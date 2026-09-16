@@ -209,3 +209,24 @@ test('Node references consume the graph build without rebuilding inside the task
     assert.ok(prerequisites(tasks, id).has('posthog-node#build'))
     assert.doesNotMatch(tasks.find((task) => task.taskId === id).command, /pnpm build/)
 })
+
+test('rrweb dev bootstraps dependency builds before starting its single watcher', () => {
+    for (const pkg of rrwebPackages) {
+        assert.equal(pkg.scripts.dev, `pnpm turbo run build --filter='${pkg.name}^...' && vite build --watch`)
+    }
+    const tasks = dryRun(['run', 'build', '--filter=@posthog/rrweb-record^...'])
+    assert.ok(!tasks.some((task) => task.taskId === '@posthog/rrweb-record#build'))
+    for (const name of ['@posthog/core', '@posthog/types', '@posthog/rrweb', '@posthog/rrweb-types']) {
+        assert.ok(
+            executable(tasks).some((task) => task.taskId === `${name}#build`),
+            name
+        )
+    }
+    for (const input of [
+        '$TURBO_ROOT$/packages/rrweb/vite.declarations.ts',
+        '$TURBO_ROOT$/packages/rrweb/rolldown.dts.config.mts',
+        'rolldown.dts*.config.mts',
+        'vite.config.entries.js',
+    ])
+        assert.ok(turbo.tasks.build.inputs.includes(input), input)
+})

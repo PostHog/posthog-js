@@ -153,15 +153,20 @@ All 16 rrweb workspace packages use `build: pnpm check-types && vite build && pn
 
 The shared `packages/rrweb/rolldown.dts.config.mts` explicitly uses Oxc for all 16 packages, each of which enables `isolatedDeclarations` in its TSConfig. Exported declarations must have sufficient type annotations for isolated generation. Keep semantic checking enabled: Oxc does not replace TypeScript's type checker.
 
-Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses the same package Rolldown configs through `vite.declarations.ts`. Vite owns runtime and declaration rebuilds together, including type-only source dependencies; it emits the same self-contained declarations, CommonJS copies, secondary entrypoints, and canvas WebRTC shim as production. An incremental TypeScript program reports semantic errors on startup and source edits without stopping development; production `check-types` still blocks invalid builds. The checker shares Vite's watched files and creates no additional watcher or process. It checks the full TSConfig project on each rebuild; a newly created, unimported file is picked up on the next watched edit or restart.
+
+Each rrweb `pnpm dev` first builds its dependencies through Turbo, then starts a single Vite watcher. Running `vite build --watch` directly assumes dependencies are already built. The alternate `pnpm dev --config vite.config.entries.js` in `packages/rrweb/rrweb` uses `rolldown.dts.entries.config.mts` for the record/replay entries. Restart development after editing build configuration. Declarations are generated in memory and emitted by Vite, so no second process races Vite's output cleanup.
 
 ```sh
 pnpm turbo run build --filter='./packages/rrweb/**'
 pnpm turbo run check-types --filter='./packages/rrweb/**'
 pnpm test:rrweb-declarations
+pnpm test:rrweb-dev-watch
 pnpm test:rrweb-package-exports
 pnpm test:rrweb-consumers
 ```
+
+The watch suite builds its prerequisites and temporarily edits and restores rrweb sources to check startup, declaration parity, semantic diagnostics, rebuilds, and shutdown. Run it without other builds or watchers in the same worktree.
 
 The installed-consumer tests build and pack their prerequisites. `test:rrweb-package-exports` checks JavaScript/CSS export targets and native Node ESM/CommonJS behavior. `test:rrweb-consumers` checks strict declarations with TypeScript 4.7, 5.8, and 6, including coexistence with consumer Node 22/24 typings. Both need registry access; the strict type checks retain their tarballs, installs, and compiler logs in a reported temporary directory.
 
