@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-4997-auto-none-no-comment-no-close-1789577918079",
-      "kind": "issue",
-      "number": 4997,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-09-16T16:58:38.079Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 35125253970,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/35125253970"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
