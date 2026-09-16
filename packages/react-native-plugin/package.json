@@ -39,6 +39,7 @@
     "!**/.*"
   ],
   "scripts": {
+    "check-types": "pnpm typecheck",
     "clean": "del-cli android/build lib",
     "lint": "oxlint --report-unused-disable-directives-severity error .",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error . --fix",
