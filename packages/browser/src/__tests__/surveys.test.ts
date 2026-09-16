@@ -349,8 +349,7 @@ describe('surveys', () => {
     })
 
     it('posthog.reset() drops in-progress answers held in memory when localStorage is unusable', () => {
-        // On a page with an opaque origin the in-memory copy is the only record of a respondent's
-        // answers, so a logout must clear it even though there is nothing in localStorage to remove.
+        // The in-memory copy is the only record here, and there is nothing in localStorage to remove.
         setInProgressSurveyState({ id: 'XYZ', current_iteration: null }, {
             surveySubmissionId: 'submission-1',
             lastQuestionIndex: 1,

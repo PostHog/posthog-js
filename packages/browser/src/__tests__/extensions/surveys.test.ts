@@ -1734,8 +1734,7 @@ describe('SurveyManager', () => {
 
         it('advances past the prefilled question when localStorage is unavailable', async () => {
             localStorage.clear()
-            // The hosted survey page is served with a `sandbox` CSP that omits `allow-same-origin`,
-            // so the document has an opaque origin and every localStorage access throws.
+            // An opaque-origin document (`sandbox` CSP without `allow-same-origin`) throws on every access.
             const opaqueOriginError = new Error(
                 "Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag."
             )

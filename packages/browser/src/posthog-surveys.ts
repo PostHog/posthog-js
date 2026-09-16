@@ -143,9 +143,7 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
-        // Outside the try because this is the state that matters most when localStorage throws:
-        // on a page with no usable storage it is the only copy of a respondent's in-progress
-        // answers, and it must not outlive their session on a shared device.
+        // Outside the try: when localStorage throws, this is the only copy of the answers.
         clearInMemoryInProgressSurveyState()
         try {
             // Drop in-memory event/action activations too; they aren't in persistence (which

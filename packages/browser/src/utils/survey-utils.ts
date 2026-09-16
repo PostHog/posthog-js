@@ -53,18 +53,10 @@ export interface InProgressSurveyState {
     questionSnapshots?: Record<string, string>
 }
 
-/**
- * Some pages cannot touch localStorage at all. The hosted survey page is served with a `sandbox`
- * CSP that omits `allow-same-origin`, so the document gets an opaque origin and every localStorage
- * access throws; private-mode and storage-blocking browsers behave the same way. The in-progress
- * state is the only channel that carries a URL-prefilled answer, and the question index it advances
- * to, from `renderSurvey` to the question renderer, so losing the write silently re-shows a
- * question the link already answered. This per-page-load copy keeps that state readable. It cannot
- * survive a reload, but neither can localStorage on those pages.
- *
- * It lives here rather than next to its localStorage wrappers so that `reset()` can drop it on
- * logout: partially typed answers must not outlive the respondent's session on a shared device.
- */
+// localStorage throws outright on a document with an opaque origin (the hosted survey page is
+// served with a `sandbox` CSP that omits `allow-same-origin`), and this state is the only channel
+// carrying a URL-prefilled answer and its start index to the question renderer. Kept here rather
+// than beside the localStorage wrappers so that reset() can drop it on logout.
 export const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
 
 export const clearInMemoryInProgressSurveyState = (): void => {

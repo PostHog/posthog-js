@@ -786,8 +786,7 @@ export const getInProgressSurveyState = (
         }
     } catch (e) {
         logger.error('Error getting in-progress survey state from localStorage', e)
-        // Only fall back when localStorage is unreadable. A successful read that finds nothing
-        // means the state was never written or was cleared, and must stay empty.
+        // Only when unreadable: a successful read that finds nothing must stay empty.
         return inMemoryInProgressSurveyState[key] ?? null
     }
     return null
