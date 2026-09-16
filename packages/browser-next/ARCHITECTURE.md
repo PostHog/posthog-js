@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits both automatic dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags and logs during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -192,7 +192,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags load during async initialization. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags and logs load during async initialization. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -210,6 +210,16 @@ Applications access flag controls through `getExtension(FeatureFlagsExtension)`.
 Browser-next supplies a `BrowserClient` view extending the shared `Client` with `onIdentify`, `onGroup`, and `onReset` listeners. Core publishes synchronous notifications after local state updates, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses these listeners to update evaluation context and reload; core does not look up product-specific identity hooks.
 
 Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
+
+### Logs
+
+Logs follows the flags composition pattern: the root awaits the literal module import and setup, not remote configuration. `logs: false` omits automatic inclusion; an explicit `logs(options)` extension owns its configuration and takes precedence. The manual core entrypoint contains no logs import. `captureLog()` is a narrow optional delegate; SDK diagnostics retain the existing `logger`.
+
+The optional module adapts the shared browser-common logs implementation. It owns programmatic and console queues, OTLP resources/scopes, the console runtime, persisted console enablement hints, pagehide handoff, and transport timeout/abort cleanup. Console capture follows existing local/remote gates, not module loading. The generic console serialization and patching runtime is shared with legacy browser bundles; historical ABI routing and global registration stay exclusively in the legacy entrypoint.
+
+A package-private host supplies only the bound request runtime and dispatch authority. Logs performs JSON Fetch requests to `/i/v1/logs?token=...` with a 60-second timeout, preserving separate logs status classification and retry policy. Pagehide uses the existing logs Beacon contract with keepalive Fetch fallback. This does not enable Beacon for analytics. No logs transport or serializer enters the initial root graph.
+
+Core delegates reset and observed consent denial to logs queue cleanup. Capture stops when shutdown begins, but already admitted logs can flush while dispatch authority remains valid. `flush()` awaits analytics and both logs queues independently. Shutdown shares its existing timeout across delivery and disposal; logs aborts and settles pending callbacks during disposal, even if a supplied Fetch ignores abort signals. Flags exposes a package-private key snapshot so log context can include flag keys without emitting exposure analytics. All capability calls are failure-isolated, and the public shared Client contract remains unchanged.
 
 ## 6. Import graph rules
 
@@ -291,7 +301,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature. Automatic analytics delivery and feature flags use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
+Use a separate export subpath for each substantial optional feature. Automatic analytics delivery, feature flags, and logs use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
 
 Example:
 
@@ -337,9 +347,9 @@ The change must include measurements that support this decision.
 
 ### 8.3 Register only selected extensions
 
-The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics and feature-flags instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
+The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics, feature-flags, and logs instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
 
-Do not add a static catalog of product implementations to core. The root selects automatic analytics and flags through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
+Do not add a static catalog of product implementations to core. The root selects automatic analytics, flags, and logs through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
 
 Do not put this code in the root graph:
 

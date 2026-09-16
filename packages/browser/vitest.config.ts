@@ -28,6 +28,10 @@ export default defineConfig({
                 find: '@posthog/browser-common/logs-config',
                 replacement: fromRoot('../browser-common/src/logs-config.ts'),
             },
+            {
+                find: '@posthog/browser-common/console-logs',
+                replacement: fromRoot('../browser-common/src/console-logs.ts'),
+            },
             { find: '@posthog/browser-common/logs', replacement: fromRoot('../browser-common/src/logs.ts') },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },

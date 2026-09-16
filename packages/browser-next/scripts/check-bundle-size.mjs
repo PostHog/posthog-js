@@ -16,6 +16,7 @@ const forbiddenInputs = [
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
 const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
+const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
@@ -64,7 +65,7 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowF
         (input) =>
             (forbiddenInputs.some((pattern) => pattern.test(input)) && !(allowFlags && coreInput.test(input))) ||
             (forbidAnalytics && analyticsInput.test(input)) ||
-            (!allowFlags && flagsInput.test(input))
+            (!allowFlags && (flagsInput.test(input) || logsInput.test(input)))
     )
 
     stdout.write(
@@ -159,4 +160,6 @@ await measureStatic('eager analytics', 'fixtures/eager.ts', false)
 await measureLazy()
 await measureStatic('static flags', 'fixtures/static-flags.ts', true, true)
 await measureLazy('dynamic flags', 'fixtures/dynamic-flags.ts', false)
+await measureStatic('static logs', 'fixtures/static-logs.ts', true, true)
+await measureLazy('dynamic logs', 'fixtures/dynamic-logs.ts', false)
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)
