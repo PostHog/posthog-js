@@ -68,6 +68,19 @@ interface ResolvedErrorTrackingOptions {
   autocapture: ResolvedAutocaptureOptions
 }
 
+// Hook the parent PostHog exposes so the error-tracking layer can round-trip the fatal journal:
+// `waitForJSPersist` resolves after the JS event queue is durable. `markIngestedOnCapturePath`
+// is invoked from the capture path to add the journal id to FatalJournalIngested in the same
+// JS storage write as the queue item (so the next launch short-circuits and removes the
+// native entry without re-capturing). `removeNativeEntry` is invoked from the recovery path
+// to clean up the native file once the recovered event is durable in JS.
+export interface FatalJournalHooks {
+  waitForJSPersist: () => Promise<boolean>
+  markIngestedOnCapturePath: (journalId: string) => Promise<void>
+  removeNativeEntry: (journalId: string) => Promise<void>
+  hashApiKey: () => Promise<string>
+}
+
 export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
@@ -88,7 +101,7 @@ export class ErrorTracking {
     private instance: PostHog,
     options: ErrorTrackingOptions = {},
     logger: Logger,
-    private readonly persistFatalException?: () => Promise<void>
+    private readonly fatalJournalHooks?: FatalJournalHooks
   ) {
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
@@ -299,10 +312,19 @@ export class ErrorTracking {
           ) => { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties } | null
         }
         if (instance.captureExceptionInternal) {
-          captured = instance.captureExceptionInternal.call(instance, error, additionalProperties, hint, {
-            uuid: eventUuid,
-            timestamp: timestampDate,
-          })
+          // captureExceptionInternal itself swallows capture() failures, but only after
+          // doing the work — its return value is null on a soft failure. A throwing
+          // implementation would otherwise skip persistFatalReportToNative and flush()
+          // below, so the crash this code path exists to recover goes unrecorded.
+          try {
+            captured = instance.captureExceptionInternal.call(instance, error, additionalProperties, hint, {
+              uuid: eventUuid,
+              timestamp: timestampDate,
+            })
+          } catch (e) {
+            this.logger.error('captureExceptionInternal threw; fatal handler aborts.', e)
+            return
+          }
         } else {
           this.instance.captureException(error, additionalProperties, hint)
           captured = { eventUuid: '', timestamp: timestampDate.toISOString(), additionalProperties }
@@ -315,14 +337,28 @@ export class ErrorTracking {
         return
       }
 
-      const persisted = this.persistFatalException?.()
+      const persisted = this.fatalJournalHooks?.waitForJSPersist?.()
       const journalWrite = captured
-        ? this.persistFatalReportToNative(captured, hint, error).catch(() => {})
-        : Promise.resolve()
+        ? this.persistFatalReportToNative(captured, hint, error).catch(() => undefined)
+        : Promise.resolve(undefined)
       void this.instance.flush().catch(() => {
         this.logger.critical('Failed to flush events')
       })
-      return Promise.all([persisted, journalWrite]).then(() => undefined)
+      return Promise.all([persisted, journalWrite])
+        .then(([persistedOk, journalId]) => {
+          // If both the JS write AND the native write landed, mark ingested in JS so
+          // the next launch's drain skips re-capturing. The native entry is left on
+          // disk intentionally — the dedup marker is the durable receipt that turns
+          // a recovery attempt into a no-op cleanup.
+          if (persistedOk && journalId) {
+            void this.fatalJournalHooks?.markIngestedOnCapturePath?.(journalId)
+          }
+          return undefined
+        })
+        .catch((e) => {
+          this.logger.warn('Fatal handler completion failed.', e)
+          return undefined
+        })
     }
     try {
       this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
@@ -335,33 +371,48 @@ export class ErrorTracking {
     captured: { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties },
     hint: CoreErrorTracking.EventHint,
     error: unknown
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     const bridge = OptionalReactNativePlugin?.persistFatalException
     if (!bridge) {
-      return
+      return undefined
+    }
+    // Honor the user's privacy choice: the journal lives on disk and would survive a
+    // crash, so an opted-out user must not have their fatal crash leave any trace, even
+    // transiently. The JS event was already dropped by capture() above.
+    if ((this.instance as unknown as { optedOut?: boolean }).optedOut === true) {
+      return undefined
     }
     const journalId = uuidv7()
     const exceptionList = this._exceptionListFromError(error, hint)
     const steps = this._exceptionStepsBuffer.getAttachable() as unknown as Array<{
       [key: string]: JsonType
     }> | undefined
+    const apiKeyHash = (await this.fatalJournalHooks?.hashApiKey?.()) || ''
+    if (!apiKeyHash) {
+      // Without an apiKey hash we can't scope the entry to a client on recovery — drop
+      // the write entirely rather than leak cross-project data on a future relaunch.
+      this.logger.warn('Skipping fatal journal write: apiKeyHash unavailable.')
+      return undefined
+    }
     const entry = buildFatalJournalEntry({
       id: journalId,
       eventUuid: captured.eventUuid,
       timestamp: captured.timestamp,
       sessionId: this.instance.getSessionId() || '',
       distinctId: this.instance.getDistinctId() || '',
-      anonymousId: this.instance.getAnonymousId() || '',
       deviceId:
         (this.instance as unknown as { getDeviceId?: () => string }).getDeviceId?.() || '',
       commonProperties: (this.instance as unknown as { getCommonEventProperties?: () => PostHogEventProperties })
         .getCommonEventProperties?.() || {},
+      capturedProperties: captured.additionalProperties,
       exceptionList: exceptionList as unknown as PostHogEventProperties['$exception_list'],
       exceptionLevel: 'fatal',
       exceptionSteps: steps as unknown as PostHogEventProperties['$exception_steps'],
       optedOut: (this.instance as unknown as { optedOut?: boolean }).optedOut === true,
+      apiKeyHash,
     })
     await bridge(serializeFatalJournalEntry(entry))
+    return journalId
   }
 
   private _exceptionListFromError(

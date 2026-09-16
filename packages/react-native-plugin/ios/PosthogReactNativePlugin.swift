@@ -531,22 +531,34 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     }
 }
 
+// Bounded on-disk journal of fatal JS exception snapshots awaiting recovery on the next launch.
+// Each entry is one atomic JSON file (id-correlated, idempotent on retry) capped at
+// `maxPending`; eviction drops the oldest by modification date.
+final class PendingFatalExceptionStore {
     static let shared = PendingFatalExceptionStore()
 
     private static let maxPending = 5
     private let queue = DispatchQueue(label: "com.posthog-js-native.pending-fatal")
 
+    // Lives under Application Support (not Documents/Caches) and is excluded from iCloud
+    // and iTunes/Files backups, so the journal — which holds distinct_id, super properties
+    // and exception text — never leaves the device. posthog-ios keeps its own storage in the
+    // same Application Support directory.
     private func directoryURL() throws -> URL {
-        let docs = try FileManager.default.url(
-            for: .documentDirectory,
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         )
-        let dir = docs.appendingPathComponent("posthog-pending-fatal", isDirectory: true)
+        let dir = support.appendingPathComponent("posthog-pending-fatal", isDirectory: true)
         if !FileManager.default.fileExists(atPath: dir.path) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var dirWithValues = dir
+        try? dirWithValues.setResourceValues(values)
         return dir
     }
 

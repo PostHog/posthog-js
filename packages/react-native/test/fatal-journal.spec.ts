@@ -6,6 +6,7 @@ import {
   entryToEventProperties,
   FATAL_JOURNAL_INGESTED_MAX,
   hasFatalJournalIngested,
+  hashApiKey,
   parseFatalJournalEntry,
   serializeFatalJournalEntry,
 } from '../src/error-tracking/journal'
@@ -57,6 +58,12 @@ const resetMockPlugin = (): void => {
   mockPlugin.removePendingFatalException = vi.fn(() => Promise.resolve())
 }
 
+const TEST_API_KEY = 'test-token'
+let TEST_API_KEY_HASH = ''
+beforeAll(async () => {
+  TEST_API_KEY_HASH = await hashApiKey(TEST_API_KEY)
+})
+
 describe('fatal journal helper', () => {
   it('roundtrips a serialized entry preserving all fields', () => {
     const entry = buildFatalJournalEntry({
@@ -65,13 +72,14 @@ describe('fatal journal helper', () => {
       timestamp: '2026-09-15T10:00:00.000Z',
       sessionId: 'session-1',
       distinctId: 'user-1',
-      anonymousId: 'anon-1',
       deviceId: 'device-1',
       commonProperties: { $lib: 'posthog-react-native', $app_version: '1.2.3' },
+      capturedProperties: { $app_state: 'active', $expo_update_id: 'u-1' },
       exceptionList: [{ type: 'Error', value: 'boom' }],
       exceptionLevel: 'fatal',
       exceptionSteps: undefined,
       optedOut: false,
+      apiKeyHash: 'abcd1234',
     })
     const raw = serializeFatalJournalEntry(entry)
     const parsed = parseFatalJournalEntry(raw)
@@ -81,11 +89,12 @@ describe('fatal journal helper', () => {
     expect(parsed!.timestamp).toBe(entry.timestamp)
     expect(parsed!.sessionId).toBe(entry.sessionId)
     expect(parsed!.distinctId).toBe(entry.distinctId)
-    expect(parsed!.anonymousId).toBe(entry.anonymousId)
     expect(parsed!.deviceId).toBe(entry.deviceId)
     expect(parsed!.exceptionLevel).toBe(entry.exceptionLevel)
     expect(parsed!.optedOut).toBe(false)
+    expect(parsed!.apiKeyHash).toBe('abcd1234')
     expect(parsed!.commonProperties).toEqual({ $lib: 'posthog-react-native', $app_version: '1.2.3' })
+    expect(parsed!.capturedProperties).toEqual({ $app_state: 'active', $expo_update_id: 'u-1' })
     expect(parsed!.exceptionList).toEqual([{ type: 'Error', value: 'boom' }])
   })
 
@@ -104,12 +113,51 @@ describe('fatal journal helper', () => {
           timestamp: 'c',
           sessionId: '',
           distinctId: '',
-          anonymousId: '',
           deviceId: '',
           commonProperties: {},
+          capturedProperties: {},
           exceptionLevel: 'fatal',
           optedOut: false,
+          apiKeyHash: 'x',
           exceptionList: 'not-an-array',
+        })
+      )
+    ).toBeNull()
+    // capturedProperties must be an object
+    expect(
+      parseFatalJournalEntry(
+        JSON.stringify({
+          id: 'a',
+          eventUuid: 'b',
+          timestamp: 'c',
+          sessionId: '',
+          distinctId: '',
+          deviceId: '',
+          commonProperties: {},
+          capturedProperties: 'not-an-object',
+          exceptionLevel: 'fatal',
+          optedOut: false,
+          apiKeyHash: 'x',
+          exceptionList: [{ type: 'Error', value: 'boom' }],
+        })
+      )
+    ).toBeNull()
+    // apiKeyHash must be a string
+    expect(
+      parseFatalJournalEntry(
+        JSON.stringify({
+          id: 'a',
+          eventUuid: 'b',
+          timestamp: 'c',
+          sessionId: '',
+          distinctId: '',
+          deviceId: '',
+          commonProperties: {},
+          capturedProperties: {},
+          exceptionLevel: 'fatal',
+          optedOut: false,
+          apiKeyHash: 123,
+          exceptionList: [{ type: 'Error', value: 'boom' }],
         })
       )
     ).toBeNull()
@@ -122,12 +170,13 @@ describe('fatal journal helper', () => {
       timestamp: '2026-09-15T10:00:00.000Z',
       sessionId: 's',
       distinctId: 'u',
-      anonymousId: 'a',
       deviceId: 'd',
       commonProperties: { $lib: 'posthog-react-native', $app_version: '1.0.0' },
+      capturedProperties: { $app_state: 'background' },
       exceptionList: [{ type: 'Error', value: 'recover me' }],
       exceptionLevel: 'fatal',
       optedOut: false,
+      apiKeyHash: 'abcd1234',
     })
     const reconstructed = entryToEventProperties(entry)
     expect(reconstructed.uuid).toBe('event-uuid-1')
@@ -136,6 +185,7 @@ describe('fatal journal helper', () => {
     expect(reconstructed.properties.$exception_level).toBe('fatal')
     expect(reconstructed.properties.$lib).toBe('posthog-react-native')
     expect(reconstructed.properties.$app_version).toBe('1.0.0')
+    expect(reconstructed.properties.$app_state).toBe('background')
   })
 
   it('bounds the seenIds set and dedups', () => {
@@ -163,12 +213,32 @@ describe('fatal journal helper', () => {
         timestamp: 'c',
         sessionId: '',
         distinctId: '',
-        anonymousId: '',
         deviceId: '',
         commonProperties: {},
+        capturedProperties: {},
         exceptionList: [],
         exceptionLevel: 'fatal',
         optedOut: false,
+        apiKeyHash: 'abcd1234',
+      })
+    ).toThrow()
+  })
+
+  it('rejects a missing apiKeyHash at build time so cross-client recovery is impossible', () => {
+    expect(() =>
+      buildFatalJournalEntry({
+        id: 'a',
+        eventUuid: 'b',
+        timestamp: 'c',
+        sessionId: '',
+        distinctId: '',
+        deviceId: '',
+        commonProperties: {},
+        capturedProperties: {},
+        exceptionList: [{ type: 'Error', value: 'boom' }],
+        exceptionLevel: 'fatal',
+        optedOut: false,
+        apiKeyHash: '',
       })
     ).toThrow()
   })
@@ -252,7 +322,10 @@ describe('native fatal-report journal recovery', () => {
     )
 
     handler(new Error('journal-me'), true)
-    await vi.advanceTimersByTimeAsync(0)
+    // Advance enough time for the async apiKey hash (which uses libuv's thread pool via
+    // crypto.subtle.digest, not microtasks — vitest's fake timers don't flush those on
+    // advanceTimersByTime(0)).
+    await vi.advanceTimersByTimeAsync(100)
     expect(previous).not.toHaveBeenCalled()
     expect(mockPlugin.persistFatalException).toHaveBeenCalledTimes(1)
     const payload = JSON.parse(mockPlugin.persistFatalException.mock.calls[0][0])
@@ -332,7 +405,7 @@ describe('native fatal-report journal recovery', () => {
     expect(seenIds.length).toBe(1)
   })
 
-  it('retains the journal entry when JS durable handoff fails (waitForPersist rejects)', async () => {
+  it('retains the journal entry when JS durable handoff fails (sync setItem throws)', async () => {
     const journalId = '0192f1c2-aaaa-7bbb-cccc-dddddddddddd'
     const entry = buildFatalJournalEntry({
       id: journalId,
@@ -340,12 +413,13 @@ describe('native fatal-report journal recovery', () => {
       timestamp: new Date().toISOString(),
       sessionId: 's',
       distinctId: 'u',
-      anonymousId: 'a',
       deviceId: 'd',
       commonProperties: {},
+      capturedProperties: {},
       exceptionList: [{ type: 'Error', value: 'persist-fails' }],
       exceptionLevel: 'fatal',
       optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
     })
     mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
       Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
@@ -358,7 +432,7 @@ describe('native fatal-report journal recovery', () => {
         throw new Error('disk full')
       },
     }
-    posthog = new PostHog('test-token', {
+    posthog = new PostHog(TEST_API_KEY, {
       customStorage: customStorage as any,
       flushInterval: 0,
       flushAt: 100,
@@ -378,9 +452,58 @@ describe('native fatal-report journal recovery', () => {
     expect(mockPlugin.removePendingFatalException).not.toHaveBeenCalled()
   })
 
+  it('retains the journal entry when JS durable handoff fails (async setItem rejects)', async () => {
+    // The previous test covered the sync-throw case; this one covers the async-reject path,
+    // which waitForPersist used to swallow silently — leading to a lost fatal.
+    const journalId = '0192f1c2-bbbb-7ccc-dddd-eeeeeeeeeeee'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-async-fail',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      commonProperties: {},
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'persist-rejects' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    // Async rejection — the previous waitForPersist() swallowed this and lost the fatal.
+    const customStorage = {
+      getItem: () => null,
+      setItem: () => Promise.reject(new Error('async disk failure')),
+    }
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: customStorage as any,
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(mockPlugin.removePendingFatalException).not.toHaveBeenCalled()
+    expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
+  })
+
   it('does not produce a duplicate when recovery is interrupted after persist but before native remove', async () => {
-    // Simulates a crash between waitForPersist() and removePendingFatalException(): the
-    // FatalJournalIngested set on the next launch tells us to skip the re-capture.
+    // Simulates a crash between waitForPersistSuccess() and removePendingFatalException():
+    // the FatalJournalIngested marker is durable (same write as the queue item), so the
+    // next launch sees it, short-circuits, and removes the native file without re-capturing.
     const journalId = '0192f1c2-1111-7abc-9def-0123456789ab'
     const eventUuid = 'event-uuid-no-duplicate'
     const entry = buildFatalJournalEntry({
@@ -389,12 +512,13 @@ describe('native fatal-report journal recovery', () => {
       timestamp: new Date().toISOString(),
       sessionId: '',
       distinctId: '',
-      anonymousId: '',
       deviceId: '',
       commonProperties: {},
+      capturedProperties: {},
       exceptionList: [{ type: 'Error', value: 'should-ship-once' }],
       exceptionLevel: 'fatal',
       optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
     })
 
     // Simulate state across two launches: getPending returns the entry on both, but the
@@ -419,7 +543,7 @@ describe('native fatal-report journal recovery', () => {
       return Promise.resolve()
     })
 
-    posthog = new PostHog('test-token', {
+    posthog = new PostHog(TEST_API_KEY, {
       customStorage: customStorage as any,
       flushInterval: 0,
       flushAt: 100,
@@ -448,12 +572,13 @@ describe('native fatal-report journal recovery', () => {
       timestamp: new Date().toISOString(),
       sessionId: '',
       distinctId: '',
-      anonymousId: '',
       deviceId: '',
       commonProperties: {},
+      capturedProperties: {},
       exceptionList: [{ type: 'Error', value: 'duplicate me' }],
       exceptionLevel: 'fatal',
       optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
     })
     const report = serializeFatalJournalEntry(entry)
     mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
@@ -468,7 +593,7 @@ describe('native fatal-report journal recovery', () => {
       getItem: (key: string) => (key === '.posthog-rn.json' ? seeded : null),
       setItem: () => {},
     }
-    posthog = new PostHog('test-token', {
+    posthog = new PostHog(TEST_API_KEY, {
       customStorage: customStorage as any,
       flushInterval: 0,
       flushAt: 100,
@@ -480,6 +605,65 @@ describe('native fatal-report journal recovery', () => {
       capturePushNotificationOpened: false,
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(mockPlugin.removePendingFatalException).toHaveBeenCalledWith(journalId)
+    expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
+  })
+
+  it('drops a pending entry whose apiKeyHash does not match the current client', async () => {
+    const journalId = '0192f1c2-eeee-ffff-0000-111111111111'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid',
+      timestamp: new Date().toISOString(),
+      sessionId: '',
+      distinctId: '',
+      deviceId: '',
+      commonProperties: {},
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'wrong-client' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      // Mismatched — produced by another PostHog client in the same app.
+      apiKeyHash: 'someone-elses-hash',
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+    posthog = createClient()
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(mockPlugin.removePendingFatalException).toHaveBeenCalledWith(journalId)
+    expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
+  })
+
+  it('drops a pending entry whose crash-time optedOut is true (privacy carry-over)', async () => {
+    const journalId = '0192f1c2-2222-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid',
+      timestamp: new Date().toISOString(),
+      sessionId: '',
+      distinctId: '',
+      deviceId: '',
+      commonProperties: {},
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'was-opted-out' }],
+      exceptionLevel: 'fatal',
+      optedOut: true,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+    posthog = createClient()
     await posthog.ready()
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
@@ -516,12 +700,13 @@ describe('native fatal-report journal recovery', () => {
       timestamp: new Date().toISOString(),
       sessionId: '',
       distinctId: '',
-      anonymousId: '',
       deviceId: '',
       commonProperties: {},
+      capturedProperties: {},
       exceptionList: [{ type: 'Error', value: 'should-not-ship' }],
       exceptionLevel: 'fatal',
       optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
     })
     mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
       Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
@@ -531,7 +716,7 @@ describe('native fatal-report journal recovery', () => {
       getItem: () => JSON.stringify({ version: 'v1', content: { opted_out: true } }),
       setItem: () => {},
     }
-    posthog = new PostHog('test-token', {
+    posthog = new PostHog(TEST_API_KEY, {
       customStorage: customStorage as any,
       flushInterval: 0,
       flushAt: 100,
@@ -550,6 +735,111 @@ describe('native fatal-report journal recovery', () => {
 
     expect(mockPlugin.removePendingFatalException).toHaveBeenCalledWith(journalId)
     expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
+  })
+
+  it('does not write a journal entry when the user is opted out at crash time', async () => {
+    const customStorage = {
+      getItem: () => JSON.stringify({ version: 'v1', content: { opted_out: true } }),
+      setItem: (key: string, value: string) => {
+        stored.set(key, value)
+      },
+    }
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: customStorage as any,
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    await posthog.ready()
+    await (posthog as any)._eventsStorage.waitForPersist()
+    handler(new Error('opted-out-fatal'), true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+  })
+
+  it('preserves the crash-time app version so a fix in version N is not reported as a regression in N+1', async () => {
+    const journalId = '0192f1c2-aaaa-bbbb-cccc-dddddddddddd'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-version-regression',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      // Crash-time snapshot: app was at 1.0.0 with iOS 16.0. The current launch (this test)
+      // is running app version 2.0.0 / iOS 17.0 — those values would normally flow through
+      // getCommonEventProperties() and overwrite the snapshot if not reapplied.
+      commonProperties: { $app_version: '1.0.0', $os_version: '16.0', $lib_version: '1.0.0' },
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'pre-fix-crash' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    // Set up custom storage that reports the new launch's runtime state via getCommonEventProperties.
+    posthog = createClient()
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    const recoveredQueue = JSON.parse(stored.get('.posthog-rn.json') || '{}')
+    const queue = (recoveredQueue.content && recoveredQueue.content.queue) || []
+    expect(queue.length).toBe(1)
+    // The recovered event carries the CRASH-time version, not the relaunch's runtime version.
+    expect(queue[0].message.properties.$app_version).toBe('1.0.0')
+    expect(queue[0].message.properties.$os_version).toBe('16.0')
+    expect(queue[0].message.properties.$lib_version).toBe('1.0.0')
+  })
+
+  it('preserves the crash-time $app_state and Expo update context', async () => {
+    const journalId = '0192f1c2-aaaa-bbbb-cccc-eeeeeeeeeeee'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-context',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      commonProperties: {},
+      capturedProperties: {
+        $app_state: 'background',
+        $expo_update_id: 'expo-update-pre-fix',
+        $expo_runtime_version: '1.0.0',
+        $expo_channel: 'production',
+      },
+      exceptionList: [{ type: 'Error', value: 'with-context' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    posthog = createClient()
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    const recoveredQueue = JSON.parse(stored.get('.posthog-rn.json') || '{}')
+    const queue = (recoveredQueue.content && recoveredQueue.content.queue) || []
+    expect(queue.length).toBe(1)
+    expect(queue[0].message.properties.$app_state).toBe('background')
+    expect(queue[0].message.properties.$expo_update_id).toBe('expo-update-pre-fix')
+    expect(queue[0].message.properties.$expo_runtime_version).toBe('1.0.0')
+    expect(queue[0].message.properties.$expo_channel).toBe('production')
   })
 
   it('does not throw when the native plugin fails on persist (best-effort)', async () => {
@@ -572,5 +862,110 @@ describe('native fatal-report journal recovery', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
     expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not crash the fatal handler when captureExceptionInternal throws', async () => {
+    posthog = createClient()
+    await posthog.ready()
+    await (posthog as any)._eventsStorage.waitForPersist()
+    // Force captureExceptionInternal to throw — the handler must not skip
+    // persistFatalReportToNative + flush as a side effect, and must not propagate.
+    const original = (posthog as any).captureExceptionInternal
+    ;(posthog as any).captureExceptionInternal = () => {
+      throw new Error('capture exploded')
+    }
+    expect(() => handler(new Error('capture-throws'), true)).not.toThrow()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    expect(previous).toHaveBeenCalledTimes(1)
+    // restore so afterEach teardown doesn't observe a polluted state
+    ;(posthog as any).captureExceptionInternal = original
+  })
+
+  it('drains the journal on init even when native crashes are NOT autocaptured', async () => {
+    // Drain is independent of nativeCrashes: every fatal JS exception writes the journal,
+    // so every launch with uncaughtExceptions + the plugin installed must drain.
+    const journalId = '0192f1c2-3333-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-no-native',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      commonProperties: {},
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'no-native-crashes' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: {
+        getItem: () => null,
+        setItem: (key, value) => {
+          stored.set(key, value)
+        },
+      },
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      // Note: nativeCrashes is OMITTED — only uncaughtExceptions is set. Drain still runs.
+      errorTracking: { autocapture: { uncaughtExceptions: true } },
+    } as any)
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(mockPlugin.getPendingFatalExceptions).toHaveBeenCalled()
+    expect(mockPlugin.removePendingFatalException).toHaveBeenCalledWith(journalId)
+    expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(1)
+  })
+
+  it('does not double-send when AsyncStorage finishes within the 2s deadline', async () => {
+    // The dedup marker is written in the same AsyncStorage write as the recovered event,
+    // so a successful JS persist + successful native remove means the next launch sees the
+    // marker and skips re-capture.
+    const journalId = '0192f1c2-4444-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-no-double',
+      timestamp: new Date().toISOString(),
+      sessionId: '',
+      distinctId: '',
+      deviceId: '',
+      commonProperties: {},
+      capturedProperties: {},
+      exceptionList: [{ type: 'Error', value: 'no-double' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+    mockPlugin.removePendingFatalException.mockImplementation(() => Promise.resolve())
+
+    posthog = createClient()
+    await posthog.ready()
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    // Exactly one recovery and one removal — second launch would short-circuit on the marker.
+    expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(1)
+    expect(mockPlugin.removePendingFatalException).toHaveBeenCalledTimes(1)
+    const recovered = JSON.parse(stored.get('.posthog-rn.json') || '{}')
+    expect(recovered.content.fatal_journal_ingested).toEqual([journalId])
   })
 })

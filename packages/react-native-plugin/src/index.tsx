@@ -116,6 +116,37 @@ export function addExceptionStep(message: string, properties?: PostHogReactNativ
   return PosthogReactNativePlugin.addExceptionStep(message, properties ?? {})
 }
 
+/**
+ * Persists a fatal JS exception snapshot to the bounded native on-disk journal, so it can be
+ * recovered on the next SDK launch if the JS event queue write is interrupted by the process
+ * terminating. The report is a JSON-serialized {@link FatalJournalEntry} whose `id` is the
+ * journal-side identifier — recovery uses it to coordinate the dedup set.
+ *
+ * @internal Used by `posthog-react-native`'s fatal handler. Not part of the public API.
+ */
+export function persistFatalException(report: string): Promise<void> {
+  return PosthogReactNativePlugin.persistFatalException(report)
+}
+
+/**
+ * Reads every pending journal entry written by a previous launch that did not get a chance
+ * to clean up after itself (i.e. the process died before the JS queue persisted).
+ *
+ * @internal Used by `posthog-react-native`'s fatal-journal drain. Not part of the public API.
+ */
+export function getPendingFatalExceptions(): Promise<Array<{ id: string; report: string }>> {
+  return PosthogReactNativePlugin.getPendingFatalExceptions()
+}
+
+/**
+ * Removes a single journal entry by id. Idempotent: removing a missing entry is a no-op.
+ *
+ * @internal Used by `posthog-react-native`'s fatal-journal drain. Not part of the public API.
+ */
+export function removePendingFatalException(id: string): Promise<void> {
+  return PosthogReactNativePlugin.removePendingFatalException(id)
+}
+
 export function registerPushNotificationToken(deviceToken: string, appId: string | null): Promise<void> {
   return PosthogReactNativePlugin.registerPushNotificationToken(deviceToken, appId)
 }
@@ -214,6 +245,12 @@ export interface PostHogReactNativePluginModule {
 
   addExceptionStep: (message: string, properties?: PostHogReactNativePluginMap) => Promise<void>
 
+  persistFatalException: (report: string) => Promise<void>
+
+  getPendingFatalExceptions: () => Promise<Array<{ id: string; report: string }>>
+
+  removePendingFatalException: (id: string) => Promise<void>
+
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
 
   unregisterPushNotificationToken: () => Promise<void>
@@ -236,6 +273,9 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   startRecording,
   stopRecording,
   addExceptionStep,
+  persistFatalException,
+  getPendingFatalExceptions,
+  removePendingFatalException,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
   setOptOut,

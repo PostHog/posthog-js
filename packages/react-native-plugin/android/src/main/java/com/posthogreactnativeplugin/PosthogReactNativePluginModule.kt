@@ -400,7 +400,7 @@ class PosthogReactNativePluginModule(
   ) {
     try {
       PendingFatalExceptionStore.persist(
-        reactApplicationContext.filesDir,
+        reactApplicationContext.noBackupFilesDir,
         report,
       )
     } catch (e: Throwable) {
@@ -413,7 +413,7 @@ class PosthogReactNativePluginModule(
   @ReactMethod
   fun getPendingFatalExceptions(promise: Promise) {
     try {
-      val entries = PendingFatalExceptionStore.readAll(reactApplicationContext.filesDir)
+      val entries = PendingFatalExceptionStore.readAll(reactApplicationContext.noBackupFilesDir)
       val payload: WritableArray = Arguments.createArray()
       for (entry in entries) {
         val map: WritableMap = Arguments.createMap()
@@ -434,7 +434,7 @@ class PosthogReactNativePluginModule(
     promise: Promise,
   ) {
     try {
-      PendingFatalExceptionStore.remove(reactApplicationContext.filesDir, id)
+      PendingFatalExceptionStore.remove(reactApplicationContext.noBackupFilesDir, id)
     } catch (e: Throwable) {
       logError("removePendingFatalException", e)
     } finally {
