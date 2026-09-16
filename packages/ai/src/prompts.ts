@@ -92,6 +92,11 @@ function isSameOrigin(url: string, host: string): boolean {
   }
 }
 
+/** Formats a batch-fetch reference for logs and errors. */
+function promptListReference(label: string | undefined): string {
+  return label === undefined ? 'all prompts' : `prompts with label "${label}"`
+}
+
 /**
  * Classify how a list row relates to the requested label, via its all_labels
  * field.
@@ -103,11 +108,6 @@ function isSameOrigin(url: string, host: string): boolean {
  * filters by label never returns such a row, so this means the server ignored
  * the label param (an older PostHog release) and served latest versions.
  */
-/** Formats a batch-fetch reference for logs and errors. */
-function promptListReference(label: string | undefined): string {
-  return label === undefined ? 'all prompts' : `prompts with label "${label}"`
-}
-
 function rowLabelState(row: PromptApiResponse, label: string): 'resolved' | 'moved' | 'absent' {
   const allLabels = (row as unknown as Record<string, unknown>).all_labels
   if (!Array.isArray(allLabels)) {
