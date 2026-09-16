@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import type { Client, Disposable, Extension } from '@posthog/browser-common'
 
 import { analytics as createAnalytics } from '../src/analytics'
@@ -187,6 +188,7 @@ describe('portable consent persistence', () => {
         storage.values.set(DEFAULT_KEY, '0')
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -305,6 +307,7 @@ describe('portable consent persistence', () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -351,6 +354,7 @@ describe('portable consent persistence', () => {
                 .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const first = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage,
                 navigator: false,
@@ -378,6 +382,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         setDefaultStorage(storage)
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
@@ -399,6 +404,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         setDefaultStorage(storage)
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
@@ -419,6 +425,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         setDefaultStorage(storage)
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
@@ -437,6 +444,7 @@ describe('portable consent persistence', () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -486,6 +494,7 @@ describe('portable consent persistence', () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -507,6 +516,7 @@ describe('portable consent persistence', () => {
         const observable = new ObservableStorage()
         const observableRequests: SentRequest[] = []
         const observed = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: observable,
             navigator: false,
@@ -522,6 +532,7 @@ describe('portable consent persistence', () => {
         const plain = new MemoryStorage()
         const plainRequests: SentRequest[] = []
         const nextGate = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: plain,
             navigator: false,
@@ -571,6 +582,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         const observed = vi.fn()
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -602,6 +614,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         const observed = vi.fn()
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -629,6 +642,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         const laterObserver = vi.fn()
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -655,6 +669,7 @@ describe('portable consent persistence', () => {
         let captureTime = startedAt
         vi.spyOn(Date, 'now').mockImplementation(() => captureTime)
         const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -693,6 +708,7 @@ describe('portable consent persistence', () => {
             const observed = vi.fn()
             const laterSessionObserver = vi.fn()
             const first = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage,
                 navigator: false,
@@ -793,7 +809,13 @@ describe('portable consent persistence', () => {
         const fetch = vi
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
+        const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch,
+        })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const init = Object.defineProperty({}, 'headers', {
             get() {
@@ -813,7 +835,13 @@ describe('portable consent persistence', () => {
         const fetch = vi
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
+        const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch,
+        })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const init = Object.defineProperty({}, 'headers', {
             get() {
@@ -835,7 +863,13 @@ describe('portable consent persistence', () => {
                     finishFetch = resolve
                 })
         )
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
+        const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch,
+        })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
         const response = first.sendRequest('/flags/')
@@ -856,7 +890,13 @@ describe('portable consent persistence', () => {
                     failFetch = reject
                 })
         )
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
+        const first = await createPostHog({
+            remoteConfig: localRemoteConfig,
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch,
+        })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
         const response = first.sendRequest('/flags/')

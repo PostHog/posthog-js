@@ -1,4 +1,12 @@
-import type { BrowserFetch, StorageLike } from '../src/core'
+import type { BrowserFetch, RemoteConfig, StorageLike } from '../src/core'
+
+export const localRemoteConfig: RemoteConfig = {
+    supportedCompression: [],
+    toolbarParams: {},
+    toolbarVersion: 'toolbar',
+    isAuthenticated: false,
+    siteApps: [],
+}
 
 export class MemoryStorage implements StorageLike {
     readonly values = new Map<string, string>()
