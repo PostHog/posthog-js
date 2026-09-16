@@ -66,7 +66,7 @@ it.each([false, true])('validates the CLI cache sequence before saving (invalid 
           const file = ${JSON.stringify(directory)} + '/fixtures/anthropic-' + names[index++] + '.json';
           const fixture = JSON.parse(readFileSync(file, 'utf8'));
           let body = fixture.interactions[0].response.body.chunks.join('');
-          if (${invalid}) body = body.replace(/"cache_read_input_tokens":\\s*0/, '"cache_read_input_tokens":1');
+          if (${invalid}) body = body.replace(/"cache_read_input_tokens":\\s*0/g, '"cache_read_input_tokens":1');
           return new Response(body, {
             headers: { 'content-type': 'text/event-stream' }
           });
