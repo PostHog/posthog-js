@@ -1,4 +1,4 @@
-import * as ts from 'typescript'
+import * as ts from 'typescript-legacy'
 
 import type {
     SegmentAnalytics,

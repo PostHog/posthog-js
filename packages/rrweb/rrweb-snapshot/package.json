@@ -72,7 +72,7 @@
         "puppeteer": "^23.11.1",
         "ts-node": "^7.0.1",
         "tslib": "^1.9.3",
-        "typescript": "catalog:",
+        "typescript": "7.0.2",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0"

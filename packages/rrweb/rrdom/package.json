@@ -41,7 +41,7 @@
         "@types/jsdom": "^20.0.0",
         "jsdom": "^22.1.0",
         "puppeteer": "^23.11.1",
-        "typescript": "catalog:",
+        "typescript": "7.0.2",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0"

@@ -36,7 +36,8 @@
     ],
     "devDependencies": {
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "vite-plugin-dts": "catalog:",
+        "typescript": "7.0.2"
     },
     "browserslist": [
         "supports es6-class"

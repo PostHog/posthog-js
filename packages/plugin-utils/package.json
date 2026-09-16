@@ -1,49 +1,50 @@
 {
-  "name": "@posthog/plugin-utils",
-  "version": "2.0.0",
-  "bugs": {
-    "url": "https://github.com/PostHog/posthog-js/issues"
-  },
-  "description": "Shared CLI and sourcemap utilities for PostHog build plugins",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-js.git",
-    "directory": "packages/plugin-utils"
-  },
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
+    "name": "@posthog/plugin-utils",
+    "version": "2.0.0",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "description": "Shared CLI and sourcemap utilities for PostHog build plugins",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/plugin-utils"
+    },
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__/**",
+        "!src/**/*.spec.ts"
+    ],
+    "scripts": {
+        "clean": "rimraf dist",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
+        "build": "rslib build",
+        "dev": "rslib build -w",
+        "test:unit": "vitest run",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "dependencies": {
+        "cross-spawn": "^7.0.6"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/cross-spawn": "^6.0.6",
+        "@vitest/coverage-v8": "catalog:",
+        "vitest": "catalog:",
+        "typescript": "7.0.2"
     }
-  },
-  "files": [
-    "dist",
-    "src",
-    "!src/__tests__/**",
-    "!src/**/*.spec.ts"
-  ],
-  "scripts": {
-    "clean": "rimraf dist",
-    "lint": "oxlint --report-unused-disable-directives-severity error src",
-    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
-    "build": "rslib build",
-    "dev": "rslib build -w",
-    "test:unit": "vitest run",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
-  },
-  "dependencies": {
-    "cross-spawn": "^7.0.6"
-  },
-  "devDependencies": {
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@rslib/core": "catalog:",
-    "@types/cross-spawn": "^6.0.6",
-    "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
-  }
 }

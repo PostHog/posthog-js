@@ -6,7 +6,8 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsc -b"
+        "build": "node node_modules/@typescript/native/bin/tsc -b",
+        "test:built": "node --test tests/compiler-api.test.mjs"
     },
     "keywords": [],
     "author": "",
@@ -29,6 +30,7 @@
     },
     "devDependencies": {
         "rollup": "catalog:",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "@typescript/native": "npm:typescript@7.0.2"
     }
 }

@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -16,6 +16,8 @@ test('native declarations match TypeScript and retain semantic build failures', 
     const output = join(fixture, 'dist')
     const config = join(fixture, 'rslib.config.mjs')
     try {
+        writeFileSync(join(fixture, 'package.json'), JSON.stringify({ private: true }))
+        mkdirSync(join(fixture, 'node_modules'))
         cpSync(join(packageRoot, 'src'), source, {
             recursive: true,
             filter: (path) => !path.includes('__tests__'),
@@ -31,13 +33,22 @@ test('native declarations match TypeScript and retain semantic build failures', 
         )
         const build = (native: boolean) => {
             rmSync(output, { recursive: true, force: true })
+            const compiler = join(fixture, 'node_modules/typescript')
+            rmSync(compiler, { force: true })
+            symlinkSync(
+                dirname(require.resolve(`${native ? 'typescript' : 'typescript-legacy'}/package.json`)),
+                compiler,
+                'junction'
+            )
+            const version = JSON.parse(readFileSync(join(compiler, 'package.json'), 'utf8')).version
+            expect(version).toBe(native ? '7.0.2' : '5.8.2')
             writeFileSync(
                 config,
                 `
 import original from ${JSON.stringify(pathToFileURL(join(packageRoot, 'rslib.config.ts')).href)}
 export default {
     ...original,
-    lib: ${native ? 'original.lib' : 'original.lib.map(lib => ({ ...lib, dts: true }))'},
+    lib: ${native ? 'original.lib' : 'original.lib.map(lib => ({ ...lib, dts: { tsgo: false } }))'},
     source: {
         ...original.source,
         entry: { index: [${JSON.stringify(join(source, '**/*'))}] },
@@ -48,7 +59,7 @@ export default {
 `
             )
             const result = spawnSync(process.execPath, [rslib, 'build', '--config', config], {
-                cwd: packageRoot,
+                cwd: fixture,
                 encoding: 'utf8',
                 timeout: 60_000,
             })

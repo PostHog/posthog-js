@@ -39,7 +39,7 @@
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "7.0.2",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:"
     },

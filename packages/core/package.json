@@ -86,6 +86,7 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "7.0.2"
   }
 }

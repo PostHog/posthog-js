@@ -4,7 +4,7 @@
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
-  "description": "NextJS configuration helper for Posthog 🦔",
+  "description": "NextJS configuration helper for Posthog \ud83e\udd94",
   "repository": {
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js.git",
@@ -61,7 +61,8 @@
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.1",
     "next": "^15.5.22",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "7.0.2"
   },
   "peerDependencies": {
     "next": ">12.1.0"

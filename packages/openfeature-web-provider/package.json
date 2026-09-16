@@ -67,6 +67,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "posthog-js": "workspace:*",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "7.0.2"
   }
 }

@@ -42,7 +42,7 @@
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
         "@posthog/rrweb-utils": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "7.0.2",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",

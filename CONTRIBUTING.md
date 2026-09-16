@@ -171,9 +171,19 @@ The declaration regression tests also run through `pnpm test:unit`. When changin
 
 ### Native TypeScript declarations
 
-`packages/types` uses the pinned native TypeScript compiler for Rslib declaration generation, with semantic checking retained. Other packages keep their existing compiler backends; Next retains its separate native compiler pin.
+SDK builds use stable `typescript@7.0.2` for native compiler commands and compatible declaration backends, rather than `@typescript/native-preview`. Rslib selects the native backend from the installed TypeScript version. rrweb retains its Oxc declaration bundler and uses native TypeScript for semantic checks.
 
-`pnpm turbo run test:unit --filter=@posthog/types` includes a production-build regression check comparing all TypeScript and native compiler outputs, including declarations and source maps, and verifying that both builds fail on a deliberate semantic error. The test copies sources into a temporary fixture and leaves production outputs untouched. Compiler backend changes must preserve this compatibility check; isolated compiler speed alone does not establish production-build or consumer compatibility.
+The JavaScript compiler remains only where existing tooling requires it:
+
+- The root compiler supports documentation resolvers and programmatic compiler regression tests.
+- `posthog-js` retains its ES5 emitter and compiler API. `@posthog/nuxt` retains the compiler API required by Nuxt's module builder.
+- `@posthog/react` uses `typescript-legacy` only for its ES5 compatibility transform; declarations use native TypeScript.
+- `@posthog/types` uses `typescript-legacy` for API introspection tests and the declaration-build baseline.
+- `@posthog/browser` uses `typescript-legacy` for its full development type check because the pinned Playwright declarations contain syntax removed in TypeScript 7. Its production declaration build uses native TypeScript without test-only ambient types.
+- Rollup utilities keep the JavaScript compiler for their exported TypeScript plugin, but compile themselves with the explicit `@typescript/native` alias. Their built-output test checks that the exported plugins still initialize.
+- `unplugin-dts` uses its documented `@typescript/typescript6` fallback for rrweb's Vite declaration tooling. The package extension supplies this runtime dependency even when its TypeScript peer is native.
+
+`pnpm turbo run test:unit --filter=@posthog/types` includes a production-build regression check comparing all legacy and native compiler outputs, including declarations and source maps, and verifying that both builds fail on a deliberate semantic error. The test copies sources into a temporary fixture, explicitly links and verifies each compiler version, and leaves production outputs untouched. Compiler backend changes must preserve this compatibility check; isolated compiler speed alone does not establish production-build or consumer compatibility.
 
 ### Dead code audit (Knip)
 
