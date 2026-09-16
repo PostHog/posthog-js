@@ -4,8 +4,11 @@ import type { AnalyticsOptions } from './analytics-options'
 import {
     createAnalyticsDelivery,
     type AnalyticsDeliveryContext,
+    type AnalyticsMessage,
     type InternalAnalyticsExtension,
 } from './analytics-internal'
+import type { CaptureOutcome, CaptureSummary } from './types'
+import { captureFailure } from './capture-summary'
 import {
     CAPTURE_V1_MAX_BATCH_EVENTS,
     CAPTURE_V1_TEARDOWN_BUDGET_BYTES,
@@ -30,6 +33,31 @@ const isOnline = (context: AnalyticsDeliveryContext): boolean => {
     } catch {
         return true
     }
+}
+
+const summarizeCapture = (
+    messages: readonly AnalyticsMessage[],
+    outcomes: Readonly<Record<string, CaptureOutcome>>
+): CaptureSummary => {
+    const results: Record<string, CaptureOutcome> = {}
+    for (const [uuid, outcome] of Object.entries(outcomes)) {
+        Object.defineProperty(results, uuid, {
+            enumerable: true,
+            value: Object.freeze({ ...outcome }),
+        })
+    }
+    const persisted = messages.reduce((count, message) => {
+        const result = Object.hasOwn(outcomes, message.uuid) ? outcomes[message.uuid]?.result : undefined
+        return count + (result === 'ok' || result === 'warning' ? 1 : 0)
+    }, 0)
+    const submitted = messages.length
+    const notPersisted = Math.max(0, submitted - persisted)
+    return Object.freeze({
+        submitted,
+        notPersisted,
+        allPersisted: notPersisted === 0,
+        results: Object.freeze(results),
+    })
 }
 
 const observeLifecycle = (context: AnalyticsDeliveryContext, setOnline: (online: boolean) => void): Disposable => {
@@ -102,6 +130,7 @@ export const analytics = (options: AnalyticsOptions = {}): Extension => {
     let lifecycleSubscription: Disposable | undefined
     let compressionEnabled = false
     let online = true
+    const immediateControllers = new Set<AbortController>()
     const extension: InternalAnalyticsExtension = {
         name: 'analytics',
         setup(client) {
@@ -117,6 +146,14 @@ export const analytics = (options: AnalyticsOptions = {}): Extension => {
         dispose() {
             compressionEnabled = false
             online = true
+            for (const controller of immediateControllers) {
+                try {
+                    controller.abort()
+                } catch {
+                    // The client delivery gate still prevents future retries.
+                }
+            }
+            immediateControllers.clear()
             lifecycleSubscription?.dispose()
             lifecycleSubscription = undefined
             remoteConfigSubscription?.dispose()
@@ -151,6 +188,41 @@ export const analytics = (options: AnalyticsOptions = {}): Extension => {
                         context.reportFailure(result.error ?? result.statusCode)
                     }
                     return retry.length ? { retry } : undefined
+                },
+                async deliverImmediate(messages, immediateCanContinue) {
+                    let controller: AbortController | undefined
+                    try {
+                        controller = new AbortController()
+                        immediateControllers.add(controller)
+                    } catch {
+                        // Delivery still observes consent and disposal before each retry.
+                    }
+                    try {
+                        const canRetry = (): boolean =>
+                            !controller?.signal.aborted &&
+                            (immediateCanContinue?.() ?? true) &&
+                            context.canRetry() &&
+                            online
+                        const result = await sendCaptureV1Batches(
+                            context.runtime,
+                            [...messages],
+                            context.libraryVersion,
+                            {
+                                canRetry,
+                                compressionEnabled,
+                                ...(controller ? { signal: controller.signal } : {}),
+                            }
+                        )
+                        const summary = summarizeCapture(messages, result.outcomes)
+                        if (result.terminalError !== undefined) {
+                            return captureFailure(result.terminalError, summary)
+                        }
+                        return summary
+                    } finally {
+                        if (controller) {
+                            immediateControllers.delete(controller)
+                        }
+                    }
                 },
                 teardown(events, maxBytes) {
                     const result = sendCaptureV1TeardownBatches(context.runtime, [...events], context.libraryVersion, {

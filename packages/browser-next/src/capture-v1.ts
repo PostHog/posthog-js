@@ -33,6 +33,13 @@ export interface CaptureV1Event {
     properties: Record<string, unknown>
 }
 
+export type CaptureV1OutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'
+
+export interface CaptureV1Outcome {
+    result: CaptureV1OutcomeStatus
+    details?: string
+}
+
 export interface CaptureV1Drop {
     uuid: string
     details?: string
@@ -42,6 +49,10 @@ export interface CaptureV1Result extends ApiResponse {
     /** UUIDs still undelivered when the sender's own attempt budget ended. */
     retry: string[]
     drops: CaptureV1Drop[]
+    /** Latest recognized backend outcome for each reported event UUID. */
+    outcomes: Record<string, CaptureV1Outcome>
+    /** A request-level failure that prevents a trustworthy terminal summary. */
+    terminalError?: unknown
 }
 
 interface PreparedCaptureV1Event {
@@ -103,12 +114,30 @@ type AttemptResult = [CaptureV1Result, PreparedCaptureV1Event[], Response | unde
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
+const setOutcome = (target: Record<string, CaptureV1Outcome>, uuid: string, outcome: CaptureV1Outcome): void => {
+    Object.defineProperty(target, uuid, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: outcome,
+    })
+}
+const mergeOutcomes = (
+    target: Record<string, CaptureV1Outcome>,
+    source: Readonly<Record<string, CaptureV1Outcome>>
+): void => {
+    for (const [uuid, outcome] of Object.entries(source)) {
+        setOutcome(target, uuid, outcome)
+    }
+}
 const eventIds = (events: { uuid: string }[]): string[] => events.map(({ uuid }) => uuid)
 const failedResult = (events: { uuid: string }[], error: unknown, statusCode = 0): CaptureV1Result => ({
     statusCode,
     retry: eventIds(events),
     drops: [],
+    outcomes: {},
     error,
+    terminalError: error,
 })
 
 const utf8Bytes = (value: string): number => {
@@ -650,22 +679,28 @@ const attemptOnce = async (
     const results = isRecord(json.results) ? json.results : {}
     const retryEvents: PreparedCaptureV1Event[] = []
     const drops: CaptureV1Drop[] = []
+    const outcomes: Record<string, CaptureV1Outcome> = {}
     for (const prepared of events) {
-        const outcome = results[prepared.uuid]
-        if (!isRecord(outcome)) {
+        const outcome = Object.hasOwn(results, prepared.uuid) ? results[prepared.uuid] : undefined
+        if (!isRecord(outcome) || !['ok', 'warning', 'drop', 'retry'].includes(String(outcome.result))) {
             continue
         }
-        if (outcome.result === 'retry') {
+        const parsed: CaptureV1Outcome = {
+            result: outcome.result as CaptureV1OutcomeStatus,
+            ...(typeof outcome.details === 'string' ? { details: outcome.details } : {}),
+        }
+        setOutcome(outcomes, prepared.uuid, parsed)
+        if (parsed.result === 'retry') {
             retryEvents.push(prepared)
-        } else if (outcome.result === 'drop') {
+        } else if (parsed.result === 'drop') {
             drops.push({
                 uuid: prepared.uuid,
-                ...(typeof outcome.details === 'string' ? { details: outcome.details } : {}),
+                ...(parsed.details === undefined ? {} : { details: parsed.details }),
             })
         }
     }
 
-    return [{ statusCode: status, retry: eventIds(retryEvents), drops }, retryEvents, response]
+    return [{ statusCode: status, retry: eventIds(retryEvents), drops, outcomes }, retryEvents, response]
 }
 
 export const sendCaptureV1Batch = async (
@@ -675,7 +710,7 @@ export const sendCaptureV1Batch = async (
     options: CaptureV1SenderOptions = {}
 ): Promise<CaptureV1Result> => {
     if (messages.length === 0) {
-        return { statusCode: 204, retry: [], drops: [] }
+        return { statusCode: 204, retry: [], drops: [], outcomes: {} }
     }
     if (!runtime[2]) {
         return failedResult(messages, new Error('Fetch is not available'))
@@ -714,11 +749,16 @@ export const sendCaptureV1Batch = async (
     }
 
     const drops: CaptureV1Drop[] = []
-    let latest: CaptureV1Result = { statusCode: 0, retry: eventIds(pending), drops: [] }
-    const finish = (error: unknown): CaptureV1Result => {
+    const outcomes: Record<string, CaptureV1Outcome> = {}
+    let latest: CaptureV1Result = { statusCode: 0, retry: eventIds(pending), drops: [], outcomes: {} }
+    const finish = (error: unknown, terminal = false): CaptureV1Result => {
         latest.retry = eventIds(pending)
         latest.drops = drops
+        latest.outcomes = outcomes
         latest.error = error
+        if (terminal || latest.terminalError !== undefined || Object.keys(outcomes).length === 0) {
+            latest.terminalError = error
+        }
         return latest
     }
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -752,8 +792,10 @@ export const sendCaptureV1Batch = async (
             retryEvents = pending
         }
         drops.push(...latest.drops)
+        mergeOutcomes(outcomes, latest.outcomes)
         if (retryEvents.length === 0) {
             latest.drops = drops
+            latest.outcomes = outcomes
             if (drops.length) {
                 latest.error ??= new Error('Capture V1 dropped one or more events')
             }
@@ -765,7 +807,7 @@ export const sendCaptureV1Batch = async (
         }
 
         if (!canContinue(options.canRetry)) {
-            return finish(new Error('Capture V1 retry was cancelled'))
+            return finish(new Error('Capture V1 retry was cancelled'), true)
         }
 
         const delay = retryDelay(attempt, initialDelayMs, maxBackoffMs, random, parseRetryAfter(response, now))
@@ -778,12 +820,13 @@ export const sendCaptureV1Batch = async (
                 throw cancellationError()
             }
         } catch (error) {
-            return finish(error)
+            return finish(error, true)
         }
     }
 
     latest.retry = eventIds(pending)
     latest.drops = drops
+    latest.outcomes = outcomes
     return latest
 }
 
@@ -904,7 +947,7 @@ export const sendCaptureV1Batches = async (
     options: CaptureV1BatchesOptions = {}
 ): Promise<CaptureV1BatchesResult> => {
     if (messages.length === 0) {
-        return { statusCode: 204, retry: [], retryMessages: [], drops: [] }
+        return { statusCode: 204, retry: [], retryMessages: [], drops: [], outcomes: {} }
     }
 
     const now = options.now ?? Date.now
@@ -923,7 +966,13 @@ export const sendCaptureV1Batches = async (
     const maxBatchEvents = Math.floor(numberOption(options.maxBatchEvents, CAPTURE_V1_MAX_BATCH_EVENTS, 1))
     const targetBatchBytes = Math.floor(numberOption(options.targetBatchBytes, CAPTURE_V1_BATCH_TARGET_BYTES, 1))
     const batches = partitionEvents(events, partitionCreatedAt, maxBatchEvents, targetBatchBytes)
-    const aggregate: CaptureV1BatchesResult = { statusCode: 204, retry: [], retryMessages: [], drops: [] }
+    const aggregate: CaptureV1BatchesResult = {
+        statusCode: 204,
+        retry: [],
+        retryMessages: [],
+        drops: [],
+        outcomes: {},
+    }
 
     for (let index = 0; index < batches.length; index++) {
         const remaining = remainingTime()
@@ -932,9 +981,11 @@ export const sendCaptureV1Batches = async (
             const unsent = batches.slice(index).flat()
             aggregate.retry.push(...eventIds(unsent))
             aggregate.retryMessages.push(...unsent.map(({ source }) => source))
-            aggregate.error ??= new Error(
+            const terminalError = new Error(
                 cancelled ? 'Capture V1 retry was cancelled' : 'Capture V1 exhausted its elapsed retry budget'
             )
+            aggregate.error ??= terminalError
+            aggregate.terminalError ??= terminalError
             return aggregate
         }
 
@@ -956,8 +1007,12 @@ export const sendCaptureV1Batches = async (
         const retryIds = new Set(result.retry)
         aggregate.retryMessages.push(...batch.filter(({ uuid }) => retryIds.has(uuid)).map(({ source }) => source))
         aggregate.drops.push(...result.drops)
+        mergeOutcomes(aggregate.outcomes, result.outcomes)
         if (result.error !== undefined) {
             aggregate.error ??= result.error
+        }
+        if (result.terminalError !== undefined) {
+            aggregate.terminalError ??= result.terminalError
         }
     }
 
