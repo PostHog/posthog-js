@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags, logs, and surveys orchestration during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags, logs, surveys orchestration, and autocapture during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -194,7 +194,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags, logs, and surveys orchestration load during async initialization. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags, logs, surveys orchestration, and autocapture load during async initialization. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -202,6 +202,12 @@ A bundler cannot remove an internal module when the factory always needs that mo
 Do not implement a large optional feature as a method on the core client class.
 Bundlers usually retain all methods on a used class.
 Use an extension or an adapter instead.
+
+### Autocapture
+
+The root awaits a literal dynamic autocapture import and setup, unless disabled or an explicit instance exists. `/autocapture` statically includes the same browser-common implementation; the manual core has no automatic import. Configuration uses camelCase, maps inside the optional module, and snapshots arrays/regular expressions without losing callbacks. The latest staged browser defaults apply: URL hashes are redacted, rageclick ignores stepper content and text-selection surfaces, clipboard capture is opt-in, and text/attribute masking remains false by default. Remote-config/cached opt-out policy, consent, DOM privacy filters, and event wire properties remain shared. No new core method or host contract is needed.
+
+Survey action selectors are owned by the optional surveys module. It returns copied snapshots to autocapture at setup and forwards replacements when definitions register later. Receiver creation hydrates running triggers from the existing cached definitions without adding requests or bypassing TTL/backoff. Successful full definition refreshes replace next's trigger maps, including empty snapshots; failed fetches retain them. The shared orchestration's default registration policy is unchanged for legacy clients. Survey disposal clears its selector set. For URL-constrained actions, the surveys observation adapter supplies a missing URL from its existing targeting URL capability only to local matching; explicit event URL values are preserved and observed/wire events are not modified. There is no generic extension-registration observer or core selector catalog. Matching keeps existing exact-target and SVG-control attribution rather than broadening ancestor matches.
 
 ### Feature flags
 
@@ -317,7 +323,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature. Automatic analytics delivery, feature flags, logs, and surveys orchestration use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
+Use a separate export subpath for each substantial optional feature. Automatic analytics delivery, feature flags, logs, surveys orchestration, and autocapture use literal dynamic imports from the root entrypoint; the core entrypoint references none of their automatic loaders.
 
 Example:
 
@@ -327,7 +333,7 @@ Example:
 @posthog/browser/delivery/analytics
 @posthog/browser/persistence/cookie
 @posthog/browser/delivery/durable
-@posthog/browser/extensions/feature-flags
+@posthog/browser/flags
 ```
 
 Add the source entry and the package export in the same change.
@@ -363,9 +369,9 @@ The change must include measurements that support this decision.
 
 ### 8.3 Register only selected extensions
 
-The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics, feature-flags, logs, and surveys instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
+The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics, feature-flags, logs, surveys, and autocapture instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
 
-Do not add a static catalog of product implementations to core. The root selects automatic analytics, flags, logs, and surveys through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
+Do not add a static catalog of product implementations to core. The root selects automatic analytics, flags, logs, surveys, and autocapture through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
 
 Do not put this code in the root graph:
 
@@ -385,10 +391,10 @@ A generic loader function does not create a chunk by itself. The owner or a prod
 Use this form when the application selects an extension before client creation:
 
 ```ts
-const { featureFlags } = await import('@posthog/browser/extensions/feature-flags')
+const { flags } = await import('@posthog/browser/flags')
 const posthog = await createPostHog({
     projectToken,
-    extensions: [featureFlags()],
+    extensions: [flags()],
 })
 ```
 
