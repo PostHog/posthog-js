@@ -51,6 +51,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearAllInMemoryInProgressSurveyState,
     clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
@@ -277,6 +278,14 @@ export class SurveyManager {
             this._surveyPopupProps = null
             this._displayOptions = undefined
         }
+    }
+
+    /**
+     * Called by the core on reset(). It cannot clear the map itself: survey-utils compiles into
+     * both the core and this extension, so a core-side clear reaches only its own unused copy.
+     */
+    public clearInMemoryInProgressSurveyState(): void {
+        clearAllInMemoryInProgressSurveyState()
     }
 
     public setAutomaticDisplayDispose(dispose: () => void): void {

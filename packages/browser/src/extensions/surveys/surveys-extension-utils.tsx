@@ -780,9 +780,14 @@ const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iterat
 // Holds the state localStorage refused to take. A document with an opaque origin (the hosted
 // survey page is served with a `sandbox` CSP that omits `allow-same-origin`) throws on every
 // access, and this state is the only channel carrying a URL-prefilled answer and its start index
-// to the question renderer. Only ever populated when a write fails, so storage stays the source
-// of truth wherever it works, and cleared with the survey so a finished one leaves nothing behind.
+// to the question renderer. Only populated when a write fails, so storage stays authoritative.
 const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
+
+export const clearAllInMemoryInProgressSurveyState = (): void => {
+    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
+        delete inMemoryInProgressSurveyState[key]
+    }
+}
 
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
