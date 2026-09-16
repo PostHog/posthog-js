@@ -91,13 +91,14 @@ function createMockWindow() {
     return { mockWindow, performanceEntries, observerCallbacks }
 }
 
-function createNavigationTimingEntry(name: string) {
+function createNavigationTimingEntry(name: string, loadEventEnd: number = 400) {
     return {
         name,
         entryType: 'navigation',
         initiatorType: 'navigation',
         startTime: 0,
         responseEnd: 120,
+        loadEventEnd,
         toJSON() {
             return {
                 name: this.name,
@@ -541,6 +542,18 @@ describe('network plugin', () => {
                 global.PerformanceObserver = mockWindow.PerformanceObserver
                 mockWindow.document.readyState = 'loading'
                 performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})
+
+                expect(callback).not.toHaveBeenCalled()
+            })
+
+            it('leaves the navigation entry to the observer while the load event has not finished', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                // readiness turns `complete` before the load event fires, so the entry is not final yet
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
 
                 const callback = vi.fn()
                 cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})

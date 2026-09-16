@@ -64,11 +64,16 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
 // so a recorder that starts after the document loaded must read the navigation timings itself
 function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
     // while the document still loads the observer delivers the entry when it completes,
-    // so reading it here would capture partial timings and duplicate that delivery
+    // so reading it here would capture partial timings and duplicate that delivery.
+    // readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd`
+    // proves the entry is final and was already delivered to any observer watching at the time
     if (win.document?.readyState !== 'complete') {
         return []
     }
-    return win.performance.getEntriesByType('navigation').filter(isNavigationTiming)
+    return win.performance
+        .getEntriesByType('navigation')
+        .filter(isNavigationTiming)
+        .filter((entry) => entry.loadEventEnd > 0)
 }
 
 function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
