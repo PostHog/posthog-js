@@ -197,12 +197,7 @@ describe('captureImmediate', () => {
             new EventBuffer<AnalyticsMessage>(1_000, () => {}),
             posthog,
             {
-                runtime: [
-                    { api: 'https://example.com', flags: 'https://example.com', assets: 'https://example.com' },
-                    'ph_test',
-                    fetch,
-                    undefined,
-                ],
+                runtime: [{ api: 'https://example.com', flags: 'https://example.com' }, 'ph_test', fetch, undefined],
                 canRetry: () => true,
                 onAvailable() {},
                 reportFailure() {},

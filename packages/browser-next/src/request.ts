@@ -1,4 +1,4 @@
-import type { ApiResponse, RequestTarget, SendRequestInit } from '@posthog/browser-common'
+import type { ApiResponse, SendRequestInit } from '@posthog/browser-common'
 
 import type { BrowserFetch, BrowserNavigator } from './types'
 
@@ -27,7 +27,7 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
 }
 
 export type RequestRuntime = [
-    hosts: Record<RequestTarget, string>,
+    hosts: { api: string; flags: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,
@@ -50,7 +50,7 @@ export const sendRequest = async (
             return createFailedResponse(new Error('Request paths must be relative to a configured PostHog host'))
         }
 
-        const baseUrl = new URL(`${runtime[0][init.target ?? 'api']}/`)
+        const baseUrl = new URL(`${runtime[0][init.target === 'flags' ? 'flags' : 'api']}/`)
         url = new URL(path, baseUrl)
         if (url.origin !== baseUrl.origin) {
             return createFailedResponse(new Error('Request path resolved outside the configured PostHog host'))

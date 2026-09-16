@@ -22,17 +22,15 @@ describe.each([
     })
 
     it.each([
-        [undefined, undefined, 'https://us-assets.i.posthog.com'],
-        ['https://eu.i.posthog.com/', undefined, 'https://eu-assets.i.posthog.com'],
-        ['https://app.posthog.com', undefined, 'https://us-assets.i.posthog.com'],
-        ['https://proxy.example.com', undefined, 'https://proxy.example.com'],
-        ['https://us.i.posthog.com', 'https://assets.example.com/', 'https://assets.example.com'],
-    ])('routes the JSON GET through the configured assets host (%s, %s)', async (apiHost, assetsHost, host) => {
+        [undefined, 'https://us.i.posthog.com'],
+        ['https://eu.i.posthog.com/', 'https://eu.i.posthog.com'],
+        ['https://app.posthog.com', 'https://app.posthog.com'],
+        ['https://proxy.example.com', 'https://proxy.example.com'],
+    ])('routes the JSON GET through the configured API host (%s)', async (apiHost, host) => {
         const fetch = vi.fn(async () => response())
         const posthog = await create({
             ...options,
             ...(apiHost ? { apiHost } : {}),
-            ...(assetsHost ? { assetsHost } : {}),
             fetch,
         })
         await expect(posthog.getRemoteConfig()).resolves.toEqual(localRemoteConfig)
