@@ -34,6 +34,42 @@ const posthog = await createPostHog({
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
 
+## Feature flags
+
+Flags dynamically load during `createPostHog()` by default. Initialization waits for the module and extension setup, not the network response. Use `flags: false` to omit automatic flags, or configure the extension through `flags`:
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    flags: { evaluationContexts: ['web'], requestTimeoutMs: 3_000 },
+})
+const subscription = posthog.onFeatureFlags((results, errorsLoading) => {
+    if (!errorsLoading) console.log(results)
+})
+const result = posthog.getFeatureFlag('new-onboarding')
+if (result?.enabled) console.log(result.variant, result.payload)
+subscription.dispose()
+```
+
+`getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
+
+For static inclusion, import the factory explicitly and pass the same configuration:
+
+```ts
+import { flags } from '@posthog/browser/flags'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
+})
+```
+
+An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
+
+Flags uses the selected storage in a separate `<effective core persistence key>_flags` record, isolated from unrelated core saves. Matching identities synchronize across tabs; explicit reset clears local flags for the new identity. Storage failures fall back to memory. This layout does not migrate legacy `posthog-js` flags. Concurrent simultaneous writes are not atomic.
+
+## Capture and delivery
+
 `capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.

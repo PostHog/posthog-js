@@ -742,16 +742,11 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const addDocumentListener = vi.spyOn(document, 'addEventListener')
             setRefreshInterval.mockClear()
             addDocumentListener.mockClear()
-            vi.doMock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
-                ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
-                document: undefined,
-            }))
+            const originalDocument = globalThis.document
+            vi.stubGlobal('document', undefined)
 
             try {
-                vi.resetModules()
-                const { PostHogFeatureFlags: NoDocumentFeatureFlags } =
-                    await import('@posthog/browser-common/feature-flags')
-                const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
+                const noDocumentFeatureFlags = new SharedFeatureFlags({
                     get: () => ({ ...config, refreshIntervalMs }),
                 })
 
@@ -760,8 +755,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
                 noDocumentFeatureFlags.dispose()
             } finally {
-                vi.doUnmock('@posthog/browser-common/utils/globals')
-                vi.resetModules()
+                vi.stubGlobal('document', originalDocument)
             }
 
             expect(setRefreshInterval).not.toHaveBeenCalled()

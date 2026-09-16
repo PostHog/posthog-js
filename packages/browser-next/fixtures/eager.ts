@@ -1,4 +1,4 @@
-import { createPostHog } from '@posthog/browser'
+import { createPostHog } from '@posthog/browser/core'
 import { analytics } from '@posthog/browser/analytics'
 
 void createPostHog({ projectToken: 'ph_test', extensions: [analytics()] }).then(async (posthog) => {
