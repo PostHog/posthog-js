@@ -191,6 +191,16 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
     await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
 }
 
+const surveyTypes = await build({
+    entryPoints: ['fixtures/survey-types.ts'],
+    bundle: true,
+    format: 'esm',
+    write: false,
+})
+if (surveyTypes.outputFiles.some((file) => file.text.trim())) {
+    throw new Error('Type-only survey contracts must not retain runtime code')
+}
+
 await measureStatic('core', 'fixtures/minimal.ts', true)
 await measureStatic('eager analytics', 'fixtures/eager.ts', false)
 await measureLazy()
