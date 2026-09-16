@@ -43,7 +43,7 @@ After adoption, check native watch-mode behavior on POSIX systems with:
 node scripts/native-typescript-trial/watch-check.mjs
 ```
 
-It checks initial declarations, a declaration-changing edit, TS2322 reporting, and recovery after fixing the error, then stops the whole watcher process group.
+It checks initial declarations, a declaration-changing edit, TS2322 reporting, and a declaration unique to the corrected recovery build, then stops the whole watcher process group. Run `pnpm --dir scripts/native-typescript-trial test` for the regression check that ensures a failed build's declaration cannot satisfy recovery. Both checks write temporary package sources, so run them sequentially in an idle checkout.
 
 The harness uses temporary package configs and, during negative build checks, a temporary source file. Run it without concurrent work in the same checkout. Normal completion and ordinary failures clean these up; after a forced process kill inspect `.native-trial-*`, `__native_trial_canary_*`, and the trial compiler links before resuming development.
 

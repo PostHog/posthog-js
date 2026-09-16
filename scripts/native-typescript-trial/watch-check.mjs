@@ -72,8 +72,8 @@ try {
     const beforeError = log.length
     writeFileSync(source, 'export const value: string = 123\n')
     await until(() => log.slice(beforeError).includes('TS2322'))
-    writeFileSync(source, "export const value: string = 'recovered'\n")
-    await until(() => declares('string'))
+    writeFileSync(source, 'export const value: boolean = true\n')
+    await until(() => declares('boolean'))
     process.stdout.write('Native types watch: initial emit, declaration update, semantic error, and recovery passed.\n')
 } finally {
     if (child?.pid) {

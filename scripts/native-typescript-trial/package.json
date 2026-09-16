@@ -3,6 +3,7 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "test": "node --test watch-check.test.mjs",
         "verify": "node trial.mjs verify",
         "benchmark": "node trial.mjs benchmark"
     },
