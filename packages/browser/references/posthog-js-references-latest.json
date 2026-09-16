@@ -2526,7 +2526,7 @@
       "id": "DisplaySurveyOptions",
       "name": "DisplaySurveyOptions",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions"
     },
     {
@@ -2553,13 +2553,13 @@
           "name": "skipShownEvent"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
     },
     {
@@ -5427,7 +5427,7 @@
       "id": "SurveyCallback",
       "name": "SurveyCallback",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(surveys: Survey[], context?: {\n    isLoaded: boolean;\n    error?: string;\n}) => void"
     },
     {
@@ -5452,7 +5452,7 @@
           "name": "prefillFromUrl"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyElement",
@@ -5507,34 +5507,34 @@
           "name": "text"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyEventName",
       "name": "SurveyEventName",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
     },
     {
       "id": "SurveyEventProperties",
       "name": "SurveyEventProperties",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
     },
     {
       "id": "SurveyEventType",
       "name": "SurveyEventType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
@@ -5548,7 +5548,7 @@
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
@@ -5562,41 +5562,41 @@
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyResponseValue",
       "name": "SurveyResponseValue",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTabPosition",
       "name": "SurveyTabPosition",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
     },
     {
       "id": "SurveyType",
       "name": "SurveyType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
       "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
+      "path": "../browser-common/dist/survey-constants.d.ts",
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {

@@ -1,5 +1,5 @@
 import type { Properties } from '@posthog/types'
-import type { Survey, SurveyCallback, DisplaySurveyPopoverOptions } from './surveys-types'
+import type { Survey, SurveyCallback, DisplaySurveyPopoverOptions } from './types/surveys'
 
 export const SURVEYS = '$surveys'
 export const SURVEYS_LOADED_AT = '$surveys_loaded_at'

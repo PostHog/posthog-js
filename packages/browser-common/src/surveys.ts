@@ -1,3 +1,16 @@
+export {
+    SurveyEventType,
+    SurveyWidgetType,
+    SurveyPosition,
+    SurveyTabPosition,
+    SurveyType,
+    SurveyQuestionType,
+    SurveyQuestionBranchingType,
+    SurveySchedule,
+    SurveyEventName,
+    SurveyEventProperties,
+    DisplaySurveyType,
+} from './survey-constants'
 import type { ApiResponse, Client, SendRequestInit } from './client'
 import type { DeepReadonly } from './client'
 import type { Disposable } from './disposable'
@@ -13,13 +26,8 @@ import {
     SURVEYS_REFRESH_BACKOFF_MS,
 } from './surveys-config'
 import type { SurveysManager, SurveysEventReceiver } from './surveys-config'
-import {
-    type DisplaySurveyOptions,
-    DisplaySurveyType,
-    type Survey,
-    type SurveyCallback,
-    type SurveyRenderReason,
-} from './surveys-types'
+import { type DisplaySurveyOptions, type Survey, type SurveyCallback, type SurveyRenderReason } from './types/surveys'
+import { DisplaySurveyType } from './survey-constants'
 import type { SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
 import type { Properties } from '@posthog/types'
 import type { RemoteConfigResult } from './types/remote-config'
