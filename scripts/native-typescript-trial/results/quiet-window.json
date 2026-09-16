@@ -1,0 +1,36 @@
+{
+    "date": "2026-09-16T09:40:14.391Z",
+    "threads": [
+        {
+            "id": "thr_53ryinb379",
+            "status": "idle"
+        },
+        {
+            "id": "thr_reqj2zkdgm",
+            "status": "idle"
+        },
+        {
+            "id": "thr_gftdtf838f",
+            "status": "idle"
+        },
+        {
+            "id": "thr_axmsaga6du",
+            "status": "idle"
+        },
+        {
+            "id": "thr_aabew7x6qr",
+            "status": "idle"
+        }
+    ],
+    "processes": [],
+    "parent": "Parent explicitly paused builds, installs, tests, and heavy validation until end notice.",
+    "resumeAudit": {
+        "date": "2026-09-16T12:32:19.004Z",
+        "benchmarkComplete": true,
+        "successfulRows": 21,
+        "samplesPerRow": 5,
+        "ineligibleRows": 6,
+        "note": "The original job completed and wrote its full report before the manual stop. No surviving trial/build processes were found on resume; all 27 rows and medians validated. No samples combined across runs."
+    },
+    "benchmarkReportWrittenAt": "2026-09-16T09:43:19.818Z"
+}

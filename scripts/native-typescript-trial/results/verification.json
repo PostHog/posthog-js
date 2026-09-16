@@ -1,0 +1,1400 @@
+{
+    "mode": "verify",
+    "complete": true,
+    "quietWindow": null,
+    "date": "2026-09-16T12:37:40.468Z",
+    "commit": "916e16394de38e01789309ea314f23e6ad436c46",
+    "trialLockfileSha256": "63a660420d3f28f37bcdc95ce665a8c6c67a58cc0d0d07d4fb66770b8ae2497c",
+    "lockfileSha256": "8d002b4d0c11f5c99709358b77c67dffd48c52e827f11a5ec3baa557b7c79619",
+    "host": {
+        "node": "v24.21.0",
+        "pnpm": "11.7.0",
+        "platform": "darwin",
+        "arch": "arm64",
+        "release": "25.6.0",
+        "cpu": "Apple M4 Pro",
+        "logicalCpus": 14,
+        "memoryBytes": 51539607552
+    },
+    "versions": {
+        "tsc": {
+            "command": ["node", "<repo>/node_modules/typescript/bin/tsc", "--version"],
+            "status": 0,
+            "diagnostics": "Version 5.8.2\n"
+        },
+        "nextPreview": {
+            "command": [
+                "node",
+                "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                "--version"
+            ],
+            "status": 0,
+            "diagnostics": "Version 7.0.0-dev.20260216.1\n"
+        },
+        "currentPreview": {
+            "command": [
+                "node",
+                "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                "--version"
+            ],
+            "status": 0,
+            "diagnostics": "Version 7.0.0-dev.20260707.2\n"
+        }
+    },
+    "results": [
+        {
+            "pkg": "types",
+            "compiler": "tsc",
+            "operation": "typescript-4.7.4-consumer",
+            "command": [
+                "node",
+                "<repo>/scripts/native-typescript-trial/node_modules/typescript-min/bin/tsc",
+                "-p",
+                "<scratch>/consumer-tsc.json",
+                "--pretty",
+                "false"
+            ],
+            "status": 0,
+            "diagnostics": ""
+        },
+        {
+            "pkg": "types",
+            "compiler": "tsc",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/types/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 30,
+                "sha256": "659b6e69a2883edd12f2ebf26070b03b245b131af3cdad96a675902dfca59c1f"
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "operation": "typescript-4.7.4-consumer",
+            "command": [
+                "node",
+                "<repo>/scripts/native-typescript-trial/node_modules/typescript-min/bin/tsc",
+                "-p",
+                "<scratch>/consumer-nextPreview.json",
+                "--pretty",
+                "false"
+            ],
+            "status": 0,
+            "diagnostics": ""
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/types/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 30,
+                "sha256": "659b6e69a2883edd12f2ebf26070b03b245b131af3cdad96a675902dfca59c1f"
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "operation": "typescript-4.7.4-consumer",
+            "command": [
+                "node",
+                "<repo>/scripts/native-typescript-trial/node_modules/typescript-min/bin/tsc",
+                "-p",
+                "<scratch>/consumer-currentPreview.json",
+                "--pretty",
+                "false"
+            ],
+            "status": 0,
+            "diagnostics": ""
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/types/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 30,
+                "sha256": "659b6e69a2883edd12f2ebf26070b03b245b131af3cdad96a675902dfca59c1f"
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "outputParity": [],
+            "baselineFileCount": 30,
+            "candidateFileCount": 30
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "outputParity": [],
+            "baselineFileCount": 30,
+            "candidateFileCount": 30
+        },
+        {
+            "pkg": "core",
+            "compiler": "tsc",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/core/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 158,
+                "sha256": "3e95a9ed13e8bbac8d75216d4505ad6c291320048ea0a930d9a2132ad5795522"
+            }
+        },
+        {
+            "pkg": "core",
+            "compiler": "nextPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/core/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 158,
+                "sha256": "294f949bf9742985d6f94a78b8794f0f058a710daf1472c7c36ef70e0ff22915"
+            }
+        },
+        {
+            "pkg": "core",
+            "compiler": "currentPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 1,
+                "diagnostics": "error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "semanticCanary": false,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/core/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "packages/core/.native-trial-82515.json(1,134): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "files": {
+                "count": 0,
+                "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+            }
+        },
+        {
+            "pkg": "core",
+            "compiler": "nextPreview",
+            "outputParity": [
+                "error-tracking/parsers/index.js",
+                "error-tracking/parsers/node.js",
+                "error-tracking/parsers/opera.js",
+                "featureFlagUtils.d.ts",
+                "featureFlagUtils.js",
+                "index.js",
+                "metrics/index.js",
+                "posthog-core-stateless.d.ts",
+                "posthog-core-stateless.js",
+                "surveys/index.js",
+                "testing/PostHogCoreTestClient.d.ts",
+                "traces/index.d.ts",
+                "tracing-headers.d.ts",
+                "types.d.ts",
+                "utils/index.js",
+                "utils/string-utils.js",
+                "utils/type-utils.d.ts",
+                "utils/type-utils.js",
+                "utils/user-agent-utils.d.ts",
+                "utils/user-agent-utils.js"
+            ],
+            "baselineFileCount": 158,
+            "candidateFileCount": 158
+        },
+        {
+            "pkg": "core",
+            "compiler": "currentPreview",
+            "outputParity": [
+                "cookie.d.ts",
+                "cookie.js",
+                "error-tracking/chunk-ids.d.ts",
+                "error-tracking/chunk-ids.js",
+                "error-tracking/coercers/dom-exception-coercer.d.ts",
+                "error-tracking/coercers/dom-exception-coercer.js",
+                "error-tracking/coercers/error-coercer.d.ts",
+                "error-tracking/coercers/error-coercer.js",
+                "error-tracking/coercers/error-event-coercer.d.ts",
+                "error-tracking/coercers/error-event-coercer.js",
+                "error-tracking/coercers/event-coercer.d.ts",
+                "error-tracking/coercers/event-coercer.js",
+                "error-tracking/coercers/index.d.ts",
+                "error-tracking/coercers/index.js",
+                "error-tracking/coercers/object-coercer.d.ts",
+                "error-tracking/coercers/object-coercer.js",
+                "error-tracking/coercers/primitive-coercer.d.ts",
+                "error-tracking/coercers/primitive-coercer.js",
+                "error-tracking/coercers/promise-rejection-event.d.ts",
+                "error-tracking/coercers/promise-rejection-event.js",
+                "error-tracking/coercers/string-coercer.d.ts",
+                "error-tracking/coercers/string-coercer.js",
+                "error-tracking/coercers/utils.d.ts",
+                "error-tracking/coercers/utils.js",
+                "error-tracking/error-properties-builder.d.ts",
+                "error-tracking/error-properties-builder.js",
+                "error-tracking/exception-steps.d.ts",
+                "error-tracking/exception-steps.js",
+                "error-tracking/index.d.ts",
+                "error-tracking/index.js",
+                "error-tracking/parsers/base.d.ts",
+                "error-tracking/parsers/base.js",
+                "error-tracking/parsers/chrome.d.ts",
+                "error-tracking/parsers/chrome.js",
+                "error-tracking/parsers/gecko.d.ts",
+                "error-tracking/parsers/gecko.js",
+                "error-tracking/parsers/index.d.ts",
+                "error-tracking/parsers/index.js",
+                "error-tracking/parsers/node.d.ts",
+                "error-tracking/parsers/node.js",
+                "error-tracking/parsers/opera.d.ts",
+                "error-tracking/parsers/opera.js",
+                "error-tracking/parsers/safari.d.ts",
+                "error-tracking/parsers/safari.js",
+                "error-tracking/parsers/winjs.d.ts",
+                "error-tracking/parsers/winjs.js",
+                "error-tracking/release.d.ts",
+                "error-tracking/release.js",
+                "error-tracking/types.d.ts",
+                "error-tracking/types.js",
+                "error-tracking/utils.d.ts",
+                "error-tracking/utils.js",
+                "eventemitter.d.ts",
+                "eventemitter.js",
+                "featureFlagLocalEvaluation.d.ts",
+                "featureFlagLocalEvaluation.js",
+                "featureFlagUtils.d.ts",
+                "featureFlagUtils.js",
+                "gzip.d.ts",
+                "gzip.js",
+                "index.d.ts",
+                "index.js",
+                "logs/index.d.ts",
+                "logs/index.js",
+                "logs/logs-utils.d.ts",
+                "logs/logs-utils.js",
+                "logs/types.d.ts",
+                "logs/types.js",
+                "metrics/config.d.ts",
+                "metrics/config.js",
+                "metrics/index.d.ts",
+                "metrics/index.js",
+                "metrics/metrics-utils.d.ts",
+                "metrics/metrics-utils.js",
+                "metrics/types.d.ts",
+                "metrics/types.js",
+                "posthog-core-stateless.d.ts",
+                "posthog-core-stateless.js",
+                "posthog-core.d.ts",
+                "posthog-core.js",
+                "surveys/activation.d.ts",
+                "surveys/activation.js",
+                "surveys/events.d.ts",
+                "surveys/events.js",
+                "surveys/index.d.ts",
+                "surveys/index.js",
+                "surveys/keys.d.ts",
+                "surveys/keys.js",
+                "surveys/property-matching.d.ts",
+                "surveys/property-matching.js",
+                "surveys/translations.d.ts",
+                "surveys/translations.js",
+                "surveys/validation.d.ts",
+                "surveys/validation.js",
+                "testing/index.d.ts",
+                "testing/index.js",
+                "testing/PostHogCoreTestClient.d.ts",
+                "testing/PostHogCoreTestClient.js",
+                "testing/test-utils.d.ts",
+                "testing/test-utils.js",
+                "traces/config.d.ts",
+                "traces/config.js",
+                "traces/context.d.ts",
+                "traces/context.js",
+                "traces/ids.d.ts",
+                "traces/ids.js",
+                "traces/index.d.ts",
+                "traces/index.js",
+                "traces/otlp.d.ts",
+                "traces/otlp.js",
+                "traces/sanitize.d.ts",
+                "traces/sanitize.js",
+                "traces/span.d.ts",
+                "traces/span.js",
+                "traces/traceparent.d.ts",
+                "traces/traceparent.js",
+                "traces/types.d.ts",
+                "traces/types.js",
+                "tracing-headers.d.ts",
+                "tracing-headers.js",
+                "types.d.ts",
+                "types.js",
+                "utils/backoff.d.ts",
+                "utils/backoff.js",
+                "utils/bot-detection.d.ts",
+                "utils/bot-detection.js",
+                "utils/browser-utils.d.ts",
+                "utils/browser-utils.js",
+                "utils/bucketed-rate-limiter.d.ts",
+                "utils/bucketed-rate-limiter.js",
+                "utils/flush-timer.d.ts",
+                "utils/flush-timer.js",
+                "utils/index.d.ts",
+                "utils/index.js",
+                "utils/json-utils.d.ts",
+                "utils/json-utils.js",
+                "utils/logger.d.ts",
+                "utils/logger.js",
+                "utils/number-utils.d.ts",
+                "utils/number-utils.js",
+                "utils/otlp-any-value.d.ts",
+                "utils/otlp-any-value.js",
+                "utils/otlp-resource.d.ts",
+                "utils/otlp-resource.js",
+                "utils/promise-queue.d.ts",
+                "utils/promise-queue.js",
+                "utils/retry-after.d.ts",
+                "utils/retry-after.js",
+                "utils/string-utils.d.ts",
+                "utils/string-utils.js",
+                "utils/type-utils.d.ts",
+                "utils/type-utils.js",
+                "utils/user-agent-utils.d.ts",
+                "utils/user-agent-utils.js",
+                "utils/webview-app-utils.d.ts",
+                "utils/webview-app-utils.js",
+                "vendor/uuidv7.d.ts",
+                "vendor/uuidv7.js"
+            ],
+            "baselineFileCount": 158,
+            "candidateFileCount": 0
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "tsc",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/plugin-utils/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 12,
+                "sha256": "9dafdb3fc4ed2a9e23b361698aae4da643dbf77945718e9114a4d91c2afb1bb0"
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "nextPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": ""
+            },
+            "semanticCanary": true,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/plugin-utils/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 2,
+                "diagnostics": "../../../../../..<scratch>/canary.ts(1,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+            },
+            "files": {
+                "count": 12,
+                "sha256": "baa2d601a17daa3d71b1cf44f4894230f5c5b6553a8055d2dc942844220d36aa"
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "currentPreview",
+            "check": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "packages/plugin-utils/tsconfig.build.json(3,3): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "emit": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 1,
+                "diagnostics": "packages/plugin-utils/tsconfig.build.json(3,3): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "semanticCanary": false,
+            "negative": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/plugin-utils/.native-trial-82515.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "packages/plugin-utils/.native-trial-82515.json(1,142): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "files": {
+                "count": 0,
+                "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "nextPreview",
+            "outputParity": ["index.js"],
+            "baselineFileCount": 12,
+            "candidateFileCount": 12
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "currentPreview",
+            "outputParity": [
+                "chunk-ids.d.ts",
+                "chunk-ids.js",
+                "cli.d.ts",
+                "cli.js",
+                "config.d.ts",
+                "config.js",
+                "index.d.ts",
+                "index.js",
+                "spawn-local.d.ts",
+                "spawn-local.js",
+                "utils.d.ts",
+                "utils.js"
+            ],
+            "baselineFileCount": 12,
+            "candidateFileCount": 0
+        },
+        {
+            "pkg": "types",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/types/.native-trial-82515.mjs"],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated in 1.10 s (esm)\nready   declaration files generated in 1.11 s (cjs)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:82659) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-i749qn2fy7=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+            "productionTypescript": "5.8.2",
+            "files": {
+                "count": 60,
+                "sha256": "286584225587e9af82702a14e8060005643476871dc1b7178dc06ff72ee47948"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.16s (esm)\nready   built in 0.16s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.4 kB (esm)\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 11.9 kB (cjs)\n\n(node:82754) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-d4rxhh6n0r=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (esm)\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 32,
+                    "sha256": "6a70128e6b7bba703ed2e3e688e64f825c5e5f814445a8db9d006a710a0a95a2"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/types/.native-trial-82515.mjs"],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (cjs)\nready   built in 0.15s (esm)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.27 s (esm)\nready   declaration files generated with tsgo in 0.27 s (cjs)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:82850) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-z9aupwtk93=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+            "productionTypescript": "5.8.2",
+            "files": {
+                "count": 60,
+                "sha256": "18a9e87faa301cb9da4d8e564805f5a7aa4dea27c9311dc75715fe9251e0fe7f"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.17s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.4 kB (esm)\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 11.9 kB (cjs)\n\n(node:82941) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-on09xijkxyb=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to generate declaration files. (esm)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 32,
+                    "sha256": "6a70128e6b7bba703ed2e3e688e64f825c5e5f814445a8db9d006a710a0a95a2"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/types/.native-trial-82515.mjs"],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.16s (cjs)\nready   built in 0.16s (esm)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.28 s (esm)\nready   declaration files generated with tsgo in 0.27 s (cjs)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:83038) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-0vzs9b34p9vr=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+            "productionTypescript": "5.8.2",
+            "files": {
+                "count": 60,
+                "sha256": "286584225587e9af82702a14e8060005643476871dc1b7178dc06ff72ee47948"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.4 kB (esm)\n\n16 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 11.9 kB (cjs)\n\n(node:83131) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-ql24nze4u1n=0,file://<repo>/packages/types/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\nerror   Failed to generate declaration files. (esm)\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 32,
+                    "sha256": "6a70128e6b7bba703ed2e3e688e64f825c5e5f814445a8db9d006a710a0a95a2"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 45,
+            "differingMaps": ["capture-log.d.ts.map", "capture-metric.d.ts.map"],
+            "differingFiles": []
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 45,
+            "differingMaps": [],
+            "differingFiles": []
+        },
+        {
+            "pkg": "core",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/core/.native-trial-82515.mjs"],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.18s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated in 0.95 s (esm)\nready   declaration files generated in 0.95 s (cjs)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:83221) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-3p1bz9rsnya=0,file://<repo>/packages/core/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 318,
+                "sha256": "892b0a973b57059ad246e7de9f2ebdd5bbde3dbe0634015d5eb843eb820a4fdc"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/core/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.18s (esm)\nready   built in 0.19s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n\n80 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n80 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 521.4 kB (cjs)\n\n(node:83331) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-ctw57d71a6=0,file://<repo>/packages/core/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (esm)\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 162,
+                    "sha256": "fb8203c9bb3d9527ac55b722f8cc193281d57b51ea1d8c4641d008d98aa9a042"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "core",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/core/.native-trial-82515.mjs"],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.18s (esm)\nready   built in 0.19s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.16 s (cjs)\nready   declaration files generated with tsgo in 0.17 s (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:83449) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-dym0qu07466=0,file://<repo>/packages/core/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 318,
+                "sha256": "ce53494c20a1e8c664c237487dc1502b5d9bc8ae0e8b1bafd880b924445feed8"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/core/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.17s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n\n80 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n80 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 521.4 kB (cjs)\n\n(node:83552) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-70wkdedu1j=0,file://<repo>/packages/core/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\nerror   Failed to generate declaration files. (esm)\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 162,
+                    "sha256": "fb8203c9bb3d9527ac55b722f8cc193281d57b51ea1d8c4641d008d98aa9a042"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "core",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "command": ["pnpm", "exec", "rslib", "build", "--config", "<repo>/packages/core/.native-trial-82515.mjs"],
+            "status": 1,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.18s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] Found 1 error.\n[tsgo] error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] Found 1 error.\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:83647) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-868c82q8cke=0,file://<repo>/packages/core/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\nerror   Failed to generate declaration files. (esm)\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 160,
+                "sha256": "48f74ae82376014fc494630aa322cb3825d7025dfa2234cee0e7653578211bf8"
+            },
+            "negative": null
+        },
+        {
+            "pkg": "core",
+            "compiler": "nextPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 239,
+            "differingMaps": [
+                "error-tracking/coercers/dom-exception-coercer.d.ts.map",
+                "error-tracking/coercers/error-coercer.d.ts.map",
+                "error-tracking/coercers/error-event-coercer.d.ts.map",
+                "error-tracking/coercers/event-coercer.d.ts.map",
+                "error-tracking/coercers/object-coercer.d.ts.map",
+                "error-tracking/coercers/primitive-coercer.d.ts.map",
+                "error-tracking/coercers/promise-rejection-event.d.ts.map",
+                "error-tracking/coercers/string-coercer.d.ts.map",
+                "error-tracking/error-properties-builder.d.ts.map",
+                "error-tracking/exception-steps.d.ts.map",
+                "error-tracking/parsers/safari.d.ts.map",
+                "error-tracking/utils.d.ts.map",
+                "eventemitter.d.ts.map",
+                "featureFlagLocalEvaluation.d.ts.map",
+                "featureFlagUtils.d.ts.map",
+                "gzip.d.ts.map",
+                "logs/index.d.ts.map",
+                "logs/types.d.ts.map",
+                "metrics/index.d.ts.map",
+                "metrics/types.d.ts.map",
+                "posthog-core-stateless.d.ts.map",
+                "posthog-core.d.ts.map",
+                "surveys/events.d.ts.map",
+                "surveys/property-matching.d.ts.map",
+                "testing/PostHogCoreTestClient.d.ts.map",
+                "testing/test-utils.d.ts.map",
+                "traces/context.d.ts.map",
+                "traces/index.d.ts.map",
+                "traces/span.d.ts.map",
+                "traces/types.d.ts.map",
+                "tracing-headers.d.ts.map",
+                "types.d.ts.map",
+                "utils/bot-detection.d.ts.map",
+                "utils/bucketed-rate-limiter.d.ts.map",
+                "utils/flush-timer.d.ts.map",
+                "utils/index.d.ts.map",
+                "utils/json-utils.d.ts.map",
+                "utils/logger.d.ts.map",
+                "utils/promise-queue.d.ts.map",
+                "utils/retry-after.d.ts.map",
+                "utils/string-utils.d.ts.map",
+                "utils/type-utils.d.ts.map",
+                "utils/user-agent-utils.d.ts.map",
+                "vendor/uuidv7.d.ts.map"
+            ],
+            "differingFiles": [
+                "featureFlagUtils.d.ts",
+                "posthog-core-stateless.d.ts",
+                "testing/PostHogCoreTestClient.d.ts",
+                "traces/index.d.ts",
+                "tracing-headers.d.ts",
+                "types.d.ts",
+                "utils/type-utils.d.ts",
+                "utils/user-agent-utils.d.ts"
+            ]
+        },
+        {
+            "pkg": "core",
+            "compiler": "currentPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 239,
+            "differingMaps": [
+                "cookie.d.ts.map",
+                "error-tracking/chunk-ids.d.ts.map",
+                "error-tracking/coercers/dom-exception-coercer.d.ts.map",
+                "error-tracking/coercers/error-coercer.d.ts.map",
+                "error-tracking/coercers/error-event-coercer.d.ts.map",
+                "error-tracking/coercers/event-coercer.d.ts.map",
+                "error-tracking/coercers/index.d.ts.map",
+                "error-tracking/coercers/object-coercer.d.ts.map",
+                "error-tracking/coercers/primitive-coercer.d.ts.map",
+                "error-tracking/coercers/promise-rejection-event.d.ts.map",
+                "error-tracking/coercers/string-coercer.d.ts.map",
+                "error-tracking/coercers/utils.d.ts.map",
+                "error-tracking/error-properties-builder.d.ts.map",
+                "error-tracking/exception-steps.d.ts.map",
+                "error-tracking/index.d.ts.map",
+                "error-tracking/parsers/base.d.ts.map",
+                "error-tracking/parsers/chrome.d.ts.map",
+                "error-tracking/parsers/gecko.d.ts.map",
+                "error-tracking/parsers/index.d.ts.map",
+                "error-tracking/parsers/node.d.ts.map",
+                "error-tracking/parsers/opera.d.ts.map",
+                "error-tracking/parsers/safari.d.ts.map",
+                "error-tracking/parsers/winjs.d.ts.map",
+                "error-tracking/release.d.ts.map",
+                "error-tracking/types.d.ts.map",
+                "error-tracking/utils.d.ts.map",
+                "eventemitter.d.ts.map",
+                "featureFlagLocalEvaluation.d.ts.map",
+                "featureFlagUtils.d.ts.map",
+                "gzip.d.ts.map",
+                "index.d.ts.map",
+                "logs/index.d.ts.map",
+                "logs/logs-utils.d.ts.map",
+                "logs/types.d.ts.map",
+                "metrics/config.d.ts.map",
+                "metrics/index.d.ts.map",
+                "metrics/metrics-utils.d.ts.map",
+                "metrics/types.d.ts.map",
+                "posthog-core-stateless.d.ts.map",
+                "posthog-core.d.ts.map",
+                "surveys/activation.d.ts.map",
+                "surveys/events.d.ts.map",
+                "surveys/index.d.ts.map",
+                "surveys/keys.d.ts.map",
+                "surveys/property-matching.d.ts.map",
+                "surveys/translations.d.ts.map",
+                "surveys/validation.d.ts.map",
+                "testing/index.d.ts.map",
+                "testing/PostHogCoreTestClient.d.ts.map",
+                "testing/test-utils.d.ts.map",
+                "traces/config.d.ts.map",
+                "traces/context.d.ts.map",
+                "traces/ids.d.ts.map",
+                "traces/index.d.ts.map",
+                "traces/otlp.d.ts.map",
+                "traces/sanitize.d.ts.map",
+                "traces/span.d.ts.map",
+                "traces/traceparent.d.ts.map",
+                "traces/types.d.ts.map",
+                "tracing-headers.d.ts.map",
+                "types.d.ts.map",
+                "utils/backoff.d.ts.map",
+                "utils/bot-detection.d.ts.map",
+                "utils/browser-utils.d.ts.map",
+                "utils/bucketed-rate-limiter.d.ts.map",
+                "utils/flush-timer.d.ts.map",
+                "utils/index.d.ts.map",
+                "utils/json-utils.d.ts.map",
+                "utils/logger.d.ts.map",
+                "utils/number-utils.d.ts.map",
+                "utils/otlp-any-value.d.ts.map",
+                "utils/otlp-resource.d.ts.map",
+                "utils/promise-queue.d.ts.map",
+                "utils/retry-after.d.ts.map",
+                "utils/string-utils.d.ts.map",
+                "utils/type-utils.d.ts.map",
+                "utils/user-agent-utils.d.ts.map",
+                "utils/webview-app-utils.d.ts.map",
+                "vendor/uuidv7.d.ts.map"
+            ],
+            "differingFiles": [
+                "cookie.d.ts",
+                "error-tracking/chunk-ids.d.ts",
+                "error-tracking/coercers/dom-exception-coercer.d.ts",
+                "error-tracking/coercers/error-coercer.d.ts",
+                "error-tracking/coercers/error-event-coercer.d.ts",
+                "error-tracking/coercers/event-coercer.d.ts",
+                "error-tracking/coercers/index.d.ts",
+                "error-tracking/coercers/object-coercer.d.ts",
+                "error-tracking/coercers/primitive-coercer.d.ts",
+                "error-tracking/coercers/promise-rejection-event.d.ts",
+                "error-tracking/coercers/string-coercer.d.ts",
+                "error-tracking/coercers/utils.d.ts",
+                "error-tracking/error-properties-builder.d.ts",
+                "error-tracking/exception-steps.d.ts",
+                "error-tracking/index.d.ts",
+                "error-tracking/parsers/base.d.ts",
+                "error-tracking/parsers/chrome.d.ts",
+                "error-tracking/parsers/gecko.d.ts",
+                "error-tracking/parsers/index.d.ts",
+                "error-tracking/parsers/node.d.ts",
+                "error-tracking/parsers/opera.d.ts",
+                "error-tracking/parsers/safari.d.ts",
+                "error-tracking/parsers/winjs.d.ts",
+                "error-tracking/release.d.ts",
+                "error-tracking/types.d.ts",
+                "error-tracking/utils.d.ts",
+                "eventemitter.d.ts",
+                "featureFlagLocalEvaluation.d.ts",
+                "featureFlagUtils.d.ts",
+                "gzip.d.ts",
+                "index.d.ts",
+                "logs/index.d.ts",
+                "logs/logs-utils.d.ts",
+                "logs/types.d.ts",
+                "metrics/config.d.ts",
+                "metrics/index.d.ts",
+                "metrics/metrics-utils.d.ts",
+                "metrics/types.d.ts",
+                "posthog-core-stateless.d.ts",
+                "posthog-core.d.ts",
+                "surveys/activation.d.ts",
+                "surveys/events.d.ts",
+                "surveys/index.d.ts",
+                "surveys/keys.d.ts",
+                "surveys/property-matching.d.ts",
+                "surveys/translations.d.ts",
+                "surveys/validation.d.ts",
+                "testing/index.d.ts",
+                "testing/PostHogCoreTestClient.d.ts",
+                "testing/test-utils.d.ts",
+                "traces/config.d.ts",
+                "traces/context.d.ts",
+                "traces/ids.d.ts",
+                "traces/index.d.ts",
+                "traces/otlp.d.ts",
+                "traces/sanitize.d.ts",
+                "traces/span.d.ts",
+                "traces/traceparent.d.ts",
+                "traces/types.d.ts",
+                "tracing-headers.d.ts",
+                "types.d.ts",
+                "utils/backoff.d.ts",
+                "utils/bot-detection.d.ts",
+                "utils/browser-utils.d.ts",
+                "utils/bucketed-rate-limiter.d.ts",
+                "utils/flush-timer.d.ts",
+                "utils/index.d.ts",
+                "utils/json-utils.d.ts",
+                "utils/logger.d.ts",
+                "utils/number-utils.d.ts",
+                "utils/otlp-any-value.d.ts",
+                "utils/otlp-resource.d.ts",
+                "utils/promise-queue.d.ts",
+                "utils/retry-after.d.ts",
+                "utils/string-utils.d.ts",
+                "utils/type-utils.d.ts",
+                "utils/user-agent-utils.d.ts",
+                "utils/webview-app-utils.d.ts",
+                "vendor/uuidv7.d.ts"
+            ]
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "command": [
+                "pnpm",
+                "exec",
+                "rslib",
+                "build",
+                "--config",
+                "<repo>/packages/plugin-utils/.native-trial-82515.mjs"
+            ],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated in 0.63 s (cjs)\nready   declaration files generated in 0.63 s (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:83741) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-7zyptbmyexy=0,file://<repo>/packages/plugin-utils/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 24,
+                "sha256": "6c5ffaebc3399aee3f7246c99923e088e4fea5d2084e8ce19b34193a29f95b64"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/plugin-utils/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.16s (esm)\nready   built in 0.16s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n\n7 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.3 kB (esm)\n\n7 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 24.4 kB (cjs)\n\n(node:83835) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-0zw54vhwo00o=0,file://<repo>/packages/plugin-utils/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (esm)\nerror   [tsc] src/__native_trial_canary_82515.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'.\n\n1 export const mustFail: string = 123\n               ~~~~~~~~\n\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 14,
+                    "sha256": "105d0f06f377e6c37a8f84bf45b66b4bf5c713fd12ffda757f003f22f80c3150"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "command": [
+                "pnpm",
+                "exec",
+                "rslib",
+                "build",
+                "--config",
+                "<repo>/packages/plugin-utils/.native-trial-82515.mjs"
+            ],
+            "status": 0,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (cjs)\nready   built in 0.15s (esm)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.11 s (esm)\nready   declaration files generated with tsgo in 0.12 s (cjs)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:83929) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-7puni5t8iop=0,file://<repo>/packages/plugin-utils/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 24,
+                "sha256": "e78255058e15bb39b73d60e1a001db7631f92af352da810204caa7e0b64f710f"
+            },
+            "negative": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/plugin-utils/.native-trial-82515.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.16s (esm)\nready   built in 0.16s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n[tsgo] src/__native_trial_canary_82515.ts:1:14 - error TS2322: \n[tsgo] Type 'number' is not assignable to type 'string'.\n[tsgo] 1 export const mustFail: string = 123\n[tsgo]                ~~~~~~~~\n[tsgo] Found 1 error in src/__native_trial_canary_82515.ts:1\n\n7 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.3 kB (esm)\n\n7 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 24.4 kB (cjs)\n\n(node:84022) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-ehq7u294cf6=0,file://<repo>/packages/plugin-utils/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\nerror   Failed to generate declaration files. (esm)\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 14,
+                    "sha256": "105d0f06f377e6c37a8f84bf45b66b4bf5c713fd12ffda757f003f22f80c3150"
+                },
+                "semanticCanary": true
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "command": [
+                "pnpm",
+                "exec",
+                "rslib",
+                "build",
+                "--config",
+                "<repo>/packages/plugin-utils/.native-trial-82515.mjs"
+            ],
+            "status": 1,
+            "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] tsconfig.build.json:3:3 - error TS5108: \n[tsgo] Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] 3   \"compilerOptions\": {\n[tsgo]     ~~~~~~~~~~~~~~~~~\n[tsgo] Found 1 error in tsconfig.build.json:3\n[tsgo] tsconfig.build.json:3:3 - error TS5108: \n[tsgo] Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] 3   \"compilerOptions\": {\n[tsgo]     ~~~~~~~~~~~~~~~~~\n[tsgo] Found 1 error in tsconfig.build.json:3\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:84116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-9zpbpklwp77=0,file://<repo>/packages/plugin-utils/.native-trial-82515.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to generate declaration files. (esm)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+            "productionTypescript": "5.9.3",
+            "files": {
+                "count": 12,
+                "sha256": "5b81f0e894a38dfcd6d9e25dc4000b2f9b67d5258f2f307ed9b0371f78188aa2"
+            },
+            "negative": null
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "nextPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 18,
+            "differingMaps": ["utils.d.ts.map"],
+            "differingFiles": []
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "currentPreview",
+            "operation": "rslib-parity",
+            "comparedFiles": 18,
+            "differingMaps": [
+                "chunk-ids.d.ts.map",
+                "cli.d.ts.map",
+                "config.d.ts.map",
+                "index.d.ts.map",
+                "spawn-local.d.ts.map",
+                "utils.d.ts.map"
+            ],
+            "differingFiles": [
+                "chunk-ids.d.ts",
+                "cli.d.ts",
+                "config.d.ts",
+                "index.d.ts",
+                "spawn-local.d.ts",
+                "utils.d.ts"
+            ]
+        }
+    ],
+    "completedAt": "2026-09-16T12:38:25.044Z"
+}

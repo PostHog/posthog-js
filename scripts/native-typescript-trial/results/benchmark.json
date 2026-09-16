@@ -1,0 +1,756 @@
+{
+    "mode": "benchmark",
+    "quietWindow": "2026-09-16T09:40:14Z: all five sibling threads idle; ps found no relevant build/test/install processes; parent paused heavy validation. See results/quiet-window.json.",
+    "date": "2026-09-16T09:40:22.063Z",
+    "commit": "916e16394de38e01789309ea314f23e6ad436c46",
+    "trialLockfileSha256": "63a660420d3f28f37bcdc95ce665a8c6c67a58cc0d0d07d4fb66770b8ae2497c",
+    "lockfileSha256": "5bf48c092ef6bb65075e4853c39531ed3090512f698e84ea22b2e9052dc87deb",
+    "host": {
+        "node": "v24.21.0",
+        "pnpm": "11.7.0",
+        "platform": "darwin",
+        "arch": "arm64",
+        "release": "25.6.0",
+        "cpu": "Apple M4 Pro",
+        "logicalCpus": 14,
+        "memoryBytes": 51539607552
+    },
+    "versions": {
+        "tsc": {
+            "command": ["node", "<repo>/node_modules/typescript/bin/tsc", "--version"],
+            "status": 0,
+            "diagnostics": "Version 5.8.2\n"
+        },
+        "nextPreview": {
+            "command": [
+                "node",
+                "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                "--version"
+            ],
+            "status": 0,
+            "diagnostics": "Version 7.0.0-dev.20260216.1\n"
+        },
+        "currentPreview": {
+            "command": [
+                "node",
+                "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                "--version"
+            ],
+            "status": 0,
+            "diagnostics": "Version 7.0.0-dev.20260707.2\n"
+        }
+    },
+    "results": [
+        {
+            "pkg": "types",
+            "operation": "check",
+            "compiler": "tsc",
+            "samplesMs": [902.720542, 902.0787499999997, 899.8935000000001, 904.6885829999992, 901.8564589999987],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 916.1380840000002
+            },
+            "medianMs": 902.0787499999997
+        },
+        {
+            "pkg": "types",
+            "operation": "check",
+            "compiler": "nextPreview",
+            "samplesMs": [
+                203.75845800000025, 201.15483399999994, 201.02970800000003, 200.22254199999952, 200.50429199999962
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 201.81387499999983
+            },
+            "medianMs": 201.02970800000003
+        },
+        {
+            "pkg": "types",
+            "operation": "check",
+            "compiler": "currentPreview",
+            "samplesMs": [
+                205.68112500000007, 205.85166599999957, 203.1269170000014, 207.85499999999956, 204.6452079999999
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 204.7180840000001
+            },
+            "medianMs": 205.68112500000007
+        },
+        {
+            "pkg": "types",
+            "operation": "emit",
+            "compiler": "tsc",
+            "samplesMs": [923.272500000001, 928.0465000000004, 927.2299999999996, 931.4082080000007, 930.4340830000001],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 925.6735000000008
+            },
+            "medianMs": 928.0465000000004
+        },
+        {
+            "pkg": "types",
+            "operation": "emit",
+            "compiler": "nextPreview",
+            "samplesMs": [
+                207.65149999999994, 206.75475000000006, 206.69350000000122, 207.19837499999994, 210.385459000001
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 206.7222500000007
+            },
+            "medianMs": 207.19837499999994
+        },
+        {
+            "pkg": "types",
+            "operation": "emit",
+            "compiler": "currentPreview",
+            "samplesMs": [
+                210.44395900000018, 206.30995900000198, 209.9710840000007, 209.15195799999856, 210.44437499999913
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/types/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/types/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 209.40729100000135
+            },
+            "medianMs": 209.9710840000007
+        },
+        {
+            "pkg": "core",
+            "operation": "check",
+            "compiler": "tsc",
+            "samplesMs": [
+                616.9925410000033, 619.5193330000002, 631.2643339999995, 618.1335830000025, 624.4848330000023
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 618.5907079999997
+            },
+            "medianMs": 619.5193330000002
+        },
+        {
+            "pkg": "core",
+            "operation": "check",
+            "compiler": "nextPreview",
+            "samplesMs": [83.2992919999997, 80.44412499999817, 81.88787500000035, 88.3896249999998, 101.41720800000257],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 79.61408400000073
+            },
+            "medianMs": 83.2992919999997
+        },
+        {
+            "pkg": "core",
+            "operation": "check",
+            "compiler": "currentPreview",
+            "samplesMs": [],
+            "ineligible": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "medianMs": null
+        },
+        {
+            "pkg": "core",
+            "operation": "emit",
+            "compiler": "tsc",
+            "samplesMs": [763.8028329999979, 769.4319170000017, 758.370041999995, 773.4492090000058, 768.8062920000011],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 758.9808750000011
+            },
+            "medianMs": 768.8062920000011
+        },
+        {
+            "pkg": "core",
+            "operation": "emit",
+            "compiler": "nextPreview",
+            "samplesMs": [98.74012500000026, 96.6929999999993, 98.13695800000278, 97.20033400000102, 95.39500000000407],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 100.69254200000069
+            },
+            "medianMs": 97.20033400000102
+        },
+        {
+            "pkg": "core",
+            "operation": "emit",
+            "compiler": "currentPreview",
+            "samplesMs": [],
+            "ineligible": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/core/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/core/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 1,
+                "diagnostics": "error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "medianMs": null
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "check",
+            "compiler": "tsc",
+            "samplesMs": [
+                457.434874999999, 463.33095799999865, 457.6647909999956, 468.61554199999955, 454.76000000000204
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 468.9898749999993
+            },
+            "medianMs": 457.6647909999956
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "check",
+            "compiler": "nextPreview",
+            "samplesMs": [72.47095799999806, 73.39945799999987, 72.92720800000097, 72.7960000000021, 71.59108399999968],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 73.10024999999587
+            },
+            "medianMs": 72.7960000000021
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "check",
+            "compiler": "currentPreview",
+            "samplesMs": [],
+            "ineligible": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--noEmit"
+                ],
+                "status": 1,
+                "diagnostics": "packages/plugin-utils/tsconfig.build.json(3,3): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "medianMs": null
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "emit",
+            "compiler": "tsc",
+            "samplesMs": [
+                474.1878330000036, 475.00554199999897, 471.5451250000042, 465.5795829999988, 475.8222919999971
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/node_modules/typescript/bin/tsc",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/tsc",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 476.9449999999997
+            },
+            "medianMs": 474.1878330000036
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "emit",
+            "compiler": "nextPreview",
+            "samplesMs": [
+                74.96708300000319, 73.03737499999988, 72.08187499999622, 74.22395799999504, 73.75175000000309
+            ],
+            "firstObserved": {
+                "command": [
+                    "node",
+                    "<repo>/packages/next/node_modules/@typescript/native-preview/bin/tsgo.js",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/nextPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 0,
+                "diagnostics": "",
+                "ms": 74.17604199999914
+            },
+            "medianMs": 73.75175000000309
+        },
+        {
+            "pkg": "plugin-utils",
+            "operation": "emit",
+            "compiler": "currentPreview",
+            "samplesMs": [],
+            "ineligible": {
+                "command": [
+                    "node",
+                    "<repo>/scripts/native-typescript-trial/node_modules/@typescript/native-preview/bin/tsgo",
+                    "-p",
+                    "<repo>/packages/plugin-utils/tsconfig.build.json",
+                    "--pretty",
+                    "false",
+                    "--incremental",
+                    "false",
+                    "--outDir",
+                    "<scratch>/plugin-utils/currentPreview",
+                    "--sourceMap",
+                    "false",
+                    "--declarationMap",
+                    "false"
+                ],
+                "status": 1,
+                "diagnostics": "packages/plugin-utils/tsconfig.build.json(3,3): error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n"
+            },
+            "medianMs": null
+        },
+        {
+            "pkg": "types",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "productionTypescript": "5.8.2",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.16s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated in 1.12 s (cjs)\nready   declaration files generated in 1.12 s (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:38244) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-09u12jvu79nl=0,file://<repo>/packages/types/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+                "ms": 2957.6447499999995,
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 60,
+                    "sha256": "286584225587e9af82702a14e8060005643476871dc1b7178dc06ff72ee47948"
+                }
+            },
+            "samplesMs": [2949.617624999999, 2945.2062080000032, 2931.501667000004, 2953.921875, 2963.933292000009],
+            "medianMs": 2949.617624999999
+        },
+        {
+            "pkg": "types",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "productionTypescript": "5.8.2",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.25 s (esm)\nready   declaration files generated with tsgo in 0.26 s (cjs)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:42445) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-mlkn69sh43m=0,file://<repo>/packages/types/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+                "ms": 2068.744749999998,
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 60,
+                    "sha256": "18a9e87faa301cb9da4d8e564805f5a7aa4dea27c9311dc75715fe9251e0fe7f"
+                }
+            },
+            "samplesMs": [
+                2061.8668330000073, 2122.439249999996, 2055.3938329999946, 2061.768207999994, 2065.055457999988
+            ],
+            "medianMs": 2061.8668330000073
+        },
+        {
+            "pkg": "types",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "productionTypescript": "5.8.2",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/types/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (cjs)\nready   built in 0.15s (esm)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.26 s (esm)\nready   declaration files generated with tsgo in 0.26 s (cjs)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 0.3 kB (esm)\n\n15 files generated in ../../../../../../../..<scratch>/types/rslib-output, total: 10.6 kB (cjs)\n\n(node:46654) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/types/rslib.config.ts?fresh-import-6hram13td9b=0,file://<repo>/packages/types/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/types/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/types\nwarn    Current dist path: <scratch>/types/rslib-output\n",
+                "ms": 2053.433625000005,
+                "productionTypescript": "5.8.2",
+                "files": {
+                    "count": 60,
+                    "sha256": "286584225587e9af82702a14e8060005643476871dc1b7178dc06ff72ee47948"
+                }
+            },
+            "samplesMs": [
+                2053.3944159999955, 2058.7489579999965, 2070.3589999999967, 2096.2556250000052, 2048.9311670000025
+            ],
+            "medianMs": 2058.7489579999965
+        },
+        {
+            "pkg": "core",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "productionTypescript": "5.9.3",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/core/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.18s (cjs)\nstart   generating declaration files... (cjs)\nstart   generating declaration files... (esm)\nready   declaration files generated in 0.82 s (cjs)\nready   declaration files generated in 0.82 s (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:50852) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-0dckqwq3y7t5=0,file://<repo>/packages/core/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\n",
+                "ms": 2659.7005409999983,
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 318,
+                    "sha256": "892b0a973b57059ad246e7de9f2ebdd5bbde3dbe0634015d5eb843eb820a4fdc"
+                }
+            },
+            "samplesMs": [
+                2664.970291999998, 2661.8540839999914, 2658.421166999993, 2720.349583000003, 2675.8807910000032
+            ],
+            "medianMs": 2664.970291999998
+        },
+        {
+            "pkg": "core",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "productionTypescript": "5.9.3",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/core/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.17s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.18 s (esm)\nready   declaration files generated with tsgo in 0.18 s (cjs)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:55029) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-hh2yxhprvwb=0,file://<repo>/packages/core/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\n",
+                "ms": 1985.8273749999935,
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 318,
+                    "sha256": "ce53494c20a1e8c664c237487dc1502b5d9bc8ae0e8b1bafd880b924445feed8"
+                }
+            },
+            "samplesMs": [
+                1979.9750420000055, 1962.0224170000001, 1973.1550419999985, 1974.9025830000173, 1953.303458999988
+            ],
+            "medianMs": 1973.1550419999985
+        },
+        {
+            "pkg": "core",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "ineligible": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/core/.native-trial-36336.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.17s (esm)\nready   built in 0.17s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] Found 1 error.\n[tsgo] error TS5108: \n[tsgo] Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] Found 1 error.\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 328.9 kB (esm)\n\n79 files generated in ../../../../../../../..<scratch>/core/rslib-output, total: 520.1 kB (cjs)\n\n(node:58679) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/core/rslib.config.ts?fresh-import-ud3a8cvxaui=0,file://<repo>/packages/core/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/core/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/core\nwarn    Current dist path: <scratch>/core/rslib-output\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to generate declaration files. (esm)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 160,
+                    "sha256": "48f74ae82376014fc494630aa322cb3825d7025dfa2234cee0e7653578211bf8"
+                }
+            }
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "tsc",
+            "operation": "rslib-build",
+            "productionTypescript": "5.9.3",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/plugin-utils/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (cjs)\nready   built in 0.16s (esm)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated in 0.56 s (cjs)\nready   declaration files generated in 0.57 s (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:59747) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-imht63qjmwh=0,file://<repo>/packages/plugin-utils/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\n",
+                "ms": 2403.2001670000027,
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 24,
+                    "sha256": "6c5ffaebc3399aee3f7246c99923e088e4fea5d2084e8ce19b34193a29f95b64"
+                }
+            },
+            "samplesMs": [
+                2443.220457999996, 2404.6041250000126, 2402.1071250000095, 2404.3297080000048, 2468.6788329999836
+            ],
+            "medianMs": 2404.6041250000126
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "nextPreview",
+            "operation": "rslib-build",
+            "productionTypescript": "5.9.3",
+            "firstObserved": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/plugin-utils/.native-trial-36336.mjs"
+                ],
+                "status": 0,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\nready   declaration files generated with tsgo in 0.11 s (cjs)\nready   declaration files generated with tsgo in 0.11 s (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:64083) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-i2t3w9jwop=0,file://<repo>/packages/plugin-utils/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\n",
+                "ms": 1933.8727910000016,
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 24,
+                    "sha256": "e78255058e15bb39b73d60e1a001db7631f92af352da810204caa7e0b64f710f"
+                }
+            },
+            "samplesMs": [
+                2014.943500000023, 1927.1587079999736, 1956.1610000000219, 1941.6398749999935, 1898.99549999999
+            ],
+            "medianMs": 1941.6398749999935
+        },
+        {
+            "pkg": "plugin-utils",
+            "compiler": "currentPreview",
+            "operation": "rslib-build",
+            "ineligible": {
+                "command": [
+                    "pnpm",
+                    "exec",
+                    "rslib",
+                    "build",
+                    "--config",
+                    "<repo>/packages/plugin-utils/.native-trial-36336.mjs"
+                ],
+                "status": 1,
+                "diagnostics": "Rslib v0.23.2\n\ninfo    build started...\nready   built in 0.15s (esm)\nready   built in 0.15s (cjs)\nstart   generating declaration files... (esm)\nstart   generating declaration files... (cjs)\n[tsgo] tsconfig.build.json:3:3 - error TS5108: Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] 3   \"compilerOptions\": {\n[tsgo]     ~~~~~~~~~~~~~~~~~\n[tsgo] Found 1 error in tsconfig.build.json:3\n[tsgo] tsconfig.build.json:3:3 - error TS5108: \n[tsgo] Option 'moduleResolution=node10' has been removed. Please remove it from your configuration.\n[tsgo] 3   \"compilerOptions\": {\n[tsgo]     ~~~~~~~~~~~~~~~~~\n[tsgo] Found 1 error in tsconfig.build.json:3\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 10.2 kB (esm)\n\n6 files generated in ../../../../../../../..<scratch>/plugin-utils/rslib-output, total: 23.1 kB (cjs)\n\n(node:67732) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<repo>/packages/plugin-utils/rslib.config.ts?fresh-import-6ij1p6lb9lj=0,file://<repo>/packages/plugin-utils/.native-trial-36336.mjs is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to <repo>/packages/plugin-utils/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nwarn    The dist path is not a subdir of root path, Rsbuild will not empty it.\nwarn    Please set `output.cleanDistPath` config manually.\nwarn    Current root path: <repo>/packages/plugin-utils\nwarn    Current dist path: <scratch>/plugin-utils/rslib-output\nerror   Failed to generate declaration files. (esm)\nerror   Failed to generate declaration files. (cjs)\nerror   Failed to build.\nerror   Error occurred in esm declaration files generation.\n",
+                "productionTypescript": "5.9.3",
+                "files": {
+                    "count": 12,
+                    "sha256": "5b81f0e894a38dfcd6d9e25dc4000b2f9b67d5258f2f307ed9b0371f78188aa2"
+                }
+            }
+        }
+    ],
+    "runs": 5,
+    "cacheSemantics": "Each sample is a fresh process; incremental=false. First timed sample follows an untimed eligibility check, so is not OS-cache cold. Warm samples follow one unmeasured priming run per command. OS caches are never flushed. Compiler order rotates each round. Emit outputs are removed before each run. Rslib builds bypass Turbo and use fresh temporary outputs; dependencies stay built. CLI compiler order rotates; Rslib compiler runs are grouped, so order bias remains possible."
+}
