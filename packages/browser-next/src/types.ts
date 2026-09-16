@@ -48,8 +48,6 @@ export interface PostHogOptions {
     apiHost?: string
     /** Origin used for requests targeting feature flags. Defaults to `apiHost`. */
     flagsHost?: string
-    /** Static assets origin. Defaults to the regional PostHog assets host, or `apiHost` for custom hosts. */
-    assetsHost?: string
     /** Storage implementation. Pass `false` to keep all state in memory. */
     storage?: StorageLike | false
     /** Override the storage key. */
