@@ -60,7 +60,15 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
+const noopHandler: listenerHandler = () => {
+    //
+}
+
+function initPerformanceObserver(
+    cb: networkCallback,
+    win: IWindow,
+    options: Required<NetworkRecordOptions>
+): listenerHandler {
     // if we are only observing timings then we could have a single observer for all types, with buffer true,
     // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
     // will deal with those.
@@ -82,7 +90,20 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             isInitial: true,
         })
     }
-    const observer = new win.PerformanceObserver((entries) => {
+    // some frames have no PerformanceObserver, or one without the static list of entry types,
+    // so live network capture is not available there
+    const performanceObserverClass = win.PerformanceObserver as typeof PerformanceObserver | undefined
+    const supportedEntryTypes = performanceObserverClass?.supportedEntryTypes
+    if (!performanceObserverClass || !isArray(supportedEntryTypes)) {
+        return noopHandler
+    }
+    const entryTypes = supportedEntryTypes.filter((x) => options.performanceEntryTypeToObserve.includes(x))
+    if (!entryTypes.length) {
+        // observe() throws when it is given no valid entry type
+        return noopHandler
+    }
+
+    const observer = new performanceObserverClass((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
         // as the wrapped functions will do that. Otherwise, this filter becomes a noop
         // because we do want to record them here
@@ -106,10 +127,6 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             ),
         })
     })
-    // compat checked earlier
-    const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) =>
-        options.performanceEntryTypeToObserve.includes(x)
-    )
     // initial records are gathered above, so we don't need to observe and buffer each type separately
     observer.observe({ entryTypes })
     return () => {

@@ -481,6 +481,73 @@ describe('network plugin', () => {
             cleanup()
         })
 
+        describe('unsupported performance observer', () => {
+            it('does not throw when the frame has no PerformanceObserver', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+
+                const plugin = getRecordNetworkPlugin()
+                let cleanup: () => void = () => {}
+                expect(() => {
+                    cleanup = plugin.observer(() => {}, mockWindow, {})
+                }).not.toThrow()
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('does not throw when the frame has no list of supported entry types', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                delete mockWindow.PerformanceObserver.supportedEntryTypes
+
+                const plugin = getRecordNetworkPlugin()
+                let cleanup: () => void = () => {}
+                expect(() => {
+                    cleanup = plugin.observer(() => {}, mockWindow, {})
+                }).not.toThrow()
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('does not observe when no supported entry type is wanted', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                mockWindow.PerformanceObserver.supportedEntryTypes = ['longtask']
+
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('still captures initial requests when the frame has no PerformanceObserver', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+                performanceEntries.push(
+                    createResourceTimingEntry('https://example.com/api/data', 'proxy', 3) as PerformanceEntry
+                )
+
+                const callback = vi.fn()
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, {
+                    ...networkOptions,
+                    recordInitialRequests: true,
+                })
+
+                expect(callback).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        isInitial: true,
+                        requests: expect.arrayContaining([
+                            expect.objectContaining({ name: 'https://example.com/api/data' }),
+                        ]),
+                    })
+                )
+                cleanup()
+            })
+        })
+
         describe('singleton initialization and cleanup', () => {
             it('should initialize successfully on first call', () => {
                 const { mockWindow, observerCallbacks } = createMockWindow()
