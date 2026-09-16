@@ -43,7 +43,7 @@
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-snapshot": "workspace:*",
         "@types/dom-mediacapture-transform": "^0.1.6",
-        "typescript": "7.0.2",
+        "typescript": "catalog:native",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:"
     },

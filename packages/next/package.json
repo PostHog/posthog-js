@@ -81,7 +81,7 @@
         "next": "^15.5.22",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "typescript": "7.0.2",
+        "typescript": "catalog:native",
         "@vitest/coverage-v8": "catalog:",
         "jsdom": "catalog:",
         "vitest": "catalog:"

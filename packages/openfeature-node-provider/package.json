@@ -68,6 +68,6 @@
     "@types/node": "^22.15.23",
     "posthog-node": "workspace:*",
     "vitest": "catalog:",
-    "typescript": "7.0.2"
+    "typescript": "catalog:native"
   }
 }

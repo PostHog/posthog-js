@@ -96,6 +96,13 @@ catalogs:
     vitest:
       specifier: ^1.6.1
       version: 1.6.1
+  native:
+    '@typescript/native':
+      specifier: npm:typescript@7.0.2
+      version: 7.0.2
+    typescript:
+      specifier: 7.0.2
+      version: 7.0.2
 
 overrides:
   eslint: '-'
@@ -267,7 +274,7 @@ importers:
         specifier: 'catalog:'
         version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -494,7 +501,7 @@ importers:
         specifier: 'catalog:'
         version: 26.1.0
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -519,7 +526,7 @@ importers:
         specifier: ^0.25.0
         version: 0.25.12
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
         specifier: npm:typescript@5.8.2
@@ -556,7 +563,7 @@ importers:
         specifier: ^17.7.0
         version: 17.7.0
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 7.3.1
@@ -581,7 +588,7 @@ importers:
         specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@edge-runtime/vm@5.0.0)(@types/node@26.1.1)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2))
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -651,7 +658,7 @@ importers:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.19.9)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -712,7 +719,7 @@ importers:
         specifier: ^19.0.0
         version: 19.2.7(react@19.2.7)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -752,7 +759,7 @@ importers:
         specifier: ^15.5.22
         version: 15.5.22(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -789,7 +796,7 @@ importers:
         specifier: ^7.8.0
         version: 7.8.2
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -859,7 +866,7 @@ importers:
         specifier: workspace:*
         version: link:../node
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -886,7 +893,7 @@ importers:
         specifier: workspace:*
         version: link:../browser
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -911,7 +918,7 @@ importers:
         specifier: 'catalog:'
         version: 1.6.1(vitest@1.6.1(@edge-runtime/vm@5.0.0)(@types/node@26.1.1)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2))
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -962,7 +969,7 @@ importers:
         specifier: 'catalog:'
         version: 2.8.1
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
         specifier: npm:typescript@5.8.2
@@ -1089,7 +1096,7 @@ importers:
         specifier: ^15.0.0
         version: 15.15.0(react-native@0.69.12(@babel/core@7.28.5)(@babel/preset-env@7.28.5(@babel/core@7.28.5))(react@18.2.0))(react@18.2.0)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -1116,7 +1123,7 @@ importers:
         specifier: ^0.30.2
         version: 0.30.3(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -1147,7 +1154,7 @@ importers:
         specifier: ~4.53.2
         version: 4.53.3
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: ^8.0.16
@@ -1172,7 +1179,7 @@ importers:
         specifier: ^23.11.1
         version: 23.11.1(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1194,7 +1201,7 @@ importers:
         version: 0.4.8
     devDependencies:
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1225,7 +1232,7 @@ importers:
         specifier: workspace:*
         version: link:../../types
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
 
   packages/rrweb/plugins/rrweb-plugin-canvas-webrtc-replay:
@@ -1247,7 +1254,7 @@ importers:
         specifier: ^0.1.6
         version: 0.1.11
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1271,7 +1278,7 @@ importers:
         specifier: ^23.11.1
         version: 23.11.1(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1295,7 +1302,7 @@ importers:
         specifier: workspace:*
         version: link:../../types
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1313,7 +1320,7 @@ importers:
         specifier: workspace:*
         version: link:../../types
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1334,7 +1341,7 @@ importers:
         specifier: workspace:*
         version: link:../../types
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1365,7 +1372,7 @@ importers:
         specifier: 'catalog:'
         version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1390,7 +1397,7 @@ importers:
         specifier: ^23.11.1
         version: 23.11.1(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1421,7 +1428,7 @@ importers:
         specifier: ^23.11.1
         version: 23.11.1(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1470,7 +1477,7 @@ importers:
         specifier: ^23.11.1
         version: 23.11.1(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1555,7 +1562,7 @@ importers:
         specifier: 'catalog:'
         version: 2.8.1
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1607,7 +1614,7 @@ importers:
         specifier: ^1.9.3
         version: 1.9.3
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1622,7 +1629,7 @@ importers:
   packages/rrweb/types:
     devDependencies:
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1638,7 +1645,7 @@ importers:
         version: link:../../core
     devDependencies:
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vite:
         specifier: 'catalog:'
@@ -1656,7 +1663,7 @@ importers:
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260707.2)(core-js@3.49.0)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
         specifier: npm:typescript@5.8.2
@@ -1690,7 +1697,7 @@ importers:
         specifier: 'catalog:'
         version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -1715,7 +1722,7 @@ importers:
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260707.2)(core-js@3.49.0)(typescript@7.0.2)
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
@@ -1731,7 +1738,7 @@ importers:
         version: 0.5.1
     devDependencies:
       typescript:
-        specifier: 7.0.2
+        specifier: catalog:native
         version: 7.0.2
 
   tooling/oxlint-plugin-posthog-js: {}
@@ -1779,7 +1786,7 @@ importers:
         version: 6.2.3(rollup@4.53.3)(typescript@5.8.2)
     devDependencies:
       '@typescript/native':
-        specifier: npm:typescript@7.0.2
+        specifier: catalog:native
         version: typescript@7.0.2
       rollup:
         specifier: 'catalog:'

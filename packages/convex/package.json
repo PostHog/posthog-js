@@ -71,7 +71,7 @@
     "convex": "1.39.1",
     "convex-test": "0.0.41",
     "globals": "^17.7.0",
-    "typescript": "7.0.2",
+    "typescript": "catalog:native",
     "vite": "7.3.1",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"

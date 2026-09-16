@@ -8,7 +8,7 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 
 - Development Node Version: `24.x` (see `.nvmrc` and `package.json`)
 - Package Manager: `pnpm@11.7.0` (see `package.json`)
-- TypeScript Catalog Version: `5.8.2` (see `pnpm-workspace.yaml`; individual packages may use other compilers)
+- TypeScript Catalogs: `catalog:native` pins `7.0.2`; the default `catalog:` retains `5.8.2` for legacy tooling (see `pnpm-workspace.yaml`)
 - Main Branch: `main`
 
 ## Tooling

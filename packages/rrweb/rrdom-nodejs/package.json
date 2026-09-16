@@ -46,7 +46,7 @@
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "7.0.2"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "@types/nwsapi": "^2.2.2",

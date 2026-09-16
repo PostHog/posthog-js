@@ -67,7 +67,7 @@
     "rekog-mcp-nest-v2": "npm:@rekog/mcp-nest@2.0.0",
     "rxjs": "^7.8.2",
     "ts-node": "^10.9.2",
-    "typescript": "7.0.2",
+    "typescript": "catalog:native",
     "zod": "^3.25.0",
     "zod4": "npm:zod@^4.4.3",
     "@vitest/coverage-v8": "catalog:",

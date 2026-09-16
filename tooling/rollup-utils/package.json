@@ -31,6 +31,6 @@
     "devDependencies": {
         "rollup": "catalog:",
         "typescript": "catalog:",
-        "@typescript/native": "npm:typescript@7.0.2"
+        "@typescript/native": "catalog:native"
     }
 }

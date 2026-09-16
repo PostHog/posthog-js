@@ -37,7 +37,7 @@
         "@rslib/core": "catalog:",
         "webpack": "^5",
         "vitest": "catalog:",
-        "typescript": "7.0.2"
+        "typescript": "catalog:native"
     },
     "scripts": {
         "clean": "rimraf dist",

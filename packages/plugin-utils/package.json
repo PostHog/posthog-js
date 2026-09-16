@@ -45,6 +45,6 @@
         "@types/cross-spawn": "^6.0.6",
         "@vitest/coverage-v8": "catalog:",
         "vitest": "catalog:",
-        "typescript": "7.0.2"
+        "typescript": "catalog:native"
     }
 }

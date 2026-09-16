@@ -64,7 +64,7 @@
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "7.0.2"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "fflate": "^0.4.4",

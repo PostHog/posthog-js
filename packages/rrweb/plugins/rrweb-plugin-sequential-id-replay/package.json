@@ -39,7 +39,7 @@
         "@posthog/rrweb-plugin-sequential-id-record": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "7.0.2",
+        "typescript": "catalog:native",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:"
     },

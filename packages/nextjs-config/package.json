@@ -62,7 +62,7 @@
     "@types/semver": "^7.7.1",
     "next": "^15.5.22",
     "vitest": "catalog:",
-    "typescript": "7.0.2"
+    "typescript": "catalog:native"
   },
   "peerDependencies": {
     "next": ">12.1.0"

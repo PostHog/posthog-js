@@ -57,7 +57,7 @@
         "react-dom": "catalog:",
         "tsdown": "0.22.14",
         "tslib": "catalog:",
-        "typescript": "7.0.2",
+        "typescript": "catalog:native",
         "jsdom": "catalog:",
         "vitest": "catalog:",
         "@ampproject/remapping": "2.3.0",

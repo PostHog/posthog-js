@@ -87,6 +87,6 @@
     "@rslib/core": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",
-    "typescript": "7.0.2"
+    "typescript": "catalog:native"
   }
 }

@@ -90,7 +90,7 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "jsdom": "catalog:",
-        "typescript": "7.0.2",
+        "typescript": "catalog:native",
         "vitest": "catalog:"
     }
 }
