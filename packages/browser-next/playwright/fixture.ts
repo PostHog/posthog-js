@@ -1,6 +1,6 @@
 import { flags } from '../src/flags'
 import { analytics } from '../src/analytics'
-import { createPostHog, type CaptureSummary, type SessionContext } from '../src/core'
+import { createPostHog, FeatureFlagsExtension, type CaptureSummary, type SessionContext } from '../src/core'
 
 interface ConsentHarness {
     updateFlags(values: Record<string, boolean | string>): Promise<void>
@@ -90,17 +90,17 @@ const client = createPostHog({
 void client.then((posthog) => posthog.onNewSession(({ reason }) => sessionChanges.push(reason)))
 
 void client.then((posthog) =>
-    posthog.onFeatureFlags(() => {
+    posthog.getExtension(FeatureFlagsExtension)!.onFeatureFlags(() => {
         flagChanges++
     })
 )
 
 window.consentHarness = {
     async updateFlags(values) {
-        ;(await client).updateFlags(values)
+        ;(await client).getExtension(FeatureFlagsExtension)!.updateFlags(values)
     },
     async flagValue(key) {
-        const value = (await client).getFeatureFlag(key)
+        const value = (await client).getExtension(FeatureFlagsExtension)!.getFeatureFlag(key)
         return value?.variant ?? value?.enabled
     },
     flagChanges: () => flagChanges,

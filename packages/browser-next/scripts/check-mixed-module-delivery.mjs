@@ -138,13 +138,17 @@ for (const createFlags of [flags, commonJsFlags]) {
         capturePageview: false,
         extensions: [createFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { mixed: 'variant' } } })],
     })
-    if (client.getFeatureFlag('mixed')?.variant !== 'variant') throw new Error('Mixed-module flags bootstrap failed')
+    if (client.getExtension('featureFlags').getFeatureFlag('mixed')?.variant !== 'variant')
+        throw new Error('Mixed-module flags bootstrap failed')
     let results
-    const subscription = client.onFeatureFlags((values) => {
+    const subscription = client.getExtension('featureFlags').onFeatureFlags((values) => {
         results = values
     })
-    client.updateFlags({ mixed: false })
-    if (client.getFeatureFlag('mixed')?.enabled !== false || results?.[0]?.enabled !== false)
+    client.getExtension('featureFlags').updateFlags({ mixed: false })
+    if (
+        client.getExtension('featureFlags').getFeatureFlag('mixed')?.enabled !== false ||
+        results?.[0]?.enabled !== false
+    )
         throw new Error('Mixed-module flags update failed')
     subscription.dispose()
     await client.dispose()
