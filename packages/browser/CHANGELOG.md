@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.433.7
+
+### Patch Changes
+
+- [#4979](https://github.com/PostHog/posthog-js/pull/4979) [`c767b98`](https://github.com/PostHog/posthog-js/commit/c767b980dc0b888994ddc0bed3c43f651860d40b) Thanks [@darkopia](https://github.com/darkopia)! - fix(surveys): keep URL prefill working when localStorage is unavailable, such as on a page with an opaque origin or in private browsing
+  (2026-09-16)
+- Updated dependencies [[`2828b6b`](https://github.com/PostHog/posthog-js/commit/2828b6bdbd33faddf77226c3e04c296823833315)]:
+  - @posthog/browser-common@0.9.0
+
+## 1.433.6
+
+### Patch Changes
+
+- [#4926](https://github.com/PostHog/posthog-js/pull/4926) [`ec4062b`](https://github.com/PostHog/posthog-js/commit/ec4062bf42667a86f9daf84e744e253471a98a96) Thanks [@posthog](https://github.com/apps/posthog)! - Stop treating a `<link rel=preload as=style>` resource hint as a stylesheet when recording. Because it carries the URL of the sheet it preloads, the recorder matched it to the loaded stylesheet and inlined the whole sheet onto it, putting the CSS in every full snapshot twice and reporting a failed stylesheet deferral on every snapshot.
+  (2026-09-16)
+
 ## 1.433.5
 
 ### Patch Changes

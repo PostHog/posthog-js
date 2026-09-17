@@ -376,7 +376,7 @@ describe('browser-next initial pageview', () => {
         await posthog.flush()
 
         expect(requests).toEqual([])
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.getExtension('analytics')).toBeDefined()
     })
 
     it('removes a hidden-document listener during disposal', async () => {

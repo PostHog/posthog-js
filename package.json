@@ -33,6 +33,7 @@
         "test:e2e": "turbo test:e2e",
         "test:mcp-harness": "node packages/mcp/harness/run-all.mjs",
         "build": "turbo build",
+        "check-types": "turbo run check-types",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
         "prepare": "if [ -z \"$CI\" ] && [ \"$PREK\" != \"0\" ] && [ \"$HUSKY\" != \"0\" ] && command -v git >/dev/null 2>&1 && [ -x node_modules/.bin/prek ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then node_modules/.bin/prek install; fi",

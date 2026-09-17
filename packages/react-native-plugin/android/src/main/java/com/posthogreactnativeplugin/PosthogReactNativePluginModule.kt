@@ -139,6 +139,9 @@ class PosthogReactNativePluginModule(
             PostHogAndroidConfig(apiKey, host).apply {
               debug = debugValue
               optOut = theOptOut
+              // JS owns consent: posthog-js core keeps its own store, so the value above is the
+              // answer, not a default the SDK may override from its own persisted copy.
+              persistOptOut = false
               preloadFeatureFlags = thePreloadFeatureFlags
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
@@ -221,7 +224,7 @@ class PosthogReactNativePluginModule(
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
 
-          captureColdStartPushOpenIfNeeded(config, jsOptedOut = theOptOut)
+          captureColdStartPushOpenIfNeeded(config)
         } catch (e: Throwable) {
           logError(method, e)
         } finally {
@@ -488,15 +491,7 @@ class PosthogReactNativePluginModule(
   // cold-start tray tap it exists for is the one creation it can never observe here. Read
   // the launch intent directly, then strip the marker so the integration (or a re-run)
   // can't capture the same tap again from this intent object.
-  //
-  // jsOptedOut is the consent JS passed into this setup(). The native SDK lets the opt-out it
-  // persisted itself win over that value, so after an earlier launch opted in, config.optOut no
-  // longer says what JS said and native would capture. A tap JS considers denied is consumed
-  // here without being captured, so a later opt-in cannot resurrect it either.
-  private fun captureColdStartPushOpenIfNeeded(
-    config: PostHogAndroidConfig,
-    jsOptedOut: Boolean,
-  ) {
+  private fun captureColdStartPushOpenIfNeeded(config: PostHogAndroidConfig) {
     if (!config.capturePushNotificationOpened) {
       return
     }
@@ -508,10 +503,6 @@ class PosthogReactNativePluginModule(
     }
     try {
       intent.getStringExtra(GOOGLE_MESSAGE_ID) ?: return
-      if (jsOptedOut) {
-        intent.removeExtra(GOOGLE_MESSAGE_ID)
-        return
-      }
       // Unmarshalling extras throws BadParcelableException on a Parcelable class this
       // classloader lacks; read before stripping the marker so a failed read leaves the
       // intent as the native integration expects it.
