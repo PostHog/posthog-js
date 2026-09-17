@@ -1188,10 +1188,18 @@ describe('surveys', () => {
             )
         })
 
-        it('should shuffle questions if shuffleQuestions is true', () => {
-            expect(surveyWithShufflingQuestions.questions).not.toEqual(
-                getDisplayOrderQuestions(surveyWithShufflingQuestions)
-            )
+        it('shuffles questions with Fisher-Yates without mutating configured order', () => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+            const questions = [...surveyWithShufflingQuestions.questions]
+            try {
+                expect(getDisplayOrderQuestions(surveyWithShufflingQuestions)).toEqual([
+                    ...questions.slice(1),
+                    questions[0],
+                ])
+                expect(surveyWithShufflingQuestions.questions).toEqual(questions)
+            } finally {
+                random.mockRestore()
+            }
         })
 
         const inProgress = (questionOrder?: string[]) =>
@@ -1329,6 +1337,16 @@ describe('surveys', () => {
             let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
+        })
+
+        it('shuffles frozen choices without mutation and keeps Other last', () => {
+            const question = {
+                ...questionWithOpenEndedChoice,
+                choices: Object.freeze(['A', 'B', 'Other']) as unknown as string[],
+            }
+            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
+            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
+            expect(question.choices).toEqual(['A', 'B', 'Other'])
         })
 
         it('shuffle should preserve all elements', () => {
