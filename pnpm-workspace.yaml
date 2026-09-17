@@ -37,7 +37,6 @@ catalog:
   tslib: ^2.5.0
   typescript: 5.8.2
   vite: ^8.2.2
-  vite-plugin-dts: ~5.0.3
   vitest: ^1.6.1
 
 catalogs:
@@ -72,10 +71,6 @@ overrides:
   tough-cookie@4.0.0: 4.1.4
 
 packageExtensions:
-  # unplugin-dts explicitly falls back to this API-compatible compiler with TypeScript 7.
-  unplugin-dts@1.0.3:
-    dependencies:
-      '@typescript/typescript6': 6.0.2
   # Oxlint runs these plugins through its JavaScript plugin API, so their ESLint peer is not needed.
   '@eslint-community/eslint-utils@4.10.1':
     peerDependenciesMeta:
