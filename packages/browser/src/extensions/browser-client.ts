@@ -154,6 +154,10 @@ export class BrowserClientAdapter implements Client, Disposable {
         }
     }
 
+    get isOptedOut(): boolean {
+        return this.instance.consent.isOptedOut()
+    }
+
     get canCapture(): boolean {
         return !this._isClosing() && this.instance.is_capturing()
     }
@@ -201,11 +205,12 @@ export class BrowserClientAdapter implements Client, Disposable {
     }
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
-        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
+        const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
+        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', pathWithQuery)
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
             ...(path === '/i/v1/logs' && (!init.target || init.target === 'api') ? { batchKey: 'logs' } : {}),
-            url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
+            url: endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,
             timeout: init.timeoutMs,

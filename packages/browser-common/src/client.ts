@@ -109,6 +109,8 @@ export interface Client {
     readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
     readonly session: SessionContext
+    /** Effective consent opt-out state. Cookieless capture may still be permitted while opted out. */
+    readonly isOptedOut: boolean
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
 

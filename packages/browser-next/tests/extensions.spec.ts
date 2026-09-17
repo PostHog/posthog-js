@@ -205,10 +205,16 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
         expect(client?.canCapture).toBe(true)
 
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         posthog.optOut()
         expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.isOptedOut).toBe(true)
+        expect(posthog.isOptedOut).toBe(true)
         expect(client?.canCapture).toBe(false)
         posthog.optIn()
+        expect(client?.isOptedOut).toBe(false)
+        expect(posthog.isOptedOut).toBe(false)
         expect(client?.canCapture).toBe(true)
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)

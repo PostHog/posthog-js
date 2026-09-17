@@ -5,6 +5,12 @@ import type { PostHog } from '../../posthog-core'
 export const createSurveysClient = (posthog: PostHog): Client =>
     ({
         projectToken: posthog.config.token,
+        get canCapture() {
+            return posthog.is_capturing()
+        },
+        get isOptedOut() {
+            return posthog.consent.isOptedOut()
+        },
         kv: {
             initialize: () => {},
             get: (key: string) => posthog.get_property(key),

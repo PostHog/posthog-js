@@ -7,6 +7,7 @@ import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-e
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE, DEVICE_ID, HEATMAPS_ENABLED_SERVER_SIDE } from '../../constants'
 import { BrowserClientAdapter } from '../../extensions/browser-client'
 import { request } from '../../request'
+import { RequestRouter } from '../../utils/request-router'
 import { PostHog } from '../../posthog-core'
 import type { PostHogPersistence } from '../../posthog-persistence'
 import type { CaptureOptions, Properties, Property, QueuedRequestWithOptions, RemoteConfigResult } from '../../types'
@@ -436,6 +437,37 @@ describe('BrowserClientAdapter', () => {
         expect(posthog._getBrowserClientAdapter().canCapture).toBe(false)
     })
 
+    it.each([false, 'on_reject', 'always'] as const)(
+        'exposes live consent separately from capture permission in cookieless mode %s',
+        async (cookielessMode) => {
+            const instance = await createPosthogInstance(undefined, {
+                cookieless_mode: cookielessMode,
+                capture_pageview: false,
+                advanced_disable_flags: true,
+                disable_session_recording: true,
+            })
+            try {
+                const client = instance._getBrowserClientAdapter()
+                if (cookielessMode === 'always') {
+                    expect(client.isOptedOut).toBe(true)
+                    expect(client.canCapture).toBe(true)
+                } else {
+                    instance.opt_in_capturing()
+                    expect(client.isOptedOut).toBe(false)
+                    expect(client.canCapture).toBe(true)
+                    instance.opt_out_capturing()
+                    expect(client.isOptedOut).toBe(true)
+                    expect(client.canCapture).toBe(cookielessMode === 'on_reject')
+                    instance.opt_in_capturing()
+                    expect(client.isOptedOut).toBe(false)
+                    expect(client.canCapture).toBe(true)
+                }
+            } finally {
+                await instance.shutdown()
+            }
+        }
+    )
+
     it('exposes the project token and adapts caller-owned request options', async () => {
         const instance = createMockPostHog()
         const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
@@ -466,7 +498,10 @@ describe('BrowserClientAdapter', () => {
         })
 
         expect(response).toEqual({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
-        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith('flags', '/flags/?existing=yes')
+        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith(
+            'flags',
+            '/flags/?existing=yes&token=query-project&extra=value'
+        )
         expect(send).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
@@ -503,6 +538,28 @@ describe('BrowserClientAdapter', () => {
         const client = new BrowserClientAdapter(instance)
         await client.sendRequest(path, { target })
         expect(vi.mocked(instance._send_request).mock.calls[0][0].batchKey).toBe(batchKey)
+        client.dispose()
+    })
+
+    it('passes survey query parameters through the request URL rewrite hook', async () => {
+        const instance = createMockPostHog()
+        instance.config.api_host = 'https://api.example.com'
+        instance.config.rewriteRequestPath = vi.fn((url: URL) => {
+            expect(url.searchParams.get('token')).toBe('test-token')
+            url.searchParams.set('token', 'rewritten-token')
+            return url
+        })
+        instance.requestRouter = new RequestRouter(instance)
+        const send = vi.mocked(instance._send_request)
+        send.mockImplementation(({ callback }) => callback?.({ statusCode: 200 }))
+        const client = new BrowserClientAdapter(instance)
+
+        await client.sendRequest('/api/surveys/', { query: { token: client.projectToken } })
+
+        expect(instance.config.rewriteRequestPath).toHaveBeenCalledOnce()
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({ url: 'https://api.example.com/api/surveys/?token=rewritten-token' })
+        )
         client.dispose()
     })
 

@@ -3,6 +3,9 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { PostHog } from '../posthog-core'
+import { SURVEYS, SURVEYS_LOADED_AT } from '../constants'
+import { SurveyType } from '../posthog-surveys-types'
+import { assignableWindow } from '../utils/globals'
 import { PostHogLogs } from '../posthog-logs'
 import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
@@ -134,6 +137,58 @@ describe('deferred extension initialization', () => {
             await posthog.shutdown()
             setup.mockRestore()
             loader.mockRestore()
+        })
+
+        it('uses the same client for survey fetching before and after deferred setup', async () => {
+            vi.useFakeTimers()
+            const previousExtensions = assignableWindow.__PosthogExtensions__
+            const generateSurveys = vi.fn()
+            assignableWindow.__PosthogExtensions__ = { generateSurveys }
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                advanced_disable_flags: true,
+                disable_surveys: false,
+                capture_pageview: false,
+                disable_session_recording: true,
+            })
+            try {
+                const client = posthog._getBrowserClientAdapter()
+                const cached = [{ id: 'cached', type: SurveyType.API }]
+                posthog.register({ [SURVEYS]: cached, [SURVEYS_LOADED_AT]: Date.now() })
+                const callback = vi.fn()
+                expect(client.getExtension('surveys')).toBeUndefined()
+                posthog.getSurveys(callback)
+                expect(callback).toHaveBeenCalledWith(cached, { isLoaded: true })
+
+                const fetched = [{ id: 'fetched', type: SurveyType.API }]
+                const transport = vi.spyOn(posthog, '_send_request').mockImplementation(({ callback }) => {
+                    callback?.({ statusCode: 200, json: { surveys: fetched } })
+                })
+                const request = vi.spyOn(client, 'sendRequest')
+                await new Promise<void>((resolve) => posthog.getSurveys(() => resolve(), true))
+                expect(request).toHaveBeenCalledWith('/api/surveys/', {
+                    method: 'GET',
+                    query: { token: posthog.config.token },
+                    sentAt: 'query',
+                    timeoutMs: posthog.config.surveys_request_timeout_ms,
+                })
+                expect(transport).toHaveBeenCalledOnce()
+                expect(posthog.get_property(SURVEYS)).toEqual(fetched)
+                expect(generateSurveys).not.toHaveBeenCalled()
+
+                await vi.advanceTimersByTimeAsync(200)
+                expect(client.getExtension('surveys')).toBe(posthog.surveys)
+                callback.mockClear()
+                posthog.getSurveys(callback)
+                expect(callback).toHaveBeenCalledWith(fetched, { isLoaded: true })
+                await new Promise<void>((resolve) => posthog.getSurveys(() => resolve(), true))
+                expect(request).toHaveBeenCalledTimes(2)
+            } finally {
+                await posthog.shutdown()
+                assignableWindow.__PosthogExtensions__ = previousExtensions
+                vi.restoreAllMocks()
+                vi.useRealTimers()
+            }
         })
 
         it('should store pending remote config when it arrives before extensions initialize', async () => {

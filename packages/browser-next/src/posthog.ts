@@ -290,6 +290,10 @@ class PostHogBrowserClient implements PostHog {
         return this._state.session
     }
 
+    get isOptedOut(): boolean {
+        return this.hasOptedOut()
+    }
+
     get canCapture(): boolean {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
@@ -1026,6 +1030,9 @@ class PostHogBrowserClient implements PostHog {
             },
             get session() {
                 return host.session
+            },
+            get isOptedOut() {
+                return host.isOptedOut
             },
             get canCapture() {
                 return host.canCapture
