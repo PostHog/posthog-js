@@ -1,28 +1,34 @@
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
+import type { Mock } from 'vitest'
+import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
-import { SurveyPopup } from '../../../extensions/surveys'
-import * as surveyUtils from '@posthog/browser-common/surveys/surveys-extension-utils'
-import { Survey, SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
-import * as uuid from '@posthog/browser-common/utils/uuidv7'
+import { SurveyPopup } from '../../src/surveys-renderer'
+import * as surveyUtils from '../../src/surveys/surveys-extension-utils'
+import { SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../src/survey-constants'
+import type { Survey } from '../../src/types/surveys'
+import * as uuid from '../../src/utils/uuidv7'
 
-vi.mock('@posthog/browser-common/surveys/surveys-extension-utils', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@posthog/browser-common/surveys/surveys-extension-utils')>()),
+vi.mock('../../src/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/surveys/surveys-extension-utils')>()),
     getInProgressSurveyState: vi.fn(),
     setInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),
 }))
 
-const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as Mock
 
-vi.mock('@posthog/browser-common/utils/uuidv7')
+vi.mock('../../src/utils/uuidv7')
 
-const mockPosthog = {
+const host = createSurveysRuntimeHost({
     capture: vi.fn(),
-    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
-    is_capturing: vi.fn(() => true),
-    reloadFeatureFlags: vi.fn(),
-}
+    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
+    canCapture: true,
+    reloadFlags: vi.fn(),
+})
 
 const baseSurvey: Survey = {
     id: 'back-survey',
@@ -53,9 +59,9 @@ const baseSurvey: Survey = {
     schedule: null,
 }
 
-const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
-const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
-const mockedUuidv7 = uuid.uuidv7 as vi.Mock
+const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as Mock
+const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as Mock
+const mockedUuidv7 = uuid.uuidv7 as Mock
 
 describe('Surveys: back button', () => {
     beforeEach(() => {
@@ -71,7 +77,7 @@ describe('Surveys: back button', () => {
     })
 
     test('back button is hidden on the first question', () => {
-        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
@@ -79,7 +85,7 @@ describe('Surveys: back button', () => {
 
     test('back button is hidden when allowGoBack is not set', async () => {
         const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, allowGoBack: false } }
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -89,7 +95,7 @@ describe('Surveys: back button', () => {
     })
 
     test('back button appears after advancing and returns to the previous question with prior answer prefilled', async () => {
-        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -108,7 +114,7 @@ describe('Surveys: back button', () => {
     test('navigation history survives a re-render (resume from persisted state)', async () => {
         // First mount: advance Q1 -> Q2, capture whatever state the SDK persisted.
         const { unmount } = render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
@@ -120,7 +126,7 @@ describe('Surveys: back button', () => {
 
         // Second mount: feed the captured state back in (simulating a reload).
         mockedGetInProgressSurveyState.mockReturnValue(persistedState)
-        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         // Behavior: we resume on Q2 AND the back button is available because Q1 is in history.
         expect(screen.getByText('Question 2')).toBeVisible()
@@ -146,9 +152,7 @@ describe('Surveys: back button', () => {
             ],
         }
 
-        render(
-            <SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'skip to q3' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -167,7 +171,7 @@ describe('Surveys: back button', () => {
             responses: { $survey_response_q1: 'previous answer' },
         })
 
-        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         expect(screen.getByText('Question 2')).toBeVisible()
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
@@ -194,9 +198,7 @@ describe('Surveys: back button', () => {
             ],
         }
 
-        render(
-            <SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         // Q1: pick 'a' -> routes to Q2
         fireEvent.click(screen.getByLabelText('a'))
@@ -231,7 +233,7 @@ describe('Surveys: back button', () => {
             ...baseSurvey,
             appearance: { ...baseSurvey.appearance, backButtonText: 'Previous' },
         }
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -246,7 +248,7 @@ describe('Surveys: back button', () => {
                 survey={baseSurvey}
                 removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={0}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -257,12 +259,7 @@ describe('Surveys: back button', () => {
     test('preview mode: back button is shown on questions after the first, with custom text', () => {
         const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, backButtonText: 'Previous' } }
         render(
-            <SurveyPopup
-                survey={survey}
-                removeSurveyFromFocus={vi.fn()}
-                previewPageIndex={1}
-                posthog={mockPosthog as any}
-            />
+            <SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} previewPageIndex={1} posthog={host as any} />
         )
 
         expect(screen.getByText('Question 2')).toBeVisible()
@@ -277,7 +274,7 @@ describe('Surveys: back button', () => {
                 removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={1}
                 onPreviewBack={onPreviewBack}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -291,12 +288,7 @@ describe('Surveys: back button', () => {
     test('preview mode: back button stays hidden when allowGoBack is not set', () => {
         const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, allowGoBack: false } }
         render(
-            <SurveyPopup
-                survey={survey}
-                removeSurveyFromFocus={vi.fn()}
-                previewPageIndex={1}
-                posthog={mockPosthog as any}
-            />
+            <SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} previewPageIndex={1} posthog={host as any} />
         )
 
         expect(screen.getByText('Question 2')).toBeVisible()

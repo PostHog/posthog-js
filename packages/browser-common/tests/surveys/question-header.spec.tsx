@@ -1,8 +1,10 @@
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
 import '@testing-library/jest-dom'
 
 import { render } from '@testing-library/preact'
-import { QuestionHeader } from '../../../extensions/surveys/components/QuestionHeader'
-import { SurveyQuestionType } from '../../../posthog-surveys-types'
+import { QuestionHeader } from '../../src/surveys/components/QuestionHeader'
+import { SurveyQuestionType } from '../../src/survey-constants'
 
 // The question-header--empty class replaces a :has(.survey-question:empty) CSS rule that
 // crashes some WebKit builds. Keep it driven from JS so the crashing selector never returns.

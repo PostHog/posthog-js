@@ -1,4 +1,6 @@
-import { doesDeviceTypeMatch } from '@posthog/browser-common/utils/matcher-utils'
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
+import { doesDeviceTypeMatch } from '../../src/utils/matcher-utils'
 
 const DESKTOP_UA =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'
@@ -12,7 +14,9 @@ function setUserAgent(ua: string | undefined) {
 }
 
 describe('doesDeviceTypeMatch', () => {
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     it.each([
         ['no device types', undefined, DESKTOP_UA, true],

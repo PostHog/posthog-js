@@ -1,16 +1,12 @@
+import '../helpers/surveys-setup'
 import {
     extractPrefillParamsFromUrl,
     convertPrefillToResponses,
     calculatePrefillStartIndex,
     PrefillParams,
-} from '../../utils/survey-url-prefill'
-import {
-    Survey,
-    SurveyQuestion,
-    SurveyQuestionBranchingType,
-    SurveyQuestionType,
-    SurveyType,
-} from '../../posthog-surveys-types'
+} from '../../src/surveys/survey-url-prefill'
+import { SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../src/survey-constants'
+import type { Survey, SurveyQuestion } from '../../src/types/surveys'
 
 describe('extractPrefillParamsFromUrl', () => {
     describe('empty and invalid inputs', () => {
