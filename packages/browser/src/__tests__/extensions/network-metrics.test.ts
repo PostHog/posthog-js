@@ -195,7 +195,7 @@ describe('network metrics', () => {
             [302, { 'http.response.status_code': 302 }],
             [404, { 'http.response.status_code': 404, 'error.type': '404' }],
             [503, { 'http.response.status_code': 503, 'error.type': '503' }],
-            [0, { 'error.type': '_OTHER' }],
+            [0, {}],
         ])('records status %s as %o', async (status, expected) => {
             fetchMock.mockResolvedValue({ status })
             start()
@@ -206,6 +206,34 @@ describe('network metrics', () => {
             expect(attributes).toMatchObject(expected)
             expect('http.response.status_code' in attributes).toBe(status !== 0)
             expect('error.type' in attributes).toBe('error.type' in expected)
+        })
+
+        it('does not record an error type for a fulfilled opaque response', async () => {
+            fetchMock.mockResolvedValue({ status: 0 })
+            start()
+
+            await window.fetch('https://api.example.com/things')
+
+            expect(recorded()[0][2].attributes).not.toHaveProperty('error.type')
+        })
+
+        it('bounds unknown methods and preserves the original method', async () => {
+            start()
+
+            await window.fetch('https://api.example.com/things', { method: 'PURGE' })
+
+            expect(recorded()[0][2].attributes).toMatchObject({
+                'http.request.method': '_OTHER',
+                'http.request.method_original': 'PURGE',
+            })
+        })
+
+        it('strips brackets from an IPv6 server address', async () => {
+            start()
+
+            await window.fetch('https://[2001:db8::1]/things')
+
+            expect(recorded()[0][2].attributes['server.address']).toBe('2001:db8::1')
         })
 
         it.each([
