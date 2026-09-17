@@ -126,6 +126,13 @@ describe('shared property matching contract', () => {
       expect(matchPropertyFilters(filter('exact', ['premium,vip']), { property: ['premium', 'vip'] })).toBe(true)
     })
 
+    it('coerces filter values to strings before matching', () => {
+      // Filter values come off the /surveys JSON response untyped at runtime, so a
+      // numeric filter value must not reach `.toLowerCase()` as a number.
+      const numericFilter = filter('icontains', [100 as unknown as string])
+      expect(matchPropertyFilters(numericFilter, { property: 100 })).toBe(true)
+    })
+
     it.each<{
       operator: PropertyOperator
       value: string
