@@ -249,7 +249,7 @@ describe('PostHog React Native', () => {
         syncStorage.setItem('a', '1')
         vi.runOnlyPendingTimers()
 
-        expect(consoleSpy).toHaveBeenCalledWith('PostHog storage scheduled persist threw:', expect.any(Error))
+        expect(consoleSpy).toHaveBeenCalledWith('PostHog storage persist failed:', expect.any(Error))
         consoleSpy.mockRestore()
       } finally {
         vi.useRealTimers()
@@ -324,8 +324,29 @@ describe('PostHog React Native', () => {
       syncStorage.setItem('a', '1')
       await expect(syncStorage.waitForPersist()).resolves.toBeUndefined()
 
-      expect(consoleSpy).toHaveBeenCalledWith('PostHog storage drain persist threw:', expect.any(Error))
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog storage persist failed:', expect.any(Error))
       consoleSpy.mockRestore()
+    })
+
+    it('waitForPersistSuccess surfaces a sync throw as false so callers can keep recovery entries on disk', async () => {
+      // Without this, a sync-throwing storage pretends to succeed and the fatal-journal
+      // recovery removes the native entry despite the data never landing.
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const syncThrowingStorage = {
+          getItem: () => null,
+          setItem: () => {
+            throw new Error('sync throw from storage backend')
+          },
+        }
+        const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync-fail.json')
+
+        syncStorage.setItem('a', '1')
+
+        await expect(syncStorage.waitForPersistSuccess()).resolves.toBe(false)
+      } finally {
+        consoleSpy.mockRestore()
+      }
     })
 
     it('fires the debounced write on its own after the debounce window', () => {

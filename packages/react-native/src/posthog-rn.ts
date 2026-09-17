@@ -311,6 +311,11 @@ export class PostHog extends PostHogCore {
 // the final authority on user data even when we reapply attribution after it runs.
   private _fatalJournalOverride?: { [key: string]: JsonType }
   private _fatalJournalDistinctIdOverride?: string
+  // Latest init-time drain promise. Held only so tests and shutdown can wait for it
+  // to finish — the drain reads `OptionalReactNativePlugin` at call time, so a slow
+  // crypto-backed apiKey hash can resolve after the test has moved on if we don't
+  // track it here.
+  private _fatalJournalDrainPromise?: Promise<void>
   private _disableSurveys: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
@@ -590,7 +595,10 @@ export class PostHog extends PostHogCore {
       // every launch with `uncaughtExceptions` enabled (and the plugin installed) needs
       // to drain it, regardless of whether native crashes are also autocaptured. Runs
       // once storage is loaded so the recovered event has somewhere durable to land.
-      void this._drainFatalJournal()
+      // Tracked so tests (and shutdown) can await completion; nothing else reads it.
+      this._fatalJournalDrainPromise = this._drainFatalJournal().finally(() => {
+        this._fatalJournalDrainPromise = undefined
+      })
 
       this.reloadRemoteConfigAsync()
         .then((response) => {

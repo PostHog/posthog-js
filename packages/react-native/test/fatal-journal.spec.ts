@@ -389,7 +389,8 @@ describe('native fatal-report journal recovery', () => {
     posthog = createClient()
     await posthog.ready()
     // Wait for the drain to complete. The drain runs in the background after native setup;
-    // give microtasks a chance.
+    // await it directly so a leaked call can't pollute the next test's mocks.
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -450,6 +451,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -496,6 +498,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -559,6 +562,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -608,6 +612,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -639,6 +644,7 @@ describe('native fatal-report journal recovery', () => {
     )
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -668,6 +674,7 @@ describe('native fatal-report journal recovery', () => {
     )
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -685,6 +692,7 @@ describe('native fatal-report journal recovery', () => {
     )
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -731,6 +739,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -790,6 +799,7 @@ describe('native fatal-report journal recovery', () => {
     // Set up custom storage that reports the new launch's runtime state via getCommonEventProperties.
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -829,6 +839,7 @@ describe('native fatal-report journal recovery', () => {
 
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -924,6 +935,7 @@ describe('native fatal-report journal recovery', () => {
       errorTracking: { autocapture: { uncaughtExceptions: true } },
     } as any)
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
@@ -958,6 +970,7 @@ describe('native fatal-report journal recovery', () => {
 
     posthog = createClient()
     await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
     for (let i = 0; i < 20; i++) {
       await vi.advanceTimersByTimeAsync(10)
     }
