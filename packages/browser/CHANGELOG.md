@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.433.8
+
+### Patch Changes
+
+- [#4709](https://github.com/PostHog/posthog-js/pull/4709) [`c1d1faf`](https://github.com/PostHog/posthog-js/commit/c1d1faf3b4ef2bda304e20fc8ed139bff40a9e7d) Thanks [@posthog](https://github.com/apps/posthog)! - Prefer synchronous compression for events captured with `send_instantly`, including the initial `$pageview`, to avoid delaying request dispatch on asynchronous compression.
+  (2026-09-17)
+
 ## 1.433.7
 
 ### Patch Changes
