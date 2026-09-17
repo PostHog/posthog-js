@@ -627,7 +627,7 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('captures intent, but strips nothing, before low-level ownership is learned from tools/list', async () => {
+  it('reads intent and mints a handle, but strips nothing, before low-level ownership is learned from tools/list', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
@@ -644,22 +644,21 @@ describe('Low-level Server tracing (e2e)', () => {
         CallToolResultSchema
       )
 
+      // Ownership is unknown here — this instance never served a `tools/list`,
+      // which on a stateless server is every instance. Reads fail open, so the
+      // intent is kept and a session handle is minted and prompted back; strips
+      // fail closed, so every argument reaches the tool. ADR-0011.
       expect(receivedCalls.at(-1)).toEqual({
         name: 'echo',
         arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
       })
       expect(
         (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
-      ).toBe(false)
+      ).toBe(true)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
-      // Ownership is unknown here — this instance never served a `tools/list`,
-      // which on a stateless server is every instance. Unknown no longer means
-      // "throw the intent away": the argument arrived because some advertised
-      // listing asked for it. Nothing is stripped and no handle is minted, since
-      // both of those can damage the customer's call and stay fail-closed.
       expect(event?.userIntent).toBe('unknown context')
-      expect(event?.conversationId).toBeUndefined()
+      expect(event?.conversationId).toBeDefined()
     } finally {
       await cleanup()
     }

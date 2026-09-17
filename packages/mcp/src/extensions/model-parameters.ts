@@ -28,9 +28,11 @@ export interface ModelInjectableTool {
   [key: string]: unknown
 }
 
-/** Unlike `context`, model capture is opt-in: off unless explicitly enabled. */
+/** Model capture is enabled unless explicitly disabled. */
 export function isCaptureModelEnabled(captureModel: MCPAnalyticsOptions['captureModel']): boolean {
-  return captureModel === true || (typeof captureModel === 'object' && captureModel !== null)
+  return (
+    captureModel === undefined || captureModel === true || (typeof captureModel === 'object' && captureModel !== null)
+  )
 }
 
 export function getModelDescription(captureModel: MCPAnalyticsOptions['captureModel']): string | undefined {

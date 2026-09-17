@@ -113,7 +113,7 @@ async function probeV1() {
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
     content: [{ type: 'text', text: `called: ${request.params.name}` }],
   }))
-  instrument(server, recorder.client, { logger: recorder.logger, collectFeedback: true })
+  instrument(server, recorder.client, { logger: recorder.logger, collectFeedback: true, captureModel: false })
 
   const client = new Client({ name: 'probe', version: '1.0.0' }, { capabilities: {} })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -162,6 +162,7 @@ async function probeV2() {
       instrument(server, recorder.client, {
         logger: recorder.logger,
         collectFeedback: true,
+        captureModel: false,
         reportMissing: true,
         enableConversationId: true,
       })

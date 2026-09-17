@@ -59,7 +59,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(tool.description).toContain('missing capability')
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'summary']))
       expect(tool.inputSchema.properties.feedback_type.enum).toEqual(['missing_capability', 'issue', 'praise', 'other'])
-      expect(tool.inputSchema.properties.conversation_id).toBeUndefined()
+      expect(tool.inputSchema.properties.conversation_id).toMatchObject({ type: 'string' })
       expect(tool.annotations.readOnlyHint).toBe(true)
     })
 
@@ -577,7 +577,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('shares one session across send_feedback and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { collectFeedback: true })
+      instrument(server, fakePostHog(), { enableConversationId: false, collectFeedback: true })
 
       await callTool(client, 'add_todo', { text: 'First', context: 'Adding first todo' })
       await callTool(client, SEND_FEEDBACK, { feedback_type: 'other', summary: 'General note.' })
@@ -600,6 +600,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.start()
       instrument(server, fakePostHog(), {
         collectFeedback: true,
+        enableConversationId: false,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
 
