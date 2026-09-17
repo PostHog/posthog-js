@@ -20,7 +20,6 @@ export default defineConfig({
                 find: '@posthog/browser-common/feature-flags',
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
-            { find: '@posthog/browser-common/logs-host', replacement: fromRoot('../browser-common/src/logs-host.ts') },
             {
                 find: '@posthog/browser-common/logs-types',
                 replacement: fromRoot('../browser-common/src/logs-types.ts'),
