@@ -171,7 +171,28 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 export const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
-const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+// carousels, pagers and scrollers are built to be clicked repeatedly, in words or in arrow glyphs
+const DEFAULT_CONTENT_IGNORELIST = [
+    'next',
+    'previous',
+    'prev',
+    'carousel',
+    'slide',
+    'scroll',
+    'arrow',
+    '>',
+    '<',
+    '→',
+    '←',
+    '›',
+    '‹',
+    '»',
+    '«',
+    '▶',
+    '◀',
+    '❯',
+    '❮',
+]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
 const MAX_CONTENT_IGNORELIST_ENTRIES = 10
@@ -197,7 +218,11 @@ function shouldIgnoreByContent(
     if (contentIgnorelist === true) {
         keywords = DEFAULT_CONTENT_IGNORELIST
     } else if (isArray(contentIgnorelist)) {
-        if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
+        // the cap protects against over-long user lists, so our own defaults are exempt from it
+        const isDefaultList =
+            contentIgnorelist === DEFAULT_CONTENT_IGNORELIST ||
+            contentIgnorelist === DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS
+        if (!isDefaultList && contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
             logger.error(
                 `[PostHog] content_ignorelist array cannot exceed ${MAX_CONTENT_IGNORELIST_ENTRIES} items. Use css_selector_ignorelist for more complex matching.`
             )
@@ -271,8 +296,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true
-        contentIgnorelist = undefined
+        // repeat-click controls are never rage, so the default content filter applies to rageclick: true too.
+        // text-selection filtering stays off here, it is gated on the 2026-05-30 config defaults
+        contentIgnorelist = _config ? true : undefined
         ignoreTextSelection = false
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST

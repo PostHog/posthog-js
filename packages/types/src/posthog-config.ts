@@ -117,8 +117,9 @@ export interface RageclickConfig {
     css_selector_ignorelist?: string[]
     /**
      * Controls automatic exclusion of elements by text content from rageclick detection.
-     * Useful for pagination buttons, loading spinners, and other repeatedly-clicked UI elements.
-     * - `true`: Use default keywords ['next', 'previous', 'prev', '>', '<']
+     * Useful for carousel arrows, pagination buttons, scrollers, and other repeatedly-clicked UI elements.
+     * - `true`: Use the default keywords, which cover next/previous/carousel/slide/scroll/arrow wording
+     *   and arrow glyphs such as '>', '<', '→', '←', '»', '«'
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
@@ -126,9 +127,8 @@ export interface RageclickConfig {
      * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
      * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      *
-     * @default undefined
-     * (`true` when `defaults` is `'2025-11-30'` or later;
-     * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
+     * @default the default keywords
+     * (the default keywords plus the '+', '-', '−', '–' steppers when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
 
@@ -1340,8 +1340,8 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
-     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
-     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.
+     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent,
+     * and on repeat-click controls such as carousel arrows and pagers (see `content_ignorelist`).
      * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
      *
      * @default true

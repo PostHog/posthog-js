@@ -841,6 +841,49 @@ describe('Autocapture system', () => {
                 )
             })
 
+            describe.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
+                'carousel and scroller controls with rageclick config %s',
+                (rageclickConfig) => {
+                    beforeEach(() => {
+                        posthog.config.rageclick = rageclickConfig
+                    })
+
+                    const buttonWithText = (text: string): HTMLButtonElement => {
+                        const el = document.createElement('button')
+                        el.textContent = text
+                        return el
+                    }
+
+                    it.each(['Scroll left', 'Scroll right', 'Next slide', 'Carousel arrow', 'Previous arrow'])(
+                        'rapid clicks on a "%s" button do not capture $rageclick',
+                        (text) => {
+                            expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                        }
+                    )
+
+                    it.each(['→', '←', '›', '‹', '»', '«', '▶', '◀', '❯', '❮'])(
+                        'rapid clicks on a "%s" arrow glyph button do not capture $rageclick',
+                        (glyph) => {
+                            expect(rageClickThreeTimes(buttonWithText(glyph))).not.toContain('$rageclick')
+                        }
+                    )
+
+                    it('rapid clicks on an icon-only control with a carousel aria-label do not capture $rageclick', () => {
+                        const el = document.createElement('button')
+                        el.setAttribute('aria-label', 'Scroll left')
+
+                        expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                    })
+
+                    it.each(['Add to cart', 'Submit', 'a → b'])(
+                        'rapid clicks on a "%s" button still capture $rageclick',
+                        (text) => {
+                            expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                        }
+                    )
+                }
+            )
+
             it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
                 'does not suppress text-entry or stepper rageclicks when rageclick config is %s',
                 (rageclickConfig) => {
