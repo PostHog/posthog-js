@@ -15,7 +15,7 @@ const forbiddenInputs = [
     /(^|\/)\.\.\/rrweb\//,
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
-const flagsInput = /(^|\/)(feature-flags|flags|flags-persistence)\.(m?js|ts)$/
+const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
