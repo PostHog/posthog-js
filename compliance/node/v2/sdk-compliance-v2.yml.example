@@ -1,0 +1,54 @@
+# Disabled template: activation and immutable image selection are separate release decisions.
+name: Node SDK v2 compliance
+on:
+  pull_request:
+    paths:
+      - 'packages/node/**'
+      - 'packages/core/**'
+      - 'packages/types/**'
+      - 'compliance/node/v2/**'
+permissions: {}
+jobs:
+  compliance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [v0, v1]
+    env:
+      NODE_IMAGE: ${{ vars.SDK_COMPLIANCE_NODE_IMAGE }}
+      HARNESS_IMAGE: ${{ vars.SDK_COMPLIANCE_V2_HARNESS_IMAGE }}
+    steps:
+      # Test the PR head, not GitHub's synthetic integration commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Validate image pins and record selected source
+        shell: bash
+        run: |
+          [[ "$NODE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ "$HARNESS_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/node-compliance"
+          git rev-parse HEAD > "$RUNNER_TEMP/node-compliance/source.txt"
+          docker pull "$HARNESS_IMAGE"
+      - name: Build fresh SDK tarballs and native adapter
+        run: |
+          docker build --file compliance/node/v2/Dockerfile \
+            --build-arg "NODE_IMAGE=$NODE_IMAGE" --build-arg "SOURCE_REVISION=$(git rev-parse HEAD)" \
+            --tag node-compliance:local .
+      - name: Run isolated compliance profile
+        env:
+          CAPTURE_MODE: ${{ matrix.mode }}
+        run: |
+          bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
+            "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/reports"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: node-v2-${{ matrix.mode }}
+          path: ${{ runner.temp }}/node-compliance
+          if-no-files-found: error
