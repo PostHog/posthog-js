@@ -1,6 +1,6 @@
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
 describe('feature flag evaluation contexts', () => {
