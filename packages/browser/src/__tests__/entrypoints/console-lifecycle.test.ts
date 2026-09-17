@@ -1,3 +1,4 @@
+import { createLogsClient } from '../helpers/logs-client'
 import type { Client } from '@posthog/browser-common'
 import type { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
@@ -44,6 +45,7 @@ const makeRunning = (copy: Copy, kind: Kind): Running => {
         },
     } as unknown as PostHog
     const logs = new copy.PostHogLogs(host)
+    logs.setup(createLogsClient(host))
     // Deliberately isolate the temporary instrumentation lifecycle from config,
     // transport, and lazy-load timing. These are real methods, not mocks.
     return {
@@ -260,7 +262,9 @@ describe('console instrumentation lifecycle', () => {
             cleanups.push(() => logs.dispose())
             let vendor: ReturnType<typeof vi.fn> | undefined
             if (order === 'foreign-first') vendor = installForeign(false)
-            logs.setup(client)
+            logs.setup(
+                createLogsClient(host, { getExtension: client.getExtension, onRemoteConfig: client.onRemoteConfig })
+            )
             if (order === 'posthog-first') vendor = installForeign(false)
             emit('before reset', vendor)
             expect((logs as any)._consoleBuffer).toHaveLength(1)

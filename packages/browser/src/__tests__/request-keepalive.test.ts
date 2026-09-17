@@ -1,3 +1,4 @@
+import { createLogsClient } from './helpers/logs-client'
 import { request } from '../request'
 import { Compression, OtlpLogsPayload, RequestWithOptions } from '../types'
 import { PostHogLogs } from '../posthog-logs'
@@ -114,12 +115,15 @@ describe('request fetch aggregate keepalive', () => {
     )
 
     it('releases before the logs batch promise resumes sequential sends', async () => {
-        const logs = new PostHogLogs({
+        const instance = {
             config: { token: 'test-token' },
             requestRouter: { endpointFor: () => 'https://example.com/i/v1/logs' },
             // Exercise the real logs callback/Promise bridge with uncompressed request bodies.
             _send_request: (options: RequestWithOptions) => request({ ...options, compression: undefined }),
-        } as unknown as PostHog)
+        } as unknown as PostHog
+        const logs = new PostHogLogs(instance)
+        const client = createLogsClient(instance)
+        logs._bindClient(() => client)
         const payload: OtlpLogsPayload = {
             resourceLogs: [
                 {

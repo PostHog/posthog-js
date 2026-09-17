@@ -720,6 +720,7 @@ export class PostHog implements PostHogInterface {
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
         this.logs = ext.logs && new ext.logs(this)
+        this.logs?._bindClient?.(() => this._getBrowserClientAdapter())
         this.metrics = ext.metrics && new ext.metrics(this)
         this.experiments = ext.experiments && new ext.experiments(this)
         this.exceptions = ext.exceptions && new ext.exceptions(this)
@@ -1174,7 +1175,9 @@ export class PostHog implements PostHogInterface {
             this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
-            this._enrollExtension((this.logs = this.logs ?? new ext.logs(this)), initTasks)
+            this.logs = this.logs ?? new ext.logs(this)
+            this.logs._bindClient?.(() => this._getBrowserClientAdapter())
+            this._enrollExtension(this.logs, initTasks)
         }
         if (ext.metrics) {
             this._extensions.push((this.metrics = this.metrics ?? new ext.metrics(this)))
@@ -2026,7 +2029,7 @@ export class PostHog implements PostHogInterface {
     }
 
     _getBrowserClientAdapter(): BrowserClientAdapter {
-        return (this._browserClientAdapter ??= new BrowserClientAdapter(this))
+        return (this._browserClientAdapter ??= new BrowserClientAdapter(this, () => this._isShutdown))
     }
 
     _registerExtensionEventProperties(producer: () => Record<string, unknown>): () => void {
@@ -3867,12 +3870,12 @@ export class PostHog implements PostHogInterface {
         }
 
         this._isShutdown = true
+        this.logs?.flushLogs('sendBeacon')
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
-        this.logs?.flushLogs('sendBeacon')
         void this.metrics?.flush('sendBeacon')
         this.metrics?.dispose()
         this._requestQueue?.unload()

@@ -1,3 +1,5 @@
+import { BrowserClientAdapter } from '../extensions/browser-client'
+import { createLogsClient } from './helpers/logs-client'
 import type { Client } from '@posthog/browser-common'
 
 import { PostHogLogs, RECORDER_MAX_AGE_MS } from '../posthog-logs'
@@ -8,15 +10,33 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 
 // Mock the logger to avoid console output during tests
-const mockLogger = {
+const mockLogger = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-}
+    debug: vi.fn(),
+    critical: vi.fn(),
+    createLogger: vi.fn(),
+}))
+mockLogger.createLogger.mockImplementation(() => mockLogger)
 
 vi.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: vi.fn(() => mockLogger),
+    logger: mockLogger,
 }))
+
+function setupLogs(logs: PostHogLogs, overrides: Partial<Client> = {}): Client {
+    const instance = (logs as any)._instance as PostHog
+    const client = createLogsClient(instance, overrides)
+    logs.setup(client)
+    return client
+}
+
+function createLogs(instance: PostHog): PostHogLogs {
+    const logs = new PostHogLogs(instance)
+    setupLogs(logs)
+    return logs
+}
 
 describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
@@ -116,7 +136,7 @@ describe('posthog-logs', () => {
                 },
             } as unknown as PostHog
 
-            logs = new PostHogLogs(mockPostHog)
+            logs = createLogs(mockPostHog)
         })
 
         describe('shared extension lifecycle', () => {
@@ -124,25 +144,29 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'callback request' })
                 logs.flushLogs()
                 await Promise.resolve()
-                expect(mockPostHog._send_request).toHaveBeenLastCalledWith({
-                    method: 'POST',
-                    url: 'https://us.i.posthog.com?token=test-token',
-                    data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
-                    compression: 'best-available',
-                    batchKey: 'logs',
-                    fireCallbackOnDrop: true,
-                    callback: expect.any(Function),
-                })
+                expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: 'https://us.i.posthog.com?token=test-token',
+                        data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
+                        compression: 'best-available',
+                        batchKey: 'logs',
+                        fireCallbackOnDrop: true,
+                        callback: expect.any(Function),
+                    })
+                )
                 logs.captureLog({ body: 'unload request' })
                 logs.flushLogs('sendBeacon')
-                expect(mockPostHog._send_request).toHaveBeenLastCalledWith({
-                    method: 'POST',
-                    url: 'https://us.i.posthog.com?token=test-token',
-                    data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
-                    compression: 'best-available',
-                    batchKey: 'logs',
-                    transport: 'sendBeacon',
-                })
+                expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
+                    expect.objectContaining({
+                        method: 'POST',
+                        url: 'https://us.i.posthog.com?token=test-token',
+                        data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
+                        compression: 'best-available',
+                        batchKey: 'logs',
+                        transport: 'sendBeacon',
+                    })
+                )
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
                 logs.dispose()
             })
@@ -156,7 +180,7 @@ describe('posthog-logs', () => {
                 assignableWindow.__PosthogExtensions__!.logs = { initializeLogs: initialize }
                 logs.onRemoteConfig({ ok: true, config: flagsResponse })
                 expect(register).toHaveBeenCalledWith({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true })
-                expect(initialize).toHaveBeenCalledWith(mockPostHog)
+                expect(initialize).toHaveBeenCalledWith(expect.any(BrowserClientAdapter))
                 logs.captureLog({ body: 'new configuration' })
                 logs.flushLogs('fetch')
                 expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
@@ -183,12 +207,16 @@ describe('posthog-logs', () => {
                     }),
                 } as unknown as Client
 
-                logs.setup(client)
+                logs.dispose()
+                logs = new PostHogLogs(mockPostHog)
+                setupLogs(logs, client)
                 remoteConfigHandler?.({ ok: true, config: flagsResponse })
 
                 expect(logs.name).toBe('logs')
                 expect(client.onRemoteConfig).toHaveBeenCalledTimes(1)
-                expect(mockInitializeLogs).toHaveBeenCalledWith(client)
+                expect(mockInitializeLogs).toHaveBeenCalledWith(
+                    expect.objectContaining({ onRemoteConfig: client.onRemoteConfig })
+                )
 
                 logs.dispose()
                 expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
@@ -207,7 +235,9 @@ describe('posthog-logs', () => {
                     },
                 } as unknown as Client
 
-                logs.setup(client)
+                logs.dispose()
+                logs = new PostHogLogs(mockPostHog)
+                setupLogs(logs, client)
                 loadCallback?.()
 
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
@@ -225,7 +255,9 @@ describe('posthog-logs', () => {
                     },
                 } as unknown as Client
 
-                logs.setup(client)
+                logs.dispose()
+                logs = new PostHogLogs(mockPostHog)
+                setupLogs(logs, client)
 
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
                 expect(mockInitializeLogs).not.toHaveBeenCalled()
@@ -242,7 +274,9 @@ describe('posthog-logs', () => {
                 } as unknown as Client
                 const removeEventListener = vi.spyOn(window, 'removeEventListener')
 
-                logs.setup(client)
+                logs.dispose()
+                logs = new PostHogLogs(mockPostHog)
+                setupLogs(logs, client)
                 logs.dispose()
                 logs.dispose()
                 remoteConfigHandler?.({ ok: true, config: flagsResponse })
@@ -268,13 +302,13 @@ describe('posthog-logs', () => {
                 expect((logs as any)._isLoaded).toBe(false)
             })
 
-            it('preserves queued logs for the shutdown transport flush', () => {
+            it('flushes queued logs before disposing the extension', () => {
                 vi.useFakeTimers()
                 try {
                     logs.captureLog({ body: 'queued before shutdown' })
 
-                    logs.dispose()
                     logs.flushLogs('sendBeacon')
+                    logs.dispose()
 
                     expect((logs as any)._queue).toHaveLength(0)
                     expect(mockPostHog._send_request).toHaveBeenCalledWith(
@@ -410,7 +444,7 @@ describe('posthog-logs', () => {
                 logs.loadIfEnabled()
 
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
-                expect(mockInitializeLogs).toHaveBeenCalledWith(mockPostHog)
+                expect(mockInitializeLogs).toHaveBeenCalledWith(expect.any(BrowserClientAdapter))
             })
 
             it('should handle loadExternalDependency errors', () => {
@@ -467,7 +501,7 @@ describe('posthog-logs', () => {
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
-                expect(mockInitializeLogs).toHaveBeenCalledWith(mockPostHog)
+                expect(mockInitializeLogs).toHaveBeenCalledWith(expect.any(BrowserClientAdapter))
             })
 
             it('should not initialize when logs are disabled in remote config', () => {
@@ -534,7 +568,7 @@ describe('posthog-logs', () => {
                 ]
 
                 configs.forEach((config) => {
-                    const testLogs = new PostHogLogs(mockPostHog)
+                    const testLogs = createLogs(mockPostHog)
                     testLogs.onRemoteConfig({ ok: true, config: config })
                     expect((testLogs as any)._isLogsEnabled).toBe(true)
                 })
@@ -598,7 +632,7 @@ describe('posthog-logs', () => {
                 ]
 
                 malformedResponses.forEach((response) => {
-                    const testLogs = new PostHogLogs(mockPostHog)
+                    const testLogs = createLogs(mockPostHog)
                     expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).not.toThrow()
                     expect((testLogs as any)._isLogsEnabled).toBeFalsy()
                 })
@@ -606,7 +640,7 @@ describe('posthog-logs', () => {
                 // Test null and undefined separately since they can't be spread
                 const nullUndefinedResponses = [null, undefined]
                 nullUndefinedResponses.forEach((response) => {
-                    const testLogs = new PostHogLogs(mockPostHog)
+                    const testLogs = createLogs(mockPostHog)
                     expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).toThrow()
                 })
             })
@@ -684,7 +718,7 @@ describe('posthog-logs', () => {
 
             it('should flush immediately when buffer reaches max size', () => {
                 ;(mockPostHog.config as any).logs = { maxBufferSize: 5, maxLogsPerInterval: 1000 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 for (let i = 0; i < 5; i++) {
                     logs.captureLog({ body: `message ${i}` })
@@ -699,7 +733,7 @@ describe('posthog-logs', () => {
                 // a burst the cap admits is held in full rather than dropped at the trigger.
                 ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
                 ;(mockPostHog.config as any).logs = { maxBufferSize: 2, maxLogsPerInterval: 1000 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 logs.captureLog({ body: 'oldest' })
                 logs.captureLog({ body: 'middle' })
@@ -804,7 +838,7 @@ describe('posthog-logs', () => {
                     serviceVersion: '1.2.3',
                     environment: 'production',
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
@@ -824,7 +858,7 @@ describe('posthog-logs', () => {
                 })
 
                 try {
-                    logs = new PostHogLogs(mockPostHog)
+                    logs = createLogs(mockPostHog)
                     logs.captureLog({ body: 'test' })
                     vi.advanceTimersByTime(3000)
 
@@ -853,7 +887,7 @@ describe('posthog-logs', () => {
                         'deployment.environment': 'from-resource-attrs',
                     },
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
@@ -871,7 +905,7 @@ describe('posthog-logs', () => {
                     ...mockPostHog.config.logs,
                     serviceName: 'my-service',
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
                 vi.advanceTimersByTime(3000)
@@ -907,7 +941,7 @@ describe('posthog-logs', () => {
                     maxLogsPerInterval: 3,
                     maxBufferSize: 1000,
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 for (let i = 0; i < 10; i++) {
                     logs.captureLog({ body: `msg ${i}` })
@@ -925,7 +959,7 @@ describe('posthog-logs', () => {
                     flushIntervalMs: 3000,
                     maxBufferSize: 1000,
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 logs.captureLog({ body: 'a' })
                 logs.captureLog({ body: 'b' })
@@ -1004,7 +1038,7 @@ describe('posthog-logs', () => {
                 'transforms the record via a %s',
                 (_label, beforeSend, input, expected) => {
                     ;(mockPostHog.config as any).logs = { beforeSend }
-                    logs = new PostHogLogs(mockPostHog)
+                    logs = createLogs(mockPostHog)
 
                     logs.captureLog({ body: input })
 
@@ -1018,7 +1052,7 @@ describe('posthog-logs', () => {
                 ['chain with a null-returning link', [(record: any) => record, () => null, (record: any) => record]],
             ] as Array<[string, any]>)('drops the record when beforeSend is a %s', (_label, beforeSend) => {
                 ;(mockPostHog.config as any).logs = { beforeSend }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 logs.captureLog({ body: 'should be dropped' })
 
@@ -1034,7 +1068,7 @@ describe('posthog-logs', () => {
                         },
                     ],
                 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 // A throwing filter must not crash captureLog; the record is
                 // dropped and the error logged.
@@ -1095,13 +1129,11 @@ describe('posthog-logs', () => {
             )
         })
 
-        const noopClient = () => ({ onRemoteConfig: vi.fn(() => ({ dispose: vi.fn() })) }) as unknown as Client
-
         describe('persisted capture hint', () => {
             it('persists the server response so the next page load can buffer early console calls', () => {
                 const register = vi.fn()
                 ;(mockPostHog as any).persistence = { register, props: {} }
-                const persisting = new PostHogLogs(mockPostHog)
+                const persisting = createLogs(mockPostHog)
 
                 persisting.onRemoteConfig({
                     ok: true,
@@ -1168,7 +1200,7 @@ describe('posthog-logs', () => {
 
             it('should buffer console entries instead of loading when the persisted bit is set', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 expect((logsFromPersisted as any)._isLogsEnabled).toBe(false)
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
@@ -1189,7 +1221,7 @@ describe('posthog-logs', () => {
                 // wait but still has to wait for the logs script, so it gets a recorder too.
                 mockLoadExternalDependency.mockImplementation(() => {})
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
                 assignableWindow.console.log('before the script lands')
@@ -1202,7 +1234,7 @@ describe('posthog-logs', () => {
                 ;(assignableWindow as any).__PosthogExtensions__ = undefined
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('never handed over')
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
@@ -1218,7 +1250,7 @@ describe('posthog-logs', () => {
                     finishLoad = cb
                 })
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 assignableWindow.console.log('kept')
 
                 logsFromPersisted.onRemoteConfig({ ok: false } as any)
@@ -1239,7 +1271,7 @@ describe('posthog-logs', () => {
                     finishLoad = cb
                 })
                 logsFromPersisted = new PostHogLogs(mockPostHog)
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
@@ -1256,7 +1288,7 @@ describe('posthog-logs', () => {
                 // entrypoint: `loadIfEnabled` is done, so nothing would ever collect that
                 // buffer and it would pin argument graphs until the max-age backstop.
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 expect((logsFromPersisted as any)._isLoaded).toBe(true)
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
 
@@ -1270,7 +1302,7 @@ describe('posthog-logs', () => {
                 // would have the entrypoint wrap console twice.
                 mockLoadExternalDependency.mockImplementation(() => {})
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
 
@@ -1279,7 +1311,7 @@ describe('posthog-logs', () => {
 
             it('should not buffer a console call made with no arguments', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log()
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
@@ -1292,7 +1324,7 @@ describe('posthog-logs', () => {
                 // `patch` gives up when a non-layer wrapper closed over us directly, so the
                 // recorder stays in the call path and the flag is what stops it recording.
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 const recorder = assignableWindow.console.log
                 assignableWindow.console.log = ((...args: any[]) => (recorder as any)(...args)) as any
 
@@ -1306,7 +1338,7 @@ describe('posthog-logs', () => {
                 const instance = buildInstanceWithPersistedBit()
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('before opt out')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
@@ -1322,7 +1354,7 @@ describe('posthog-logs', () => {
             it('should drop console records already captured when the user opts out', () => {
                 const instance = buildInstanceWithLocalConfig()
                 logsFromPersisted = new PostHogLogs(instance)
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 logsFromPersisted.captureLog({ body: 'programmatic' })
                 logsFromPersisted.captureConsoleLog({ body: 'mirrored before the opt-out' })
                 expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
@@ -1341,7 +1373,7 @@ describe('posthog-logs', () => {
                 const instance = buildInstanceWithPersistedBit()
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('before opt out')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
@@ -1364,7 +1396,7 @@ describe('posthog-logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
 
-                logsFromPersisted.setup(replayingClient())
+                setupLogs(logsFromPersisted, replayingClient())
 
                 expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
@@ -1374,7 +1406,7 @@ describe('posthog-logs', () => {
             it('should unpatch console and drop the buffer on dispose', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('held')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
@@ -1389,7 +1421,7 @@ describe('posthog-logs', () => {
             it('should stop a hint-only recorder when the response carries no logs key', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('held on the hint alone')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
@@ -1413,7 +1445,7 @@ describe('posthog-logs', () => {
             ])('should keep a locally-configured recorder when $label', ({ result }) => {
                 mockLoadExternalDependency.mockImplementation(() => {})
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 assignableWindow.console.log('kept')
 
                 logsFromPersisted.onRemoteConfig(result as any)
@@ -1429,7 +1461,7 @@ describe('posthog-logs', () => {
                 ;(instance as any)._shouldDisableFlags = vi.fn(() => true)
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
                 expect(assignableWindow.console.log).toBe(originalLog)
@@ -1441,7 +1473,7 @@ describe('posthog-logs', () => {
                 ;(assignableWindow as any)._POSTHOG_REMOTE_CONFIG = { 'test-token': { config: {} } }
                 try {
                     logsFromPersisted = new PostHogLogs(instance)
-                    logsFromPersisted.setup(noopClient())
+                    setupLogs(logsFromPersisted)
                     expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
                 } finally {
                     delete (assignableWindow as any)._POSTHOG_REMOTE_CONFIG
@@ -1456,7 +1488,7 @@ describe('posthog-logs', () => {
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
 
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
                 expect(assignableWindow.console.log).toBe(originalLog)
@@ -1464,7 +1496,7 @@ describe('posthog-logs', () => {
 
             it('should not patch console when the persisted bit is absent', () => {
                 const originalLog = assignableWindow.console.log
-                logs.setup(noopClient())
+
                 expect(assignableWindow.console.log).toBe(originalLog)
                 expect((logs as any)._isRecordingConsole).toBe(false)
             })
@@ -1472,7 +1504,7 @@ describe('posthog-logs', () => {
             it('should hand raw buffered entries to the entrypoint and unpatch console when remote config enables logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 const payload = { a: 1 }
                 assignableWindow.console.log('hello', payload)
@@ -1494,7 +1526,7 @@ describe('posthog-logs', () => {
 
             it('should keep recording until the entrypoint has initialized', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('before config')
 
@@ -1511,7 +1543,7 @@ describe('posthog-logs', () => {
             it('should stop the recorder and drop the buffer when the logs script fails to load', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('lost to a failed script load')
 
@@ -1535,7 +1567,7 @@ describe('posthog-logs', () => {
                     finish = cb
                 })
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 assignableWindow.console.info('early')
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
@@ -1556,7 +1588,7 @@ describe('posthog-logs', () => {
                     finish = cb
                 })
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 assignableWindow.console.info('early')
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
@@ -1572,7 +1604,7 @@ describe('posthog-logs', () => {
             it('should drop the buffer and restore console when remote config disables logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalInfo = assignableWindow.console.info
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.info('never sent')
 
@@ -1588,7 +1620,7 @@ describe('posthog-logs', () => {
                 const instance = buildInstanceWithPersistedBit()
                 ;(instance as any).is_capturing = vi.fn(() => false)
                 logsFromPersisted = new PostHogLogs(instance)
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('opted out')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
@@ -1599,7 +1631,7 @@ describe('posthog-logs', () => {
                 try {
                     logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                     const originalLog = assignableWindow.console.log
-                    logsFromPersisted.setup(noopClient())
+                    setupLogs(logsFromPersisted)
 
                     assignableWindow.console.log('held too long')
                     vi.advanceTimersByTime(RECORDER_MAX_AGE_MS)
@@ -1615,7 +1647,7 @@ describe('posthog-logs', () => {
             it('should stop recording and drop the buffer when remote config fails', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('lost to a failed config fetch')
 
@@ -1640,7 +1672,7 @@ describe('posthog-logs', () => {
                     }),
                 }
                 logsFromPersisted = new PostHogLogs(instance)
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('outer')
 
@@ -1650,7 +1682,7 @@ describe('posthog-logs', () => {
             it('should drop the buffer and unpatch console when the SDK is reset mid-buffer', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('before reset')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
@@ -1668,7 +1700,7 @@ describe('posthog-logs', () => {
                 assignableWindow.__PosthogExtensions__ = {} as any
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 assignableWindow.console.log('never handed over')
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
@@ -1683,7 +1715,7 @@ describe('posthog-logs', () => {
                 // order. rrweb's patch builds the same layer under its own marker, so
                 // the recorder can only be spliced out if the walk recognises both.
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
                 const recorderWrapper: any = assignableWindow.console.log
 
                 rrwebPatch(
@@ -1712,7 +1744,7 @@ describe('posthog-logs', () => {
                 assignableWindow.console.log = foreign as any
 
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 expect((assignableWindow.console.log as any).__rrweb_original__).toBe(realLog)
 
@@ -1724,7 +1756,7 @@ describe('posthog-logs', () => {
                 const instance = buildInstanceWithPersistedBit()
                 ;(instance as any).config.logs = { maxBufferSize: 3 }
                 logsFromPersisted = new PostHogLogs(instance)
-                logsFromPersisted.setup(noopClient())
+                setupLogs(logsFromPersisted)
 
                 for (let i = 0; i < 10; i++) {
                     assignableWindow.console.info('entry', i)
@@ -1877,7 +1909,7 @@ describe('posthog-logs', () => {
 
             it('lets a user-set serviceName win over the console default', () => {
                 ;(mockPostHog.config as any).logs = { serviceName: 'my-app' }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
 
                 logs.captureConsoleLog({ body: 'console' })
                 vi.advanceTimersByTime(3000)
@@ -1931,7 +1963,7 @@ describe('posthog-logs', () => {
                 // push well past both the user cap (50) and the default (1000); the
                 // console instance retains everything up to the eviction backstop (2048).
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, maxLogsPerInterval: 50 }
-                logs = new PostHogLogs(mockPostHog)
+                logs = createLogs(mockPostHog)
                 ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
 
                 for (let i = 0; i < 1500; i++) {
@@ -2190,7 +2222,11 @@ describe('posthog-logs', () => {
                 }
             )
 
-            it('does not count pre-init synthetic drops — only post-load failures feed the breaker', async () => {
+            it('counts only post-load failures even before deferred setup', async () => {
+                logs.dispose()
+                logs = new PostHogLogs(mockPostHog)
+                const client = new BrowserClientAdapter(mockPostHog)
+                logs._bindClient(() => client)
                 // Before `init` completes, `_send_request` synthesizes
                 // `{ statusCode: 0 }` without any network attempt
                 // (`fireCallbackOnDrop` on the `!__loaded` path). A deferred init
@@ -2419,7 +2455,7 @@ describe('posthog-logs', () => {
 
                 // Resolve the in-flight send: the queue drains exactly once.
                 callbacks.forEach((cb) => cb({ statusCode: 200 }))
-                await Promise.resolve()
+                await vi.advanceTimersByTimeAsync(0)
                 expect((logs as any)._queue).toHaveLength(0)
             })
 
@@ -2443,7 +2479,7 @@ describe('posthog-logs', () => {
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
                 callbacks.forEach((cb) => cb({ statusCode: 200 }))
-                await Promise.resolve()
+                await vi.advanceTimersByTimeAsync(0)
                 expect((logs as any)._consoleQueue).toHaveLength(0)
             })
         })
@@ -2493,7 +2529,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._isLoaded).toBe(true) // reset doesn't change logs state
 
                 // Create new instance
-                const newLogs = new PostHogLogs(mockPostHog)
+                const newLogs = createLogs(mockPostHog)
                 expect((newLogs as any)._isLogsEnabled).toBeFalsy()
             })
 
