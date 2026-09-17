@@ -24,12 +24,13 @@ export interface SurveysConfig {
 export interface SurveysManager {
     clearInMemoryInProgressSurveyState?(): void
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void
-    checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string }
-    checkSurveyRenderability(survey: Survey): { eligible: boolean; reason?: string }
+    checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string | undefined }
+    checkSurveyRenderability(survey: Survey): { eligible: boolean; reason?: string | undefined }
     renderSurvey(survey: Survey, element: Element, properties?: Properties): void
     handlePopoverSurvey(survey: Survey, options?: DisplaySurveyPopoverOptions): void
     cancelSurvey(surveyId: string): void
     handlePageUnload?(): void
+    startAutomaticDisplay?(): void
     dispose?(): void
 }
 
@@ -54,3 +55,7 @@ export interface SurveysConfigSource {
     createEventReceiver(onActivationChanged: () => void): SurveysEventReceiver
     onMatchingConditionsChanged?(callback: () => void): () => void
 }
+
+export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const SURVEYS_ACTIVATED_SESSION = '$surveys_activated_session'
+export const SURVEYS_ACTIVATED_TIMESTAMPS = '$surveys_activated_timestamps'

@@ -2,12 +2,12 @@ import type { Mock as VitestMock } from 'vitest'
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
-import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils'
+import * as surveyUtils from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { Survey, SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 import * as uuid from '@posthog/browser-common/utils/uuidv7'
 
-vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()),
+vi.mock('@posthog/browser-common/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/surveys/surveys-extension-utils')>()),
     getInProgressSurveyState: vi.fn(),
     setInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),
