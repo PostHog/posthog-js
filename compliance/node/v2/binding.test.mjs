@@ -344,6 +344,8 @@ test('native exceptions are retained by identity; non-JSON results are blocked',
         const first = await binding.invoke('/flush', {})
         assert.equal(first.outcome.kind, 'thrown')
         assert.deepEqual(await binding.invoke('/flush', {}), first)
+        // Sparse SDK results must not silently become JSON nulls.
+        // oxlint-disable-next-line no-sparse-arrays
         for (const value of [NaN, Infinity, 1n, new Date(), { missing: undefined }, [, 1], -0]) {
             results.capture = value
             assert.equal((await binding.invoke('/capture', {})).failure.code, 'native-non-json-result')
