@@ -127,8 +127,13 @@ export interface RageclickConfig {
      * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
      * so they don't suppress text like "sign-up", "5 > 3", or "C++".
      *
-     * @default the default keywords
-     * (the default keywords plus the '+', '-', '−', '–' steppers when `defaults` is `'2026-05-30'` or later)
+     * A `rageclick` object of your own replaces the date-gated default below the `'2025-11-30'`
+     * defaults, and whenever you pass one to `set_config`. Set this property explicitly to keep
+     * content filtering in those cases.
+     *
+     * @default undefined
+     * (`true` when `defaults` is `'2025-11-30'` or later;
+     * the default keywords plus the '+', '-', '−', '–' steppers when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
 
