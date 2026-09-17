@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.434.0
+
+### Minor Changes
+
+- [#5014](https://github.com/PostHog/posthog-js/pull/5014) [`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00) Thanks [@pauldambra](https://github.com/pauldambra)! - Rename the `metrics.network` default attributes to the OTel HTTP client semantic conventions: `http.request.method`, `server.address`, `server.port`, `url.scheme`, `url.template`, `http.response.status_code` and `error.type` replace `method`, `host`, `path` and `status_class`.
+  (2026-09-17)
+
+### Patch Changes
+
+- Updated dependencies [[`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00)]:
+  - @posthog/types@1.412.2
+
 ## 1.433.10
 
 ### Patch Changes
