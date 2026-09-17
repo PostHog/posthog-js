@@ -257,6 +257,69 @@ describe('mutation add ordering', () => {
     expectSameDom(result);
   });
 
+  // Style serialization is untouched here, but the reordering decides when a
+  // newly added <style> and its text reach the replayer relative to the nodes
+  // that depend on them. Framework-generated CSS is the shape that broke
+  // silently before (see .agents/skills/replay-incident-risk INCIDENTS class 4).
+  it('replays framework-shaped CSS added in the same batch as the nodes it styles', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const style = document.createElement('style');
+        // Shorthand set to var() with one longhand overridden by another var(),
+        // the Chakra v3 / Panda pattern, plus a Tailwind-shaped utility.
+        style.appendChild(
+          document.createTextNode(
+            ':root { --pad: 4px; --pad-top: 12px; }' +
+              '.card { padding: var(--pad); padding-top: var(--pad-top); }' +
+              '.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }',
+          ),
+        );
+        const card = document.createElement('div');
+        card.id = 'card';
+        card.className = 'card px-2';
+        card.style.setProperty('--local', 'red');
+        card.style.setProperty('color', 'var(--local)');
+        const label = document.createElement('span');
+        label.textContent = 'styled';
+        card.appendChild(label);
+        target.append(style, card);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // The compared DOM really carries the rules, so a dropped declaration fails.
+    expect(result.incrementalHtml).toContain('--pad-top');
+    expect(result.incrementalHtml).toContain('padding-left');
+    const styleAdd = result.adds.find(
+      (add) => add.node.type === 2 && add.node.tagName === 'style',
+    )!;
+    expect(elementAdd(result, 'card').nextId).toBe(null);
+    expect(styleAdd.nextId).toBe(elementAdd(result, 'card').node.id);
+  });
+
+  it('replays rules inserted into a style element added in the same batch', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const style = document.createElement('style');
+        const box = document.createElement('div');
+        box.id = 'box';
+        box.className = 'emotion-0';
+        target.append(style, box);
+        // Emotion "speedy" mode never puts text in the <style> element.
+        style.sheet.insertRule('.emotion-0 { padding: var(--gap, 8px); }', 0);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    expect(result.incrementalHtml).toContain('var(--gap, 8px)');
+  });
+
   it('serializes a shadow host together with its shadow content', async () => {
     const result = await run(
       '<div id="target"></div>',
