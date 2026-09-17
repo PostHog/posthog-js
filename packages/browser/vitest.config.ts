@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath, URL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
@@ -6,6 +7,9 @@ const require = createRequire(import.meta.url)
 const fromRoot = (relativePath: string): string => fileURLToPath(new URL(relativePath, import.meta.url))
 
 export default defineConfig({
+    define: {
+        __SURVEY_CSS__: JSON.stringify(readFileSync(fromRoot('../browser-common/src/surveys/survey.css'), 'utf8')),
+    },
     resolve: {
         alias: [
             { find: /^@\/(.*)$/, replacement: `${fromRoot('../core/src')}/$1` },
@@ -41,7 +45,15 @@ export default defineConfig({
                 find: '@posthog/browser-common/surveys-types',
                 replacement: fromRoot('../browser-common/src/surveys-types.ts'),
             },
-            { find: '@posthog/browser-common/surveys', replacement: fromRoot('../browser-common/src/surveys.ts') },
+            { find: /^@posthog\/browser-common\/surveys$/, replacement: fromRoot('../browser-common/src/surveys.ts') },
+            {
+                find: '@posthog/browser-common/surveys-renderer',
+                replacement: fromRoot('../browser-common/src/surveys-renderer.tsx'),
+            },
+            {
+                find: /^@posthog\/browser-common\/surveys\/(.*)$/,
+                replacement: `${fromRoot('../browser-common/src/surveys')}/$1`,
+            },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },
             {

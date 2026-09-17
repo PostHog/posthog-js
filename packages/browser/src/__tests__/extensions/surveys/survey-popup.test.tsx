@@ -1,13 +1,14 @@
+import { surveyStorage } from '../../../utils/surveys-runtime-host'
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
-import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
+import * as surveyUtils from '@posthog/browser-common/surveys/surveys-extension-utils' // Import all utils
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
-vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
+vi.mock('@posthog/browser-common/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
     getInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),
@@ -162,7 +163,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
@@ -182,7 +183,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('Previous answer')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
@@ -251,7 +252,7 @@ describe('SurveyPopup', () => {
             survey: partialResponsesSurvey,
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
-            posthog: mockPosthog,
+            posthog: expect.objectContaining({ canCapture: true, storage: surveyStorage }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -329,7 +330,7 @@ describe('SurveyPopup', () => {
             survey: mockSurvey,
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
-            posthog: mockPosthog,
+            posthog: expect.objectContaining({ canCapture: true, storage: surveyStorage }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -396,7 +397,11 @@ describe('SurveyPopup', () => {
 
         await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
 
-        expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(mockSurvey, mockPosthog, false)
+        expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
+            mockSurvey,
+            expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+            false
+        )
     })
 
     test('always shows external surveys even if millisecondDelay is set', () => {
@@ -600,7 +605,11 @@ describe('SurveyPopup', () => {
             const dismissButton = screen.getByRole('button', { name: /close survey/i })
             fireEvent.click(dismissButton)
 
-            expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(introSurvey, mockPosthog, false)
+            expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
+                introSurvey,
+                expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+                false
+            )
             expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
         })
 
