@@ -430,9 +430,9 @@ export class PostHogSurveys implements Extension {
             (survey) =>
                 isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
         )
-        if (eventOrActionBasedSurveys.length > 0) {
-            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-        }
+        // Survey API responses and the cached definition set are complete snapshots. Replacing the
+        // receiver registry removes triggers that were deleted or changed by a definitions refresh.
+        this._surveyEventReceiver?.replace(eventOrActionBasedSurveys)
     }
 
     /**

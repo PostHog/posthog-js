@@ -131,7 +131,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         expect(extensions.generateSurveys).toHaveBeenCalledWith(true)
     })
 
-    it('leaves receiver registrations untouched when a refresh has no triggered surveys', async () => {
+    it('clears receiver registrations when a refresh has no triggered surveys', async () => {
         const { receiver, source } = createConfigSource({ advancedEnableSurveys: true })
         const { client } = createClient()
         const surveys = new PostHogSurveys(source)
@@ -141,10 +141,11 @@ describe('PostHogSurveys shared extension lifecycle', () => {
 
         expect(result).toEqual([])
         expect(receiver.register).not.toHaveBeenCalled()
-        expect(receiver.replace).not.toHaveBeenCalled()
+        expect(receiver.replace).toHaveBeenCalledTimes(1)
+        expect(receiver.replace).toHaveBeenCalledWith([])
     })
 
-    it('registers refreshed survey triggers without replacing receiver state', async () => {
+    it('replaces receiver state with refreshed survey triggers', async () => {
         const survey = {
             id: 'event-survey',
             start_date: '2026-01-01T00:00:00.000Z',
@@ -160,9 +161,9 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         const result = await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve, true))
 
         expect(result).toEqual([survey])
-        expect(receiver.register).toHaveBeenCalledTimes(1)
-        expect(receiver.register).toHaveBeenCalledWith([survey])
-        expect(receiver.replace).not.toHaveBeenCalled()
+        expect(receiver.register).not.toHaveBeenCalled()
+        expect(receiver.replace).toHaveBeenCalledTimes(1)
+        expect(receiver.replace).toHaveBeenCalledWith([survey])
     })
 
     it('disposes synchronously and idempotently and blocks late remote config and request work', async () => {
