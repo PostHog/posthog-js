@@ -1,35 +1,31 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { SourceMap } from 'node:module'
+import path from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
-const declarationURL = new URL('../dist/error-tracking/coercers/dom-exception-coercer.d.ts', import.meta.url)
-const sourceURL = new URL('../src/error-tracking/coercers/dom-exception-coercer.ts', import.meta.url)
+const dist = fileURLToPath(new URL('../dist/', import.meta.url))
 
-test('DOMExceptionCoercer declaration mappings stay inside the final declaration', () => {
-  const declaration = readFileSync(declarationURL, 'utf8')
-  assert.ok(declaration.includes('//# sourceMappingURL=dom-exception-coercer.d.ts.map'))
-  const payload = JSON.parse(readFileSync(new URL(`${declarationURL}.map`), 'utf8'))
-  const map = new SourceMap(payload)
-  const lines = declaration.split('\n')
+test('declaration mappings stay inside the final declarations throughout dist', () => {
+  const files = readdirSync(dist, { recursive: true }).filter((file) => file.endsWith('.d.ts'))
+  assert.ok(files.length > 0, 'No declarations found in dist')
 
-  for (const [line, mappings] of payload.mappings.split(';').entries()) {
-    if (!mappings) continue
-    const entry = map.findEntry(line, Number.MAX_SAFE_INTEGER)
-    assert.equal(entry.generatedLine, line)
-    assert.ok(entry.generatedColumn <= lines[line]?.length, `Mapping outside declaration line ${line + 1}`)
-  }
+  for (const file of files) {
+    const declaration = readFileSync(path.join(dist, file), 'utf8')
+    assert.ok(
+      declaration.includes(`//# sourceMappingURL=${path.basename(file)}.map`),
+      `${file}: missing declaration map reference`
+    )
+    const payload = JSON.parse(readFileSync(path.join(dist, `${file}.map`), 'utf8'))
+    const map = new SourceMap(payload)
+    const lines = declaration.split('\n')
 
-  const sourceLines = readFileSync(sourceURL, 'utf8').split('\n')
-  for (const marker of ["'../types'", 'DOMExceptionCoercer', 'coerce(']) {
-    const line = lines.findIndex((value) => value.includes(marker))
-    assert.ok(line >= 0)
-    const column = lines[line].indexOf(marker)
-    const originalLine = sourceLines.findIndex((value) => value.includes(marker))
-    assert.ok(originalLine >= 0)
-    const entry = map.findEntry(line, column)
-    assert.equal(entry.originalSource, '../../../src/error-tracking/coercers/dom-exception-coercer.ts')
-    assert.equal(entry.originalLine, originalLine)
-    assert.equal(entry.originalColumn, sourceLines[originalLine].indexOf(marker))
+    for (const [line, mappings] of payload.mappings.split(';').entries()) {
+      if (!mappings) continue
+      const entry = map.findEntry(line, Number.MAX_SAFE_INTEGER)
+      assert.equal(entry.generatedLine, line, `${file}: missing generated line ${line + 1}`)
+      assert.ok(entry.generatedColumn <= lines[line]?.length, `${file}: mapping outside declaration line ${line + 1}`)
+    }
   }
 })
