@@ -6,7 +6,7 @@ import type { FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
 export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
-export type { FlagsOptions, FlagsCallback, FeatureFlagResult } from './flags-options'
+export type { FlagsOptions, FlagsCallback, FeatureFlagResult, FeatureFlagsReloadResult } from './flags-options'
 
 /** Statically include feature flags, bypassing the default runtime module load. */
 export const flags = (options: FlagsOptions = {}): FeatureFlags => {
@@ -72,6 +72,15 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             } catch (error) {
                 client?.logger.error('Feature flag read failed', error)
                 return undefined
+            }
+        },
+        reloadFeatureFlags: async () => {
+            if (disposed) return { status: 'cancelled' }
+            try {
+                return await shared.reloadFeatureFlagsAsync()
+            } catch (error) {
+                client?.logger.error('Feature flags reload failed', error)
+                return { status: 'error' }
             }
         },
         onFeatureFlags: (callback) => {

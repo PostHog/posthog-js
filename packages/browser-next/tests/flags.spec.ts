@@ -140,6 +140,77 @@ describe('flags', () => {
         })
     })
 
+    it('awaits explicit reloads before returning fresh synchronous reads', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ featureFlags: { test: 'remote' } })))
+        const client = await create({ fetch, flags: { bootstrap: { featureFlags: { test: 'bootstrap' } } } })
+        const extension = client.getExtension(FeatureFlagsExtension)!
+        expect(extension.getFeatureFlag('test')?.variant).toBe('bootstrap')
+        const reload = extension.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await reload).toEqual({ status: 'loaded' })
+        expect(extension.getFeatureFlag('test')?.variant).toBe('remote')
+        expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each(['<html>proxy error</html>', '{}'])(
+        'reports a response without an evaluation as an error: %s',
+        async (body) => {
+            vi.useFakeTimers()
+            const client = await create({
+                fetch: async () => new Response(body),
+                flags: { bootstrap: { featureFlags: { test: 'bootstrap' } } },
+            })
+            const extension = client.getExtension(FeatureFlagsExtension)!
+            const reload = extension.reloadFeatureFlags()
+            await vi.advanceTimersByTimeAsync(5)
+            expect(await reload).toEqual({ status: 'error' })
+            expect(extension.getFeatureFlag('test')?.variant).toBe('bootstrap')
+        }
+    )
+
+    it('reports disabled evaluation and reloads after disposal without waiting', async () => {
+        const client = await create({ flags: { featureFlagEvaluation: false } })
+        const extension = client.getExtension(FeatureFlagsExtension)!
+        expect(await extension.reloadFeatureFlags()).toEqual({ status: 'skipped' })
+        await client.dispose()
+        expect(await extension.reloadFeatureFlags()).toEqual({ status: 'cancelled' })
+    })
+
+    it('settles failed and timed-out reloads', async () => {
+        vi.useFakeTimers()
+        const fetch = vi.fn(
+            async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 500 })
+        )
+        const client = await create({ fetch, flags: { requestTimeoutMs: 25 } })
+        const extension = client.getExtension(FeatureFlagsExtension)!
+        const failed = extension.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await failed).toEqual({ status: 'error' })
+        fetch.mockImplementation(
+            (_input, init) =>
+                new Promise((_resolve, reject) => {
+                    if (init?.signal) init.signal.onabort = () => reject(new Error('aborted'))
+                })
+        )
+        const timeout = extension.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(30)
+        expect(await timeout).toEqual({ status: 'error' })
+    })
+
+    it('cancels in-flight explicit reloads on reset and disposal', async () => {
+        vi.useFakeTimers()
+        const client = await create({ fetch: () => new Promise(() => {}) })
+        const extension = client.getExtension(FeatureFlagsExtension)!
+        const reset = extension.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(5)
+        client.reset()
+        expect(await reset).toEqual({ status: 'cancelled' })
+        const disposed = extension.reloadFeatureFlags()
+        await client.dispose()
+        expect(await disposed).toEqual({ status: 'cancelled' })
+    })
+
     it('snapshots extension configuration before setup', async () => {
         const options = { bootstrap: { featureFlags: { test: 'original' } }, featureFlagEvaluation: false }
         const extension = flags(options)
