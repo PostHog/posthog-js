@@ -26,7 +26,9 @@ function defaultResourceAttributes(): Record<string, string> {
     let osName = ''
     let osVersion = ''
     try {
-        const userAgent = typeof globalThis !== 'undefined' ? globalThis.navigator?.userAgent : undefined
+        const browserGlobal =
+            typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : undefined
+        const userAgent = browserGlobal?.navigator?.userAgent
         if (userAgent) {
             ;[osName, osVersion] = detectOS(userAgent)
         }
