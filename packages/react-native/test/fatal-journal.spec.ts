@@ -1091,4 +1091,86 @@ describe('native fatal-report journal recovery', () => {
     expect(parsed!.attribution.$app_version).toBe('1.0.0')
     expect(parsed!.attribution.$sensitive_user_email).toBeUndefined()
   })
+
+  it('before_send is final on user properties but SDK metadata is reapplied (regression for hpouillot P1)', async () => {
+    // hpouillot raised a P1 about before_send final authority. The chosen design is:
+    //   - user properties are never persisted in the journal, so before_send's scrubbing
+    //     of user properties is final (nothing to reapply).
+    //   - SDK / device / session identifiers ARE persisted and reapplied AFTER
+    //     super.processBeforeEnqueue so crash attribution survives across app versions —
+    //     a customer's before_send stripping $app_version would lose the crash-to-version
+    //     link when the user updates between the crash and the relaunch.
+    // This test locks in both halves so a future refactor can't silently change either.
+    const journalId = '0192f1c2-6666-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-before-send',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      attribution: {
+        $app_version: '1.0.0',
+        $os_version: '16.0',
+        $lib_version: '1.0.0',
+        // User properties never reach the journal, so they can't reach before_send
+        // either — the assertion below confirms before_send has nothing to scrub here.
+        $user_email: 'attribution-key-not-in-allowlist-so-stripped',
+      },
+      exceptionList: [{ type: 'Error', value: 'before-send-recovery' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    const beforeSend = vi.fn((event: any) => {
+      // Try to scrub SDK metadata. The override reapplies these after this hook
+      // returns, so the recovered event MUST still carry them — this is the design
+      // choice hpouillot flagged.
+      delete event.properties.$app_version
+      delete event.properties.$os_version
+      delete event.properties.$lib_version
+      return event
+    })
+
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: {
+        getItem: () => null,
+        setItem: (key, value) => {
+          stored.set(key, value)
+        },
+      },
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      before_send: beforeSend,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(beforeSend).toHaveBeenCalled()
+    const recoveredQueue = JSON.parse(stored.get('.posthog-rn.json') || '{}')
+    const queue = (recoveredQueue.content && recoveredQueue.content.queue) || []
+    expect(queue.length).toBe(1)
+    // Design choice: SDK metadata is reapplied after before_send so the crash stays
+    // attributed to the version the user was running, not the relaunch's version.
+    expect(queue[0].message.properties.$app_version).toBe('1.0.0')
+    expect(queue[0].message.properties.$os_version).toBe('16.0')
+    expect(queue[0].message.properties.$lib_version).toBe('1.0.0')
+    // User properties never made it into the journal in the first place — before_send
+    // has nothing to scrub here, but the assertion documents the boundary.
+    expect(queue[0].message.properties.$user_email).toBeUndefined()
+  })
 })
