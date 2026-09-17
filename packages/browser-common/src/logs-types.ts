@@ -1,3 +1,4 @@
+import type { Client } from './client'
 import type { LogSdkContext } from '@posthog/core'
 
 // Internal contract between the main bundle and the lazily-loaded logs entrypoint.
@@ -27,3 +28,11 @@ export interface BufferedConsoleEntry {
     occurredAtMs: number
     context: LogSdkContext
 }
+
+export interface ConsoleLogsCapture {
+    initialize(client: Client): (() => void) | undefined
+    replay(client: Client, entries: BufferedConsoleEntry[]): void
+}
+
+/** A loader may report its result synchronously. */
+export type ConsoleLogsLoader = (callback: (error: unknown, capture?: ConsoleLogsCapture) => void) => void

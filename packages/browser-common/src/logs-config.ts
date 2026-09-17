@@ -6,6 +6,13 @@ export interface BrowserLogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/** SDK configuration mapping; values are read again when configuration changes. */
+export interface LogsConfigSource {
+    get(): BrowserLogsConfig | undefined
+    readonly captureHintKey: string
+    readonly remoteConfigWillArrive: boolean
+}
+
 const DEFAULT_FLUSH_INTERVAL_MS = 3000
 const DEFAULT_MAX_BUFFER_SIZE = 100
 const DEFAULT_MAX_LOGS_PER_INTERVAL = 1000

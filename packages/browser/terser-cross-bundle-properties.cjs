@@ -3,6 +3,7 @@ const globallyReservedPrivateProperties = ['_addCaptureHook', '_send_request']
 
 const crossBundlePrivateProperties = [
     ...globallyReservedPrivateProperties,
+    '_bindClient',
     '_onIdentityChanged',
     '_onOptOut',
     '_onIdentityCleared',
