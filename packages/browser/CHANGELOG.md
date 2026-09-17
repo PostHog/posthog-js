@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.433.10
+
+### Patch Changes
+
+- [#4960](https://github.com/PostHog/posthog-js/pull/4960) [`c8e53fa`](https://github.com/PostHog/posthog-js/commit/c8e53faa796b9dfb255286656155036e3cecad31) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console warning when session replay stops capturing canvas frames (browser without `OffscreenCanvas`, a CSP that blocks `blob:` workers, or a failing `canvasCapture.maskRegionsFn`), and stop changing WebGL and WebGPU canvas settings when canvas capture fails to start
+  (2026-09-17)
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+- Updated dependencies [[`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0)]:
+  - @posthog/core@1.54.4
+
 ## 1.433.9
 
 ### Patch Changes

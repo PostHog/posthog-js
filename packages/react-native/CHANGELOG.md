@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.74.1
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+- Updated dependencies [[`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0)]:
+  - @posthog/core@1.54.4
+
 ## 4.74.0
 
 ### Minor Changes
