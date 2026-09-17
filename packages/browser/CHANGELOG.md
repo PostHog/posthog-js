@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.433.9
+
+### Patch Changes
+
+- [#5007](https://github.com/PostHog/posthog-js/pull/5007) [`c3043f4`](https://github.com/PostHog/posthog-js/commit/c3043f45c088cbd80398648c8ae75bcce3e075f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a session diagnostic when stale replay configuration cannot be refreshed, without changing recording behavior.
+  (2026-09-17)
+
 ## 1.433.8
 
 ### Patch Changes
