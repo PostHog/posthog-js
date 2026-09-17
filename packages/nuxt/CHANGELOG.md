@@ -1,5 +1,14 @@
 # @posthog/nuxt
 
+## 1.7.91
+
+### Patch Changes
+
+- [#4985](https://github.com/PostHog/posthog-js/pull/4985) [`d14b608`](https://github.com/PostHog/posthog-js/commit/d14b608e1260092b6abaf845ebf81f99f8553c22) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Nuxt runtime plugin type declarations.
+  (2026-09-16)
+- Updated dependencies [[`ec4062b`](https://github.com/PostHog/posthog-js/commit/ec4062bf42667a86f9daf84e744e253471a98a96)]:
+  - posthog-js@1.433.6
+
 ## 1.7.90
 
 ### Patch Changes

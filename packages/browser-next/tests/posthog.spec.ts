@@ -22,12 +22,40 @@ const createPostHogWithAnalytics = (options: CorePostHogOptions) =>
     createPostHog({ ...options, extensions: [immediateAnalytics(), ...(options.extensions ?? [])] })
 
 describe('@posthog/browser core', () => {
-    it('requires a project token in options', async () => {
-        // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
-        await expect(createPostHog()).rejects.toThrow('A PostHog project token is required')
-        // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
-        await expect(createPostHog({})).rejects.toThrow('A PostHog project token is required')
-        await expect(createPostHog({ projectToken: '' })).rejects.toThrow('A PostHog project token is required')
+    it.each([createPostHog, createAutomaticPostHog])('disables clients without a project token', async (create) => {
+        const clients = [
+            // @ts-expect-error Verify untyped JavaScript consumers.
+            await create(),
+            // @ts-expect-error Verify untyped JavaScript consumers.
+            await create({}),
+            await create({ projectToken: '' }),
+        ]
+        for (const client of clients) {
+            expect(client.canCapture).toBe(false)
+            expect(() => client.capture('disabled')).not.toThrow()
+            expect(await client.sendRequest('/test')).toMatchObject({ statusCode: 0 })
+            client.optIn()
+            expect(client.canCapture).toBe(false)
+            await client.shutdown()
+        }
+    })
+
+    it('admits capture synchronously and returns void', async () => {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
+        const events: string[] = []
+        posthog.onEvent(({ event }) => events.push(event))
+
+        const result: void = posthog.capture('synchronous')
+
+        expect(result).toBeUndefined()
+        expect(events).toEqual(['synchronous'])
+        await posthog.dispose()
     })
 
     it('buffers capture without configured analytics delivery', async () => {
@@ -46,7 +74,7 @@ describe('@posthog/browser core', () => {
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.getExtension('analytics')).toBeDefined()
         await posthog.dispose()
     })
 
@@ -167,10 +195,9 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
 
-        const capture = posthog.capture('private')
+        posthog.capture('private')
         posthog.optOut()
         posthog.optIn()
-        await capture
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
@@ -188,7 +215,7 @@ describe('@posthog/browser core', () => {
         posthog.onEvent((event) => observed.push(event))
         posthog.registerDynamicEventProperties(() => ({ dynamic: 'yes', token: 'bad-token' }))
 
-        await posthog.capture(
+        posthog.capture(
             'signed_up',
             { plan: 'pro', distinct_id: 'bad-id' },
             {
@@ -198,6 +225,7 @@ describe('@posthog/browser core', () => {
                 setOnce: { source: 'docs' },
             }
         )
+        await posthog.flush()
 
         expect(requests).toHaveLength(1)
         expect(requests[0]?.url.pathname).toBe('/i/v1/analytics/events')
@@ -250,7 +278,7 @@ describe('@posthog/browser core', () => {
             fetch,
         })
 
-        const capture = posthog.capture('pending')
+        posthog.capture('pending')
         let flushed = false
         const flush = posthog.flush().then(() => {
             flushed = true
@@ -259,7 +287,6 @@ describe('@posthog/browser core', () => {
         expect(flushed).toBe(false)
 
         finishRequest?.(new Response('{}', { status: 200 }))
-        await capture
         await flush
         expect(flushed).toBe(true)
     })
@@ -456,26 +483,21 @@ describe('@posthog/browser core', () => {
                 fetch,
             })
 
-            let captureSettled = false
+            posthog.capture('consent_revoked_during_backoff')
             let flushSettled = false
-            const capture = posthog.capture('consent_revoked_during_backoff').then(() => {
-                captureSettled = true
-            })
             const flush = posthog.flush().then(() => {
                 flushSettled = true
             })
             await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(vi.getTimerCount()).toBe(1)
-            expect(captureSettled).toBe(true)
             expect(flushSettled).toBe(false)
 
             posthog.optOut()
             await vi.runOnlyPendingTimersAsync()
-            await Promise.all([capture, flush])
+            await flush
 
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(captureSettled).toBe(true)
             expect(flushSettled).toBe(true)
         } finally {
             vi.useRealTimers()
@@ -567,7 +589,7 @@ describe('@posthog/browser core', () => {
                 fetch,
             })
 
-            const capture = posthog.capture('disposed_during_backoff')
+            posthog.capture('disposed_during_backoff')
             await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(vi.getTimerCount()).toBe(1)
@@ -579,7 +601,7 @@ describe('@posthog/browser core', () => {
             await Promise.resolve()
             expect(disposalSettled).toBe(false)
             await vi.runOnlyPendingTimersAsync()
-            await Promise.all([capture, disposal])
+            await disposal
 
             expect(fetch).toHaveBeenCalledTimes(4)
             expect(disposalSettled).toBe(true)
@@ -857,7 +879,7 @@ describe('@posthog/browser core', () => {
             })
             vi.advanceTimersByTime(1_000)
 
-            await expect(posthog.capture('hostile_properties', properties)).resolves.toBeUndefined()
+            expect(() => posthog.capture('hostile_properties', properties)).not.toThrow()
 
             expect(posthog.session).toEqual(session)
             expect(storage.values).toEqual(persisted)
@@ -898,7 +920,7 @@ describe('@posthog/browser core', () => {
             }
             vi.advanceTimersByTime(1_000)
 
-            await expect(posthog.capture('hostile_to_json', properties)).resolves.toBeUndefined()
+            expect(() => posthog.capture('hostile_to_json', properties)).not.toThrow()
 
             expect(posthog.session).toEqual(session)
             expect(storage.values).toEqual(persisted)
@@ -957,7 +979,7 @@ describe('@posthog/browser core', () => {
                         throw new Error(`${option} getter failed`)
                     },
                 }) as Parameters<typeof posthog.capture>[2]
-                await expect(posthog.capture(`hostile_${option}`, undefined, options)).resolves.toBeUndefined()
+                expect(() => posthog.capture(`hostile_${option}`, undefined, options)).not.toThrow()
             }
 
             expect(posthog.session).toEqual(session)

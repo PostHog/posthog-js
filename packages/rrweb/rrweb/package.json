@@ -13,7 +13,7 @@
         "test:watch": "pnpm turbo run build && cross-env PUPPETEER_HEADLESS=true pnpm vitest --exclude test/benchmark",
         "test:update": "pnpm test:headless --update",
         "retest:update": "cross-env PUPPETEER_HEADLESS=true pnpm retest --update",
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc --noEmit",
@@ -71,7 +71,6 @@
         "tslib": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0"
     },
     "dependencies": {

@@ -57,3 +57,6 @@ CLAUDE.md
 
 # Ignore Ralph's local configuration directory
 .ralph/
+
+# Review live provider recordings before promoting them to test fixtures.
+/packages/ai/harness/fixtures/*.live.json

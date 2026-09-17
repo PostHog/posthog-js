@@ -253,6 +253,11 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    /**
+     * Bypasses asynchronous CompressionStream gzip in favor of synchronous compression.
+     * Used for immediate requests so compression does not delay dispatch until after a navigation or page unload.
+     */
+    preferSyncCompression?: boolean
     /** Used when best-available compression negotiation does not select a format. */
     compressionFallback?: Compression
     /**

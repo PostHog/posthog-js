@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, type Ref } from 'vue'
 import { usePostHog } from './usePostHog'
 import type { JsonType } from 'posthog-js'
 
@@ -23,11 +23,12 @@ import type { JsonType } from 'posthog-js'
  * @param flag - The feature flag key
  * @returns A reactive ref containing the feature flag payload
  */
-export function useFeatureFlagPayload(flag: string) {
+export function useFeatureFlagPayload(flag: string): Ref {
   const posthog = usePostHog()
-  const featureFlagPayload = ref<JsonType | undefined>(
-    posthog?.getFeatureFlagResult?.(flag, { send_event: false })?.payload
-  )
+  // Avoid recursively unwrapping JsonType while preserving the existing public Ref signature.
+  const featureFlagPayload = ref<unknown>(posthog?.getFeatureFlagResult?.(flag, { send_event: false })?.payload) as Ref<
+    JsonType | undefined
+  >
 
   let unsubscribe: (() => void) | undefined
   onMounted(() => {

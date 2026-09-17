@@ -276,6 +276,19 @@ export function ignoreAttribute(
   );
 }
 
+/**
+ * Whether a `<link>`'s `rel` marks it as a stylesheet, matching `rel` as the
+ * space-separated, ASCII-case-insensitive token list it is. The distinction
+ * matters because `<link rel=preload as=style>` carries the same URL as the
+ * stylesheet it preloads while applying no CSS of its own.
+ */
+function isStylesheetLink(rel: unknown): boolean {
+  if (typeof rel !== 'string') {
+    return false;
+  }
+  return toLowerCase(rel).split(/\s+/).includes('stylesheet');
+}
+
 export function _isBlockedElement(
   element: Element,
   blockClass: string | RegExp,
@@ -772,7 +785,16 @@ function serializeElementNode(
   // remote css
   // a blocked link is serialized as a dimensions-only placeholder, so reading its
   // sheet would be wasted work - and deferring it would leak CSS the block excluded
-  if (tagName === 'link' && inlineStylesheet && !needBlock) {
+  if (
+    tagName === 'link' &&
+    inlineStylesheet &&
+    !needBlock &&
+    // Only a real stylesheet link. `preload`/`prefetch` links carry the URL of
+    // a sheet without applying it, so the href lookup below happily resolves
+    // them to the loaded sheet - and then the whole stylesheet is inlined twice
+    // into the snapshot, once on an element the replayer must leave alone.
+    isStylesheetLink(attributes.rel)
+  ) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -1493,7 +1515,7 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    serializedNode.attributes.rel === 'stylesheet'
+    isStylesheetLink(serializedNode.attributes.rel)
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,
