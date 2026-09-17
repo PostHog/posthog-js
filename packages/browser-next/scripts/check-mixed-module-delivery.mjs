@@ -185,7 +185,7 @@ for (const createLogs of [logs, commonJsLogs]) {
     await client.shutdown()
     if (
         requests.length !== 1 ||
-        !requests[0].url.includes('/i/v1/logs?token=ph_test') ||
+        !String(requests[0].url).includes('/i/v1/logs?token=ph_test') ||
         requests[0].body.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue !== 'mixed logs'
     ) {
         throw new Error('Mixed-module logs did not flush its OTLP record on shutdown')

@@ -1,3 +1,4 @@
+import type { Client } from '@posthog/browser-common'
 import { createPostHog } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { logs } from '../src/logs'
@@ -254,6 +255,44 @@ describe('logs', () => {
         await closing
         expect(signal?.aborted).toBe(true)
         expect(fetch).toHaveBeenCalledOnce()
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('keeps ordinary requests closed while admitted logs finish shutdown', async () => {
+        let ordinary!: Client
+        const fetch = vi.fn(() => new Promise<Response>(() => {}))
+        const client = await create({
+            fetch,
+            extensions: [
+                {
+                    name: 'ordinary',
+                    setup: (value) => {
+                        ordinary = value
+                    },
+                },
+            ],
+        })
+        client.captureLog({ body: 'before closing' })
+        const closing = client.shutdown(10)
+        expect((await client.sendRequest('/i/v1/logs')).statusCode).toBe(0)
+        expect((await ordinary.sendRequest('/i/v1/logs')).statusCode).toBe(0)
+        expect(fetch).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(10)
+        await closing
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('settles rejected requests and leaves the queue available to a later flush', async () => {
+        const fetch = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('network unavailable'))
+            .mockResolvedValue(new Response('{}'))
+        const client = await create({ fetch })
+        client.captureLog({ body: 'retry' })
+        await client.flush()
+        await client.flush()
+        expect(fetch).toHaveBeenCalledTimes(2)
+        await client.shutdown()
         expect(vi.getTimerCount()).toBe(0)
     })
 
