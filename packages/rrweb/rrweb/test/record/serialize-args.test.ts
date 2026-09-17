@@ -320,6 +320,28 @@ describe('serializeArg with dataURLOptions', () => {
     ]);
   });
 
+  it('should not throw when a tainted canvas refuses toDataURL', () => {
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new Error('SecurityError: tainted canvas');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const result = serializeArg(canvas, window, context, defaultDataURLOptions);
+
+    // replay must still get a loadable image, otherwise `drawImage` throws
+    expect(result).toMatchObject({
+      rr_type: 'HTMLImageElement',
+      src: expect.stringMatching(/^data:image\/gif;base64,/) as string,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // a tainted canvas fails on every draw, so only the first one warns
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it('should serialize ImageData with nested canvas in complex structure', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = (t?: string, q?: number) => `data:${t};base64,test`;
