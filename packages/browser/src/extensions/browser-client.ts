@@ -202,6 +202,7 @@ export class BrowserClientAdapter implements Client {
         const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
+            ...(path === '/i/v1/logs' && (!init.target || init.target === 'api') ? { batchKey: 'logs' } : {}),
             url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,

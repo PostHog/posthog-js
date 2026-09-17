@@ -12,10 +12,11 @@ import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome 
 import type { Client, DeepReadonly } from './client'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
-import type { BrowserLogsHost } from './logs-host'
+import type { ConsoleLogsLoader } from './logs-types'
+import { continueWith } from './utils/promise-utils'
 import { addEventListener } from './utils/general-utils'
 import { createLogger } from './utils/logger'
-import { resolveLogsConfig, type BrowserLogsConfig } from './logs-config'
+import { resolveLogsConfig, type BrowserLogsConfig, type LogsConfigSource } from './logs-config'
 import { BUFFERED_CONSOLE_LEVELS } from './logs-types'
 import type { BufferedConsoleEntry, BufferedConsoleLevel } from './logs-types'
 import { patch } from './utils/patch'
@@ -30,10 +31,8 @@ export const RECORDER_MAX_AGE_MS = 30000
 // OTLP instrumentation-scope name for console auto-capture, distinguishing it from
 // programmatic logs (which use the SDK scope) in scope-based dashboards/queries.
 const CONSOLE_SCOPE_NAME = 'console'
-// Safety backstop for a `_send_request` that never calls back. Set above the
-// request layer's own 60s timeout so a real (slow-but-completing) request always
-// settles via its callback first; this only fires on a genuinely callback-less
-// send (e.g. request enqueued before load, or a transport that never reports).
+// Backstop for a host request that never settles. Keep it above the transport's
+// own 60s timeout so slow requests normally settle through the client first.
 const LOGS_SEND_TIMEOUT_MS = 90000
 // Mirrors the event retry queue's status-0 budget (see retry-queue.ts
 // `STATUS_CODE_ZERO_MAX_RETRIES`): a request that dies before any HTTP response
@@ -63,16 +62,18 @@ export class PostHogLogs implements Extension {
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
-    private readonly _logger = createLogger('[logs]')
+    private _logger: Client['logger'] = createLogger('[logs]')
     // Core owns retry/backoff but the browser request layer owns transport logging.
     // Filter only errors explicitly branded by this adapter; fatal core errors remain visible.
-    private readonly _coreLogger = {
-        ...this._logger,
-        error: (...args: any[]) => {
-            if (!args.some(isHandledLogsRequestError)) {
-                this._logger.error(...args)
-            }
-        },
+    private get _coreLogger() {
+        return {
+            ...this._logger,
+            error: (...args: any[]) => {
+                if (!args.some(isHandledLogsRequestError)) {
+                    this._logger.error(...args)
+                }
+            },
+        }
     }
 
     // In-memory only; records do not survive a page reload.
@@ -94,7 +95,17 @@ export class PostHogLogs implements Extension {
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
-    private _client: Client | undefined
+    private _clientSource: (() => Client) | undefined
+    private _setupStarted = false
+
+    private get _client(): Client | undefined {
+        return this._clientSource?.()
+    }
+
+    /** @internal Supply the SDK-owned client without activating the extension. */
+    _bindClient(getClient: () => Client): void {
+        if (!this._disposed && !this._setupStarted) this._clientSource = getClient
+    }
     private _remoteConfigSubscription: Disposable | undefined
     private _disposed = false
 
@@ -112,13 +123,40 @@ export class PostHogLogs implements Extension {
     // `logger.critical` writes straight to the global `console`.
     private _isRecordingConsoleEntry = false
 
-    constructor(private readonly _host: BrowserLogsHost) {
-        if (this._host.config?.captureConsoleLogs) {
-            this._isLogsEnabled = true
+    private _window: (Window & typeof globalThis) | undefined
+    private _listeningForReconnect = false
+
+    constructor(private readonly _configSource: LogsConfigSource) {
+        this._isLogsEnabled = !!_configSource.get()?.captureConsoleLogs
+    }
+
+    protected get _isRequestReady(): boolean {
+        return true
+    }
+
+    protected _getSdkContext(): LogSdkContext {
+        const client = this._client!
+        const session = client.session
+        return {
+            distinctId: client.distinctId,
+            ...(session.sessionId ? session : {}),
         }
-        // Flush on reconnect rather than waiting out the retry backoff.
-        if (this._host.window) {
-            addEventListener(this._host.window, 'online', this._onReconnect)
+    }
+
+    protected _getConsoleLoader(): ConsoleLogsLoader | undefined {
+        return undefined
+    }
+
+    private _listenForReconnect(): void {
+        if (this._listeningForReconnect) return
+        try {
+            this._window = typeof window === 'undefined' ? undefined : window
+        } catch {
+            this._window = undefined
+        }
+        if (this._window) {
+            addEventListener(this._window, 'online', this._onReconnect)
+            this._listeningForReconnect = true
         }
     }
 
@@ -141,12 +179,13 @@ export class PostHogLogs implements Extension {
         opts?: Parameters<typeof resolveLogsConfig>[1],
         scopeName?: string
     ): [CorePostHogLogs, ResolvedPostHogLogsConfig] {
-        const config = resolveLogsConfig(this._host.config, opts)
+        this._listenForReconnect()
+        const config = resolveLogsConfig(this._configSource.get(), opts)
         const core = new CorePostHogLogs(
             this._createHost(getQueue, setQueue),
             config,
             this._coreLogger,
-            () => this._host.getSdkContext(),
+            () => this._getSdkContext(),
             (fn) => fn(),
             undefined,
             scopeName
@@ -155,7 +194,7 @@ export class PostHogLogs implements Extension {
     }
 
     private _getCore(): CorePostHogLogs {
-        const logsConfig = this._host.config
+        const logsConfig = this._configSource.get()
         if (!this._core || this._resolvedFrom !== logsConfig) {
             this._core?.reset()
             this._resolvedFrom = logsConfig
@@ -171,7 +210,7 @@ export class PostHogLogs implements Extension {
 
     // Like `_getCore`, but with the console service name + scope, backed by `_consoleQueue`.
     private _getConsoleCore(): CorePostHogLogs {
-        const logsConfig = this._host.config
+        const logsConfig = this._configSource.get()
         if (!this._consoleCore || this._consoleResolvedFrom !== logsConfig) {
             this._consoleCore?.reset()
             this._consoleResolvedFrom = logsConfig
@@ -187,14 +226,23 @@ export class PostHogLogs implements Extension {
         return this._consoleCore
     }
 
-    setup(client: Client): void {
-        if (this._disposed) {
+    setup(client: Client): void | Promise<void> {
+        if (this._disposed || this._setupStarted) {
             return
         }
-        this._client = client
+        this._setupStarted = true
+        this._clientSource = () => client
+        this._logger = client.logger.createLogger('[logs]')
+        return continueWith(client.kv.initialize(), () => {
+            if (!this._disposed) this._finishSetup(client)
+        })
+    }
+
+    private _finishSetup(client: Client): void {
+        this._listenForReconnect()
         // Non-slim bundles build this extension in the `PostHog` constructor, while
         // `config` is still the defaults, so the opt-in is re-read here.
-        if (this._host.config?.captureConsoleLogs) {
+        if (this._configSource.get()?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
         // Both routes to console capture have a window before the logs script can run,
@@ -202,7 +250,10 @@ export class PostHogLogs implements Extension {
         // load; a persisted `true` is only a hint remote config may since have withdrawn.
         // Neither emits anything here. Started before subscribing, because a replayed
         // config calls back synchronously.
-        if (this._isLogsEnabled || (this._host.remoteConfigWillArrive && this._host.persistedCaptureHint)) {
+        if (
+            this._isLogsEnabled ||
+            (this._configSource.remoteConfigWillArrive && client.kv.get(this._configSource.captureHintKey))
+        ) {
             this._startConsoleRecorder()
         }
         let replayedEnabledConfig = false
@@ -228,13 +279,15 @@ export class PostHogLogs implements Extension {
         this._stopConsoleRecorder()
         this._remoteConfigSubscription?.dispose()
         this._remoteConfigSubscription = undefined
-        this._client = undefined
+        this._clientSource = undefined
         this._isLoading = false
-        this._host.window?.removeEventListener('online', this._onReconnect)
+        this._window?.removeEventListener('online', this._onReconnect)
         // TODO: Multiplex console capture across instances and settle pending log sends so
         // wrappers and request timers cannot outlive their final owner.
         this._consoleLogsDispose?.()
         this._consoleLogsDispose = undefined
+        this._core?.clearQueue()
+        this._consoleCore?.clearQueue()
         this._core?.reset()
         this._consoleCore?.reset()
     }
@@ -253,7 +306,7 @@ export class PostHogLogs implements Extension {
             this._stopRecorderStartedByPersistedHint()
             return
         }
-        this._host.persistCaptureHint(!!logCapture)
+        this._client?.kv.set(this._configSource.captureHintKey, !!logCapture)
         if (!logCapture) {
             // The server reports `false` for every project that has not turned console
             // capture on, so it cannot distinguish "not enabled" from "turned off" and
@@ -288,7 +341,7 @@ export class PostHogLogs implements Extension {
     }
 
     captureLog(options: CaptureLogOptions): void {
-        if (!this._disposed) {
+        if (!this._disposed && this._client) {
             this._getCore().captureLog(options)
         }
     }
@@ -297,7 +350,7 @@ export class PostHogLogs implements Extension {
     // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
     /** @internal */
     captureConsoleLog(options: CaptureLogOptions): void {
-        if (!this._disposed) {
+        if (!this._disposed && this._client) {
             this._getConsoleCore().captureLog(options)
         }
     }
@@ -308,7 +361,7 @@ export class PostHogLogs implements Extension {
     // same reason `captureConsoleLog` is: the caller lives in a separately built bundle.
     /** @internal */
     captureBufferedConsoleLog(options: CaptureLogOptions, context: LogSdkContext, occurredAtMs: number): void {
-        if (!this._disposed) {
+        if (!this._disposed && this._client) {
             this._getConsoleCore().captureLog(options, { context, occurredAtMs })
         }
     }
@@ -342,13 +395,13 @@ export class PostHogLogs implements Extension {
     }
 
     private _startConsoleRecorder(): void {
-        if (this._isRecordingConsole || !this._host.console) {
+        if (this._isRecordingConsole || !this._window?.console) {
             return
         }
         // Deliberately tighter than the console queue's own depth: entries here pin
         // live argument graphs rather than serialized records, so the ceiling is core's
         // flush threshold rather than its eviction cap.
-        const maxBufferSize = resolveLogsConfig(this._host.config).maxBufferSize
+        const maxBufferSize = resolveLogsConfig(this._configSource.get()).maxBufferSize
         // Foreign wrappers can retain this installation after stop. Restarting the
         // instance must not reactivate those older recorder closures.
         let active = true
@@ -358,7 +411,7 @@ export class PostHogLogs implements Extension {
         for (const level of BUFFERED_CONSOLE_LEVELS) {
             let trueOriginal: any
             try {
-                trueOriginal = originalConsoleMethod(this._host.console![level])
+                trueOriginal = originalConsoleMethod(this._window!.console[level])
             } catch {
                 // A hostile `console` accessor must not take the whole logs extension
                 // down with it: the runtime disposes an extension whose setup throws.
@@ -368,7 +421,7 @@ export class PostHogLogs implements Extension {
                 continue
             }
             this._consoleRecorderUnpatchers.push(
-                patch(this._host.console!, level, (next: any) => {
+                patch(this._window!.console, level, (next: any) => {
                     const wrapped = (...args: any[]) => {
                         try {
                             if (active) {
@@ -377,7 +430,7 @@ export class PostHogLogs implements Extension {
                         } catch {
                             // Recording must never break the page's own console output.
                         }
-                        return next.apply(this._host.console!, args)
+                        return next.apply(this._window!.console, args)
                     }
                     // Later patchers walk this marker to reach the real console method
                     // instead of re-entering the recorder.
@@ -398,7 +451,7 @@ export class PostHogLogs implements Extension {
         if (!this._isRecordingConsole || this._isRecordingConsoleEntry || args.length === 0) {
             return
         }
-        if (!this._host.isCapturing) {
+        if (!this._client?.canCapture) {
             // Opting out mid-window releases the arguments already held, not just
             // future ones.
             this._stopConsoleRecorder()
@@ -409,7 +462,7 @@ export class PostHogLogs implements Extension {
         }
         this._isRecordingConsoleEntry = true
         try {
-            this._consoleBuffer.push({ level, args, occurredAtMs: Date.now(), context: this._host.getSdkContext() })
+            this._consoleBuffer.push({ level, args, occurredAtMs: Date.now(), context: this._getSdkContext() })
         } finally {
             this._isRecordingConsoleEntry = false
         }
@@ -460,6 +513,7 @@ export class PostHogLogs implements Extension {
     // (core's batched flush can't force a transport, and the unload sendBeacon must be
     // synchronous). No transport → core's batched, 413-aware, retrying flush.
     flushLogs(transport?: 'XHR' | 'fetch' | 'sendBeacon'): void {
+        if (!this._client) return
         if (transport) {
             this._flushViaTransport(transport)
             return
@@ -483,7 +537,7 @@ export class PostHogLogs implements Extension {
             return
         }
 
-        const loadConsole = this._host.getConsoleLoader()
+        const loadConsole = this._getConsoleLoader()
         if (!loadConsole) {
             this._stopConsoleRecorder()
             return
@@ -506,10 +560,10 @@ export class PostHogLogs implements Extension {
                     // both. Both steps run synchronously here, so stopping first opens no
                     // capture gap.
                     const buffered = this._takeConsoleBuffer()
-                    this._consoleLogsDispose = logsExtension.initialize(this._client)
+                    this._consoleLogsDispose = logsExtension.initialize(this._client!)
                     this._isLoaded = true
                     if (buffered.length > 0) {
-                        logsExtension.replay(this._client, buffered)
+                        logsExtension.replay(this._client!, buffered)
                     }
                 }
             })
@@ -524,14 +578,14 @@ export class PostHogLogs implements Extension {
     // queue accessors are parameterized so the programmatic and console instances
     // each bind to their own queue.
     private _createHost(getQueue: () => BufferedLogEntry[], setQueue: (q: BufferedLogEntry[]) => void) {
-        const host = this._host
+        const client = this._client!
         return {
             // The browser gates capture through `is_capturing()` (see `optedOut`).
             get isDisabled() {
                 return false
             },
             get optedOut() {
-                return !host.isCapturing
+                return !client.canCapture
             },
             // Live queue by reference; core mutates it in place and persists via the setter.
             getPersistedProperty: <T>(key: PostHogPersistedProperty): T | undefined =>
@@ -542,8 +596,8 @@ export class PostHogLogs implements Extension {
                 }
             },
             _sendLogsBatch: (payload: OtlpLogsPayload) => this._sendLogsBatch(payload),
-            getLibraryId: () => this._host.libraryName,
-            getLibraryVersion: () => this._host.libraryVersion,
+            getLibraryId: () => client.library.name,
+            getLibraryVersion: () => client.library.version,
         }
     }
 
@@ -577,8 +631,7 @@ export class PostHogLogs implements Extension {
                 resolve(outcome)
             }
 
-            // Backstop for `_send_request` paths that never call back, so the promise
-            // always settles and core's flush can't wedge. Keeps records for retry.
+            // A host request must not wedge the queue indefinitely. Keep records for retry.
             const timer = setTimeout(() => {
                 this._logger.warn('Logs request timed out before receiving a response')
                 settle({
@@ -587,53 +640,58 @@ export class PostHogLogs implements Extension {
                 })
             }, LOGS_SEND_TIMEOUT_MS)
 
-            this._host.sendRequest(payload, undefined, (response) => {
-                const status = response.statusCode
-                this._trackEndpointReachability(status)
-                if (status >= 200 && status < 300) {
-                    settle({ kind: 'ok' })
-                } else if (status === 413) {
-                    settle({ kind: 'too-large' })
-                } else if (status === 0 || status === 408 || status === 429 || status >= 500) {
-                    // Transient (network / timeout / rate-limit / server error): keep and retry.
-                    if (status === 0) {
-                        // `_send_request` already logs fetch failures. Bare status 0 is the
-                        // XHR/synthetic path, so keep one warning for it here.
-                        if (!response.error) {
-                            this._logger.warn('Logs request failed before receiving an HTTP response')
+            this._client!.sendRequest('/i/v1/logs', {
+                method: 'POST',
+                query: { token: this._client!.projectToken },
+                body: payload,
+                compression: 'best-available',
+                timeoutMs: 60_000,
+            }).then(
+                (response) => {
+                    const status = response.statusCode
+                    this._trackEndpointReachability(status)
+                    if (status >= 200 && status < 300) {
+                        settle({ kind: 'ok' })
+                    } else if (status === 413) {
+                        settle({ kind: 'too-large' })
+                    } else if (status === 0 || status === 408 || status === 429 || status >= 500) {
+                        // Transient (network / timeout / rate-limit / server error): keep and retry.
+                        if (status === 0) {
+                            // `_send_request` already logs fetch failures. Bare status 0 is the
+                            // XHR/synthetic path, so keep one warning for it here.
+                            if (!response.error) {
+                                this._logger.warn('Logs request failed before receiving an HTTP response')
+                            }
+                            settle({
+                                kind: 'retry-later',
+                                error: markLogsRequestErrorAsHandled(
+                                    response.error,
+                                    'logs request failed before receiving an HTTP response'
+                                ),
+                            })
+                        } else {
+                            // Preserve error severity for real HTTP failures.
+                            settle({
+                                kind: 'retry-later',
+                                error: response.error ?? new Error(`logs request failed with status ${status}`),
+                            })
                         }
-                        settle({
-                            kind: 'retry-later',
-                            error: markLogsRequestErrorAsHandled(
-                                response.error,
-                                'logs request failed before receiving an HTTP response'
-                            ),
-                        })
                     } else {
-                        // Preserve error severity for real HTTP failures.
-                        settle({
-                            kind: 'retry-later',
-                            error: response.error ?? new Error(`logs request failed with status ${status}`),
-                        })
+                        // Client error (4xx): won't succeed on retry, drop.
+                        settle({ kind: 'fatal', error: new Error(`logs request failed with status ${status}`) })
                     }
-                } else {
-                    // Client error (4xx): won't succeed on retry, drop.
-                    settle({ kind: 'fatal', error: new Error(`logs request failed with status ${status}`) })
+                },
+                (error) => {
+                    settle({ kind: 'retry-later', error })
                 }
-            })
+            )
         })
     }
 
     // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
     private _trackEndpointReachability(statusCode: number): void {
-        // Before `init` completes, `_send_request` synthesizes `{ statusCode: 0 }`
-        // without any network attempt (the `fireCallbackOnDrop` path), so only
-        // post-load failures count — a deferred init must not arrive to an
-        // already-tripped breaker. `__loaded` flips on init, not on a successful
-        // request, so a blocked-from-the-start page still trips as intended.
-        if (statusCode === 0 && !this._host.isLoaded) {
-            return
-        }
+        // A pre-initialization drop is not evidence that the endpoint is blocked.
+        if (statusCode === 0 && !this._isRequestReady) return
         this._consecutiveStatusZeroFailures = updateStatusZeroFailureCount(
             statusCode,
             this._consecutiveStatusZeroFailures,
@@ -654,9 +712,15 @@ export class PostHogLogs implements Extension {
     private _flushViaTransport(transport: 'XHR' | 'fetch' | 'sendBeacon'): void {
         if (this._queue.length > 0) {
             // Invariant: _resolvedConfig is set whenever _queue has items.
-            this._drainQueueViaTransport(transport, this._queue, this._resolvedConfig!, this._host.libraryName, (q) => {
-                this._queue = q
-            })
+            this._drainQueueViaTransport(
+                transport,
+                this._queue,
+                this._resolvedConfig!,
+                this._client!.library.name,
+                (q) => {
+                    this._queue = q
+                }
+            )
         }
         if (this._consoleQueue.length > 0) {
             // Invariant: _consoleResolvedConfig is set whenever _consoleQueue has items.
@@ -686,18 +750,25 @@ export class PostHogLogs implements Extension {
         setQueue([])
         // Shared with the core flush path so resource attributes can't drift. The
         // scope name labels the stream (console vs SDK); `telemetry.sdk.name` stays
-        // the SDK id (`this._host.libraryName`) regardless.
+        // the SDK id (`this._client!.library.name`) regardless.
         const payload = buildOtlpLogsPayload(
             records,
-            buildResourceAttributes(config, this._host.libraryName, this._host.libraryVersion),
+            buildResourceAttributes(config, this._client!.library.name, this._client!.library.version),
             scopeName,
-            this._host.libraryVersion
+            this._client!.library.version
         )
         // Intentionally bypasses the circuit breaker and does not feed
         // `_trackEndpointReachability`: this is a best-effort "last gasp" send
         // (page unload or explicit transport flush) where `sendBeacon` in particular
         // is sometimes honoured even by blockers, and the callback-less path means
         // we can't track the outcome anyway.
-        this._host.sendRequest(payload, transport)
+        void this._client!.sendRequest('/i/v1/logs', {
+            method: 'POST',
+            query: { token: this._client!.projectToken },
+            body: payload,
+            compression: 'best-available',
+            transport,
+            timeoutMs: 60_000,
+        }).catch((error) => this._logFlushError(error))
     }
 }

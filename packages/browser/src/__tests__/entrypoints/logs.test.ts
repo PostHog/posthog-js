@@ -1,9 +1,9 @@
+import { createLogsClient } from '../helpers/logs-client'
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { PostHogLogs } from '../../posthog-logs'
 import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import type { Client } from '@posthog/browser-common'
 
 const loadLogsEntrypoint = async (): Promise<void> => {
     await import('../../entrypoints/logs')
@@ -868,12 +868,10 @@ describe('logs entrypoint', () => {
         // side hides whether the handover leaves the console chain clean.
         // The entrypoint reaches capture through `getCapturingLogs`, which uses the
         // Client path; `loadIfEnabled` hands it `this._client`, so drive it the same way.
-        const noopClient = () =>
-            ({
-                onRemoteConfig: vi.fn(() => ({ dispose: vi.fn() })),
-                canCapture: true,
+        const logsClient = () =>
+            createLogsClient(mockPostHog, {
                 getExtension: () => (mockPostHog as any).logs,
-            }) as unknown as Client
+            })
         let logs: PostHogLogs
         let realConsoleLog: vi.Mock
         let capturedBuffered: vi.Mock
@@ -904,7 +902,7 @@ describe('logs entrypoint', () => {
         })
 
         it('removes the temporary recorder from the console chain once the entrypoint takes over', () => {
-            logs.setup(noopClient())
+            logs.setup(logsClient())
             expect((logs as any)._isRecordingConsole).toBe(true)
             const recorder: any = assignableWindow.console.log
             expect(recorder.__posthog_layer__).toBeDefined()
@@ -928,7 +926,7 @@ describe('logs entrypoint', () => {
         })
 
         it('writes to the real console once and captures once after handover', () => {
-            logs.setup(noopClient())
+            logs.setup(logsClient())
             logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
 
             realConsoleLog.mockClear()
@@ -943,7 +941,7 @@ describe('logs entrypoint', () => {
         it.each(['debug', 'log', 'warn', 'error', 'info'] as const)(
             'maps a buffered console.%s to its log severity',
             (level) => {
-                logs.setup(noopClient())
+                logs.setup(logsClient())
                 ;(assignableWindow.console[level] as any)('early')
 
                 logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
@@ -957,7 +955,7 @@ describe('logs entrypoint', () => {
         )
 
         it('keeps replaying after one entry fails to capture', () => {
-            logs.setup(noopClient())
+            logs.setup(logsClient())
             assignableWindow.console.log('first')
             assignableWindow.console.log('second')
             assignableWindow.console.log('third')
@@ -980,7 +978,7 @@ describe('logs entrypoint', () => {
         it('replays a buffered entry stamped at the console call, not at the handover', () => {
             const nowSpy = vi.spyOn(Date, 'now')
             try {
-                logs.setup(noopClient())
+                logs.setup(logsClient())
                 nowSpy.mockReturnValue(1700000000000)
                 assignableWindow.console.log('early')
                 nowSpy.mockReturnValue(1700000005000)
@@ -995,7 +993,7 @@ describe('logs entrypoint', () => {
         })
 
         it('replays a buffered entry through the entrypoint serializer with its captured context', () => {
-            logs.setup(noopClient())
+            logs.setup(logsClient())
 
             const cyclic: any = { name: 'early' }
             cyclic.self = cyclic

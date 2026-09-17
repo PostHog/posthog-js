@@ -50,9 +50,6 @@
             "logs": [
                 "dist/logs.d.ts"
             ],
-            "logs-host": [
-                "dist/logs-host.d.ts"
-            ],
             "logs-types": [
                 "dist/logs-types.d.ts"
             ],
@@ -111,11 +108,6 @@
             "types": "./dist/logs.d.ts",
             "require": "./dist/logs.js",
             "import": "./dist/logs.mjs"
-        },
-        "./logs-host": {
-            "types": "./dist/logs-host.d.ts",
-            "require": "./dist/logs-host.js",
-            "import": "./dist/logs-host.mjs"
         },
         "./logs-types": {
             "types": "./dist/logs-types.d.ts",
