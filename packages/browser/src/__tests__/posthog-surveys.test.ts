@@ -707,7 +707,9 @@ describe('posthog-surveys', () => {
             })
 
             it('should return cached surveys before shared extension setup', () => {
+                mockPostHog._getBrowserClientAdapter = vi.fn().mockReturnValue(createSurveysClient(mockPostHog))
                 const uninitializedSurveys = new BrowserSurveys(mockPostHog)
+                expect(mockPostHog._getBrowserClientAdapter).not.toHaveBeenCalled()
                 mockPostHog.get_property.mockReturnValue(mockSurveys)
                 const callback = vi.fn()
 

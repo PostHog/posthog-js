@@ -1,7 +1,7 @@
 import type { Mock as VitestMock } from 'vitest'
 import type { ApiResponse, Client, Disposable, RemoteConfigResult } from '@posthog/browser-common'
 
-import { PostHogSurveys } from '../posthog-surveys'
+import { PostHogSurveys } from '@posthog/browser-common/surveys'
 import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '../surveys-config'
 import type { Survey } from '../posthog-surveys-types'
 
@@ -26,8 +26,6 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
     }
     const source: SurveysConfigSource = {
         get: vi.fn(() => ({ ...config })),
-        isOptedOut: vi.fn(() => false),
-        isCapturing: vi.fn(() => true),
         getExtensions: vi.fn(() => extensions),
         createEventReceiver: vi.fn(() => receiver as any),
     }
@@ -45,6 +43,8 @@ const createClient = (
     const remoteConfigDispose = vi.fn()
     const client = {
         projectToken: 'test-token',
+        isOptedOut: false,
+        canCapture: true,
         kv: {
             initialize: vi.fn(options.initialize ?? (() => {})),
             get: (key: string) => values[key],
