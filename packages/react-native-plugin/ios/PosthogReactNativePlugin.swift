@@ -566,12 +566,12 @@ final class PendingFatalExceptionStore {
         try queue.sync {
             let dir = try directoryURL()
             let id = Self.extractId(from: report) ?? UUID().uuidString.lowercased()
-            let final = dir.appendingPathComponent("\(id).json")
-            let tmp = final.appendingPathExtension("tmp")
+            let destURL = dir.appendingPathComponent("\(id).json")
+            let tmp = destURL.appendingPathExtension("tmp")
             try? FileManager.default.removeItem(at: tmp)
             guard let data = report.data(using: .utf8) else { return }
             try data.write(to: tmp, options: .atomic)
-            try FileManager.default.moveItem(at: tmp, to: final)
+            try FileManager.default.moveItem(at: tmp, to: destURL)
             try evictOldest(in: dir)
         }
     }
