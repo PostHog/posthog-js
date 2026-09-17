@@ -197,6 +197,7 @@ The JavaScript compiler remains only where existing tooling requires it:
 - `posthog-js` retains its ES5 emitter and compiler API. `@posthog/nuxt` retains the compiler API required by Nuxt's module builder.
 - `@posthog/react` uses `typescript-legacy` only for its ES5 compatibility transform; declarations use native TypeScript.
 - `@posthog/types` uses `typescript-legacy` for API introspection tests and the declaration-build baseline.
+- `@posthog/mcp` uses `typescript-legacy` only for its NestJS integration harnesses, where `ts-node` needs the compiler API and decorator metadata emitter.
 - `@posthog/browser` uses `typescript-legacy` for its full development type check because the pinned Playwright declarations contain syntax removed in TypeScript 7. Its production declaration build uses native TypeScript without test-only ambient types.
 - Rollup utilities keep the JavaScript compiler for their exported TypeScript plugin, but compile themselves with the explicit `@typescript/native` alias. Their built-output test checks that the exported plugins still initialize.
 

@@ -657,6 +657,9 @@ importers:
       typescript:
         specifier: catalog:native
         version: 7.0.2
+      typescript-legacy:
+        specifier: npm:typescript@5.8.2
+        version: typescript@5.8.2
       vitest:
         specifier: 'catalog:'
         version: 1.6.1(@edge-runtime/vm@5.0.0)(@types/node@20.19.9)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2)
