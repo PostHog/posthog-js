@@ -1,13 +1,15 @@
-import type { Client, Extension } from '@posthog/browser-common'
+import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
-import type { FlagsExtension } from './flags-internal'
+import type { BrowserClient } from './browser-client'
 import type { FlagsOptions } from './flags-options'
+import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
+export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 export type { FlagsOptions, FlagsCallback, FeatureFlagResult } from './flags-options'
 
 /** Statically include feature flags, bypassing the default runtime module load. */
-export const flags = (options: FlagsOptions = {}): Extension => {
+export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const snapshot = JSON.parse(JSON.stringify(options)) as FlagsOptions
     const config: FeatureFlagsConfig = {
         bootstrap: snapshot.bootstrap ?? {},
@@ -22,52 +24,80 @@ export const flags = (options: FlagsOptions = {}): Extension => {
         evaluationContexts: snapshot.evaluationContexts ?? [],
         ...(snapshot.flagKeys === undefined ? {} : { flagKeys: snapshot.flagKeys }),
     }
-    let client: Client | undefined
+    let client: BrowserClient | undefined
     let disposed = false
+    const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
-    const extension: FlagsExtension = {
-        name: 'featureFlags',
-        setup: async (value) => {
+    const extension: FeatureFlags = {
+        name: FeatureFlagsExtension,
+        setup: async (value: BrowserClient) => {
             client = value
             await shared.setup(value)
             if (disposed) {
                 shared.dispose()
                 return
             }
+            subscriptions.push(
+                value.onIdentify(({ distinctId, previousDistinctId, wasIdentified, set, setOnce }) => {
+                    if (distinctId !== previousDistinctId) {
+                        shared.resetFlagCallReported()
+                        if (!wasIdentified) shared.setAnonymousDistinctId(previousDistinctId)
+                    }
+                    if (set || setOnce)
+                        shared.setPersonPropertiesForFlags({ $set: set ?? {}, $set_once: setOnce ?? {} }, false)
+                    shared.reloadFeatureFlags()
+                })
+            )
+            subscriptions.push(
+                value.onGroup(({ type, changed, properties }) => {
+                    if (changed) shared.resetGroupPropertiesForFlags(type)
+                    if (properties) shared.setGroupPropertiesForFlags({ [type]: properties }, false)
+                    shared.reloadFeatureFlags()
+                })
+            )
+            subscriptions.push(
+                value.onReset(() => {
+                    shared.reset()
+                    shared.reloadFeatureFlags()
+                })
+            )
             shared.setPersonPropertiesForFlags({ ...value.initialPersonProperties }, false)
             shared.ensureFlagsLoaded()
         },
-        getFeatureFlag: (key) => (disposed ? undefined : shared.getFeatureFlagResult(key)),
+        getFeatureFlag: (key) => {
+            if (disposed) return undefined
+            try {
+                return shared.getFeatureFlagResult(key)
+            } catch (error) {
+                client?.logger.error('Feature flag read failed', error)
+                return undefined
+            }
+        },
         onFeatureFlags: (callback) => {
-            if (disposed) return { dispose() {} }
-            const unsubscribe = shared.onFeatureFlags((_keys, _variants, context) =>
-                callback(shared.getAllFeatureFlags(), !!context?.errorsLoading)
-            )
-            return { dispose: unsubscribe }
+            if (!disposed) {
+                try {
+                    const unsubscribe = shared.onFeatureFlags((_keys, _variants, context) =>
+                        callback(shared.getAllFeatureFlags(), !!context?.errorsLoading)
+                    )
+                    return { dispose: unsubscribe }
+                } catch (error) {
+                    client?.logger.error('Feature flags subscription failed', error)
+                }
+            }
+            return { dispose() {} }
         },
         updateFlags: (values, payloads, settings) => {
-            if (!disposed) shared.updateFlags(values, payloads, settings)
-        },
-        onIdentify: (previousDistinctId, wasIdentified, set, setOnce) => {
-            if (client?.distinctId !== previousDistinctId) {
-                shared.resetFlagCallReported()
-                if (!wasIdentified) shared.setAnonymousDistinctId(previousDistinctId)
+            if (disposed) return
+            try {
+                shared.updateFlags(values, payloads, settings)
+            } catch (error) {
+                client?.logger.error('Feature flags update failed', error)
             }
-            if (set || setOnce) shared.setPersonPropertiesForFlags({ $set: set ?? {}, $set_once: setOnce ?? {} }, false)
-            shared.reloadFeatureFlags()
-        },
-        onGroup: (type, changed, properties) => {
-            if (changed) shared.resetGroupPropertiesForFlags(type)
-            if (properties) shared.setGroupPropertiesForFlags({ [type]: properties }, false)
-            shared.reloadFeatureFlags()
-        },
-        reset: () => {
-            shared.reset()
-            shared.reloadFeatureFlags()
         },
         dispose: () => {
             disposed = true
+            subscriptions.splice(0).forEach((subscription) => subscription.dispose())
             shared.dispose()
         },
     }

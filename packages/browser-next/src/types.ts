@@ -1,4 +1,5 @@
-import type { FeatureFlagResult, FlagsCallback, FlagsConfiguration, JsonType } from './flags-options'
+import type { FlagsConfiguration } from './flags-options'
+import type { BrowserClient } from './browser-client'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -9,7 +10,6 @@ import type {
 import type {
     ApiResponse,
     CaptureOptions,
-    Client,
     Disposable,
     Extension,
     ExtensionToken,
@@ -112,15 +112,8 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-export interface PostHog extends Client, Disposable {
+export interface PostHog extends BrowserClient, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
-    getFeatureFlag(key: string): FeatureFlagResult | undefined
-    onFeatureFlags(callback: FlagsCallback): Disposable
-    updateFlags(
-        flags: Record<string, boolean | string>,
-        payloads?: Record<string, JsonType>,
-        options?: { merge?: boolean }
-    ): void
     /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
     captureImmediate(
         event: string,

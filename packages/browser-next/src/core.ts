@@ -5,6 +5,8 @@ import { createPostHogCore } from './posthog'
 export const createPostHog = async (options: CorePostHogOptions): Promise<PostHog> => createPostHogCore(options)
 
 export { version } from './version'
+export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
+export type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
 export type {
     AnalyticsOptions,
     ApiResponse,
