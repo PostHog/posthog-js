@@ -31,6 +31,7 @@ export interface TestClientOptions {
     anonymousId?: string
     groups?: Record<string, string>
     session?: SessionContext
+    isOptedOut?: boolean
     canCapture?: boolean
     remoteConfig?: RemoteConfig
     logger?: Logger
@@ -112,6 +113,7 @@ export class TestClient implements Client {
     initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
     session: SessionContext | undefined
+    isOptedOut: boolean
     canCapture: boolean
 
     private _remoteConfigResult: RemoteConfigResult | undefined
@@ -141,6 +143,7 @@ export class TestClient implements Client {
             sessionStartTimestamp: 0,
             lastActivityTimestamp: 0,
         }
+        this.isOptedOut = options.isOptedOut ?? false
         this.canCapture = options.canCapture ?? true
         this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
         this.logger = options.logger ?? noopLogger

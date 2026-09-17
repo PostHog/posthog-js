@@ -60,8 +60,6 @@ const create = (overrides: Partial<SurveysConfig> = {}) => {
     const extensions: SurveysExtensionHost = { generateSurveys: vi.fn(() => manager) }
     const source: SurveysConfigSource = {
         get: () => config,
-        isOptedOut: vi.fn(() => false),
-        isCapturing: vi.fn(() => true),
         getExtensions: () => extensions,
         createEventReceiver: vi.fn(() => receiver),
     }
@@ -76,6 +74,40 @@ afterEach(() => {
 })
 
 describe('PostHogSurveys', () => {
+    it('uses a supplied client for fetching before setup without starting the renderer', async () => {
+        const { client, source, extensions } = create()
+        const getClient = vi.fn(() => client)
+        const surveys = new PostHogSurveys(source, getClient)
+        const subscribe = vi.spyOn(client, 'onRemoteConfig')
+        expect(getClient).not.toHaveBeenCalled()
+
+        const result = await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve))
+        expect(result).toEqual([definition])
+        expect(client.sentRequests).toHaveLength(1)
+        expect(client.kv.get(SURVEYS)).toEqual([definition])
+        expect(subscribe).not.toHaveBeenCalled()
+        expect(extensions.generateSurveys).not.toHaveBeenCalled()
+        expect(source.createEventReceiver).not.toHaveBeenCalled()
+
+        await surveys.setup(client)
+        getClient.mockClear()
+        const callback = vi.fn()
+        surveys.getSurveys(callback)
+        expect(callback).toHaveBeenCalledWith([definition], { isLoaded: true })
+        expect(getClient).not.toHaveBeenCalled()
+        expect(subscribe).toHaveBeenCalledOnce()
+        surveys.dispose()
+    })
+
+    it('does not acquire the supplied client after disposal', () => {
+        const { client, source } = create()
+        const getClient = vi.fn(() => client)
+        const surveys = new PostHogSurveys(source, getClient)
+        surveys.dispose()
+        surveys.getSurveys(vi.fn())
+        expect(getClient).not.toHaveBeenCalled()
+    })
+
     it.each([true, false, [], [definition]])('uses remote surveys %j only as the renderer gate', async (remote) => {
         const { client, surveys, extensions, receiver } = create()
         await surveys.setup(client)
@@ -165,20 +197,38 @@ describe('PostHogSurveys', () => {
     })
 
     it('keeps cookieless consent gating and render-time capture gating', async () => {
-        const { client, surveys, source, extensions, manager } = create({
+        const { client, surveys, extensions, manager } = create({
             cookielessMode: true,
             advancedEnableSurveys: true,
         })
-        vi.mocked(source.isOptedOut).mockReturnValue(true)
+        client.isOptedOut = true
+        expect(client.canCapture).toBe(true)
         await surveys.setup(client)
         expect(extensions.generateSurveys).not.toHaveBeenCalled()
-        vi.mocked(source.isOptedOut).mockReturnValue(false)
+        client.isOptedOut = false
         surveys.loadIfEnabled()
         expect(extensions.generateSurveys).toHaveBeenCalledOnce()
-        vi.mocked(source.isCapturing).mockReturnValue(false)
+        client.canCapture = false
         surveys.renderSurvey(definition, '#target')
         expect(manager.renderSurvey).not.toHaveBeenCalled()
         expect(surveys.canRenderSurvey(definition).visible).toBe(false)
+        surveys.dispose()
+    })
+
+    it('rechecks live capture permission before delayed rendering', async () => {
+        vi.useFakeTimers()
+        const { client, surveys, manager } = create({ advancedEnableSurveys: true })
+        vi.stubGlobal('document', { querySelector: () => ({}) })
+        await surveys.setup(client)
+        const delayed = { ...definition, appearance: { surveyPopupDelaySeconds: 1 } }
+        surveys.renderSurvey(delayed, '#target')
+        client.canCapture = false
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(manager.renderSurvey).not.toHaveBeenCalled()
+        client.canCapture = true
+        surveys.renderSurvey(delayed, '#target')
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(manager.renderSurvey).toHaveBeenCalledOnce()
         surveys.dispose()
     })
 
