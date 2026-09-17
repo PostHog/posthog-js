@@ -75,12 +75,24 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * @returns {string} the element's direct text content
  */
 export function getSafeText(el: Element): string {
+    return joinSafeTextNodes(el, '')
+}
+
+/*
+ * Get the direct text content of an element, joining its text nodes with the given separator.
+ * `getSafeText` joins them with nothing, which keeps `$el_text` as it has always been captured,
+ * so a separator is only for readers that need the words of a label kept apart.
+ * @param {Element} el - element to get the text of
+ * @param {string} separator - placed after each text node
+ * @returns {string} the element's direct text content
+ */
+function joinSafeTextNodes(el: Element, separator: string): string {
     let elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += makeSafeText(child.textContent) ?? ''
+                elText += `${makeSafeText(child.textContent) ?? ''}${separator}`
             }
         })
     }
@@ -292,9 +304,17 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
     }
 
     return {
-        safeText: getDirectAndNestedSpanText(control).toLowerCase(),
+        safeText: controlLabelText(control).toLowerCase(),
         ariaLabel,
     }
+}
+
+// an inline icon or an interpolated value splits a label across text nodes, and getSafeText joins
+// those with nothing, so <button>Next <svg/> page</button> would read as "nextpage" and no whole-word
+// keyword could match it. we keep the words apart for matching; $el_text keeps using getSafeText
+function controlLabelText(control: Element): string {
+    const text = `${joinSafeTextNodes(control, ' ')} ${joinNestedSpanText(control, ' ')}`.replace(/\s+/g, ' ').trim()
+    return shouldCaptureValue(text) ? text : ''
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
@@ -751,16 +771,20 @@ export function getDirectAndNestedSpanText(target: Element): string {
  * @returns {string} text content of span tags
  */
 export function getNestedSpanText(target: Element): string {
+    return joinNestedSpanText(target, '')
+}
+
+function joinNestedSpanText(target: Element, separator: string): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
         each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
-                    const spanText = getSafeText(child)
+                    const spanText = joinSafeTextNodes(child, separator)
                     text = `${text} ${spanText}`.trim()
 
                     if (child.childNodes && child.childNodes.length) {
-                        text = `${text} ${getNestedSpanText(child)}`.trim()
+                        text = `${text} ${joinNestedSpanText(child, separator)}`.trim()
                     }
                 } catch (e) {
                     logger.error('[AutoCapture]', e)

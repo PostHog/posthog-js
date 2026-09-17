@@ -899,6 +899,35 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(icon, button)).not.toContain('$rageclick')
                     })
 
+                    it('rapid clicks on a button whose label is split by an inline icon do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        button.appendChild(document.createTextNode('Next '))
+                        button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                        button.appendChild(document.createTextNode(' page'))
+
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose child span label is split by an inline icon do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const label = document.createElement('span')
+                        label.appendChild(document.createTextNode('Next '))
+                        label.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                        label.appendChild(document.createTextNode(' page'))
+                        button.appendChild(label)
+
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose split label only contains a keyword as a substring still capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        button.appendChild(document.createTextNode('Preview '))
+                        button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                        button.appendChild(document.createTextNode(' mode'))
+
+                        expect(rageClickThreeTimes(button)).toContain('$rageclick')
+                    })
+
                     it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
                         const button = document.createElement('button')
                         const glyph = document.createElement('span')
