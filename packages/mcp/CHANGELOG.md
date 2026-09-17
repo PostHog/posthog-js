@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.16.4
+
+### Patch Changes
+
+- [#5009](https://github.com/PostHog/posthog-js/pull/5009) [`b4f58eb`](https://github.com/PostHog/posthog-js/commit/b4f58eb0ddec084f4011f080cb7fdc0461ed7ad6) Thanks [@gesh](https://github.com/gesh)! - Use conversation IDs for `get_more_tools` and `send_feedback` calls handled by fresh server instances.
+  (2026-09-17)
+
 ## 0.16.3
 
 ### Patch Changes
