@@ -641,36 +641,6 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 }
 
 /**
- * Ownership for an SDK-owned virtual tool (`get_more_tools`, `send_feedback`),
- * resolved from its own descriptor rather than the `tools/list` cache.
- *
- * A virtual-tool branch is only entered when the application does not advertise
- * a tool by this name, so the descriptor is the SDK's own and what it declares
- * is known statically. An instance that never served a listing — a per-request
- * `McpServer`/`Server`, the topology in ADR-0011 — would otherwise read every
- * injected parameter as not-ours and neither capture nor strip it.
- *
- * `conversation_id` still comes from the cache on purpose: resolving it here too
- * would start minting a handle, and appending its prompt-back block, on
- * instances that today mint none. That changes session anchoring (ADR-0004)
- * rather than closing this gap.
- *
- * `virtualToolInputSchema` is required (not defaulted to one specific virtual
- * tool's descriptor) so every call site names the tool it means; each caller
- * passes its own descriptor's `inputSchema`.
- */
-export function getVirtualToolParameterOwnership(
-  data: MCPAnalyticsData,
-  toolName: string,
-  virtualToolInputSchema: unknown
-): AnalyticsParameterOwnership {
-  return {
-    ...getAnalyticsParameterOwnership(virtualToolInputSchema),
-    conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
-  }
-}
-
-/**
  * Checks the server's raw listing for a real owner of a candidate virtual tool.
  * This does not depend on a previous client request and does not call the
  * instrumented list wrapper, so it neither injects PostHog tools nor captures a

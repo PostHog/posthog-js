@@ -1,4 +1,4 @@
-// send_feedback listing probe — the simple case, on real servers of both majors.
+// Virtual feedback-tool probe on real servers of both majors.
 //
 // A server instrumented with `collectFeedback: true` must advertise the virtual
 // send_feedback tool in tools/list next to the application's own tools, with the
@@ -34,6 +34,7 @@ const check = (name, ok, detail = '') => {
 }
 
 const APP_TOOLS = [{ name: 'app_tool', description: 'A real application tool', inputSchema: { type: 'object' } }]
+const KNOWN_CONVERSATION_ID = '019fd2b0-3333-7333-8333-333333333333'
 
 /** The assertions, identical on both majors — only the transport differs. */
 function assertListing(label, tools) {
@@ -86,6 +87,23 @@ function assertListing(label, tools) {
   )
 }
 
+function assertConversationListing(label, tools) {
+  for (const name of ['send_feedback', 'get_more_tools']) {
+    const properties = tools?.find((tool) => tool.name === name)?.inputSchema?.properties
+    check(`${label} · ${name} advertises conversation_id`, properties?.conversation_id?.type === 'string')
+  }
+}
+
+function readConversationId(result) {
+  for (const block of result?.content ?? []) {
+    try {
+      const value = JSON.parse(block.text)?.conversation_id
+      if (typeof value === 'string') return value
+    } catch {}
+  }
+  return undefined
+}
+
 // ── v1, low-level, in-memory ────────────────────────────────────────────────
 async function probeV1() {
   console.log('\nv1 · low-level · collectFeedback listing')
@@ -116,8 +134,23 @@ const MODERN_META = {
   'io.modelcontextprotocol/clientCapabilities': {},
 }
 
+async function postV2(port, id, method, params, name) {
+  const res = await fetch(`http://localhost:${port}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': '2026-07-28',
+      'mcp-method': method,
+      ...(name ? { 'mcp-name': name } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params: { ...params, _meta: MODERN_META } }),
+  })
+  return JSON.parse(await res.text())?.result
+}
+
 async function probeV2() {
-  console.log('\nv2 · low-level · per-request · modern era · collectFeedback listing')
+  console.log('\nv2 · low-level · per-request · modern era · virtual conversation IDs')
   const recorder = createRecorder('probe:feedback:v2')
   const handler = createMcpHandler(
     () => {
@@ -126,7 +159,12 @@ async function probeV2() {
       server.setRequestHandler('tools/call', async (request) => ({
         content: [{ type: 'text', text: `called: ${request.params.name}` }],
       }))
-      instrument(server, recorder.client, { logger: recorder.logger, collectFeedback: true })
+      instrument(server, recorder.client, {
+        logger: recorder.logger,
+        collectFeedback: true,
+        reportMissing: true,
+        enableConversationId: true,
+      })
       return server
     },
     { responseMode: 'json', onerror: (e) => recorder.logger(`handler error: ${e}`) }
@@ -141,26 +179,77 @@ async function probeV2() {
     let listing
     let failure
     try {
-      const res = await fetch(`http://localhost:${port}/mcp`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          'mcp-protocol-version': '2026-07-28',
-          'mcp-method': 'tools/list',
-        },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: MODERN_META } }),
-      })
-      listing = JSON.parse(await res.text())?.result
+      listing = await postV2(port, 1, 'tools/list', {})
     } catch (error) {
       failure = String(error)
     }
-    // No settle delay: every assertion below reads `listing`, which is already
-    // resolved — this probe never inspects the recorder's captured events.
     check('v2 · the tools/list request returns a result', listing !== undefined, failure ?? '')
     if (listing) {
       assertListing('v2', listing.tools)
+      assertConversationListing('v2', listing.tools)
     }
+
+    const feedback = await postV2(
+      port,
+      2,
+      'tools/call',
+      {
+        name: 'send_feedback',
+        arguments: {
+          feedback_type: 'other',
+          summary: 'A probe note.',
+          conversation_id: KNOWN_CONVERSATION_ID,
+        },
+      },
+      'send_feedback'
+    )
+    const missingKnown = await postV2(
+      port,
+      3,
+      'tools/call',
+      {
+        name: 'get_more_tools',
+        arguments: { context: 'Need another tool.', conversation_id: KNOWN_CONVERSATION_ID },
+      },
+      'get_more_tools'
+    )
+    const missingMinted = await postV2(
+      port,
+      4,
+      'tools/call',
+      { name: 'get_more_tools', arguments: { context: 'Need another tool.' } },
+      'get_more_tools'
+    )
+    await sleep(200)
+
+    const mintedConversationId = readConversationId(missingMinted)
+    const feedbackEvent = recorder.events.find(
+      (event) => event.event === '$mcp_feedback' && event.properties?.$mcp_conversation_id === KNOWN_CONVERSATION_ID
+    )
+    const knownMissingEvent = recorder.events.find(
+      (event) =>
+        event.event === '$mcp_missing_capability' && event.properties?.$mcp_conversation_id === KNOWN_CONVERSATION_ID
+    )
+    const mintedMissingEvent = recorder.events.find(
+      (event) =>
+        event.event === '$mcp_missing_capability' && event.properties?.$mcp_conversation_id === mintedConversationId
+    )
+
+    check('v2 · send_feedback uses the supplied conversation_id', feedbackEvent !== undefined)
+    check('v2 · get_more_tools uses the supplied conversation_id', knownMissingEvent !== undefined)
+    check(
+      'v2 · both virtual tools use the same derived session',
+      feedbackEvent?.properties?.$session_id !== undefined &&
+        feedbackEvent.properties.$session_id === knownMissingEvent?.properties?.$session_id
+    )
+    check('v2 · get_more_tools returns a created conversation_id', mintedConversationId !== undefined)
+    check('v2 · the created conversation_id is captured', mintedMissingEvent !== undefined)
+    check(
+      'v2 · the created conversation_id derives a session',
+      mintedMissingEvent?.properties?.$session_id !== undefined
+    )
+    check('v2 · send_feedback returns its acknowledgement', /feedback was recorded/.test(JSON.stringify(feedback)))
+    check('v2 · get_more_tools returns its acknowledgement', /Unfortunately/.test(JSON.stringify(missingKnown)))
   } finally {
     http.close()
     await sleep(150)
