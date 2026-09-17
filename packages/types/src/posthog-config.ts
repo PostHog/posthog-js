@@ -1146,17 +1146,24 @@ export interface NetworkMetricsConfig {
     name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
     /**
      * Adds attributes to each recorded request. The result is merged over the
-     * default attributes (`method`, `host`, `path`, `status_class`), so it can
-     * also replace them, e.g. to set `path` to a route template.
-     * Keep attribute values low-cardinality.
+     * default attributes, so it can also replace them, e.g. to set
+     * `url.template` to your own route template. Keep attribute values
+     * low-cardinality.
      *
-     * The default `path` replaces each all-digit or uuid-like segment with
-     * `:id`. Ids that carry a prefix or suffix, such as `order-123` or
-     * `38217.pdf`, are kept as they are, so return your own `path` for
-     * those routes.
+     * The default attributes follow the OpenTelemetry semantic conventions
+     * for `http.client.request.duration`: `http.request.method`,
+     * `server.address`, `url.scheme`, `url.template`,
+     * `http.response.status_code` and `error.type`.
      *
-     * `status_class` is `2xx`, `3xx`, `4xx` or `5xx`, or `missing` when no
-     * response arrived.
+     * The default `url.template` replaces each all-digit or uuid-like path
+     * segment with `:id`. Ids that carry a prefix or suffix, such as
+     * `order-123` or `38217.pdf`, are kept as they are, so return your own
+     * `url.template` for those routes.
+     *
+     * `http.response.status_code` is set when a response arrived.
+     * `error.type` is the status code for a 4xx or 5xx response, the error's
+     * class name (e.g. `TypeError`, `AbortError`) when a fetch rejected, and
+     * `_OTHER` when no response arrived for another reason.
      */
     attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
 }

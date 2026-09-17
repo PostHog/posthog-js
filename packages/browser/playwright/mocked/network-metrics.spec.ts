@@ -15,7 +15,7 @@ function captureMetricsPayloads(context: BrowserContext) {
 }
 
 const attributesOf = (dataPoint: OtlpHistogramDataPoint): Record<string, string | undefined> =>
-    Object.fromEntries(dataPoint.attributes.map((a) => [a.key, a.value.stringValue]))
+    Object.fromEntries(dataPoint.attributes.map((a) => [a.key, a.value.stringValue ?? a.value.intValue]))
 
 test.describe('network metrics', () => {
     test('records customer fetch and XHR durations without changing them, and skips its own requests', async ({
@@ -67,10 +67,11 @@ test.describe('network metrics', () => {
         expect(dataPoints.map((dp) => ({ count: dp.count, ...attributesOf(dp) }))).toEqual([
             {
                 count: 2,
-                method: 'GET',
-                host: 'localhost',
-                path: '/__network_metrics_test/orders/:id',
-                status_class: '2xx',
+                'http.request.method': 'GET',
+                'server.address': 'localhost',
+                'url.scheme': 'http',
+                'url.template': '/__network_metrics_test/orders/:id',
+                'http.response.status_code': '200',
             },
         ])
     })
