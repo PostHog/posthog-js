@@ -49,8 +49,6 @@ export interface SurveysExtensionHost {
 
 export interface SurveysConfigSource {
     get(): Readonly<SurveysConfig>
-    isOptedOut(): boolean
-    isCapturing(): boolean
     getExtensions(): SurveysExtensionHost | undefined
     createEventReceiver(): SurveysEventReceiver
 }

@@ -11,7 +11,7 @@ export {
     SurveyEventProperties,
     DisplaySurveyType,
 } from './survey-constants'
-import type { ApiResponse, Client, SendRequestInit } from './client'
+import type { ApiResponse, Client } from './client'
 import type { DeepReadonly } from './client'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
@@ -51,8 +51,6 @@ export type SurveyFetchResult = {
     context?: { isLoaded: boolean; error?: string }
 }
 
-type SurveysClientState = Pick<Client, 'projectToken' | 'kv'>
-
 export class PostHogSurveys implements Extension {
     readonly name: string = 'surveys'
     // this is set to undefined until the remote config is loaded
@@ -76,7 +74,8 @@ export class PostHogSurveys implements Extension {
     private _renderTimeouts = new Set<ReturnType<typeof setTimeout>>()
     constructor(
         private readonly _configSource: SurveysConfigSource,
-        private readonly _initialClientState?: SurveysClientState
+        // Hosts with synchronous storage can expose survey fetching before deferred setup.
+        private readonly _getClient?: () => Client
     ) {}
 
     setup(client: Client): void | Promise<void> {
@@ -190,7 +189,7 @@ export class PostHogSurveys implements Extension {
             logger.info(SURVEY_DISABLED)
             return
         }
-        if (config.cookielessMode && this._configSource.isOptedOut()) {
+        if (config.cookielessMode && this._client.isOptedOut) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
@@ -308,8 +307,11 @@ export class PostHogSurveys implements Extension {
     }
 
     getSurveys(callback: SurveyCallback, forceReload = false): void {
-        const client = this._client ?? this._initialClientState
-        if (!client || this._disposed) {
+        if (this._disposed) {
+            return
+        }
+        const client = this._client ?? this._getClient?.()
+        if (!client) {
             return
         }
         if (this._config.disableSurveys) {
@@ -337,22 +339,24 @@ export class PostHogSurveys implements Extension {
             return
         }
 
-        const request = this._sendSurveysRequest('/api/surveys/', {
-            method: 'GET',
-            query: { token: client.projectToken },
-            sentAt: 'query',
-            timeoutMs: this._config.requestTimeoutMs,
-        }).then(
-            (response) => {
-                try {
-                    return this._handleSurveyResponse(client, response)
-                } catch (error) {
-                    logger.error('Error processing surveys response', error)
-                    return this._handleSurveyResponse(client, { statusCode: 0, error })
-                }
-            },
-            (error) => this._handleSurveyResponse(client, { statusCode: 0, error })
-        )
+        const request = client
+            .sendRequest('/api/surveys/', {
+                method: 'GET',
+                query: { token: client.projectToken },
+                sentAt: 'query',
+                timeoutMs: this._config.requestTimeoutMs,
+            })
+            .then(
+                (response) => {
+                    try {
+                        return this._handleSurveyResponse(client, response)
+                    } catch (error) {
+                        logger.error('Error processing surveys response', error)
+                        return this._handleSurveyResponse(client, { statusCode: 0, error })
+                    }
+                },
+                (error) => this._handleSurveyResponse(client, { statusCode: 0, error })
+            )
         this._getSurveysInFlightPromise = request
 
         const clearInFlight = (): void => {
@@ -370,15 +374,7 @@ export class PostHogSurveys implements Extension {
             .catch((error) => logger.error('Error in survey callback', error))
     }
 
-    protected _sendSurveysRequest(path: string, init: SendRequestInit): Promise<ApiResponse> {
-        const client = this._client
-        if (!client) {
-            return new Promise((resolve) => resolve({ statusCode: 0, error: new Error(SURVEY_NOT_LOADED) }))
-        }
-        return client.sendRequest(path, init)
-    }
-
-    private _handleSurveyResponse(client: SurveysClientState, response: ApiResponse): SurveyFetchResult {
+    private _handleSurveyResponse(client: Client, response: ApiResponse): SurveyFetchResult {
         if (this._disposed) {
             return { surveys: [], context: { isLoaded: false, error: SURVEY_NOT_LOADED } }
         }
@@ -424,7 +420,7 @@ export class PostHogSurveys implements Extension {
      * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
      */
     private _isSurveyCacheStale(): boolean {
-        const surveysLoadedAt = (this._client ?? this._initialClientState)?.kv.get(SURVEYS_LOADED_AT)
+        const surveysLoadedAt = (this._client ?? this._getClient?.())?.kv.get(SURVEYS_LOADED_AT)
         return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
     }
 
@@ -501,7 +497,7 @@ export class PostHogSurveys implements Extension {
     }
 
     private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
-        if (!this._configSource.isCapturing()) {
+        if (!(this._client ?? this._getClient?.())?.canCapture) {
             return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
         }
         if (isNullish(this._surveyManager)) {
@@ -553,7 +549,7 @@ export class PostHogSurveys implements Extension {
     }
 
     renderSurvey(surveyId: string | Survey, selector: string, properties?: Properties) {
-        if (!this._configSource.isCapturing()) {
+        if (!(this._client ?? this._getClient?.())?.canCapture) {
             return
         }
         if (isNullish(this._surveyManager)) {
@@ -580,7 +576,7 @@ export class PostHogSurveys implements Extension {
             )
             const timeout = setTimeout(() => {
                 this._renderTimeouts.delete(timeout)
-                if (this._disposed || !this._configSource.isCapturing()) {
+                if (this._disposed || !this._client?.canCapture) {
                     return
                 }
                 logger.info(
@@ -596,7 +592,7 @@ export class PostHogSurveys implements Extension {
     }
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
-        if (!this._configSource.isCapturing()) {
+        if (!(this._client ?? this._getClient?.())?.canCapture) {
             return
         }
         if (isNullish(this._surveyManager)) {
