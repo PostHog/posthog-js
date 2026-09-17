@@ -1,6 +1,6 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.7.0",
+    "version": "1.7.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -39,6 +39,7 @@
         "vitest": "catalog:"
     },
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "clean": "rimraf dist",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",

@@ -1,5 +1,6 @@
 import type { MockInstance } from 'vitest'
 import { PostHog } from '../posthog-core'
+import * as requests from '../request'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
 describe('retry connectivity after a bfcache restore', () => {
@@ -33,9 +34,9 @@ describe('retry connectivity after a bfcache restore', () => {
 
     const failRequest = () => {
         const sendRequest = vi
-            .spyOn(posthog, '_send_request')
-            .mockImplementationOnce(({ callback }) => callback?.({ statusCode: 0 }))
-            .mockImplementation(({ callback }) => callback?.({ statusCode: 200 }))
+            .spyOn(requests, 'request')
+            .mockImplementationOnce((_options, onResponse) => onResponse?.({ statusCode: 0 }))
+            .mockImplementation((_options, onResponse) => onResponse?.({ statusCode: 200 }))
         posthog._retryQueue!.retriableRequest({ url: '/e', data: { event: 'conversion' } })
         expect(posthog._retryQueue!.length).toBe(1)
         expect(sendRequest).toHaveBeenCalledTimes(1)

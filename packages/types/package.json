@@ -1,6 +1,6 @@
 {
     "name": "@posthog/types",
-    "version": "1.411.1",
+    "version": "1.412.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -20,6 +20,7 @@
         "!src/__tests__"
     ],
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "clean": "rimraf dist",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",

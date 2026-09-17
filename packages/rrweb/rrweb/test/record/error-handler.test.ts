@@ -491,6 +491,52 @@ describe('error-handler', function (this: ISuite) {
     });
   });
 
+  it('keeps the observers that started when one observer fails', async () => {
+    const result = await ctx.page.evaluate(
+      (incrementalSnapshotType, mouseInteractionSource) => {
+        const rrweb = (window as unknown as IWindow).rrweb as IWindow['rrweb'] & {
+          getObserverInitFailures: () => string[];
+        };
+        let mouseInteractions = 0;
+        const stop = rrweb.record({
+          emit: (event: eventWithTime) => {
+            if (
+              event.type === incrementalSnapshotType &&
+              event.data.source === mouseInteractionSource
+            ) {
+              mouseInteractions += 1;
+            }
+          },
+          errorHandler: (_error, context) => context === 'rrweb',
+          plugins: [
+            {
+              name: 'throwing-observer',
+              options: {},
+              observer: () => {
+                throw new Error('observer initialization failed');
+              },
+            },
+          ],
+        });
+
+        document.body.click();
+        stop?.();
+
+        return {
+          mouseInteractions,
+          observerInitFailures: rrweb.getObserverInitFailures(),
+        };
+      },
+      EventType.IncrementalSnapshot,
+      IncrementalSource.MouseInteraction,
+    );
+
+    expect(result).toEqual({
+      mouseInteractions: 1,
+      observerInitFailures: ['plugin:throwing-observer'],
+    });
+  });
+
   it('cleans up a failed iframe observer initialization', async () => {
     const result = await ctx.page.evaluate(
       async (incrementalSnapshotType, mouseInteractionSource) => {

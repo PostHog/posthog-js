@@ -6,6 +6,7 @@ import {
     getMutationCost,
     getDeferredStylesheetStats,
     getDiscardedDurationSamples,
+    getObserverInitFailures,
     resetSnapshotCostState,
 } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
@@ -24,6 +25,7 @@ assignableWindow.__PosthogExtensions__.rrweb = {
     getMutationCost,
     getDeferredStylesheetStats,
     getDiscardedDurationSamples,
+    getObserverInitFailures,
     resetSnapshotCostState,
 }
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>

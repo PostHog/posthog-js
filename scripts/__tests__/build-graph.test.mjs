@@ -195,9 +195,137 @@ test('the unit CI entry point retains built-output checks without scheduling rrw
     }
 })
 
+test('browser unit tests wait for the React output included in their package tarball', () => {
+    for (const tasks of [rootScriptGraph('test:unit'), dryRun(['run', 'test:unit', '--filter=posthog-js'])]) {
+        const dependencies = prerequisites(tasks, 'posthog-js#test:unit')
+        assert.ok(dependencies.has('posthog-js#build'))
+        assert.ok(dependencies.has('@posthog/react#build'), 'packing must not race the React build')
+    }
+})
+
 test('Node references consume the graph build without rebuilding inside the task', () => {
     const tasks = dryRun(['run', 'generate-references', '--filter=posthog-node'])
     const id = 'posthog-node#generate-references'
     assert.ok(prerequisites(tasks, id).has('posthog-node#build'))
     assert.doesNotMatch(tasks.find((task) => task.taskId === id).command, /pnpm build/)
+})
+
+test('rrweb dev bootstraps dependency builds before starting its single watcher', () => {
+    for (const pkg of rrwebPackages) {
+        assert.equal(pkg.scripts.dev, `pnpm turbo run build --filter='${pkg.name}^...' && vite build --watch`)
+    }
+    const tasks = dryRun(['run', 'build', '--filter=@posthog/rrweb-record^...'])
+    assert.ok(!tasks.some((task) => task.taskId === '@posthog/rrweb-record#build'))
+    for (const name of ['@posthog/core', '@posthog/types', '@posthog/rrweb', '@posthog/rrweb-types']) {
+        assert.ok(
+            executable(tasks).some((task) => task.taskId === `${name}#build`),
+            name
+        )
+    }
+    for (const input of [
+        '$TURBO_ROOT$/packages/rrweb/vite.declarations.ts',
+        '$TURBO_ROOT$/packages/rrweb/rolldown.dts.config.mts',
+        'rolldown.dts*.config.mts',
+        'vite.config.entries.js',
+    ])
+        assert.ok(turbo.tasks.build.inputs.includes(input), input)
+})
+
+test('every SDK and rrweb package participates in the root semantic check contract', () => {
+    const sdkPackages = globSync('packages/*/package.json', { cwd: root }).map(readJson)
+    const tasks = rootScriptGraph('check-types')
+    const checks = executable(tasks).filter((task) => task.task === 'check-types')
+    const packages = [...sdkPackages, ...rrwebPackages]
+    assert.equal(checks.length, packages.length)
+    for (const pkg of packages) {
+        const id = `${pkg.name}#check-types`
+        const task = checks.find((task) => task.taskId === id)
+        assert.ok(task, `${pkg.name} needs check-types`)
+        let command = pkg.scripts['check-types']
+        command = command.replace('pnpm typecheck', pkg.scripts.typecheck ?? '')
+        assert.match(command, /\b(?:tsc|tsgo)\b/, id)
+        assert.doesNotMatch(command, /\bturbo\b|--noCheck|--skipLibCheck|\|\||;|\bexit 0\b/, id)
+        const dependencies = prerequisites(tasks, id)
+        assert.equal(dependencies.has(`${pkg.name}#build`), pkg.name === '@posthog/browser', id)
+        for (const [name, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
+            if (version.startsWith('workspace:')) assert.ok(dependencies.has(`${name}#build`), `${id} needs ${name}`)
+        }
+    }
+    const ci = readFileSync(resolve(root, '.github/workflows/library-ci.yml'), 'utf8')
+    assert.match(ci, /run: pnpm check-types(?:\s|$)/)
+})
+
+test('the root type-check command propagates semantic failures after dependency builds', () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'semantic-check-failure-'))
+    try {
+        for (const name of ['dependency', 'sdk']) mkdirSync(resolve(fixture, 'packages', name), { recursive: true })
+        writeFileSync(
+            resolve(fixture, 'package.json'),
+            JSON.stringify({
+                name: 'semantic-check-fixture',
+                private: true,
+                packageManager: rootPackage.packageManager,
+                scripts: { 'check-types': rootPackage.scripts['check-types'] },
+            })
+        )
+        writeFileSync(resolve(fixture, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+        writeFileSync(
+            resolve(fixture, 'pnpm-lock.yaml'),
+            "lockfileVersion: '9.0'\nimporters:\n  .: {}\n  packages/dependency: {}\n  packages/sdk:\n    dependencies:\n      dependency:\n        specifier: workspace:*\n        version: link:../dependency\n"
+        )
+        writeFileSync(
+            resolve(fixture, 'turbo.json'),
+            JSON.stringify({
+                tasks: {
+                    build: { dependsOn: turbo.tasks.build.dependsOn },
+                    'check-types': turbo.tasks['check-types'],
+                },
+            })
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/dependency/package.json'),
+            JSON.stringify({
+                name: 'dependency',
+                scripts: {
+                    build: `node -e "require('fs').writeFileSync('built.d.ts', 'export declare const value: string')"`,
+                },
+            })
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/sdk/package.json'),
+            JSON.stringify({
+                name: 'sdk',
+                dependencies: { dependency: 'workspace:*' },
+                scripts: {
+                    build: 'node -e "process.exit(0)"',
+                    'check-types': 'tsc --noEmit --project tsconfig.json',
+                },
+            })
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/sdk/tsconfig.json'),
+            JSON.stringify({ compilerOptions: { strict: true, types: [] }, files: ['index.ts'] })
+        )
+        const source = resolve(fixture, 'packages/sdk/index.ts')
+        writeFileSync(source, "import { value } from '../dependency/built'\nconst result: number = value\n")
+        const run = () =>
+            execFileSync('pnpm', ['check-types', '--force'], {
+                cwd: fixture,
+                encoding: 'utf8',
+                timeout: 30_000,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: { ...process.env, PATH: `${resolve(root, 'node_modules/.bin')}:${process.env.PATH}` },
+            })
+        assert.throws(run, (error) => {
+            assert.notEqual(error.status, 0)
+            assert.match(error.stdout, /TS2322/)
+            assert.doesNotMatch(error.stdout, /TS2307/)
+            return true
+        })
+        assert.match(readFileSync(resolve(fixture, 'packages/dependency/built.d.ts'), 'utf8'), /value/)
+        writeFileSync(source, "import { value } from '../dependency/built'\nconst result: string = value\n")
+        assert.doesNotThrow(run)
+    } finally {
+        rmSync(fixture, { recursive: true, force: true })
+    }
 })

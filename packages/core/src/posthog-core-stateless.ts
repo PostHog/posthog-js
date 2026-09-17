@@ -404,6 +404,15 @@ export abstract class PostHogCoreStateless {
   abstract getLibraryVersion(): string
   abstract getCustomUserAgent(): string | void
 
+  /**
+   * The runtime this client evaluates flags in, sent as `evaluation_runtime` on `/flags`
+   * requests so the server filters by a declared runtime instead of inferring one from
+   * request headers. Undefined leaves the server's inference in place.
+   */
+  protected getEvaluationRuntime(): 'all' | 'client' | 'server' | undefined {
+    return undefined
+  }
+
   // This is our abstracted storage. Each implementation should handle its own
   abstract getPersistedProperty<T>(key: PostHogPersistedProperty): T | undefined
   abstract setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void
@@ -804,6 +813,16 @@ export abstract class PostHogCoreStateless {
     // Add evaluation contexts if configured
     if (this.evaluationContexts && this.evaluationContexts.length > 0) {
       requestData.evaluation_contexts = this.evaluationContexts
+    }
+
+    // State the runtime explicitly so the server doesn't have to infer it from the request.
+    // Without it, `/flags` reads the User-Agent first and falls back to browser headers such as
+    // `sec-fetch-mode`, which Node's fetch always sends. An unrecognized User-Agent therefore
+    // resolves to the client runtime rather than to "unknown", and `server` flags are dropped.
+    // Flags marked `all`, and flags with no runtime, are returned either way.
+    const evaluationRuntime = this.getEvaluationRuntime()
+    if (evaluationRuntime) {
+      requestData.evaluation_runtime = evaluationRuntime
     }
 
     const fetchOptions: PostHogFetchOptions = {
@@ -1935,7 +1954,8 @@ export abstract class PostHogCoreStateless {
           // We only throw on HTTP errors if we're not in no-cors mode.
           // https://developer.mozilla.org/en-US/docs/Web/API/Request/mode#no-cors
           const isNoCors = options.mode === 'no-cors'
-          if (!isNoCors && (res.status < 200 || res.status >= 400)) {
+          const maxSuccessStatus = responseHandling.type === 'successful-write' ? 300 : 400
+          if (!isNoCors && (res.status < 200 || res.status >= maxSuccessStatus)) {
             // Read error bodies lazily so retryable statuses are retried immediately. The
             // getter still uses this attempt's deadline when diagnostics request the body.
             throw new PostHogFetchHttpError(res, reqByteLength, requestDeadline, ctrl)

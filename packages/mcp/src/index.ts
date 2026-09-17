@@ -143,6 +143,7 @@ const DEFAULT_OPTIONS = {
   reportMissing: false,
   collectFeedback: false,
   enableConversationId: true,
+  captureModel: true,
 } satisfies Partial<MCPAnalyticsOptions>
 
 function buildTrackingData(
@@ -163,8 +164,7 @@ function buildTrackingData(
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: {
       ...DEFAULT_OPTIONS,
-      ...options,
-      enableConversationId: options.enableConversationId ?? DEFAULT_OPTIONS.enableConversationId,
+      ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)),
     },
     sessionSource: 'generated',
   }

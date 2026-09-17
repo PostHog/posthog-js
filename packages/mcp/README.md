@@ -81,6 +81,8 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
 - **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
   protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
   `enableConversationId`, which is **on by default**. Without it every request is its own `$session_id`.
+  The `get_more_tools` and `send_feedback` virtual tools also use this handle, including calls handled
+  by a fresh server instance.
 - **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
   `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
   `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that
@@ -159,6 +161,10 @@ results are left as-is, because the same shapes are often legitimate data there.
 guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
 
 ### Defaults and opt-outs
+
+On fresh low-level instances, tools with an `outputSchema` deliver new handles through `content` only. Clients that consume only `structuredContent` will not echo those handles, so correlation is not guaranteed for that combination. Unknown ownership can also cause a prompt-back block to be appended for a schema that discovery would not extend; disable `enableConversationId` if that contract is unsuitable.
+
+A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
 
 Intent, model capture, conversation correlation, and exception capture are enabled by default.
 Missing-capability reporting and feedback collection remain disabled.
@@ -281,7 +287,8 @@ const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
 return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
 
 // tools/call dispatcher
-const prepared = posthog.prepareToolCall(name, rawArgs)
+const originalTool = myTools.find((tool) => tool.name === name)
+const prepared = posthog.prepareToolCall(name, rawArgs, { originalTool })
 if (prepared.isFeedback) {
   posthog.captureFeedback({ report: prepared.feedbackReport!, ...identity })
   await myFeedbackBackend.record(prepared.feedbackReport!)
@@ -289,11 +296,31 @@ if (prepared.isFeedback) {
 }
 ```
 
+`originalTool` must come from the application's tool list before `prepareToolList()` adds PostHog's
+virtual tools. This lets a real application tool with the configured feedback name win, including
+when `tools/list` and `tools/call` reach different server replicas.
+
 `send_feedback` covers what `reportMissing` covers — a capability gap is
 `feedback_type: "missing_capability"` — so new integrations should enable only `collectFeedback`.
 `reportMissing` and its `$mcp_missing_capability` event stay unchanged for existing users; enabling
 both advertises both tools. Like `get_more_tools`, a real tool that already uses the configured name
 wins: the SDK warns, skips injection, and delegates calls to the real handler.
+
+On a paginated catalogue (a `tools/list` response with a `nextCursor`), `instrument()` injects
+its virtual tools (`send_feedback` and `get_more_tools`) on the first page only — the page every
+client reads, including clients that never follow `nextCursor` — so a compliant client's
+concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
+empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
+`prepareToolList()` directly own this rule themselves: pass `reportMissing: true` and
+`collectFeedback: true` only for the first page.
+
+Name collisions are detected on the first page only. A real tool named `send_feedback` (or
+`get_more_tools`) on the first page wins: the SDK warns, skips injection, and forwards its calls. A
+real tool that only appears on a **later** page is not detected up front — the SDK's virtual tool is
+injected and intercepts calls to the name, so the real tool is shadowed and a concatenated listing
+carries the name twice. The SDK logs a warning when a client fetches the colliding page, but the fix
+is yours: rename the SDK's tools with `collectFeedback: { toolName: "..." }` and the
+`missingCapabilityToolName` option.
 
 ### If you switched to `instrument(server.server)`
 

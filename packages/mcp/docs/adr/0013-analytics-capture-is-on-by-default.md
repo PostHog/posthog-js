@@ -15,7 +15,8 @@ The first draft of this change resolved ownership by replaying the host's raw `t
 
 1. **`captureModel` and `enableConversationId` default to `true`.** `reportMissing` and `collectFeedback` stay off: a virtual tool is a larger contract change than an argument, and both are being reworked separately.
 2. **Unknown ownership reads `llm_model` and `conversation_id` the way ADR-0011 reads `context`.** Capture fails open; stripping fails closed. The `structuredContent` mirror keeps failing closed (ADR-0004), so on a cold instance the handle travels in `content` only.
-3. **Replaying the host listing on the call path stays rejected.** ADR-0011 stands; the catalog lookup was removed before merge.
+3. **Preserve carried sessions until an agent echoes a handle.** A valid echoed handle still wins across reconnects. When a request already carries an MCP transport session or a PostHog session token, suppress new conversation minting and prompt-back delivery. Requests carrying neither keep the conversation fallback. This applies to both SDKs.
+4. **Replaying the host listing on the call path stays rejected.** ADR-0011 stands; the catalog lookup was removed before merge.
 
 Considered and rejected:
 
@@ -27,9 +28,17 @@ Considered and rejected:
 
 - A routine upgrade changes the advertised contract with no code change by the host: compatible tool schemas gain `llm_model` (required, advisory) and `conversation_id` (optional), and eligible tool results gain a prompt-back handle. `instrument(server, posthog, { captureModel: false, enableConversationId: false })` restores the previous shape. Ships as a minor, as `context` did.
 - On a cold instance a host tool that declares its own `llm_model` is recorded under `$mcp_llm_model` with source `self_reported` until a listing proves otherwise — the same class of cost ADR-0011 accepted for `$mcp_intent`. A host-declared `conversation_id` that is not a uuidv7 is never trusted (ADR-0004), so a fresh handle is minted and prompted back.
+- Unknown conversation ownership is a **read and write** tradeoff, unlike context: minting can append a content block even for a complex or application-owned schema that discovery would not extend. The carried-session guard prevents this on requests already carrying a session; it does not prove ownership on cold stateless instances. Disable `enableConversationId` for such tools when this contract is unsuitable. No undeclared structured-content field is written.
+- Cold tools with an `outputSchema` still deliver the handle through `content` only. Clients that consume only `structuredContent` cannot echo it and their calls remain uncorrelated. The parameterized fresh-instance test explicitly covers this limitation; the passing C2 matrix rows only prove the content channel.
 - Nothing is stripped on a cold instance; raw low-level handlers ignore extra keys. A high-level `McpServer` resolves ownership from its live registry per request and is unaffected.
 - The harness's parked C2 low-level session rows now pass and are no longer excused.
 - Cross-SDK contract: posthog-python applies the same defaults and the same read rule (PostHog/posthog-python#944).
+
+## Representation and follow-ups
+
+`ActiveAnalyticsParameterOwnership` now names both questions explicitly as `strip` and `read`, replacing ADR-0011's intermediate `contextOwnershipKnown` representation. This is an internal representation change; strip gates still require positive ownership.
+
+Per-event conversation source (`minted` / `echoed`) and session source would help measure cooperation. They are deferred from this defaults release: the current event contract records the delivered handle but cannot measure echo rate directly. Adding these properties should specify both SDKs and failed-delivery behavior together. The carried-session fix prevents the concrete legacy-session regression without requiring those new properties.
 
 ## References
 

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/react-native-plugin",
-  "version": "2.7.0",
+  "version": "2.9.4",
   "description": "PostHog React Native plugin for iOS and Android integrations",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
@@ -39,6 +39,7 @@
     "!**/.*"
   ],
   "scripts": {
+    "check-types": "pnpm typecheck",
     "clean": "del-cli android/build lib",
     "lint": "oxlint --report-unused-disable-directives-severity error .",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error . --fix",

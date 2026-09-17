@@ -1,5 +1,47 @@
 # @posthog/core
 
+## 1.54.4
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+
+## 1.54.3
+
+### Patch Changes
+
+- [#5005](https://github.com/PostHog/posthog-js/pull/5005) [`6545d3f`](https://github.com/PostHog/posthog-js/commit/6545d3f059131774678643eb638e35564575e25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix declaration source mappings for DOMExceptionCoercer.
+  (2026-09-17)
+
+## 1.54.2
+
+### Patch Changes
+
+- [#4885](https://github.com/PostHog/posthog-js/pull/4885) [`39a8980`](https://github.com/PostHog/posthog-js/commit/39a89801877f684b599550ae2fc944fec347e042) Thanks [@decknamec](https://github.com/decknamec)! - Server-side feature flags now resolve in posthog-node and posthog-edge even when a proxy rewrites the request's `User-Agent`. Flags restricted to the `client` runtime now resolve to `undefined` in these SDKs, where a rewritten `User-Agent` previously let them through.
+  (2026-09-15)
+
+## 1.54.1
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+
+## 1.54.0
+
+### Minor Changes
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Export the shared Retry-After parser with safe integer caps, GMT HTTP-date handling and rejection of non-HTTP dates.
+  (2026-09-14)
+
+## 1.53.3
+
+### Patch Changes
+
+- [#4922](https://github.com/PostHog/posthog-js/pull/4922) [`3786cff`](https://github.com/PostHog/posthog-js/commit/3786cff3b92a0276f5dc6a0f0cdacdc0e3f76e78) Thanks [@Mnigos](https://github.com/Mnigos)! - Require final 2xx responses for successful writes while preserving immediate-call error handling.
+  (2026-09-14)
+
 ## 1.53.2
 
 ### Patch Changes

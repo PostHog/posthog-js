@@ -74,7 +74,7 @@ A floor ("≥35 of 37") would let a regression hide behind a coincidental improv
 that moves needs a reason, and the diff of the snapshot file is where the reason lives.
 
 Currently pinned: the four `v2 … 2025` `client` cells (`clientInfo` cannot reach a per-request
-instance on the v2 SDK's legacy leg — documented limitation), nest-v2's `error message is clean` on both eras (NestJS's `RpcExceptionsHandler` flattens every
+instance on the v2 SDK's legacy leg — documented limitation), and nest-v2's `error message is clean` on both eras (NestJS's `RpcExceptionsHandler` flattens every
 thrown error to `"Internal server error"` — adapter behaviour, not ours).
 
 Standing regression assertions on every PR: the four `v1` matrix rows stay all-green, and

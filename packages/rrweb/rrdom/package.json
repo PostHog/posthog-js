@@ -28,7 +28,7 @@
         "url": "git+https://github.com/PostHog/posthog-js.git"
     },
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrdom^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc --noEmit",
@@ -43,7 +43,6 @@
         "puppeteer": "^23.11.1",
         "typescript": "catalog:",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0"
     },
     "dependencies": {

@@ -1,5 +1,30 @@
 # posthog-node
 
+## 5.52.4
+
+### Patch Changes
+
+- [#4885](https://github.com/PostHog/posthog-js/pull/4885) [`39a8980`](https://github.com/PostHog/posthog-js/commit/39a89801877f684b599550ae2fc944fec347e042) Thanks [@decknamec](https://github.com/decknamec)! - Server-side feature flags now resolve in posthog-node and posthog-edge even when a proxy rewrites the request's `User-Agent`. Flags restricted to the `client` runtime now resolve to `undefined` in these SDKs, where a rewritten `User-Agent` previously let them through.
+  (2026-09-15)
+- Updated dependencies [[`39a8980`](https://github.com/PostHog/posthog-js/commit/39a89801877f684b599550ae2fc944fec347e042)]:
+  - @posthog/core@1.54.2
+
+## 5.52.3
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+
+## 5.52.2
+
+### Patch Changes
+
+- [#4951](https://github.com/PostHog/posthog-js/pull/4951) [`55c5142`](https://github.com/PostHog/posthog-js/commit/55c51429d964bdb8b5814dc052bcaeacd1416d56) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Express exception events reporting the initial response status instead of the final HTTP status.
+  (2026-09-14)
+
 ## 5.52.1
 
 ### Patch Changes

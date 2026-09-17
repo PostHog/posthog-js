@@ -604,6 +604,125 @@ describe('network plugin', () => {
             })
         })
 
+        describe('XHR capture teardown', () => {
+            it.each([false, true])('drops pending timing capture before masking, restart=%s', async (restart) => {
+                vi.useFakeTimers()
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const oldCallback = vi.fn()
+                const oldMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const newCallback = vi.fn()
+                const newMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const getEntries = vi.spyOn(mockWindow.performance, 'getEntriesByName')
+                let cleanup = getRecordNetworkPlugin().observer(oldCallback, mockWindow, {
+                    recordHeaders: true,
+                    recordInitialRequests: false,
+                    maskRequestFn: oldMask,
+                })
+                const completeRequest = (url: string) => {
+                    const xhr = new mockWindow.XMLHttpRequest()
+                    xhr.open('GET', url)
+                    xhr.send()
+                    xhr.readyState = xhr.DONE
+                    for (const listener of [...xhr.listeners.get('readystatechange')]) listener()
+                }
+                try {
+                    completeRequest('https://example.com/old-observer')
+                    expect(getEntries).toHaveBeenCalledWith('https://example.com/old-observer')
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    expect(oldMask).not.toHaveBeenCalled()
+                    cleanup()
+                    if (restart) {
+                        cleanup = getRecordNetworkPlugin().observer(newCallback, mockWindow, {
+                            recordHeaders: true,
+                            recordInitialRequests: false,
+                            maskRequestFn: newMask,
+                        })
+                        completeRequest('https://example.com/new-observer')
+                    }
+                    await vi.advanceTimersByTimeAsync(3000)
+                    expect(oldMask).not.toHaveBeenCalled()
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    if (restart) {
+                        expect(newMask).toHaveBeenCalledOnce()
+                        expect(newCallback).toHaveBeenCalledWith({
+                            requests: [expect.objectContaining({ name: 'https://example.com/new-observer' })],
+                        })
+                    }
+                } finally {
+                    cleanup()
+                    vi.useRealTimers()
+                }
+            })
+        })
+
+        describe('fetch capture teardown', () => {
+            const OriginalRequest = global.Request
+            let cleanupObserver: (() => void) | undefined
+
+            afterEach(() => {
+                cleanupObserver?.()
+                global.Request = OriginalRequest
+            })
+
+            function deferredBody() {
+                let resolve!: (body: string) => void
+                const promise = new Promise<string>((r) => {
+                    resolve = r
+                })
+                return { promise, resolve }
+            }
+
+            function instrument(fetch: () => Promise<any>, requestBody: Promise<string>, callback: any) {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.performance.now = () => 10
+                mockWindow.performance.getEntriesByName = () => [
+                    createResourceTimingEntry('https://example.com/', 'server', 1),
+                ]
+                global.Request = class {
+                    url = 'https://example.com/'
+                    method = 'POST'
+                    headers = { forEach: () => {} }
+                    clone() {
+                        return { text: () => requestBody }
+                    }
+                } as any
+                mockWindow.fetch = fetch
+                const plugin = getRecordNetworkPlugin()
+                cleanupObserver = plugin.observer(callback, mockWindow, {
+                    recordBody: true,
+                    maskRequestFn: (entry: CapturedNetworkRequest) => {
+                        if (entry.requestBody) entry.requestBody = 'redacted'
+                        if (entry.responseBody) entry.responseBody = 'redacted'
+                        return entry
+                    },
+                })
+                return mockWindow.fetch
+            }
+
+            it('drops old pending captures after repeated teardown without silencing a restarted observer', async () => {
+                const oldBody = deferredBody()
+                const response = {
+                    status: 204,
+                    headers: { forEach: () => {}, get: () => null },
+                    clone: () => ({ text: async () => '' }),
+                }
+                const oldCallback = vi.fn()
+                const oldFetch = instrument(async () => response, oldBody.promise, oldCallback)
+                const oldHostFetch = oldFetch('https://example.com/')
+                cleanupObserver?.()
+                cleanupObserver?.()
+                const newCallback = vi.fn()
+                const newFetch = instrument(async () => response, Promise.resolve('new body'), newCallback)
+                await expect(newFetch('https://example.com/')).resolves.toBe(response)
+                oldBody.resolve('old body')
+                await expect(oldHostFetch).resolves.toBe(response)
+                await vi.waitFor(() => expect(newCallback).toHaveBeenCalledOnce())
+                expect(oldCallback).not.toHaveBeenCalled()
+            })
+        })
+
         describe('instrumentation failures degrade gracefully', () => {
             // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
             // not let the exception escape and misattribute a failure to session replay

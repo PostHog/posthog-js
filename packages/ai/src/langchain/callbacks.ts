@@ -654,7 +654,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       id: toolCall.id,
       function: {
         name: toolCall.name,
-        arguments: JSON.stringify(toolCall.args),
+        arguments: toContentString(toolCall.args),
       },
     }))
   }

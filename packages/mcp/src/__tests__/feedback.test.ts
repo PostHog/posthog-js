@@ -9,6 +9,7 @@ import {
 } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import type { FeedbackReport } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -58,6 +59,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(tool.description).toContain('missing capability')
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'summary']))
       expect(tool.inputSchema.properties.feedback_type.enum).toEqual(['missing_capability', 'issue', 'praise', 'other'])
+      expect(tool.inputSchema.properties.conversation_id).toMatchObject({ type: 'string' })
       expect(tool.annotations.readOnlyHint).toBe(true)
     })
 
@@ -151,7 +153,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('captures $mcp_feedback with the report properties on a fresh instance', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { collectFeedback: true })
+      instrument(server, fakePostHog(), { collectFeedback: true, enableConversationId: true })
 
       const result = await callTool(client, SEND_FEEDBACK, {
         feedback_type: 'missing_capability',
@@ -163,6 +165,10 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       })
 
       expect(result.content[0].text).toContain('recorded')
+      expect(result.content).toHaveLength(2)
+      const promptBack = result.content.find((block: any) => block.text?.includes('"conversation_id"'))
+      const conversationId = JSON.parse(promptBack?.text ?? '{}').conversation_id
+      expect(conversationId).toEqual(expect.any(String))
 
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
@@ -170,6 +176,8 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         .find((e) => e.eventType === MCPAnalyticsEventType.mcpFeedback && e.resourceName === SEND_FEEDBACK)
       expect(event?.userIntent).toBe('No tool to delete multiple todos in one call.\n\nDeleted 20 todos one by one.')
       expect(event?.userIntentSource).toBe('context_parameter')
+      expect(event?.conversationId).toBe(conversationId)
+      expect(event?.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
 
       const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
       expect(payloads).toHaveLength(1)
@@ -181,6 +189,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSentiment]).toBe('negative')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackTaskCompleted]).toBe(true)
       expect(p[PostHogMCPAnalyticsProperty.ResourceName]).toBe(SEND_FEEDBACK)
+      expect(p[PostHogMCPAnalyticsProperty.ConversationId]).toBe(conversationId)
       // No raw arguments: the redacted $mcp_feedback_* properties are the captured surface.
       expect(p[PostHogMCPAnalyticsProperty.Parameters]).toBeUndefined()
 
@@ -420,6 +429,36 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it('rejects a fractional number for a declared integer extra, accepting whole values', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      const onFeedback = vi.fn()
+      instrument(server, fakePostHog(), {
+        collectFeedback: { extraProperties: { score: { type: 'integer' } }, onFeedback },
+      })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'praise',
+        summary: 'Great tools.',
+        score: 3.5, // fractional — a JSON Schema `integer` does not accept it
+      })
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'praise',
+        summary: 'Great tools again.',
+        score: 3, // whole — conforms
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const events = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
+      expect(events[0].properties.$mcp_feedback_score).toBeUndefined()
+      expect(events[1].properties.$mcp_feedback_score).toBe(3)
+      expect(onFeedback.mock.calls[0][0].extras).toEqual({})
+      expect(onFeedback.mock.calls[0][0].raw.score).toBe(3.5)
+      expect(onFeedback.mock.calls[1][0].extras).toEqual({ score: 3 })
+
+      await capture.stop()
+    })
+
     it('redacts credential-named keys inside nested extras', async () => {
       const capture = new EventCapture()
       await capture.start()
@@ -505,10 +544,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('falls back to the default reply when onFeedback throws, and still captures the event', async () => {
       const capture = new EventCapture()
       await capture.start()
+      const logged: string[] = []
       instrument(server, fakePostHog(), {
+        logger: (message: string) => logged.push(message),
         collectFeedback: {
           onFeedback: async () => {
-            throw new Error('backend down')
+            const error = new Error('backend down for jane@example.com')
+            error.name = 'jane@example.com\nforged log line'
+            throw error
           },
         },
       })
@@ -516,6 +559,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const result = await callTool(client, SEND_FEEDBACK, { feedback_type: 'issue', summary: 'A tool failed.' })
 
       expect(result.content[0].text).toContain('recorded')
+
+      // No part of the thrown value reaches the log. Both its message and its
+      // mutable name can contain agent-controlled PII or log-forging newlines.
+      const warning = logged.find((line) => line.includes('onFeedback handler threw'))
+      expect(warning).toBe('Warning: onFeedback handler threw; returning the default acknowledgement')
+      expect(warning).not.toContain('backend down')
+      expect(warning).not.toContain('jane@example.com')
+      expect(warning).not.toContain('forged log line')
 
       await new Promise((r) => setTimeout(r, 50))
       expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)).toHaveLength(1)
@@ -549,6 +600,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.start()
       instrument(server, fakePostHog(), {
         collectFeedback: true,
+        enableConversationId: false,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
 
@@ -697,6 +749,33 @@ describe('PostHogMCP (custom dispatcher path)', () => {
     expect(posthog.prepareToolList(myTools, { collectFeedback: true }).find((t) => t.name === SEND_FEEDBACK)).toBe(
       undefined
     )
+
+    await posthog.shutdown()
+  })
+
+  it('a supplied originalTool wins a feedback-name collision', async () => {
+    const posthog = newClient({ collectFeedback: true })
+
+    const realTools = [
+      {
+        name: SEND_FEEDBACK,
+        inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
+      },
+    ]
+    const listed = posthog.prepareToolList(realTools, { collectFeedback: true })
+    expect(listed).toHaveLength(1)
+
+    // The descriptor comes from the host's original list, not the prepared list.
+    // This is stateless proof that the real application tool owns the name.
+    const originalTool = realTools.find((tool) => tool.name === SEND_FEEDBACK)
+    const collided = posthog.prepareToolCall(SEND_FEEDBACK, { note: 'hi' }, { originalTool })
+    expect(collided.isFeedback).toBe(false)
+    expect(collided.feedbackReport).toBeUndefined()
+
+    // Without originalTool the name match stands.
+    const virtual = posthog.prepareToolCall(SEND_FEEDBACK, { feedback_type: 'other', summary: 'A note.' })
+    expect(virtual.isFeedback).toBe(true)
+    expect(virtual.feedbackReport).toBeDefined()
 
     await posthog.shutdown()
   })

@@ -30,14 +30,19 @@ export function parseRetryAfterMs(value: unknown, now: number = Date.now()): num
   // a comma of its own ("Wed, 21 Oct 2015 07:28:00 GMT").
   const trimmed = /^\d+\s*,/.test(raw) ? raw.slice(0, raw.indexOf(',')).trim() : raw
   // Integer seconds. Not parseFloat: "10 minutes" must not read as 10 seconds.
-  const seconds = /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
-  if (!Number.isFinite(seconds) && /^[+-]?[\d.]+$/.test(trimmed)) {
-    // Numeric but not delta-seconds, so it is malformed. `Date.parse` reads
-    // "-5", "+5" and "5.5" as dates in 2001 rather than rejecting them, which
-    // on a device whose clock predates that would surface as a real wait.
+  if (/^\d+$/.test(trimmed)) {
+    // Cap before multiplication: even a valid integer can overflow to Infinity.
+    const ms = Math.min(Number(trimmed), MAX_RETRY_AFTER_MS / 1000) * 1000
+    return ms > 0 ? ms : undefined
+  }
+  // HTTP dates start with a weekday. Do not let Date.parse guess a date from
+  // malformed seconds, ISO timestamps or month-first dates.
+  if (!/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,]/.test(trimmed)) {
     return undefined
   }
-  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(trimmed) - now
+  // The obsolete asctime HTTP-date omits the timezone, but is still GMT.
+  const date = /^\w{3} \w{3} /.test(trimmed) ? trimmed + ' GMT' : trimmed
+  const ms = Date.parse(date) - now
   if (!Number.isFinite(ms) || ms <= 0) {
     return undefined
   }

@@ -13,10 +13,11 @@
                 "babel.config.js",
                 "rollup.config.mjs",
                 "oxc.config.mjs",
-                "rolldown.dts.config.mts",
+                "rolldown.dts*.config.mts",
                 "$TURBO_ROOT$/packages/rrweb/rolldown.dts.config.mts",
                 "$TURBO_ROOT$/packages/rrweb/vite.config.default.ts",
                 "$TURBO_ROOT$/packages/rrweb/vite.config.utils.ts",
+                "$TURBO_ROOT$/packages/rrweb/vite.declarations.ts",
                 "$TURBO_ROOT$/tooling/rrweb-build/index.ts",
                 "$TURBO_ROOT$/tooling/rrweb-build/vite.mjs",
                 "$TURBO_ROOT$/tooling/rrweb-build/package.json",
@@ -28,7 +29,8 @@
                 "tsdown.config.ts",
                 "rslib.config.*",
                 "vite.config.ts",
-                "vite.config.js"
+                "vite.config.js",
+                "vite.config.entries.js"
             ],
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
@@ -79,6 +81,10 @@
         },
         "test:unit": {
             "dependsOn": ["^build", "build"],
+            "cache": false
+        },
+        "posthog-js#test:unit": {
+            "dependsOn": ["^build", "build", "@posthog/react#build"],
             "cache": false
         },
         "@posthog/browser#test:unit": {

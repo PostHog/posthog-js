@@ -8,6 +8,7 @@ import {
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import type { MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
@@ -117,7 +118,7 @@ async function setupLowLevelServer(realToolName?: string) {
 /** Shaped like a handle we would have minted, so it is echoed rather than replaced. */
 const ANALYTICS_CONVERSATION = '019fd2b0-3333-7333-8333-333333333333'
 
-describe('Low-level Server reportMissing ownership (e2e)', () => {
+describe('Low-level Server virtual tool ownership (e2e)', () => {
   let eventCapture: EventCapture
 
   beforeEach(async () => {
@@ -216,12 +217,56 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
         CallToolResultSchema
       )
       expect((result.content as { text: string }[])[0].text).toContain('Unfortunately')
-      expect(result.content).toHaveLength(1)
+      expect(result.content).toHaveLength(2)
+      const promptBack = (result.content as { text?: string }[]).find((block) =>
+        block.text?.includes('"conversation_id"')
+      )
+      const conversationId = JSON.parse(promptBack?.text ?? '{}').conversation_id
+      expect(conversationId).toEqual(expect.any(String))
       await new Promise((resolve) => setTimeout(resolve, 50))
       const captures = eventCapture.findCapturesByEvent('$mcp_missing_capability')
       expect(captures).toHaveLength(1)
-      expect(captures[0].properties.$mcp_conversation_id).toBeUndefined()
+      expect(captures[0].properties.$mcp_conversation_id).toBe(conversationId)
+      expect(captures[0].properties.$session_id).toBe(deriveSessionIdFromConversation(conversationId))
       expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(0)
+    } finally {
+      await Promise.all([podA.cleanup(), podB.cleanup()])
+    }
+  })
+
+  it('uses feedback conversation_id on a pod that never advertised the tool', async () => {
+    const podA = await setupLowLevelServer()
+    const podB = await setupLowLevelServer()
+    try {
+      instrument(podA.server, fakePostHog(), { collectFeedback: true, enableConversationId: true })
+      instrument(podB.server, fakePostHog(), { collectFeedback: true, enableConversationId: true })
+      await Promise.all([podA.connect(), podB.connect()])
+
+      const { tools } = await podA.client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const feedback = tools.find((tool) => tool.name === 'send_feedback')
+      expect(feedback?.inputSchema.properties?.conversation_id).toBeDefined()
+
+      const result = await podB.client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'send_feedback',
+            arguments: {
+              feedback_type: 'other',
+              summary: 'A note.',
+              conversation_id: ANALYTICS_CONVERSATION,
+            },
+          },
+        },
+        CallToolResultSchema
+      )
+      expect(result.content).toHaveLength(1)
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const captures = eventCapture.findCapturesByEvent('$mcp_feedback')
+      expect(captures).toHaveLength(1)
+      expect(captures[0].properties.$mcp_conversation_id).toBe(ANALYTICS_CONVERSATION)
+      expect(captures[0].properties.$session_id).toBe(deriveSessionIdFromConversation(ANALYTICS_CONVERSATION))
     } finally {
       await Promise.all([podA.cleanup(), podB.cleanup()])
     }

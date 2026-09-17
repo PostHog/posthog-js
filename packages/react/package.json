@@ -1,6 +1,6 @@
 {
     "name": "@posthog/react",
-    "version": "1.10.6",
+    "version": "1.11.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -15,6 +15,7 @@
     "homepage": "https://posthog.com/docs/libraries/react",
     "packageManager": "pnpm@10.33.0",
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.json",
         "clean": "rimraf dist",
         "build": "rimraf dist ../browser/react/dist ../browser/react/src && tsdown && pnpm check:build-output",
         "dev": "rimraf dist ../browser/react/dist ../browser/react/src && tsdown --watch",

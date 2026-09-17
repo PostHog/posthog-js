@@ -1330,6 +1330,35 @@ describe('Prompts', () => {
       expect(cached.version).toBe(3)
     })
 
+    it('omits the label param on an unlabeled fetch and seeds the cache', async () => {
+      // Without a label the param must be left off the URL entirely, since
+      // the server treats any value as a label name to filter by. Rows
+      // without any labels must be accepted, since no label was requested.
+      const unlabeled = { ...labeledRow('prompt-a', 2), all_labels: [] }
+      mockFetch.mockResolvedValueOnce(listResponse([unlabeled]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll()
+
+      expect(mockFetch.mock.calls[0][0]).not.toContain('label')
+      expect(results).toEqual({
+        'prompt-a': {
+          source: 'api',
+          prompt: 'Prompt for prompt-a',
+          name: 'prompt-a',
+          version: 2,
+          label: undefined,
+          config: null,
+        },
+      })
+
+      // Later unlabeled get() calls are cache hits, not new requests.
+      const cached = await prompts.get('prompt-a')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(cached.source).toBe('cache')
+      expect(cached.version).toBe(2)
+    })
+
     it('throws when the server ignores the label', async () => {
       // An old server ignores ?label= and returns latest versions of every
       // prompt, including prompts without the label. Even when some labels
@@ -1361,6 +1390,19 @@ describe('Prompts', () => {
 
       expect(Object.keys(results)).toEqual(['prompt-b'])
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('throws when every row was skipped as moved', async () => {
+      // An old server can serve latest versions while every prompt's label
+      // points at an earlier version. Each row then looks like a moved label;
+      // returning {} would report no labeled prompts despite them existing.
+      const rowA = { ...labeledRow('prompt-a', 2), all_labels: [{ name: 'production', version: 1 }] }
+      const rowB = { ...labeledRow('prompt-b', 3), all_labels: [{ name: 'production', version: 2 }] }
+      mockFetch.mockResolvedValueOnce(listResponse([rowA, rowB]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/none resolve label/)
     })
 
     it('preserves a prompt named __proto__ as an own entry', async () => {

@@ -6,6 +6,7 @@ import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
 import { getMoreToolsResult } from '../index'
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -194,7 +195,10 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       )
 
       expect(result.content[0].text).toContain('Unfortunately')
-      expect(result.content).toHaveLength(1)
+      expect(result.content).toHaveLength(2)
+      const promptBack = result.content.find((block: any) => block.text?.includes('"conversation_id"'))
+      const conversationId = JSON.parse(promptBack?.text ?? '{}').conversation_id
+      expect(conversationId).toEqual(expect.any(String))
 
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
@@ -204,7 +208,8 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       expect(event?.userIntent).toBe(context)
       expect(event?.sessionId).toBeDefined()
       expect(event?.userIntentSource).toBe('context_parameter')
-      expect(event?.conversationId).toBeUndefined()
+      expect(event?.conversationId).toBe(conversationId)
+      expect(event?.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
 
       // It's a capability gap, not a tool invocation.
       expect(capture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
@@ -250,6 +255,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       await capture.start()
       instrument(server, fakePostHog(), {
         reportMissing: true,
+        enableConversationId: false,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
 
