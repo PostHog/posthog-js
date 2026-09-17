@@ -2,7 +2,7 @@
     "name": "@posthog/rrweb-replay",
     "version": "0.0.46",
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-replay^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "test": "pnpm test:rrweb",
@@ -41,7 +41,6 @@
     "devDependencies": {
         "puppeteer": "^23.11.1",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
         "typescript": "catalog:"
     },

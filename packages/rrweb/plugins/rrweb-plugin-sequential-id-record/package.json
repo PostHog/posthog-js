@@ -24,7 +24,7 @@
         "package.json"
     ],
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-plugin-sequential-id-record^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc --noEmit"
@@ -39,8 +39,7 @@
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
         "typescript": "catalog:",
-        "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "vite": "catalog:"
     },
     "peerDependencies": {
         "@posthog/rrweb": "workspace:*"
