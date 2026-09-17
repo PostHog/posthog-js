@@ -47,8 +47,6 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             get_current_url: config.getCurrentUrl,
             prepareStylesheet: config.prepareStylesheet,
         }),
-        isCapturing: () => !disposed && !!client?.canCapture,
-        isOptedOut: () => !client?.canCapture,
         getExtensions: () => ({
             generateSurveys:
                 renderer && runtimeHost
