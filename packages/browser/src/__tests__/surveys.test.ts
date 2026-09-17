@@ -815,7 +815,7 @@ describe('surveys', () => {
 
             const userAgent =
                 'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
-            const userAgentSpy = vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(userAgent)
+            const userAgentSpy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(userAgent)
 
             // matching
             surveys.getActiveMatchingSurveys((data) => {

@@ -490,16 +490,25 @@ importers:
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
+      preact:
+        specifier: ^10.29.3
+        version: 10.29.3
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@rsbuild/plugin-react':
+        specifier: ^2.1.0
+        version: 2.1.0(@rsbuild/core@2.1.13(core-js@3.49.0))(@rspack/core@2.1.10(@swc/helpers@0.5.23))
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0
+      lightningcss:
+        specifier: ^1.33.0
+        version: 1.33.0
       typescript:
         specifier: catalog:native
         version: 7.0.2
@@ -570,7 +579,7 @@ importers:
         version: 7.0.2
       vite:
         specifier: 7.3.1
-        version: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0)
+        version: 7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.33.0)(terser@5.48.0)(yaml@2.8.0)
       vitest:
         specifier: 'catalog:'
         version: 1.6.1(@edge-runtime/vm@5.0.0)(@types/node@24.10.13)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2)
@@ -7428,6 +7437,14 @@ packages:
       core-js:
         optional: true
 
+  '@rsbuild/plugin-react@2.1.0':
+    resolution: {integrity: sha512-RQTIAWB/CwPjoWt9iAl+8HixeQVgZ7kEIBrWPCixfITyHdiD84h0YpUTpEUuz6kGHw1KXT9mHZ3Rwy6WG7aRDA==}
+    peerDependencies:
+      '@rsbuild/core': ^2.0.0
+    peerDependenciesMeta:
+      '@rsbuild/core':
+        optional: true
+
   '@rslib/core@0.23.2':
     resolution: {integrity: sha512-KxSp+/y0BJ1O4oKwxX4ydBY7/ZVeJCUpWAmQniCIct8mTxIQFPGO/ibKbKq2IxZYqRuRpM8g+Dtyq0VbEQf9HQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -7531,6 +7548,15 @@ packages:
       '@module-federation/runtime-tools':
         optional: true
       '@swc/helpers':
+        optional: true
+
+  '@rspack/plugin-react-refresh@2.0.2':
+    resolution: {integrity: sha512-dGNZiCxQxgAUI9sah7gd8u+O7OJZRCmqtEJNDOd8xW5RqcieC86F7p5qcShyw6onH5pKf57evpr2VjGbaFGkZg==}
+    peerDependencies:
+      '@rspack/core': ^2.0.0
+      react-refresh: '>=0.10.0 <1.0.0'
+    peerDependenciesMeta:
+      '@rspack/core':
         optional: true
 
   '@rushstack/node-core-library@5.23.1':
@@ -15718,6 +15744,10 @@ packages:
 
   react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
+    engines: {node: '>=0.10.0'}
+
+  react-refresh@0.18.0:
+    resolution: {integrity: sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw==}
     engines: {node: '>=0.10.0'}
 
   react-refresh@0.4.3:
@@ -26068,6 +26098,15 @@ snapshots:
     transitivePeerDependencies:
       - '@module-federation/runtime-tools'
 
+  '@rsbuild/plugin-react@2.1.0(@rsbuild/core@2.1.13(core-js@3.49.0))(@rspack/core@2.1.10(@swc/helpers@0.5.23))':
+    dependencies:
+      '@rspack/plugin-react-refresh': 2.0.2(@rspack/core@2.1.10(@swc/helpers@0.5.23))(react-refresh@0.18.0)
+      react-refresh: 0.18.0
+    optionalDependencies:
+      '@rsbuild/core': 2.1.13(core-js@3.49.0)
+    transitivePeerDependencies:
+      - '@rspack/core'
+
   '@rslib/core@0.23.2(@microsoft/api-extractor@7.58.9(@types/node@20.19.9))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)':
     dependencies:
       '@rsbuild/core': 2.1.13(core-js@3.49.0)
@@ -26172,6 +26211,12 @@ snapshots:
       '@rspack/binding': 2.1.10
     optionalDependencies:
       '@swc/helpers': 0.5.23
+
+  '@rspack/plugin-react-refresh@2.0.2(@rspack/core@2.1.10(@swc/helpers@0.5.23))(react-refresh@0.18.0)':
+    dependencies:
+      react-refresh: 0.18.0
+    optionalDependencies:
+      '@rspack/core': 2.1.10(@swc/helpers@0.5.23)
 
   '@rushstack/node-core-library@5.23.1(@types/node@20.19.9)':
     dependencies:
@@ -36744,6 +36789,8 @@ snapshots:
 
   react-refresh@0.14.2: {}
 
+  react-refresh@0.18.0: {}
+
   react-refresh@0.4.3: {}
 
   react-shallow-renderer@16.15.0(react@18.2.0):
@@ -39662,7 +39709,7 @@ snapshots:
       lightningcss: 1.33.0
       terser: 5.51.2
 
-  vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0):
+  vite@7.3.1(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.33.0)(terser@5.48.0)(yaml@2.8.0):
     dependencies:
       esbuild: 0.27.3
       fdir: 6.5.0(picomatch@4.0.3)
@@ -39674,7 +39721,7 @@ snapshots:
       '@types/node': 24.10.13
       fsevents: 2.3.3
       jiti: 2.6.1
-      lightningcss: 1.27.0
+      lightningcss: 1.33.0
       terser: 5.48.0
       yaml: 2.8.0
 

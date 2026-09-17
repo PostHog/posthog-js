@@ -481,7 +481,7 @@ export class PostHogSurveys implements Extension {
         return survey
     }
 
-    private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+    private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string | undefined } {
         if (isNullish(this._surveyManager)) {
             return { eligible: false, reason: SURVEY_NOT_LOADED }
         }
@@ -492,7 +492,7 @@ export class PostHogSurveys implements Extension {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
-    private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+    private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string | undefined } {
         if (!this._client?.canCapture) {
             return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
         }

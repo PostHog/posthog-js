@@ -687,6 +687,34 @@ describe('sendSurveyEvent', () => {
         critical.mockRestore()
     })
 
+    it('still captures a response when persisting seen state fails', () => {
+        const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('quota')
+        })
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: vi.fn(),
+            is_capturing: () => true,
+        } as unknown as PostHog
+        try {
+            expect(() =>
+                sendSurveyEvent({
+                    responses: { $survey_response_q1: 'Great!' },
+                    survey: baseSurvey,
+                    surveySubmissionId: 'submission-123',
+                    isSurveyCompleted: true,
+                    posthog: mockPostHog,
+                })
+            ).not.toThrow()
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({ $survey_response_q1: 'Great!' })
+            )
+        } finally {
+            write.mockRestore()
+        }
+    })
+
     it('stays silent while capturing is on', () => {
         const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
         const mockPostHog = {
