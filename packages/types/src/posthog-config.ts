@@ -121,7 +121,7 @@ export interface RageclickConfig {
      * - `true`: Use the default keywords, which cover next/previous/carousel/slide/scroll/arrow wording
      *   and arrow glyphs such as '>', '<', '→', '←', '»', '«'
      * - `false`: Disable content-based exclusion
-     * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
+     * - `string[]`: Use custom keywords (max 33 items, otherwise use css_selector_ignorelist)
      *
      * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
      * The default word keywords match whole words, so 'arrow' doesn't suppress "Narrow results".

@@ -903,6 +903,37 @@ describe('Autocapture system', () => {
                 })
             })
 
+            describe('when a custom array copies the defaults and adds to them', () => {
+                const buttonWithText = (text: string): HTMLButtonElement => {
+                    const el = document.createElement('button')
+                    el.textContent = text
+                    return el
+                }
+
+                beforeEach(() => {
+                    posthog.config.rageclick = {
+                        content_ignorelist: [...DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, 'load more'],
+                    }
+                })
+
+                it.each(['next', '→', 'load more'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it('a list past the cap still disables content filtering', () => {
+                    const pastTheCap = Array.from(
+                        { length: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 11 },
+                        (_, index) => `keyword-${index}`
+                    )
+                    posthog.config.rageclick = { content_ignorelist: [...pastTheCap, 'next'] }
+
+                    expect(rageClickThreeTimes(buttonWithText('next'))).toContain('$rageclick')
+                })
+            })
+
             it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
                 'does not suppress text-entry or stepper rageclicks when rageclick config is %s',
                 (rageclickConfig) => {

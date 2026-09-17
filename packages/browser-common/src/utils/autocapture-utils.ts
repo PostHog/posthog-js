@@ -195,7 +195,9 @@ const DEFAULT_CONTENT_IGNORELIST = [
 ]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
-const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+// the cap guards against over-long user lists. it clears our own longest default list with room
+// to spare, so copying the defaults and adding a few keywords of your own still works
+const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
 
 interface ElementWithText {
     safeText: string
@@ -237,11 +239,11 @@ function shouldIgnoreByContent(
         keywords = DEFAULT_CONTENT_IGNORELIST
         wholeWord = true
     } else if (isArray(contentIgnorelist)) {
-        // the cap protects against over-long user lists, so our own defaults are exempt from it
+        // our own lists match whole words; a list the user built themselves keeps substring matching
         const isDefaultList =
             contentIgnorelist === DEFAULT_CONTENT_IGNORELIST ||
             contentIgnorelist === DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS
-        if (!isDefaultList && contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
+        if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
             logger.error(
                 `[PostHog] content_ignorelist array cannot exceed ${MAX_CONTENT_IGNORELIST_ENTRIES} items. Use css_selector_ignorelist for more complex matching.`
             )
