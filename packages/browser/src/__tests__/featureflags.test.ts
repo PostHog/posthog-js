@@ -8,7 +8,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { BrowserClientAdapter } from '../extensions/browser-client'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
-import { isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
+import { isNumber, isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
@@ -79,6 +79,7 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
             feature_flag_cache_ttl_ms: instance.config.feature_flag_cache_ttl_ms,
             remote_config_refresh_interval_ms: instance.config.remote_config_refresh_interval_ms,
             feature_flag_request_timeout_ms: instance.config.feature_flag_request_timeout_ms,
+            feature_flag_request_max_retries: instance.config.feature_flag_request_max_retries,
             disable_compression: instance.config.disable_compression,
             evaluation_contexts: instance.config.evaluation_contexts,
             evaluation_environments: instance.config.evaluation_environments,
@@ -1271,6 +1272,101 @@ describe('featureflags', () => {
                     expect.any(Object)
                 )
             })
+        })
+    })
+
+    describe('_callFlagsEndpoint retries', () => {
+        // 502/504 and timeouts get one more attempt by default. A plain status-0 does
+        // not: in the browser that is usually a blocker or CORS, which the status-0
+        // circuit breaker already handles.
+        const timeoutError = () => Object.assign(new Error('timeout'), { name: 'AbortError' })
+
+        const respondWith = (...responses: (number | { statusCode: number; error: Error })[]) => {
+            let call = 0
+            instance._send_request = vi.fn().mockImplementation(({ callback }) => {
+                const next = responses[Math.min(call, responses.length - 1)]
+                call++
+                const { statusCode, error } = isNumber(next) ? { statusCode: next, error: undefined } : next
+                callback({
+                    statusCode,
+                    error,
+                    json: statusCode === 200 ? { featureFlags: { 'retried-flag': true } } : {},
+                })
+            })
+        }
+
+        const reloadAndSettle = async () => {
+            featureFlags.reloadFeatureFlags()
+            vi.runOnlyPendingTimers()
+            await vi.advanceTimersByTimeAsync(1000)
+        }
+
+        it.each([
+            ['HTTP 502', 502],
+            ['HTTP 504', 504],
+        ])('retries %s once and uses the successful retry', async (_label, failingStatus) => {
+            respondWith(failingStatus, 200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(2)
+            expect(featureFlags.isFeatureEnabled('retried-flag')).toBe(true)
+        })
+
+        it('retries a timeout once and uses the successful retry', async () => {
+            respondWith({ statusCode: 0, error: timeoutError() }, 200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(2)
+            expect(featureFlags.isFeatureEnabled('retried-flag')).toBe(true)
+        })
+
+        it('does not retry a plain status-0 failure, leaving it to the circuit breaker', async () => {
+            respondWith(0, 200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([
+            ['HTTP 408', 408],
+            ['HTTP 429', 429],
+            ['HTTP 500', 500],
+            ['HTTP 503', 503],
+        ])('does not retry %s', async (_label, terminalStatus) => {
+            respondWith(terminalStatus, 200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not retry a successful response', async () => {
+            respondWith(200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('stops after the configured number of retries', async () => {
+            instance.config.feature_flag_request_max_retries = 2
+            respondWith(502)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(3)
+        })
+
+        it('does not retry when feature_flag_request_max_retries is 0', async () => {
+            instance.config.feature_flag_request_max_retries = 0
+            respondWith(502, 200)
+
+            await reloadAndSettle()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -4418,7 +4514,8 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await vi.advanceTimersByTimeAsync(10)
+        // A timeout is retried once, so settle past the retry delay to reach the final outcome.
+        await vi.advanceTimersByTimeAsync(1000)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.TIMEOUT])
     })
@@ -4487,7 +4584,8 @@ describe('$feature_flag_error tracking', () => {
                 .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
 
             featureFlags.reloadFeatureFlags()
-            await vi.advanceTimersByTimeAsync(10)
+            // 502 is retried once, so settle past the retry delay to reach the final outcome.
+            await vi.advanceTimersByTimeAsync(1000)
 
             expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
         }
