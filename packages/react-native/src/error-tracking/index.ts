@@ -72,13 +72,16 @@ interface ResolvedErrorTrackingOptions {
 // `waitForJSPersist` resolves after the JS event queue is durable. `markIngestedOnCapturePath`
 // is invoked from the capture path to add the journal id to FatalJournalIngested in the same
 // JS storage write as the queue item (so the next launch short-circuits and removes the
-// native entry without re-capturing). `removeNativeEntry` is invoked from the recovery path
-// to clean up the native file once the recovered event is durable in JS.
+// native entry without re-capturing). `waitForStorageReady` waits for storage preload so
+// consent/identity reads at fatal-handling time reflect the latest persisted state instead
+// of in-memory defaults. `getPersistenceMode` lets the journal skip writing entirely in
+// 'memory' mode where AsyncStorage isn't available.
 export interface FatalJournalHooks {
   waitForJSPersist: () => Promise<boolean>
   markIngestedOnCapturePath: (journalId: string) => Promise<void>
-  removeNativeEntry: (journalId: string) => Promise<void>
   hashApiKey: () => Promise<string>
+  waitForStorageReady: () => Promise<void>
+  getPersistenceMode: () => 'memory' | 'file' | undefined
 }
 
 export class ErrorTracking {
@@ -314,20 +317,24 @@ export class ErrorTracking {
         if (instance.captureExceptionInternal) {
           // captureExceptionInternal itself swallows capture() failures, but only after
           // doing the work — its return value is null on a soft failure. A throwing
-          // implementation would otherwise skip persistFatalReportToNative and flush()
-          // below, so the crash this code path exists to recover goes unrecorded.
+          // implementation (or one that re-throws after logging) would otherwise skip
+          // persistFatalReportToNative and flush() below, so the crash this code path
+          // exists to recover goes unrecorded. Fall back to a minimal captured and
+          // carry on — the JS event is already lost, but the native journal entry
+          // still has the exception list, level, and attribution, which is strictly
+          // more than nothing.
           try {
             captured = instance.captureExceptionInternal.call(instance, error, additionalProperties, hint, {
               uuid: eventUuid,
               timestamp: timestampDate,
             })
           } catch (e) {
-            this.logger.error('captureExceptionInternal threw; fatal handler aborts.', e)
-            return
+            this.logger.error('captureExceptionInternal threw; falling back to minimal captured for journal.', e)
+            captured = { eventUuid, timestamp: timestampDate.toISOString(), additionalProperties }
           }
         } else {
           this.instance.captureException(error, additionalProperties, hint)
-          captured = { eventUuid: '', timestamp: timestampDate.toISOString(), additionalProperties }
+          captured = { eventUuid, timestamp: timestampDate.toISOString(), additionalProperties }
         }
       } else {
         this.instance.captureException(error, additionalProperties, hint)
@@ -345,13 +352,20 @@ export class ErrorTracking {
         this.logger.critical('Failed to flush events')
       })
       return Promise.all([persisted, journalWrite])
-        .then(([persistedOk, journalId]) => {
+        .then(async ([persistedOk, journalId]) => {
           // If both the JS write AND the native write landed, mark ingested in JS so
-          // the next launch's drain skips re-capturing. The native entry is left on
-          // disk intentionally — the dedup marker is the durable receipt that turns
-          // a recovery attempt into a no-op cleanup.
-          if (persistedOk && journalId) {
-            void this.fatalJournalHooks?.markIngestedOnCapturePath?.(journalId)
+          // the next launch's drain skips re-capturing. Awaited (not void-ed) so the
+          // marker shares the existing 2 s deadline — otherwise React Native can
+          // terminate after the queue item is durable but before the marker lands, and
+          // the next launch would re-enqueue the same event. On failure the native
+          // entry stays on disk and the next launch either re-recovers or short-
+          // circuits via the marker — either way no duplicate is shipped.
+          if (persistedOk && journalId && this.fatalJournalHooks?.markIngestedOnCapturePath) {
+            try {
+              await this.fatalJournalHooks.markIngestedOnCapturePath(journalId)
+            } catch (e) {
+              this.logger.warn(`Fatal journal entry ${journalId} marker write failed: ${e}`)
+            }
           }
           return undefined
         })
@@ -376,6 +390,22 @@ export class ErrorTracking {
     if (!bridge) {
       return undefined
     }
+    // Memory-mode apps don't have AsyncStorage, so the journal's premise doesn't
+    // hold: data would land on disk while the rest of the SDK promises not to, and
+    // recovery can't tell whether the in-memory event actually survived. Skip entirely.
+    if (this.fatalJournalHooks?.getPersistenceMode?.() === 'memory') {
+      return undefined
+    }
+    // Wait for storage to finish loading before reading consent / identity. With a
+    // slow AsyncStorage preload, the default in-memory values would otherwise let an
+    // opted-out user land exception data on disk, and an opted-in user would lose
+    // their persisted attribution precisely in the slow-storage case this journal
+    // targets. The fatal-handler 2s deadline still bounds the wait via the caller.
+    try {
+      await this.fatalJournalHooks?.waitForStorageReady?.()
+    } catch {
+      return undefined
+    }
     // Honor the user's privacy choice: the journal lives on disk and would survive a
     // crash, so an opted-out user must not have their fatal crash leave any trace, even
     // transiently. The JS event was already dropped by capture() above.
@@ -394,6 +424,16 @@ export class ErrorTracking {
       this.logger.warn('Skipping fatal journal write: apiKeyHash unavailable.')
       return undefined
     }
+    // Attribution is the merge of commonProperties and the caller's captured properties
+    // (which already includes $exception_steps from attachExceptionSteps). pickAttribution
+    // keeps only SDK / device / session identifiers — anything outside the allowlist is
+    // reconstructed by the next launch or scrubbed by before_send on recovery.
+    const commonProperties = (this.instance as unknown as { getCommonEventProperties?: () => PostHogEventProperties })
+      .getCommonEventProperties?.() || {}
+    const attribution: PostHogEventProperties = {
+      ...commonProperties,
+      ...captured.additionalProperties,
+    }
     const entry = buildFatalJournalEntry({
       id: journalId,
       eventUuid: captured.eventUuid,
@@ -402,9 +442,7 @@ export class ErrorTracking {
       distinctId: this.instance.getDistinctId() || '',
       deviceId:
         (this.instance as unknown as { getDeviceId?: () => string }).getDeviceId?.() || '',
-      commonProperties: (this.instance as unknown as { getCommonEventProperties?: () => PostHogEventProperties })
-        .getCommonEventProperties?.() || {},
-      capturedProperties: captured.additionalProperties,
+      attribution,
       exceptionList: exceptionList as unknown as PostHogEventProperties['$exception_list'],
       exceptionLevel: 'fatal',
       exceptionSteps: steps as unknown as PostHogEventProperties['$exception_steps'],

@@ -73,8 +73,12 @@ describe('fatal journal helper', () => {
       sessionId: 'session-1',
       distinctId: 'user-1',
       deviceId: 'device-1',
-      commonProperties: { $lib: 'posthog-react-native', $app_version: '1.2.3' },
-      capturedProperties: { $app_state: 'active', $expo_update_id: 'u-1' },
+      attribution: {
+        $lib: 'posthog-react-native',
+        $app_version: '1.2.3',
+        $app_state: 'active',
+        $expo_update_id: 'u-1',
+      },
       exceptionList: [{ type: 'Error', value: 'boom' }],
       exceptionLevel: 'fatal',
       exceptionSteps: undefined,
@@ -93,8 +97,12 @@ describe('fatal journal helper', () => {
     expect(parsed!.exceptionLevel).toBe(entry.exceptionLevel)
     expect(parsed!.optedOut).toBe(false)
     expect(parsed!.apiKeyHash).toBe('abcd1234')
-    expect(parsed!.commonProperties).toEqual({ $lib: 'posthog-react-native', $app_version: '1.2.3' })
-    expect(parsed!.capturedProperties).toEqual({ $app_state: 'active', $expo_update_id: 'u-1' })
+    expect(parsed!.attribution).toEqual({
+      $lib: 'posthog-react-native',
+      $app_version: '1.2.3',
+      $app_state: 'active',
+      $expo_update_id: 'u-1',
+    })
     expect(parsed!.exceptionList).toEqual([{ type: 'Error', value: 'boom' }])
   })
 
@@ -114,8 +122,7 @@ describe('fatal journal helper', () => {
           sessionId: '',
           distinctId: '',
           deviceId: '',
-          commonProperties: {},
-          capturedProperties: {},
+          attribution: {},
           exceptionLevel: 'fatal',
           optedOut: false,
           apiKeyHash: 'x',
@@ -123,7 +130,7 @@ describe('fatal journal helper', () => {
         })
       )
     ).toBeNull()
-    // capturedProperties must be an object
+    // attribution must be an object
     expect(
       parseFatalJournalEntry(
         JSON.stringify({
@@ -133,8 +140,7 @@ describe('fatal journal helper', () => {
           sessionId: '',
           distinctId: '',
           deviceId: '',
-          commonProperties: {},
-          capturedProperties: 'not-an-object',
+          attribution: 'not-an-object',
           exceptionLevel: 'fatal',
           optedOut: false,
           apiKeyHash: 'x',
@@ -152,8 +158,7 @@ describe('fatal journal helper', () => {
           sessionId: '',
           distinctId: '',
           deviceId: '',
-          commonProperties: {},
-          capturedProperties: {},
+          attribution: {},
           exceptionLevel: 'fatal',
           optedOut: false,
           apiKeyHash: 123,
@@ -171,8 +176,11 @@ describe('fatal journal helper', () => {
       sessionId: 's',
       distinctId: 'u',
       deviceId: 'd',
-      commonProperties: { $lib: 'posthog-react-native', $app_version: '1.0.0' },
-      capturedProperties: { $app_state: 'background' },
+      attribution: {
+        $lib: 'posthog-react-native',
+        $app_version: '1.0.0',
+        $app_state: 'background',
+      },
       exceptionList: [{ type: 'Error', value: 'recover me' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -214,8 +222,7 @@ describe('fatal journal helper', () => {
         sessionId: '',
         distinctId: '',
         deviceId: '',
-        commonProperties: {},
-        capturedProperties: {},
+        attribution: {},
         exceptionList: [],
         exceptionLevel: 'fatal',
         optedOut: false,
@@ -233,8 +240,7 @@ describe('fatal journal helper', () => {
         sessionId: '',
         distinctId: '',
         deviceId: '',
-        commonProperties: {},
-        capturedProperties: {},
+        attribution: {},
         exceptionList: [{ type: 'Error', value: 'boom' }],
         exceptionLevel: 'fatal',
         optedOut: false,
@@ -414,8 +420,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: 's',
       distinctId: 'u',
       deviceId: 'd',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'persist-fails' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -463,8 +468,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: 's',
       distinctId: 'u',
       deviceId: 'd',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'persist-rejects' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -513,8 +517,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'should-ship-once' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -573,8 +576,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'duplicate me' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -614,7 +616,7 @@ describe('native fatal-report journal recovery', () => {
     expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
   })
 
-  it('drops a pending entry whose apiKeyHash does not match the current client', async () => {
+  it('leaves another client\'s pending entry untouched so the producing client can still recover it', async () => {
     const journalId = '0192f1c2-eeee-ffff-0000-111111111111'
     const entry = buildFatalJournalEntry({
       id: journalId,
@@ -623,12 +625,13 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'wrong-client' }],
       exceptionLevel: 'fatal',
       optedOut: false,
-      // Mismatched — produced by another PostHog client in the same app.
+      // Mismatched — produced by another PostHog client in the same app. Removing it
+      // here (when Project A initializes first) would be deterministic data loss
+      // for Project B. The per-client 5-entry FIFO cap bounds the directory growth.
       apiKeyHash: 'someone-elses-hash',
     })
     mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
@@ -640,7 +643,8 @@ describe('native fatal-report journal recovery', () => {
       await vi.advanceTimersByTimeAsync(10)
     }
 
-    expect(mockPlugin.removePendingFatalException).toHaveBeenCalledWith(journalId)
+    // The entry is left on disk for the producing client to recover on its own launch.
+    expect(mockPlugin.removePendingFatalException).not.toHaveBeenCalled()
     expect(extractExceptionCount(stored.get('.posthog-rn.json'))).toBe(0)
   })
 
@@ -653,8 +657,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'was-opted-out' }],
       exceptionLevel: 'fatal',
       optedOut: true,
@@ -701,8 +704,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'should-not-ship' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -775,8 +777,7 @@ describe('native fatal-report journal recovery', () => {
       // Crash-time snapshot: app was at 1.0.0 with iOS 16.0. The current launch (this test)
       // is running app version 2.0.0 / iOS 17.0 — those values would normally flow through
       // getCommonEventProperties() and overwrite the snapshot if not reapplied.
-      commonProperties: { $app_version: '1.0.0', $os_version: '16.0', $lib_version: '1.0.0' },
-      capturedProperties: {},
+      attribution: { $app_version: '1.0.0', $os_version: '16.0', $lib_version: '1.0.0' },
       exceptionList: [{ type: 'Error', value: 'pre-fix-crash' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -811,8 +812,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: 's',
       distinctId: 'u',
       deviceId: 'd',
-      commonProperties: {},
-      capturedProperties: {
+      attribution: {
         $app_state: 'background',
         $expo_update_id: 'expo-update-pre-fix',
         $expo_runtime_version: '1.0.0',
@@ -868,15 +868,17 @@ describe('native fatal-report journal recovery', () => {
     posthog = createClient()
     await posthog.ready()
     await (posthog as any)._eventsStorage.waitForPersist()
-    // Force captureExceptionInternal to throw — the handler must not skip
-    // persistFatalReportToNative + flush as a side effect, and must not propagate.
+    // Force captureExceptionInternal to throw — the handler falls back to a minimal
+    // captured so persistFatalReportToNative + flush still run, which is strictly more
+    // than nothing for the crash this code path exists to recover.
     const original = (posthog as any).captureExceptionInternal
     ;(posthog as any).captureExceptionInternal = () => {
       throw new Error('capture exploded')
     }
     expect(() => handler(new Error('capture-throws'), true)).not.toThrow()
-    await vi.advanceTimersByTimeAsync(0)
-    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    // Wait long enough for the libuv-backed crypto.subtle.digest used by hashApiKey.
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mockPlugin.persistFatalException).toHaveBeenCalledTimes(1)
     expect(previous).toHaveBeenCalledTimes(1)
     // restore so afterEach teardown doesn't observe a polluted state
     ;(posthog as any).captureExceptionInternal = original
@@ -893,8 +895,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: 's',
       distinctId: 'u',
       deviceId: 'd',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'no-native-crashes' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -944,8 +945,7 @@ describe('native fatal-report journal recovery', () => {
       sessionId: '',
       distinctId: '',
       deviceId: '',
-      commonProperties: {},
-      capturedProperties: {},
+      attribution: {},
       exceptionList: [{ type: 'Error', value: 'no-double' }],
       exceptionLevel: 'fatal',
       optedOut: false,
@@ -967,5 +967,115 @@ describe('native fatal-report journal recovery', () => {
     expect(mockPlugin.removePendingFatalException).toHaveBeenCalledTimes(1)
     const recovered = JSON.parse(stored.get('.posthog-rn.json') || '{}')
     expect(recovered.content.fatal_journal_ingested).toEqual([journalId])
+  })
+
+  it('skips the journal entirely when persistence is "memory"', async () => {
+    const customStorage = {
+      getItem: () => null,
+      setItem: (key, value) => {
+        stored.set(key, value)
+      },
+    }
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: customStorage as any,
+      persistence: 'memory',
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    await posthog.ready()
+    await (posthog as any)._eventsStorage.waitForPersist()
+    handler(new Error('memory-mode-fatal'), true)
+    await vi.advanceTimersByTimeAsync(100)
+    // Memory mode has no AsyncStorage to recover from; writing would land data the rest
+    // of the SDK promises never to touch disk.
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for storage preload before reading opt-out at crash time', async () => {
+    // Slow AsyncStorage preload: while it's pending, in-memory values are defaults.
+    // A previously opted-out user must NOT have their fatal crash land on disk just
+    // because we read the default value of optedOut.
+    let resolvePreload!: () => void
+    const pendingPreload = new Promise<void>((resolve) => {
+      resolvePreload = resolve
+    })
+    const customStorage = {
+      getItem: (key: string) => {
+        if (key === '.posthog-rn.json') {
+          return pendingPreload.then(() =>
+            JSON.stringify({ version: 'v1', content: { opted_out: true } })
+          ) as any
+        }
+        return null as any
+      },
+      setItem: (key: string, value: string) => {
+        stored.set(key, value)
+      },
+    }
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: customStorage as any,
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    // Don't await posthog.ready() — the preload is pending. The fatal handler
+    // installed synchronously should still gate on the storage init promise, so the
+    // native write doesn't fire with the default in-memory optedOut value.
+    const readyPromise = posthog.ready()
+    handler(new Error('slow-preload-fatal'), true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    // Now resolve the preload and let the SDK finish initialization so the test
+    // doesn't time out on afterEach teardown.
+    resolvePreload()
+    await readyPromise
+  })
+
+  it('lets before_send strip user properties on recovery (reapplies only attribution)', async () => {
+    // The journal only carries attribution keys (SDK / device / session identifiers);
+    // user properties are never persisted, so before_send can't accidentally resurrect
+    // them and the recovered event honors whatever the customer hook decides. We can't
+    // reach the core before_send hook from RN's PostHog subclass, but we can verify
+    // the structural invariant: a key that's NOT in FATAL_JOURNAL_ATTRIBUTION_KEYS is
+    // dropped on the way to the journal, so it can never reach recovery or before_send.
+    const journalId = '0192f1c2-5555-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-no-user-props',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      attribution: {
+        $app_version: '1.0.0',
+        // Anything outside the attribution allowlist is dropped before the journal
+        // entry is built — a customer's before_send hook can't resurrect it because
+        // we never persisted it in the first place.
+        $sensitive_user_email: 'leaked@example.com',
+      },
+      exceptionList: [{ type: 'Error', value: 'with-pii' }],
+      exceptionLevel: 'fatal',
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    const parsed = parseFatalJournalEntry(serializeFatalJournalEntry(entry))
+    expect(parsed).not.toBeNull()
+    // Attribution keys survive; non-attribution keys are stripped on the way in.
+    expect(parsed!.attribution.$app_version).toBe('1.0.0')
+    expect(parsed!.attribution.$sensitive_user_email).toBeUndefined()
   })
 })

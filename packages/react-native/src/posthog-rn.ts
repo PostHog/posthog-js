@@ -304,17 +304,12 @@ export class PostHog extends PostHogCore {
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
-  // Set by the fatal-journal recovery path; consumed and cleared on the next enqueue().
-  // `distinctId` lives on its own field because capture() reads it before enrichProperties.
-  // `commonProperties` and `capturedProperties` are reapplied after enrichProperties (which
-  // would otherwise overwrite crash-time $app_version / $app_state / expo fields with the
-  // next launch's runtime state).
-  private _fatalJournalOverride?: {
-    $session_id?: string
-    $device_id?: string
-    commonProperties?: { [key: string]: JsonType }
-    capturedProperties?: { [key: string]: JsonType }
-  }
+// Set by the fatal-journal recovery path; consumed and cleared on the next enqueue().
+// `distinctId` lives on its own field because capture() reads it before enrichProperties.
+// `attribution` holds only SDK / device / session identifiers (the FATAL_JOURNAL_ATTRIBUTION_KEYS
+// allowlist) — user properties are NOT included, so a customer's before_send hook stays
+// the final authority on user data even when we reapply attribution after it runs.
+  private _fatalJournalOverride?: { [key: string]: JsonType }
   private _fatalJournalDistinctIdOverride?: string
   private _disableSurveys: boolean
   private _errorTracking: ErrorTracking
@@ -387,11 +382,24 @@ export class PostHog extends PostHogCore {
         await this._initPromise
         return this._eventsStorage.waitForPersistSuccess()
       },
+      // Persistence mode check — memory-mode apps don't have AsyncStorage, so writing
+      // to the native journal would land data the rest of the SDK promises never to
+      // touch disk. Recovery is also a no-op there (waitForPersistSuccess returns true
+      // immediately) so the journal can't help; skip it outright.
+      getPersistenceMode: () => this._persistence || 'file',
+      // Wait for JS storage to finish loading before reading consent or identity. A
+      // previously opted-out user with a slow AsyncStorage preload must not have their
+      // fatal crash land on disk because we read the default value of optedOut.
+      waitForStorageReady: async () => {
+        await this._initPromise
+      },
       // Atomic dedup on the capture path: append the journal id to FatalJournalIngested
       // in the same AsyncStorage write as the queue item. The native entry is left on
       // disk — the next launch sees it in the dedup set and removes it without
       // re-capturing (so the entry acts as a one-shot durable receipt rather than a
-      // parallel send queue).
+      // parallel send queue). Awaited so the marker write shares the existing 2 s
+      // deadline — otherwise the handler can forward the crash before the marker
+      // lands and the next launch would re-enqueue.
       markIngestedOnCapturePath: async (journalId: string) => {
         const current = this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || []
         if (hasFatalJournalIngested(current, journalId)) {
@@ -403,15 +411,6 @@ export class PostHog extends PostHogCore {
         const ok = await this._eventsStorage.waitForPersistSuccess()
         if (!ok) {
           this._logger.warn(`Fatal journal entry ${journalId} marker write failed; entry stays on disk for recovery.`)
-        }
-      },
-      // On the recovery path, the queue item is already in JS storage from the capture
-      // path's persist; we just remove the now-redundant native entry.
-      removeNativeEntry: async (journalId: string) => {
-        try {
-          await OptionalReactNativePlugin?.removePendingFatalException?.(journalId)
-        } catch (e) {
-          this._logger.warn(`Fatal journal entry ${journalId} remove failed: ${e}`)
         }
       },
       hashApiKey: () => hashApiKey(this.apiKey || ''),
@@ -2965,35 +2964,38 @@ export class PostHog extends PostHogCore {
     if (!Array.isArray(entries) || entries.length === 0) {
       return
     }
-    const ingested = this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || []
     const currentApiKeyHash = await hashApiKey(this.apiKey || '')
     for (const { id, report } of entries) {
       try {
-        await this._ingestFatalJournalEntry(id, report, ingested, currentApiKeyHash)
+        await this._ingestFatalJournalEntry(id, report, currentApiKeyHash)
       } catch (e) {
         this._logger.warn(`Fatal journal entry ${id} ingest failed: ${e}`)
       }
     }
   }
 
-  private async _ingestFatalJournalEntry(
-    id: string,
-    report: string,
-    ingestedSnapshot: string[],
-    currentApiKeyHash: string
-  ): Promise<void> {
+  private async _ingestFatalJournalEntry(id: string, report: string, currentApiKeyHash: string): Promise<void> {
     const parsed = parseFatalJournalEntry(report)
     if (!parsed) {
+      // Corrupt or malformed — safe to drop, we can't decode it.
       await this._removeJournalEntry(id)
       return
     }
-    // Multi-client scoping: the journal directory is shared, so a Project A client must
-    // not ingest Project B's entries (and vice versa) — that would leak distinct_ids.
-    if (!currentApiKeyHash || parsed.apiKeyHash !== currentApiKeyHash) {
-      await this._removeJournalEntry(id)
+    // Multi-client scoping: the journal directory is shared across every PostHog
+    // client in the app, so an entry from Project B must stay on disk for B's own
+    // drain. Removing it here (when Project A initializes first) would be
+    // deterministic data loss in multi-client apps — the per-client 5-entry FIFO
+    // cap bounds the directory growth instead.
+    if (parsed.apiKeyHash !== currentApiKeyHash) {
       return
     }
-    if (ingestedSnapshot.includes(parsed.id) || hasFatalJournalIngested(ingestedSnapshot, parsed.id)) {
+    // Re-read FatalJournalIngested before checking — every earlier iteration of the
+    // outer loop may have appended to it, and reading the property once at the top
+    // of the loop would drop the ids appended by earlier siblings when the native
+    // remove for them also failed.
+    const currentIngested =
+      this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || []
+    if (hasFatalJournalIngested(currentIngested, parsed.id)) {
       await this._removeJournalEntry(id)
       return
     }
@@ -3010,30 +3012,35 @@ export class PostHog extends PostHogCore {
       timestamp: new Date(reconstructed.timestamp),
       _originatedFromCaptureException: true,
     }
+    // processBeforeEnqueue reads `_fatalJournalOverride` to reapply attribution
+    // AFTER super.processBeforeEnqueue (where before_send runs). User properties are
+    // not in this set — if a customer's hook scrubs them, the recovery respects it.
+    // $session_id and $device_id aren't part of getCommonEventProperties (they're
+    // added in enrichProperties / set via persisted property), so the entry carries
+    // them as separate fields and we merge them in here.
     this._fatalJournalOverride = {
-      $session_id: parsed.sessionId || undefined,
-      $device_id: parsed.deviceId || undefined,
-      commonProperties: parsed.commonProperties,
-      capturedProperties: parsed.capturedProperties,
+      ...parsed.attribution,
+      ...(parsed.sessionId ? { $session_id: parsed.sessionId } : {}),
+      ...(parsed.deviceId ? { $device_id: parsed.deviceId } : {}),
     }
     this._fatalJournalDistinctIdOverride = parsed.distinctId || ''
     try {
       this.capture('$exception', reconstructed.properties, captureOptions)
     } catch (e) {
       this._logger.warn(`Fatal journal entry ${id} capture failed; keeping entry on disk.`, e)
-      this._fatalJournalOverride = undefined
-      this._fatalJournalDistinctIdOverride = undefined
       return
     } finally {
       this._fatalJournalOverride = undefined
       this._fatalJournalDistinctIdOverride = undefined
     }
 
-    // Append the journal id to FatalJournalIngested BEFORE waiting on the disk write so
-    // the dedup marker lands in the same AsyncStorage write as the recovered event.
-    // A crash between the persist() call and the AsyncStorage write below loses both
-    // (queue + marker), so the next launch re-recovers and we don't ship twice.
-    const updated = appendFatalJournalIngested(ingestedSnapshot, parsed.id)
+    // Append the journal id to FatalJournalIngested in the same AsyncStorage write as
+    // the queue item. A crash between the persist() call and the AsyncStorage write
+    // loses both, so the next launch re-recovers and we don't ship twice. Re-read the
+    // property first — a sibling entry may have appended in this same drain loop.
+    const reIngested =
+      this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || []
+    const updated = appendFatalJournalIngested(reIngested, parsed.id)
     this.setPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested, updated)
     this._eventsStorage.persist()
     const ok = await this._eventsStorage.waitForPersistSuccess()
@@ -3042,19 +3049,11 @@ export class PostHog extends PostHogCore {
       return
     }
 
-    // The dedup marker is durable; remove the now-redundant native entry so it doesn't
-    // re-trigger recovery on the next launch. Best-effort: a failure means the entry
-    // stays on disk but the dedup marker short-circuits recovery, so the next launch
-    // just calls removeNativeEntry again.
-    await this.fatalJournalHooksForRecovery?.removeNativeEntry?.(parsed.id)
-  }
-
-  // Hooks shared between capture and recovery paths.
-  private get fatalJournalHooksForRecovery():
-    | { removeNativeEntry?: (id: string) => Promise<void> }
-    | undefined {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this._errorTracking as any)?.fatalJournalHooks
+    // Best-effort native cleanup. A failure means the entry stays on disk but the
+    // dedup marker is durable, so the next launch short-circuits via the
+    // FatalJournalIngested check above and removes the native file without
+    // re-capturing.
+    await this._removeJournalEntry(id)
   }
 
   private async _removeJournalEntry(id: string): Promise<void> {
@@ -3231,27 +3230,13 @@ export class PostHog extends PostHogCore {
     if (processed && this._fatalJournalOverride) {
       const override = this._fatalJournalOverride
       this._fatalJournalOverride = undefined
+      // Re-apply crash-time attribution AFTER super.processBeforeEnqueue (where
+      // before_send runs). Only SDK / device / session identifiers are reapplied —
+      // user properties are not in the override, so before_send's scrubbing of
+      // those is the final word on them.
       const newProps = { ...(processed.properties || {}) }
-      // Re-apply crash-time commonProperties AFTER enrichProperties (which would have
-      // overwritten them with the next launch's runtime state). Without this, a fix
-      // shipped in app version N shows up as a fresh crash on a relaunch into N+1.
-      if (override.commonProperties) {
-        for (const key in override.commonProperties) {
-          newProps[key] = override.commonProperties[key]
-        }
-      }
-      // Same idea for exception-only capturedProperties ($app_state, $expo_*): the next
-      // launch's AppState / expo context would otherwise overwrite them.
-      if (override.capturedProperties) {
-        for (const key in override.capturedProperties) {
-          newProps[key] = override.capturedProperties[key]
-        }
-      }
-      if (override.$session_id !== undefined) {
-        newProps.$session_id = override.$session_id
-      }
-      if (override.$device_id !== undefined) {
-        newProps.$device_id = override.$device_id
+      for (const key in override) {
+        newProps[key] = override[key]
       }
       processed.properties = newProps
     }

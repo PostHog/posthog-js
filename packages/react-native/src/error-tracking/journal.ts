@@ -1,5 +1,42 @@
 import { isObject, JsonType, PostHogEventProperties } from '@posthog/core'
 
+// Attribution fields the journal carries across launches. All of these are SDK / device /
+// session identifiers — none are user-supplied properties — so reapplying them on recovery
+// is safe even when before_send has scrubbed user properties off the recovered event.
+// Anything outside this allowlist is reconstructed by the next launch's runtime state
+// (or by before_send), which is the right behavior: it lets the customer's hook stay
+// the final authority.
+export const FATAL_JOURNAL_ATTRIBUTION_KEYS = [
+  '$session_id',
+  '$device_id',
+  // SDK metadata — fixed per release, so a fix shipped in app version N still attributes
+  // to N (and not to the relaunch's N+1) when recovered.
+  '$app_version',
+  '$app_build',
+  '$app_namespace',
+  '$app_name',
+  '$os_name',
+  '$os_version',
+  '$device_type',
+  '$device_manufacturer',
+  '$device_name',
+  '$is_emulator',
+  '$locale',
+  '$timezone',
+  '$lib',
+  '$lib_version',
+  '$screen_height',
+  '$screen_width',
+  // Crash-time exception-only context that the next launch's runtime would otherwise
+  // overwrite with its own state.
+  '$app_state',
+  '$expo_update_id',
+  '$expo_runtime_version',
+  '$expo_channel',
+  '$expo_is_embedded_launch',
+  '$exception_steps',
+] as const
+
 export interface FatalJournalEntry {
   id: string
   eventUuid: string
@@ -7,18 +44,10 @@ export interface FatalJournalEntry {
   sessionId: string
   distinctId: string
   deviceId: string
-  // Crash-time snapshot of getCommonEventProperties(), so a fix shipped in app version N doesn't
-  // look like a regression on a relaunch into N+1 (which would otherwise re-derive $app_version,
-  // $os_version, $lib_version from the new launch's state). Includes $app_version, $app_build,
-  // $os_name, $os_version, $lib, $lib_version, $screen_*, plus any $active_feature_flags that
-  // were active at crash time.
-  commonProperties: { [key: string]: JsonType }
-  // Crash-time final additionalProperties (getExceptionContext() merged with caller-supplied
-  // properties and exception steps). Captures exception-only fields that aren't part of
-  // commonProperties: $app_state, $expo_update_id, $expo_runtime_version, $expo_channel,
-  // $expo_is_embedded_launch, $exception_steps. The next launch's AppState/expo context would
-  // otherwise overwrite these.
-  capturedProperties: { [key: string]: JsonType }
+  // Crash-time snapshot of attribution fields (SDK metadata + exception-only context).
+  // Only the keys in FATAL_JOURNAL_ATTRIBUTION_KEYS are carried across launches;
+  // everything else is reconstructed by the next launch or scrubbed by before_send.
+  attribution: { [key: string]: JsonType }
   exceptionList: Array<{ [key: string]: JsonType }>
   exceptionLevel: string
   exceptionSteps?: Array<{ [key: string]: JsonType }>
@@ -26,7 +55,8 @@ export interface FatalJournalEntry {
   // regardless of whether the user has since opted back in — privacy carry-over.
   optedOut: boolean
   // SHA-256 hash of the API key that produced this entry, so multi-client apps ingest only
-  // their own entries on recovery. Other clients' entries are removed on sight.
+  // their own entries on recovery. Other clients' entries are left in place so they can
+  // still recover them on their own launch.
   apiKeyHash: string
 }
 
@@ -64,13 +94,22 @@ export interface BuildFatalJournalEntryInput {
   sessionId: string
   distinctId: string
   deviceId: string
-  commonProperties: PostHogEventProperties
-  capturedProperties: PostHogEventProperties
+  attribution: PostHogEventProperties
   exceptionList: PostHogEventProperties['$exception_list']
   exceptionLevel: string
   exceptionSteps?: PostHogEventProperties['$exception_steps']
   optedOut: boolean
   apiKeyHash: string
+}
+
+const pickAttribution = (properties: PostHogEventProperties): { [key: string]: JsonType } => {
+  const out: { [key: string]: JsonType } = {}
+  for (const key of FATAL_JOURNAL_ATTRIBUTION_KEYS) {
+    if (properties[key] !== undefined) {
+      out[key] = properties[key] as JsonType
+    }
+  }
+  return out
 }
 
 export const buildFatalJournalEntry = (input: BuildFatalJournalEntryInput): FatalJournalEntry => {
@@ -93,8 +132,7 @@ export const buildFatalJournalEntry = (input: BuildFatalJournalEntryInput): Fata
     sessionId: input.sessionId || '',
     distinctId: input.distinctId || '',
     deviceId: input.deviceId || '',
-    commonProperties: { ...input.commonProperties },
-    capturedProperties: { ...input.capturedProperties },
+    attribution: pickAttribution(input.attribution),
     exceptionList: input.exceptionList.map((e) => ({ ...(e as { [key: string]: JsonType }) })),
     exceptionLevel: input.exceptionLevel || 'fatal',
     exceptionSteps: steps,
@@ -133,8 +171,7 @@ export const parseFatalJournalEntry = (raw: string): FatalJournalEntry | null =>
     typeof candidate.exceptionLevel !== 'string' ||
     typeof candidate.optedOut !== 'boolean' ||
     typeof candidate.apiKeyHash !== 'string' ||
-    !isObject(candidate.commonProperties) ||
-    !isObject(candidate.capturedProperties) ||
+    !isObject(candidate.attribution) ||
     !Array.isArray(candidate.exceptionList) ||
     candidate.exceptionList.length === 0
   ) {
@@ -163,8 +200,7 @@ export const parseFatalJournalEntry = (raw: string): FatalJournalEntry | null =>
     distinctId: candidate.distinctId,
     deviceId: candidate.deviceId,
     exceptionLevel: candidate.exceptionLevel,
-    commonProperties: { ...(candidate.commonProperties as { [key: string]: JsonType }) },
-    capturedProperties: { ...(candidate.capturedProperties as { [key: string]: JsonType }) },
+    attribution: { ...(candidate.attribution as { [key: string]: JsonType }) },
     exceptionList: (candidate.exceptionList as Array<{ [key: string]: JsonType }>).map((e) => ({
       ...e,
     })),
@@ -197,9 +233,12 @@ export const hasFatalJournalIngested = (existing: string[] | undefined, id: stri
 }
 
 // Reconstitutes the $exception event using the captured crash-time snapshot. The exception
-// list and level carry straight through; commonProperties and capturedProperties are also
-// spread into the user-side properties, and `processBeforeEnqueue` re-applies them after
-// `enrichProperties` has overwritten them with the next launch's runtime state.
+// list and level carry straight through; the attribution snapshot is spread into user-side
+// properties and `processBeforeEnqueue` re-applies it after `enrichProperties` has
+// overwritten it with the next launch's runtime state. before_send then runs against the
+// final message — customer hooks stay the final authority over user properties; attribution
+// fields are reapplied AFTER before_send (since they're SDK / device / session identifiers,
+// not user data, reapplying them can't resurrect anything before_send stripped).
 export const entryToEventProperties = (
   entry: FatalJournalEntry
 ): {
@@ -208,8 +247,7 @@ export const entryToEventProperties = (
   timestamp: string
 } => {
   const properties: PostHogEventProperties = {
-    ...entry.capturedProperties,
-    ...entry.commonProperties,
+    ...entry.attribution,
     $exception_list: entry.exceptionList,
     $exception_level: entry.exceptionLevel,
   }
@@ -222,6 +260,12 @@ export const entryToEventProperties = (
     timestamp: entry.timestamp,
   }
 }
+
+// Returns the attribution keys that must survive before_send. Reapply ONLY these in
+// processBeforeEnqueue (after super.processBeforeEnqueue, which is where before_send
+// runs). User properties are not in this list — if a customer hook removes them, the
+// recovery respects that removal.
+export const FATAL_JOURNAL_ATTRIBUTION_OVERRIDE_KEYS = FATAL_JOURNAL_ATTRIBUTION_KEYS
 
 // SHA-256 hex digest of an API key. Used to scope journal entries to the producing client so
 // multi-client setups don't ingest each other's crashes.
