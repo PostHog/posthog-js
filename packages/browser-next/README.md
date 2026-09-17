@@ -56,6 +56,19 @@ subscription?.dispose()
 
 `FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `getExtension(FeatureFlagsExtension)` returns undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
+Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+
+```ts
+if (featureFlags) {
+    const outcome = await featureFlags.reloadFeatureFlags()
+    if (outcome.status === 'loaded') {
+        console.log(featureFlags.getFeatureFlag('new-onboarding'))
+    }
+}
+```
+
+The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled or unavailable), or `cancelled` (reset or disposal). It does not reject on request failures. Calls made before a request starts share that evaluation; calls during an active request wait for a follow-up evaluation. Cached values and `updateFlags()` do not complete a reload. `onFeatureFlags` remains a subscription to value changes, separate from reload completion.
+
 For static inclusion, import the factory explicitly and pass the same configuration:
 
 ```ts
