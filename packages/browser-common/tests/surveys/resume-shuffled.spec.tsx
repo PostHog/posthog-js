@@ -1,20 +1,25 @@
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
+import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen } from '@testing-library/preact'
-import { SurveyPopup } from '../../../extensions/surveys'
-import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
+import { SurveyPopup } from '../../src/surveys-renderer'
+import { SurveyQuestionType, SurveyType } from '../../src/survey-constants'
+import type { Survey } from '../../src/types/surveys'
 
-vi.mock('@posthog/browser-common/surveys/surveys-extension-utils', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@posthog/browser-common/surveys/surveys-extension-utils')>()),
+vi.mock('../../src/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/surveys/surveys-extension-utils')>()),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),
 }))
 
-const mockPosthog = {
+const host = createSurveysRuntimeHost({
     capture: vi.fn(),
-    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
-    is_capturing: vi.fn(() => true),
-    reloadFeatureFlags: vi.fn(),
-} as any
+    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
+    canCapture: true,
+    reloadFlags: vi.fn(),
+})
 
 const survey = {
     id: 'resume-shuffled',
@@ -45,7 +50,7 @@ const shuffleWith = (random: number) => vi.spyOn(Math, 'random').mockReturnValue
 
 const currentQuestion = () => document.querySelector('.survey-question')?.textContent
 
-const show = () => render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog} />)
+const show = () => render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={host} />)
 
 describe('Surveys: resuming a shuffled survey', () => {
     beforeEach(() => {
@@ -55,7 +60,9 @@ describe('Surveys: resuming a shuffled survey', () => {
         HTMLFormElement.prototype.submit = vi.fn()
     })
 
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     test('resumes on the question the respondent left off on', () => {
         shuffleWith(0)

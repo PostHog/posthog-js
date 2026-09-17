@@ -1,19 +1,21 @@
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
+import type { JSDOM } from 'jsdom'
+declare const jsdom: JSDOM
+import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+
 import '@testing-library/jest-dom'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
-import { FeedbackWidget } from '../../../extensions/surveys'
-import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
-import { createMockPostHog } from '../../helpers/posthog-instance'
-import { PostHogFeatureFlags } from '../../../posthog-featureflags'
+import { FeedbackWidget } from '../../src/surveys-renderer'
+import { SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../src/survey-constants'
+import type { Survey } from '../../src/types/surveys'
 
-// Mock PostHog instance
-const mockPosthog = createMockPostHog({
+// Mock survey runtime host
+const host = createSurveysRuntimeHost({
     capture: vi.fn(),
-    getActiveMatchingSurveys: vi.fn(),
-    featureFlags: {
-        isFeatureEnabled: vi.fn().mockReturnValue(true),
-    } as Partial<PostHogFeatureFlags> as unknown as PostHogFeatureFlags,
-    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
-    is_capturing: vi.fn(() => true),
+    isFlagEnabled: vi.fn().mockReturnValue(true),
+    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
+    canCapture: true,
 })
 
 // Base mock survey for widget type
@@ -58,6 +60,7 @@ const urlConditionWidgetSurvey: Survey = {
     ...baseWidgetSurvey,
     id: 'widget-survey-url',
     conditions: {
+        cancelEvents: null,
         url: 'http://test.com/specific-page',
         urlMatchType: 'exact',
         seenSurveyWaitPeriodInDays: null,
@@ -103,21 +106,18 @@ describe('FeedbackWidget', () => {
     })
 
     const expectSurveyShowEvent = (surveyId: string) => {
-        expect(mockPosthog.capture).toHaveBeenCalledWith(
-            'survey shown',
-            expect.objectContaining({ $survey_id: surveyId })
-        )
+        expect(host.capture).toHaveBeenCalledWith('survey shown', expect.objectContaining({ $survey_id: surveyId }))
     }
 
     const expectSurveySentEvent = (surveyId: string, response: Record<string, string>) => {
-        expect(mockPosthog.capture).toHaveBeenLastCalledWith(
+        expect(host.capture).toHaveBeenLastCalledWith(
             'survey sent',
             expect.objectContaining({ $survey_id: surveyId, ...response })
         )
     }
 
     test('renders feedback tab and opens survey on click', () => {
-        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={host} />)
 
         // Check if the tab is visible
         const tab = screen.getByText('Feedback')
@@ -135,7 +135,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('submits survey response and shows thank you message', async () => {
-        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={host} />)
 
         // Open the survey
         const tab = screen.getByText('Feedback')
@@ -176,21 +176,15 @@ describe('FeedbackWidget', () => {
 
     test('hides/shows feedback tab based on URL condition', async () => {
         // --- Start with a MATCHING URL ---
-        Object.defineProperty(window, 'location', {
-            value: { href: 'http://test.com/specific-page', pathname: '/specific-page', hash: '' },
-            writable: true,
-        })
+        jsdom.reconfigure({ url: 'http://test.com/specific-page' })
 
-        render(<FeedbackWidget survey={urlConditionWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={urlConditionWidgetSurvey} posthog={host} />)
 
         // Initially, the tab should be visible because the URL matches
         expect(screen.getByText('Feedback')).toBeVisible()
 
         // --- Navigate to a NON-MATCHING URL ---
-        Object.defineProperty(window, 'location', {
-            value: { href: 'http://test.com/wrong-page', pathname: '/wrong-page', hash: '' },
-            writable: true,
-        })
+        jsdom.reconfigure({ url: 'http://test.com/wrong-page' })
         // Simulate the event that triggers the checkUrlMatch in the hook
         await act(async () => {
             fireEvent(window, new PopStateEvent('popstate'))
@@ -202,10 +196,7 @@ describe('FeedbackWidget', () => {
         })
 
         // --- Navigate back to the MATCHING URL ---
-        Object.defineProperty(window, 'location', {
-            value: { href: 'http://test.com/specific-page', pathname: '/specific-page', hash: '' },
-            writable: true,
-        })
+        jsdom.reconfigure({ url: 'http://test.com/specific-page' })
         // Simulate the event again
         await act(async () => {
             fireEvent(window, new PopStateEvent('popstate'))
@@ -218,10 +209,7 @@ describe('FeedbackWidget', () => {
         })
 
         // --- Navigate Away Again ---
-        Object.defineProperty(window, 'location', {
-            value: { href: 'http://test.com/another-wrong-page', pathname: '/another-wrong-page', hash: '' },
-            writable: true,
-        })
+        jsdom.reconfigure({ url: 'http://test.com/another-wrong-page' })
         await act(async () => {
             fireEvent(window, new PopStateEvent('popstate'))
         })
@@ -231,7 +219,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('does not render tab for selector widget type initially', () => {
-        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={host} />)
 
         // Selector type should not render the tab or the form initially
         expect(screen.queryByText('Feedback')).not.toBeInTheDocument()
@@ -240,7 +228,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('shows survey popup for selector widget when event is dispatched', async () => {
-        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={host} />)
 
         // Initially, no survey form
         expect(screen.queryByRole('form')).not.toBeInTheDocument()
@@ -275,7 +263,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('closes survey popup when cancel button is clicked', async () => {
-        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={host} />)
 
         // Open the survey
         fireEvent.click(screen.getByText('Feedback'))
@@ -290,7 +278,7 @@ describe('FeedbackWidget', () => {
             expect(screen.queryByRole('form')).not.toBeInTheDocument()
         })
 
-        expect(mockPosthog.capture).toHaveBeenCalledWith(
+        expect(host.capture).toHaveBeenCalledWith(
             'survey dismissed',
             expect.objectContaining({
                 $survey_id: baseWidgetSurvey.id,
