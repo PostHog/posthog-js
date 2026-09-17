@@ -43,6 +43,6 @@ export class BrowserSurveys extends PostHogSurveys {
     declare _surveyEventReceiver: SurveyEventReceiver | null
 
     constructor(instance: PostHog) {
-        super(new BrowserSurveysConfigSource(instance), () => instance._getBrowserClientAdapter())
+        super(new BrowserSurveysConfigSource(instance))
     }
 }

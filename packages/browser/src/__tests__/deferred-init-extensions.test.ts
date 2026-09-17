@@ -139,7 +139,7 @@ describe('deferred extension initialization', () => {
             loader.mockRestore()
         })
 
-        it('uses the same client for survey fetching before and after deferred setup', async () => {
+        it('reports surveys unavailable until deferred setup completes', async () => {
             vi.useFakeTimers()
             const previousExtensions = assignableWindow.__PosthogExtensions__
             const generateSurveys = vi.fn()
@@ -157,6 +157,16 @@ describe('deferred extension initialization', () => {
                 posthog.register({ [SURVEYS]: cached, [SURVEYS_LOADED_AT]: Date.now() })
                 const callback = vi.fn()
                 expect(client.getExtension('surveys')).toBeUndefined()
+                posthog.getSurveys(callback)
+                expect(callback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'SDK is not enabled or survey functionality is not yet loaded',
+                })
+                expect(generateSurveys).not.toHaveBeenCalled()
+
+                await vi.advanceTimersByTimeAsync(200)
+                expect(client.getExtension('surveys')).toBe(posthog.surveys)
+                callback.mockClear()
                 posthog.getSurveys(callback)
                 expect(callback).toHaveBeenCalledWith(cached, { isLoaded: true })
 
@@ -176,13 +186,9 @@ describe('deferred extension initialization', () => {
                 expect(posthog.get_property(SURVEYS)).toEqual(fetched)
                 expect(generateSurveys).not.toHaveBeenCalled()
 
-                await vi.advanceTimersByTimeAsync(200)
-                expect(client.getExtension('surveys')).toBe(posthog.surveys)
                 callback.mockClear()
                 posthog.getSurveys(callback)
                 expect(callback).toHaveBeenCalledWith(fetched, { isLoaded: true })
-                await new Promise<void>((resolve) => posthog.getSurveys(() => resolve(), true))
-                expect(request).toHaveBeenCalledTimes(2)
             } finally {
                 await posthog.shutdown()
                 assignableWindow.__PosthogExtensions__ = previousExtensions
