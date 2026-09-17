@@ -341,9 +341,11 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // repeat-click controls are never rage, so the default content filter applies to rageclick: true too.
-        // text-selection filtering stays off here, it is gated on the 2026-05-30 config defaults
-        contentIgnorelist = _config ? true : undefined
+        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true.
+        // That is the value every project below the 2025-11-30 defaults resolves to, so turning the
+        // filter on here would change which events those projects capture. Opt in with
+        // { content_ignorelist: true } or a newer `defaults` date
+        contentIgnorelist = undefined
         ignoreTextSelection = false
     } else {
         selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST

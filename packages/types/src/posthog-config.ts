@@ -1348,8 +1348,9 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
-     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent,
-     * and on repeat-click controls such as carousel arrows and pagers (see `content_ignorelist`).
+     * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
+     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`, which also ignores repeat-click
+     * controls such as carousel arrows and pagers (see `content_ignorelist`).
      * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
      *
      * @default true

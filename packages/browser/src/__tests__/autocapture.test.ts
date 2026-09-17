@@ -841,7 +841,10 @@ describe('Autocapture system', () => {
                 )
             })
 
-            describe.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
+            describe.each([
+                { content_ignorelist: true },
+                { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS },
+            ] as PostHogConfig['rageclick'][])(
                 'carousel and scroller controls with rageclick config %s',
                 (rageclickConfig) => {
                     beforeEach(() => {
@@ -930,6 +933,14 @@ describe('Autocapture system', () => {
                     })
                 }
             )
+
+            it('the legacy boolean rageclick: true keeps capturing carousel controls', () => {
+                posthog.config.rageclick = true
+                const el = document.createElement('button')
+                el.textContent = 'Scroll left'
+
+                expect(rageClickThreeTimes(el)).toContain('$rageclick')
+            })
 
             describe('when content_ignorelist is a custom array', () => {
                 beforeEach(() => {
