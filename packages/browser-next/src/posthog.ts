@@ -146,6 +146,7 @@ class PostHogBrowserClient implements PostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     private _immediateAuthority = {}
+    private readonly _logsRequests = new Set<() => void>()
     private _closing = false
     private _disposed = false
     private _shutdownPromise: Promise<void> | undefined
@@ -624,6 +625,45 @@ class PostHogBrowserClient implements PostHog {
         )
     }
 
+    /** Logs already admitted before closing may finish in the bounded shutdown window. */
+    private _sendLogsRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
+        return new Promise((resolve) => {
+            let settled = false
+            let timer: ReturnType<typeof setTimeout> | undefined
+            let controller: AbortController | undefined
+            const finish = (response: ApiResponse) => {
+                if (settled) return
+                settled = true
+                if (timer !== undefined) clearTimeout(timer)
+                this._logsRequests.delete(cancel)
+                resolve(response)
+            }
+            const cancel = () => {
+                try {
+                    controller?.abort()
+                } catch {
+                    // Cancellation still settles when the browser cannot abort.
+                }
+                finish({ statusCode: 0, error: new Error('Logs request cancelled') })
+            }
+            try {
+                if (!this._canDeliver()) {
+                    finish({ statusCode: 0, error: new Error('Logs delivery disabled') })
+                    return
+                }
+                controller = typeof AbortController === 'function' ? new AbortController() : undefined
+                this._logsRequests.add(cancel)
+                timer = setTimeout(cancel, init?.timeoutMs ?? 60_000)
+                void sendRequest(this._requestRuntime, path, init, () => this._canDeliver(), controller?.signal).then(
+                    finish,
+                    (error) => finish({ statusCode: 0, error })
+                )
+            } catch (error) {
+                finish({ statusCode: 0, error })
+            }
+        })
+    }
+
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
         if (this._closing || this._disposed) {
             return undefined
@@ -772,6 +812,7 @@ class PostHogBrowserClient implements PostHog {
             await Promise.race([captureFlush.catch((error) => this.logger.error('Event flush failed', error)), timeout])
 
             this._disposed = true
+            for (const cancel of this._logsRequests) cancel()
             try {
                 this._state.dispose()
             } catch (error) {
@@ -995,7 +1036,10 @@ class PostHogBrowserClient implements PostHog {
             get projectToken() {
                 return host.projectToken
             },
-            sendRequest: (path, init) => host.sendRequest(path, init),
+            sendRequest: (path, init) =>
+                extensionName === 'logs' && path === '/i/v1/logs' && (!init?.target || init.target === 'api')
+                    ? host._sendLogsRequest(path, init)
+                    : host.sendRequest(path, init),
             onRemoteConfig: host.onRemoteConfig,
             onEvent: host.onEvent,
             onIdentify: host.onIdentify,
@@ -1046,11 +1090,7 @@ export const createPostHogCore = async (
     for (const extension of extensions) {
         try {
             if (extension.name === 'logs') {
-                ;(extension as LogsExtension).initialize?.({
-                    runtime: client._requestRuntime,
-                    canSend: () => client._canDeliver(),
-                    lastActivityTimestamp: () => client._logsLastActivity(),
-                })
+                ;(extension as LogsExtension).initialize?.(() => client._logsLastActivity())
             }
             await client._registry.install(extension)
         } catch (error) {

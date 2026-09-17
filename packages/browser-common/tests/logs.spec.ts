@@ -36,11 +36,13 @@ afterEach(() => {
 describe('shared logs', () => {
     it('awaits both programmatic and console delivery in flush', async () => {
         const callbacks: Array<(response: { statusCode: number }) => void> = []
-        const { logs } = create({
-            sendRequest: (_payload, _transport, callback) => {
-                if (callback) callbacks.push(callback)
-            },
-        })
+        const { logs, send } = create()
+        send.mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    callbacks.push(resolve)
+                })
+        )
         logs.captureLog({ body: 'programmatic' })
         logs.captureConsoleLog({ body: 'console' })
         const finished = vi.fn()
