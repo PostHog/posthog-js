@@ -202,9 +202,26 @@ interface ElementWithText {
     ariaLabel: string
 }
 
+const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
+
+// our own word keywords match whole words, so "arrow" doesn't suppress "narrow results",
+// "slide" doesn't suppress "open slideshow" and "prev" doesn't suppress "preview"
+const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = {}
+each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
+    if (isWordKeyword(keyword)) {
+        DEFAULT_WORD_KEYWORD_REGEXES[keyword] = new RegExp(`\\b${keyword}\\b`)
+    }
+})
+
 // symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
-const matchesContentKeyword = (text: string, keyword: string): boolean =>
-    /[a-z0-9]/i.test(keyword) ? text.includes(keyword) : text === keyword
+// a user-supplied array keeps matching word keywords as substrings, as it always has
+const matchesContentKeyword = (text: string, keyword: string, wholeWord: boolean): boolean => {
+    if (!isWordKeyword(keyword)) {
+        return text === keyword
+    }
+    const wholeWordRegex = wholeWord ? DEFAULT_WORD_KEYWORD_REGEXES[keyword] : undefined
+    return wholeWordRegex ? wholeWordRegex.test(text) : text.includes(keyword)
+}
 
 function shouldIgnoreByContent(
     contentIgnorelist: boolean | string[] | undefined,
@@ -215,8 +232,10 @@ function shouldIgnoreByContent(
     }
 
     let keywords: string[]
+    let wholeWord: boolean
     if (contentIgnorelist === true) {
         keywords = DEFAULT_CONTENT_IGNORELIST
+        wholeWord = true
     } else if (isArray(contentIgnorelist)) {
         // the cap protects against over-long user lists, so our own defaults are exempt from it
         const isDefaultList =
@@ -229,13 +248,16 @@ function shouldIgnoreByContent(
             return false
         }
         keywords = contentIgnorelist.map((k) => k.toLowerCase())
+        wholeWord = isDefaultList
     } else {
         return false
     }
 
     return elementsWithText.some(({ safeText, ariaLabel }) => {
         return keywords.some(
-            (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
+            (keyword) =>
+                matchesContentKeyword(safeText, keyword, wholeWord) ||
+                matchesContentKeyword(ariaLabel, keyword, wholeWord)
         )
     })
 }

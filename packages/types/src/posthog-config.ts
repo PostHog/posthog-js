@@ -124,8 +124,9 @@ export interface RageclickConfig {
      * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
      *
      * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
-     * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
-     * so they don't suppress text like "sign-up", "5 > 3", or "C++".
+     * The default word keywords match whole words, so 'arrow' doesn't suppress "Narrow results".
+     * Word keywords you supply yourself match as substrings. Symbol-only keywords (e.g. '+', '-', '>')
+     * always match exactly, so they don't suppress text like "sign-up", "5 > 3", or "C++".
      *
      * A `rageclick` object of your own replaces the date-gated default below the `'2025-11-30'`
      * defaults, and whenever you pass one to `set_config`. Set this property explicitly to keep

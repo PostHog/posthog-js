@@ -875,14 +875,33 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
                     })
 
-                    it.each(['Add to cart', 'Submit', 'a → b'])(
-                        'rapid clicks on a "%s" button still capture $rageclick',
-                        (text) => {
-                            expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
-                        }
-                    )
+                    it.each([
+                        'Add to cart',
+                        'Submit',
+                        'a → b',
+                        'Narrow results',
+                        'Open slideshow',
+                        'Download slides',
+                        'Price slider',
+                        'Preview',
+                    ])('rapid clicks on a "%s" button still capture $rageclick', (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
+                    })
                 }
             )
+
+            describe('when content_ignorelist is a custom array', () => {
+                beforeEach(() => {
+                    posthog.config.rageclick = { content_ignorelist: ['arrow'] }
+                })
+
+                it('a custom keyword still matches as a substring', () => {
+                    const el = document.createElement('button')
+                    el.textContent = 'Narrow results'
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+            })
 
             it.each([true, { content_ignorelist: true }] as PostHogConfig['rageclick'][])(
                 'does not suppress text-entry or stepper rageclicks when rageclick config is %s',
