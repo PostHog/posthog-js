@@ -66,7 +66,7 @@ const posthog = await createPostHog({
 
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
-Flags uses the selected storage in a separate `<effective core persistence key>_flags` record, isolated from unrelated core saves. Matching identities synchronize across tabs; explicit reset clears local flags for the new identity. Storage failures fall back to memory. This layout does not migrate legacy `posthog-js` flags. Concurrent simultaneous writes are not atomic.
+Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
 
 ## Capture and delivery
 
