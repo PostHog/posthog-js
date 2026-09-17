@@ -195,10 +195,9 @@ function resolveToolConversation(
   const conversation = resolveConversationId(enabled, args)
   // Echoed handles span reconnects; a new handle must not replace a session
   // already carried by this request or add a needless prompt-back to its result.
-  if (conversation.minted && (extra?.sessionId || decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra))))) {
-    return { minted: false, conversationId: undefined }
-  }
-  return conversation
+  if (!conversation.minted) return conversation
+  const carriedSession = extra?.sessionId || decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  return carriedSession ? { minted: false, conversationId: undefined } : conversation
 }
 
 interface PreparedToolEvent {
@@ -228,20 +227,14 @@ function getActiveAnalyticsParameterOwnership(
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
-  const contextEnabled = !isVirtualAnalyticsTool && isContextEnabled(data.options.context)
-  const conversationEnabled = data.options.enableConversationId === true
-  const modelEnabled = isCaptureModelEnabled(data.options.captureModel)
+  const enabled = {
+    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context),
+    conversationId: data.options.enableConversationId === true,
+    llmModel: isCaptureModelEnabled(data.options.captureModel),
+  }
   return {
-    strip: {
-      context: contextEnabled && ownership?.context === true,
-      conversationId: conversationEnabled && ownership?.conversationId === true,
-      llmModel: modelEnabled && ownership?.llmModel === true,
-    },
-    read: {
-      context: contextEnabled && ownership?.context !== false,
-      conversationId: conversationEnabled && ownership?.conversationId !== false,
-      llmModel: modelEnabled && ownership?.llmModel !== false,
-    },
+    strip: enabledArgumentOwnership(enabled, ownership, false),
+    read: enabledArgumentOwnership(enabled, ownership, true),
     // Deliberately read off `listed`, never the override: only the advertised
     // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
     // override is built from the live registry, which holds Zod on the
@@ -249,7 +242,20 @@ function getActiveAnalyticsParameterOwnership(
     // and fails closed — writing an undeclared key fails the customer's entire
     // tool result under `additionalProperties: false`. See ADR-0004 for the
     // per-request-instance gap this leaves and the planned fix.
-    outputInstructions: conversationEnabled && listed?.outputInstructions === true,
+    outputInstructions: enabled.conversationId && listed?.outputInstructions === true,
+  }
+}
+
+function enabledArgumentOwnership(
+  enabled: ArgumentOwnership,
+  ownership: ArgumentOwnership | undefined,
+  whenUnknown: boolean
+): ArgumentOwnership {
+  const resolved = ownership ?? { context: whenUnknown, conversationId: whenUnknown, llmModel: whenUnknown }
+  return {
+    context: enabled.context && resolved.context,
+    conversationId: enabled.conversationId && resolved.conversationId,
+    llmModel: enabled.llmModel && resolved.llmModel,
   }
 }
 
