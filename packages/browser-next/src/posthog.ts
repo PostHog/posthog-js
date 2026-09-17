@@ -1,5 +1,5 @@
 import { loadRemoteConfig } from './remote-config'
-import type { FlagsExtension, FlagsHost } from './flags-internal'
+import type { FlagsExtension } from './flags-internal'
 import type { FeatureFlagResult, FlagsCallback, JsonType } from './flags-options'
 import {
     type ApiResponse,
@@ -138,7 +138,6 @@ class PostHogBrowserClient implements PostHog {
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
-    readonly _flagsHost: FlagsHost
     readonly _registry: ExtensionRegistry
     readonly _requestRuntime: RequestRuntime
     _captureSink: CaptureSink | undefined
@@ -202,11 +201,6 @@ class PostHogBrowserClient implements PostHog {
         const requestedStorage: StorageLike | undefined =
             options.storage === false ? undefined : (options.storage ?? getDefaultStorage())
         const storage = this._blocked ? undefined : requestedStorage
-        this._flagsHost = {
-            storage,
-            key: `${options.persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`}_flags`,
-            observeNativeStorage: !this._blocked && options.storage === undefined && storage !== undefined,
-        }
         this._state = new BrowserState(
             projectToken,
             storage,
@@ -507,17 +501,17 @@ class PostHogBrowserClient implements PostHog {
         if (distinctId === previousDistinctId) {
             if (!wasIdentified) {
                 this._state.identify(distinctId)
-                this._withFlags((flags) => flags.identify(previousDistinctId, wasIdentified, set, setOnce))
+                this._withFlags((flags) => flags.onIdentify(previousDistinctId, wasIdentified, set, setOnce))
                 this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
             } else if (hasPersonProperties) {
-                this._withFlags((flags) => flags.identify(previousDistinctId, wasIdentified, set, setOnce))
+                this._withFlags((flags) => flags.onIdentify(previousDistinctId, wasIdentified, set, setOnce))
                 this.capture('$set', null, captureOptions)
             }
             return
         }
 
         this._state.identify(distinctId)
-        this._withFlags((flags) => flags.identify(previousDistinctId, wasIdentified, set, setOnce))
+        this._withFlags((flags) => flags.onIdentify(previousDistinctId, wasIdentified, set, setOnce))
         if (!wasIdentified) {
             this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
         } else if (hasPersonProperties) {
@@ -535,7 +529,7 @@ class PostHogBrowserClient implements PostHog {
         if (!changed && !properties) {
             return
         }
-        this._withFlags((flags) => flags.group(type, changed, properties))
+        this._withFlags((flags) => flags.onGroup(type, changed, properties))
         this.capture('$groupidentify', {
             $group_type: type,
             $group_key: key,
@@ -1045,9 +1039,6 @@ export const createPostHogCore = async (
     }
     for (const extension of extensions) {
         try {
-            if (extension.name === 'featureFlags') {
-                ;(extension as FlagsExtension).initialize?.(client._flagsHost)
-            }
             await client._registry.install(extension)
         } catch (error) {
             client.logger.error(`Failed to install configured extension "${extension.name}"`, error)

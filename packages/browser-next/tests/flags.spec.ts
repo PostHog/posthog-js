@@ -205,7 +205,7 @@ describe('flags', () => {
         expect(JSON.parse(String(last?.body)).$anon_distinct_id).not.toBe('A')
     })
 
-    it('retains bootstrap when a sibling only records an exposure', async () => {
+    it('uses bootstrap ahead of previously persisted evaluations', async () => {
         const storage = new MemoryStorage()
         const sibling = await create({ storage, flags: { featureFlagEvaluation: false } })
         sibling.updateFlags({ test: 'old' })
@@ -213,8 +213,6 @@ describe('flags', () => {
             storage,
             flags: { featureFlagEvaluation: false, bootstrap: { featureFlags: { test: 'new' } } },
         })
-        sibling.getFeatureFlag('test')
-        bootstrapped.getFeatureFlag('test')
         expect(bootstrapped.getFeatureFlag('test')?.variant).toBe('new')
     })
 
@@ -248,31 +246,33 @@ describe('flags', () => {
         expect(client.getFeatureFlag('late')).toBeUndefined()
     })
 
-    it('persists flags separately from core writes and rejects foreign identities', async () => {
+    it('retains flags across core writes and reloads through client persistence', async () => {
         const storage = new MemoryStorage()
         const first = await create({ storage, flags: { featureFlagEvaluation: false } })
-        const second = await create({ storage, flags: { featureFlagEvaluation: false } })
-        first.updateFlags({ shared: true })
-        second.kv.set('unrelated', 1)
-        expect(second.getFeatureFlag('shared')?.enabled).toBe(true)
-        await first.identify('different')
-        first.updateFlags({ foreign: true })
-        expect(second.getFeatureFlag('foreign')).toBeUndefined()
-        second.updateFlags({ stale: true })
-        expect(first.getFeatureFlag('foreign')?.enabled).toBe(true)
-        expect(first.getFeatureFlag('stale')).toBeUndefined()
-        first.reset()
-        expect(first.getFeatureFlag('foreign')).toBeUndefined()
+        first.updateFlags({ saved: 'blue' }, { saved: { enabled: true } })
+        first.kv.set('unrelated', 1)
+        await first.group('organization', 'team')
+        await first.dispose()
+
+        const reloaded = await create({ storage, flags: { featureFlagEvaluation: false } })
+        expect(reloaded.getFeatureFlag('saved')).toMatchObject({ variant: 'blue', payload: { enabled: true } })
+        expect(reloaded.kv.get('unrelated')).toBe(1)
+        reloaded.reset()
+        expect(reloaded.getFeatureFlag('saved')).toBeUndefined()
+        await reloaded.dispose()
+
+        const reset = await create({ storage, flags: { featureFlagEvaluation: false } })
+        expect(reset.getFeatureFlag('saved')).toBeUndefined()
     })
 
     it('honors custom persistence keys and storage:false', async () => {
         const storage = new MemoryStorage()
         const client = await create({ storage, persistenceKey: 'custom', flags: { featureFlagEvaluation: false } })
         client.updateFlags({ durable: true })
-        expect(storage.getItem('custom_flags')).toContain('durable')
+        expect(storage.getItem('custom')).toContain('durable')
         const memory = await create({ flags: { featureFlagEvaluation: false } })
         memory.updateFlags({ local: true })
         expect(memory.getFeatureFlag('local')?.enabled).toBe(true)
-        expect(storage.getItem('custom_flags')).not.toContain('local')
+        expect(storage.getItem('custom')).not.toContain('local')
     })
 })
