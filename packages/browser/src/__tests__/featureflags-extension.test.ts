@@ -13,6 +13,7 @@ import {
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
 import { FeatureFlagError, PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogFeatureFlags as SharedFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -33,7 +34,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const removeWindowListener = vi.spyOn(window, 'removeEventListener')
         const addDocumentListener = vi.spyOn(document, 'addEventListener')
         const removeDocumentListener = vi.spyOn(document, 'removeEventListener')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         expect(addWindowListener).not.toHaveBeenCalled()
         expect(addDocumentListener).not.toHaveBeenCalled()
@@ -325,6 +326,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const defaultRefreshIntervalMs = 5 * 60_000
         const maxIdleRefreshIntervalMs = 60 * 60_000
         let featureFlags: PostHogFeatureFlags | undefined
+        let sharedFeatureFlags: SharedFeatureFlags | undefined
 
         const setVisibilityState = (state: DocumentVisibilityState): void => {
             Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
@@ -342,14 +344,14 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         const setupFeatureFlagsWithInternalInterval = async (
             refreshIntervalMs?: number
-        ): Promise<PostHogFeatureFlags> => {
+        ): Promise<SharedFeatureFlags> => {
             const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
             const config = new MutableFeatureFlagsConfigSource(defaultConfig()).get()
-            featureFlags = new PostHogFeatureFlags({
+            sharedFeatureFlags = new SharedFeatureFlags({
                 get: () => ({ ...config, refreshIntervalMs }),
             })
-            await featureFlags.setup(posthog._getBrowserClientAdapter())
-            return featureFlags
+            await sharedFeatureFlags.setup(posthog._getBrowserClientAdapter())
+            return sharedFeatureFlags
         }
 
         beforeEach(() => {
@@ -359,6 +361,8 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         afterEach(() => {
             featureFlags?.dispose()
             featureFlags = undefined
+            sharedFeatureFlags?.dispose()
+            sharedFeatureFlags = undefined
             setVisibilityState('visible')
         })
 
@@ -745,7 +749,8 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
             try {
                 vi.resetModules()
-                const { PostHogFeatureFlags: NoDocumentFeatureFlags } = await import('../posthog-featureflags')
+                const { PostHogFeatureFlags: NoDocumentFeatureFlags } =
+                    await import('@posthog/browser-common/feature-flags')
                 const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
                     get: () => ({ ...config, refreshIntervalMs }),
                 })
@@ -788,7 +793,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('preserves the legacy initialize and destroy methods', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const removeListener = vi.spyOn(window, 'removeEventListener')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
 
         expect(() => featureFlags.initialize()).not.toThrow()
@@ -802,7 +807,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         const sendRequest = vi.spyOn(client, 'sendRequest')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
         featureFlags.reloadFeatureFlags()
@@ -819,7 +824,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
         vi.spyOn(client.logger, 'createLogger').mockReturnValue(client.logger)
         const error = vi.spyOn(client.logger, 'error').mockImplementation(() => {})
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const handlerError = new Error('handler failed')
         const laterHandler = vi.fn()
@@ -865,7 +870,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const scopedLogger = client.logger.createLogger('[FeatureFlags]')
         const scopedError = vi.spyOn(scopedLogger, 'error').mockImplementation(() => {})
         vi.spyOn(client.logger, 'createLogger').mockReturnValue(scopedLogger)
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const requestError = new Error('request failed')
         vi.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
@@ -893,7 +898,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         }
         const client = posthog._getBrowserClientAdapter()
         const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValueOnce({ statusCode: 0 })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
         expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBe(true)
@@ -932,7 +937,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         config.bootstrap = { featureFlags: { 'bootstrap-flag': true } }
         const client = posthog._getBrowserClientAdapter()
         vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 0 })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
         expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'bootstrap-flag': true })
@@ -950,7 +955,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('reuses cached dynamic event property snapshots until flag state changes', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const registerProperties = vi.spyOn(posthog, '_registerExtensionEventProperties')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
         const producer = registerProperties.mock.calls[0][0]
 
@@ -969,7 +974,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
     it('snapshots feature flag persistence after loading a v2 response', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
 
         featureFlags.receivedFeatureFlags({
@@ -1053,7 +1058,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const config = defaultConfig()
         config.advanced_disable_feature_flags = true
         config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(posthog._getBrowserClientAdapter())
 
         const properties = registerProperties.mock.calls[0][0]()
@@ -1076,7 +1081,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             request_batching: true,
             before_send: (event) => event,
         })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         await featureFlags.setup(posthog._getBrowserClientAdapter())
         posthog.persistence?.register({
             $feature_flag_request_id: 'request-id',
@@ -1152,7 +1157,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         config.evaluation_contexts = ['production']
         config.flag_keys = ['survey-flag']
         config.feature_flag_request_timeout_ms = 1234
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
         expect(featureFlags._callFlagsEndpoint()).toBeUndefined()
@@ -1186,7 +1191,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequests.push(resolve)
                 })
         )
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
         featureFlags._callFlagsEndpoint()
@@ -1225,7 +1230,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequests.push(resolve)
                 })
         )
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
         featureFlags._callFlagsEndpoint()
@@ -1267,7 +1272,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequests.push(resolve)
                 })
         )
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
@@ -1307,7 +1312,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequest = resolve
                 })
         )
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
@@ -1335,7 +1340,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequest = resolve
                 })
         )
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
@@ -1363,7 +1368,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['cached-flag'],
             [ENABLED_FEATURE_FLAGS]: { 'cached-flag': 'control' },
         })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         const setup = featureFlags.setup(posthog._getBrowserClientAdapter())
 
@@ -1374,7 +1379,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
     it('runs persistence continuations in the same tick for browser-v1', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
         const captureError = vi.spyOn(featureFlags['_logger'], 'error').mockImplementation(() => {})
         const callback = vi.fn()
@@ -1408,7 +1413,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('persists early access enrollment coherently before callbacks and capture', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
@@ -1440,7 +1445,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             })
         )
         const getPersistence = vi.spyOn(client.kv, 'get')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         const setup = featureFlags.setup(client)
 
@@ -1464,7 +1469,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             })
         )
         const registerProperties = vi.spyOn(posthog, '_registerExtensionEventProperties')
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        const featureFlags = new SharedFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         const setup = featureFlags.setup(client)
         featureFlags.dispose()
