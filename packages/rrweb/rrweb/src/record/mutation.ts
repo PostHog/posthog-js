@@ -267,6 +267,21 @@ export default class MutationBuffer {
     return false;
   }
 
+  // A node that slimDOM ignores holds IGNORED_NODE in the mirror, so it never
+  // reaches the replayer and can never carry an `add`'s nextId. The row walks
+  // in processBufferedMutations look straight through such a node, the same way
+  // the nextId resolution there does: the added siblings on either side of it
+  // belong to one row.
+  private skipIgnored(
+    node: Node | null,
+    step: (from: Node) => ChildNode | null,
+  ): Node | null {
+    while (node && this.mirror.getId(node) === IGNORED_NODE) {
+      node = step(node);
+    }
+    return node;
+  }
+
   private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
@@ -318,10 +333,14 @@ export default class MutationBuffer {
     const iter = this.addedSet.values();
     let curr = iter.next();
     while (this.addedSet.size) {
-      if (n !== null && this.addedSet.has(dom.previousSibling(n) as Node)) {
+      let previous: Node | null = n === null ? null : dom.previousSibling(n);
+      if (previous !== null && !this.addedSet.has(previous)) {
+        previous = this.skipIgnored(previous, dom.previousSibling);
+      }
+      if (previous !== null && this.addedSet.has(previous)) {
         // Still the same row, so parentNode, parentId and ancestorBad hold.
         nextSibling = n;
-        n = dom.previousSibling(n) as Node;
+        n = previous;
       } else {
         if (!this.addedSet.has(curr.value as Node)) {
           // Advance the iterator rather than reading the set again: a node the
@@ -377,7 +396,10 @@ export default class MutationBuffer {
           } else {
             for (;;) {
               nextSibling = dom.nextSibling(n);
-              if (!this.addedSet.has(nextSibling as Node)) break;
+              if (!this.addedSet.has(nextSibling as Node)) {
+                nextSibling = this.skipIgnored(nextSibling, dom.nextSibling);
+                if (!this.addedSet.has(nextSibling as Node)) break;
+              }
               // A node cannot be serialized before its next sibling has an id.
               n = nextSibling as Node;
             }

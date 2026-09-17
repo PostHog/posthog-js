@@ -236,6 +236,38 @@ describe('mutation add ordering', () => {
     );
   });
 
+  it('keeps every addition when existing ignored comments split the row', async () => {
+    const result = await run(
+      '<div id="split"><!--gap one--><!--gap two--><b id="tail"></b></div>',
+      `(() => {
+        const host = document.getElementById('split');
+        const gaps = Array.from(host.childNodes).filter(
+          (node) => node.nodeType === Node.COMMENT_NODE,
+        );
+        // Interleave the additions with the comments that are already there,
+        // and keep an existing element last so the row cannot be reached from
+        // the parent's last child.
+        ['first', 'second', 'third'].forEach((name, index) => {
+          const el = document.createElement('p');
+          el.id = 'split-' + name;
+          el.textContent = name;
+          host.insertBefore(el, gaps[index] || document.getElementById('tail'));
+        });
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // An ignored sibling carries no id of its own, so it must not end the row:
+    // the addition beyond it has to be serialized first.
+    expect(elementAdd(result, 'split-first').nextId).toBe(
+      elementAdd(result, 'split-second').node.id,
+    );
+    expect(elementAdd(result, 'split-second').nextId).toBe(
+      elementAdd(result, 'split-third').node.id,
+    );
+  });
+
   it('adds siblings next to blocked and ignored nodes that were already there', async () => {
     const result = await run(
       `<div id="with-blocked"><div class="rr-block"></div></div>
