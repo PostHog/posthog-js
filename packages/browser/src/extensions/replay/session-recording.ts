@@ -399,10 +399,13 @@ export class SessionRecording implements Extension {
                 new RemoteConfigLoader(this._instance).load()
                 return
             }
+            if (!this._lazyLoadedSessionRecording.allowStaleRemoteConfig) {
+                return
+            }
             // The refresh already failed. Recording under a stale config is a smaller loss than
             // recording nothing until the next page load, so start and flag the session.
             logger.warn('could not refresh remote config, starting under the stale persisted config')
-            this._lazyLoadedSessionRecording.allowStaleRemoteConfig?.()
+            this._lazyLoadedSessionRecording.allowStaleRemoteConfig()
             this._usingStaleRemoteConfig = true
             this._instance.register_for_session({
                 [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,

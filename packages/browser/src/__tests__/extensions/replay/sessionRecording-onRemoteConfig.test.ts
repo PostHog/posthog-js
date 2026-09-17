@@ -629,11 +629,37 @@ describe('SessionRecording', () => {
             // than leaving the page unable to record at all
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
             expect(sessionRecording.status).toBe('active')
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledOnce()
             expect(registerForSessionMock).toHaveBeenCalledWith({
                 [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
             })
             // the stale config must survive, otherwise nothing is left to record under
             expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeTruthy()
+        })
+
+        it('does not start or tag stale fallback when the recorder lacks support', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
+                },
+            })
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(sessionRecording.status).toBe('awaiting_config')
+
+            const recorder = sessionRecording['_lazyLoadedSessionRecording']!
+            recorder.allowStaleRemoteConfig = undefined
+
+            for (let attempt = 0; attempt < 3; attempt++) {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                    [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+                })
+                expect(sessionRecording['_usingStaleRemoteConfig']).toBe(false)
+            }
         })
 
         it('applies a successful refresh after stale fallback without flushing the old recording', () => {
