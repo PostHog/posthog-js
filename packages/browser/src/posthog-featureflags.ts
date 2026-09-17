@@ -1326,9 +1326,7 @@ export class PostHogFeatureFlags implements Extension {
 
     private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
         try {
-            void this._client?.capture('$feature_flag_called', properties).catch((error) => {
-                this._logger.error('Failed to capture feature flag call', error)
-            })
+            this._client?.capture('$feature_flag_called', properties)
         } catch (error) {
             this._logger.error('Failed to capture feature flag call', error)
         }
@@ -1676,9 +1674,7 @@ export class PostHogFeatureFlags implements Extension {
         })
         this._fireFeatureFlagsCallbacks()
         try {
-            void this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
-                this._logger.error('Failed to capture early access feature enrollment', error)
-            })
+            this._client?.capture('$feature_enrollment_update', properties)
         } catch (error) {
             this._logger.error('Failed to capture early access feature enrollment', error)
         }

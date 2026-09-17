@@ -107,6 +107,9 @@ Run these from the repository root:
 # Build all packages (respects dependency order)
 pnpm build
 
+# Check source types across all SDKs and rrweb (builds dependencies first)
+pnpm check-types
+
 # Watch mode for development
 pnpm dev
 
@@ -146,6 +149,16 @@ pnpm clean
 # Clean all node_modules (workspace-wide)
 pnpm clean:dep
 ```
+
+### Semantic type checks
+
+Every workspace package under `packages/` exposes `check-types`. Run `pnpm check-types` for all SDKs and rrweb, or `pnpm turbo run check-types --filter=posthog-node` for one SDK. Turbo builds workspace dependencies first, using the existing build graph once. Browser-next additionally builds itself because its check includes consumer fixtures. Direct package commands assume dependency outputs already exist.
+
+The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
+
+Builds already perform different kinds of checking: browser, React Native and Convex compile with TypeScript, Next compiles with tsgo, the native plugin uses Bob's TypeScript target, Rslib generates declarations, and AI/React/web use tsdown declaration generation. These build paths remain unchanged. The explicit command provides consistent whole-source coverage independent of which bundler emits declarations; do not add a second Turbo invocation inside package scripts or prepend redundant checks to SDK builds. rrweb retains its mandatory pre-build semantic gate described below.
+
+The Library checks unit job runs `pnpm check-types` for every package. `pnpm test:build-graph` discovers SDK and rrweb manifests to enforce coverage and dependency ordering, and injects a semantic error into a temporary workspace to verify that the root command fails even when builds succeed. New SDK packages must provide a semantic `check-types` leaf task. Do not weaken compiler options or replace semantic checking with transpilation/declaration-only validation.
 
 ### rrweb declaration builds
 
@@ -215,6 +228,7 @@ Common package scripts are listed below. Availability and build output directori
 - `lint` - Lint all files for this package
 - `lint:fix` - Fix linting issues
 - `build` - Transpile, minify and/or bundle source code (usually into `dist/` or `lib/`)
+- `check-types` - Check source types without emitting SDK JavaScript or declarations (all SDK and rrweb packages)
 - `dev` - Build and watch for changes
 - `test:unit` - Run unit tests; some packages still include built-output assertions
 - `test:built` - Run dedicated built-output assertions (if available)
@@ -254,6 +268,7 @@ Run these commands from the repository root before opening a PR:
 
 ```sh
 pnpm build
+pnpm check-types
 pnpm lint
 pnpm lint:playground
 pnpm test:unit

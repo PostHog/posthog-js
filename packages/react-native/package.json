@@ -34,6 +34,7 @@
     "directory": "packages/react-native"
   },
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
     "clean": "rimraf dist",
     "lint": "oxlint --report-unused-disable-directives-severity error src test",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src test --fix",

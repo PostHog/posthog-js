@@ -1,7 +1,8 @@
 import { analytics } from '../src/analytics'
+import { createAnalyticsExtension } from '../src/analytics-buffer'
+import { createAnalyticsDelivery } from '../src/analytics-delivery'
+import { Analytics, type AnalyticsDeliveryFactory } from '../src/analytics-internal'
 import { createPostHog, type BrowserFetch } from '../src/core'
-import { createPostHogCore, type AutomaticAnalyticsSetup } from '../src/posthog'
-import type { AnalyticsOptions, Extension } from '../src/types'
 import { MemoryStorage } from './helpers'
 
 const deferred = <T>() => {
@@ -13,12 +14,6 @@ const deferred = <T>() => {
     })
     return { promise, resolve, reject }
 }
-
-const automaticSetup = (load: (options: AnalyticsOptions) => Promise<Extension>): AutomaticAnalyticsSetup => ({
-    strategy: 'lazy',
-    options: {},
-    load,
-})
 
 describe('@posthog/browser public lifecycle state machine', () => {
     afterEach(() => {
@@ -65,11 +60,8 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(repeatedShutdown).toBe(shutdown)
 
         posthog.reset()
-        await Promise.all([
-            posthog.capture('closing-capture'),
-            posthog.identify('closing-user'),
-            posthog.group('company', 'closing-company'),
-        ])
+        posthog.capture('closing-capture')
+        await Promise.all([posthog.identify('closing-user'), posthog.group('company', 'closing-company')])
         expect(observed).toEqual([])
 
         await Promise.resolve()
@@ -82,8 +74,8 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(cleanup).toHaveBeenCalledTimes(1)
 
         posthog.reset()
+        posthog.capture('disposed-capture')
         await Promise.all([
-            posthog.capture('disposed-capture'),
             posthog.identify('disposed-user'),
             posthog.group('company', 'disposed-company'),
             posthog.flush(),
@@ -105,31 +97,23 @@ describe('@posthog/browser public lifecycle state machine', () => {
         await reloaded.shutdown()
     })
 
-    it('disposes a late automatic import without installing or sending after shutdown', async () => {
+    it('leaves late-loaded delivery inert after shutdown', async () => {
         vi.useFakeTimers()
-        const loaded = deferred<Extension>()
+        const loaded = deferred<AnalyticsDeliveryFactory>()
         const load = vi.fn(() => loaded.promise)
         const fetch = vi
             .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
-        const extension = analytics({ flushAt: 1, flushInterval: 0 })
-        const disposeExtension = extension.dispose?.bind(extension)
-        const disposed = deferred<void>()
-        const dispose = vi.fn(() => {
-            disposed.resolve(undefined)
-            return disposeExtension?.()
+        const createDelivery = vi.fn(createAnalyticsDelivery)
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch,
+            extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
         })
-        extension.dispose = dispose
-        const posthog = await createPostHogCore(
-            {
-                projectToken: 'ph_test',
-                capturePageview: false,
-                storage: false,
-                navigator: false,
-                fetch,
-            },
-            automaticSetup(load)
-        )
+        const dispose = vi.spyOn(posthog.getExtension(Analytics)!, 'dispose')
         await posthog.capture('pending-import')
         await Promise.resolve()
         expect(load).toHaveBeenCalledTimes(1)
@@ -138,8 +122,9 @@ describe('@posthog/browser public lifecycle state machine', () => {
         await vi.advanceTimersByTimeAsync(5)
         await shutdown
 
-        loaded.resolve(extension)
-        await disposed.promise
+        loaded.resolve(createDelivery)
+        await vi.advanceTimersByTimeAsync(0)
+        expect(createDelivery).not.toHaveBeenCalled()
         expect(dispose).toHaveBeenCalledTimes(1)
         expect(posthog.getExtension('analytics')).toBeUndefined()
         expect(fetch).not.toHaveBeenCalled()

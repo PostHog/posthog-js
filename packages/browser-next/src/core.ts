@@ -1,7 +1,7 @@
 import type { CorePostHogOptions, PostHog } from './types'
 import { createPostHogCore } from './posthog'
 
-/** Creates the analytics-free core client. Pass client-owned delivery through `extensions`. */
+/** Creates a buffer-only client unless analytics delivery is supplied through `extensions`. */
 export const createPostHog = async (options: CorePostHogOptions): Promise<PostHog> => createPostHogCore(options)
 
 export { version } from './version'
@@ -11,6 +11,9 @@ export type {
     BrowserFetch,
     BrowserNavigator,
     CaptureOptions,
+    CaptureOutcome,
+    CaptureOutcomeStatus,
+    CaptureSummary,
     CorePostHogOptions,
     Disposable,
     Extension,

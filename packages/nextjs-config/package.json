@@ -19,6 +19,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.build.json",
     "prepublishOnly": "pnpm lint && pnpm build",
     "clean": "rimraf dist",
     "lint": "oxlint --report-unused-disable-directives-severity error src",

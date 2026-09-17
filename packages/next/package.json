@@ -53,6 +53,7 @@
         "!src/__tests__"
     ],
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "clean": "rimraf dist",
         "build": "tsc -p tsconfig.build.json && pnpm check:esm-specifiers && pnpm check:pages-router-ssr",
         "dev": "tsc -p tsconfig.build.json --watch",

@@ -12,6 +12,7 @@
   "types": "dist/index.d.ts",
   "license": "MIT",
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.check.json",
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",

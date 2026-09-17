@@ -1,18 +1,14 @@
+import { EventBuffer } from '../src/event-buffer'
 import type { LaneDelivery } from '../src/lane'
 import { Lane } from '../src/lane'
 
-const createLane = <E>(capacity = 10): Lane<E> =>
-    new Lane(
-        capacity,
-        () => {},
-        () => {}
-    )
+const createLane = <E>(capacity = 10): Lane<E> => new Lane(new EventBuffer(capacity, () => {}))
 
 describe('Lane', () => {
     it('retains admitted events until delivery is installed', async () => {
         const batches: string[][] = []
         const lane = createLane<string>()
-        lane.enqueue('first')
+        lane['_buffer'].enqueue('first')
 
         await lane.flush()
         expect(batches).toEqual([])
@@ -34,8 +30,8 @@ describe('Lane', () => {
         })
         const batches: string[][] = []
         const lane = createLane<string>()
-        lane.enqueue('first')
-        lane.enqueue('second')
+        lane['_buffer'].enqueue('first')
+        lane['_buffer'].enqueue('second')
         lane.attach({
             async deliver(events) {
                 batches.push([...events])
@@ -45,7 +41,7 @@ describe('Lane', () => {
             },
         })
         await Promise.resolve()
-        lane.enqueue('third')
+        lane['_buffer'].enqueue('third')
 
         expect(batches).toEqual([['first', 'second']])
         release?.()
@@ -62,9 +58,9 @@ describe('Lane', () => {
                 delivered.push(...events)
             },
         })
-        lane.enqueue('private')
+        lane['_buffer'].enqueue('private')
 
-        lane.purge()
+        lane['_buffer'].purge()
         await lane.flush()
 
         expect(delivered).toEqual([])
@@ -73,14 +69,10 @@ describe('Lane', () => {
     it('drops the oldest event when its count bound is reached', async () => {
         const drops: number[] = []
         const delivered: string[] = []
-        const lane = new Lane<string>(
-            2,
-            () => {},
-            (count) => drops.push(count)
-        )
-        lane.enqueue('oldest')
-        lane.enqueue('middle')
-        lane.enqueue('newest')
+        const lane = new Lane<string>(new EventBuffer<string>(2, (count) => drops.push(count)))
+        lane['_buffer'].enqueue('oldest')
+        lane['_buffer'].enqueue('middle')
+        lane['_buffer'].enqueue('newest')
         lane.attach({
             async deliver(events) {
                 delivered.push(...events)
@@ -97,14 +89,11 @@ describe('Lane', () => {
         const drops: Array<[number, number | undefined, string | undefined]> = []
         const delivered: string[] = []
         const lane = new Lane<string>(
-            10,
-            () => {},
-            (total, count, reason) => drops.push([total, count, reason]),
-            10
+            new EventBuffer<string>(10, (total, count, reason) => drops.push([total, count, reason]), 10)
         )
 
-        expect(lane.enqueue('exact', 10)).toBe(true)
-        expect(lane.enqueue('oversized', 11)).toBe(false)
+        expect(lane['_buffer'].enqueue('exact', 10)).toBe(true)
+        expect(lane['_buffer'].enqueue('oversized', 11)).toBe(false)
         lane.attach({
             async deliver(events) {
                 delivered.push(...events)
@@ -120,15 +109,12 @@ describe('Lane', () => {
         const drops: Array<[number, number | undefined, string | undefined]> = []
         const delivered: string[] = []
         const lane = new Lane<string>(
-            10,
-            () => {},
-            (total, count, reason) => drops.push([total, count, reason]),
-            10
+            new EventBuffer<string>(10, (total, count, reason) => drops.push([total, count, reason]), 10)
         )
-        lane.enqueue('first', 4)
-        lane.enqueue('second', 4)
+        lane['_buffer'].enqueue('first', 4)
+        lane['_buffer'].enqueue('second', 4)
 
-        expect(lane.enqueue('newest', 7)).toBe(true)
+        expect(lane['_buffer'].enqueue('newest', 7)).toBe(true)
         lane.attach({
             async deliver(events) {
                 delivered.push(...events)
@@ -145,17 +131,18 @@ describe('Lane', () => {
         const drops: string[] = []
         const delivered: string[] = []
         const lane = new Lane<{ name: string; timestamp: number }>(
-            10,
-            () => {},
-            (_total, _count, reason) => drops.push(reason ?? ''),
-            100,
-            100,
-            () => now
+            new EventBuffer<{ name: string; timestamp: number }>(
+                10,
+                (_total, _count, reason) => drops.push(reason ?? ''),
+                100,
+                100,
+                () => now
+            )
         )
-        lane.enqueue({ name: 'old', timestamp: Number.MAX_SAFE_INTEGER }, 1)
+        lane['_buffer'].enqueue({ name: 'old', timestamp: Number.MAX_SAFE_INTEGER }, 1)
         now = 100
         await lane.flush()
-        expect((lane as unknown as { _queue: unknown[] })._queue).toHaveLength(1)
+        expect(lane['_buffer']._queue).toHaveLength(1)
 
         now = 101
         await lane.flush()
@@ -174,16 +161,17 @@ describe('Lane', () => {
         let now = 0
         const delivered: string[] = []
         const lane = new Lane<string>(
-            10,
-            () => {},
-            () => {},
-            100,
-            100,
-            () => now
+            new EventBuffer<string>(
+                10,
+                () => {},
+                100,
+                100,
+                () => now
+            )
         )
-        lane.enqueue('expired-on-enqueue', 1)
+        lane['_buffer'].enqueue('expired-on-enqueue', 1)
         now = 101
-        lane.enqueue('current', 1)
+        lane['_buffer'].enqueue('current', 1)
         now = 202
         lane.attach({
             async deliver(events) {
@@ -199,19 +187,20 @@ describe('Lane', () => {
         let now = 0
         const delivered: string[] = []
         const lane = new Lane<string>(
-            10,
-            () => {},
-            () => {},
-            100,
-            100,
-            () => now
+            new EventBuffer<string>(
+                10,
+                () => {},
+                100,
+                100,
+                () => now
+            )
         )
         lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
         })
-        lane.enqueue('staged', 1)
+        lane['_buffer'].enqueue('staged', 1)
         const flush = lane.flush()
         now = 101
         await lane.flush()
@@ -228,10 +217,7 @@ describe('Lane', () => {
         const drops: string[] = []
         const delivered: string[] = []
         const lane = new Lane<string>(
-            10,
-            () => {},
-            (_total, _count, reason) => drops.push(reason ?? ''),
-            10
+            new EventBuffer<string>(10, (_total, _count, reason) => drops.push(reason ?? ''), 10)
         )
         lane.attach({
             batchSize: 1,
@@ -242,11 +228,11 @@ describe('Lane', () => {
                 }
             },
         })
-        lane.enqueue('active', 8)
+        lane['_buffer'].enqueue('active', 8)
         await Promise.resolve()
-        lane.enqueue('queued', 2)
+        lane['_buffer'].enqueue('queued', 2)
 
-        expect(lane.enqueue('rejected', 3)).toBe(false)
+        expect(lane['_buffer'].enqueue('rejected', 3)).toBe(false)
         release?.()
         await lane.flush()
 
@@ -263,12 +249,13 @@ describe('Lane', () => {
         const drops: string[] = []
         const delivered: string[] = []
         const lane = new Lane<string>(
-            2,
-            () => {},
-            (_total, _count, reason) => drops.push(reason ?? ''),
-            10,
-            100,
-            () => now
+            new EventBuffer<string>(
+                2,
+                (_total, _count, reason) => drops.push(reason ?? ''),
+                10,
+                100,
+                () => now
+            )
         )
         lane.attach({
             batchSize: 1,
@@ -280,11 +267,11 @@ describe('Lane', () => {
                 delivered.push(...events)
             },
         })
-        lane.enqueue('retry', 6)
+        lane['_buffer'].enqueue('retry', 6)
         const firstFlush = lane.flush()
         await Promise.resolve()
         now = 50
-        lane.enqueue('newer', 4)
+        lane['_buffer'].enqueue('newer', 4)
         now = 101
         finish?.({ retry: ['retry'] })
         await firstFlush
@@ -304,16 +291,17 @@ describe('Lane', () => {
         const delivered: string[] = []
         let calls = 0
         const lane = new Lane<string>(
-            3,
-            () => {},
-            () => {},
-            10,
-            100,
-            () => now
+            new EventBuffer<string>(
+                3,
+                () => {},
+                10,
+                100,
+                () => now
+            )
         )
-        lane.enqueue('expired', 1)
+        lane['_buffer'].enqueue('expired', 1)
         now = 50
-        lane.enqueue('retained', 1)
+        lane['_buffer'].enqueue('retained', 1)
         lane.attach({
             batchSize: 2,
             async deliver(events) {
@@ -343,20 +331,21 @@ describe('Lane', () => {
             finish = resolve
         })
         const lane = new Lane<string>(
-            3,
-            () => {},
-            (_total, _count, reason) => {
-                if (reason === 'expired') {
-                    lane.purge()
-                }
-            },
-            10,
-            100,
-            () => now
+            new EventBuffer<string>(
+                3,
+                (_total, _count, reason) => {
+                    if (reason === 'expired') {
+                        lane['_buffer'].purge()
+                    }
+                },
+                10,
+                100,
+                () => now
+            )
         )
-        lane.enqueue('expired', 1)
+        lane['_buffer'].enqueue('expired', 1)
         now = 50
-        lane.enqueue('retained', 1)
+        lane['_buffer'].enqueue('retained', 1)
         lane.attach({
             batchSize: 2,
             async deliver() {
@@ -369,7 +358,7 @@ describe('Lane', () => {
         await Promise.resolve()
         await lane.flush()
 
-        expect(lane.hasPending()).toBe(false)
+        expect(lane['_buffer'].hasPending()).toBe(false)
     })
 
     it('contains hostile retry getters and collections without leaking active bookkeeping', async () => {
@@ -388,21 +377,16 @@ describe('Lane', () => {
                 }),
             },
         ]) {
-            const lane = new Lane<string>(
-                2,
-                (error) => errors.push(error),
-                () => {},
-                10
-            )
+            const lane = new Lane<string>(new EventBuffer<string>(2, () => {}, 10), (error) => errors.push(error))
             lane.attach({
                 async deliver() {
                     return result as { retry: readonly string[] }
                 },
             })
-            lane.enqueue('retry', 5)
+            lane['_buffer'].enqueue('retry', 5)
 
             await expect(lane.flush()).resolves.toBeUndefined()
-            expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(0)
+            expect(lane['_buffer']._activeBytes).toBe(0)
             await expect(lane.dispose()).resolves.toBeUndefined()
         }
         expect(errors).toHaveLength(2)
@@ -421,8 +405,8 @@ describe('Lane', () => {
                 delivered.push(...events)
             },
         })
-        lane.enqueue('same')
-        lane.enqueue('same')
+        lane['_buffer'].enqueue('same')
+        lane['_buffer'].enqueue('same')
 
         await lane.flush()
         expect(delivered).toEqual([])
@@ -436,46 +420,36 @@ describe('Lane', () => {
         const stalled = new Promise<void>((resolve) => {
             release = resolve
         })
-        const lane = new Lane<string>(
-            2,
-            () => {},
-            () => {},
-            10
-        )
+        const lane = new Lane<string>(new EventBuffer<string>(2, () => {}, 10))
         lane.attach({
             async deliver() {
                 await stalled
             },
         })
-        lane.enqueue('active', 8)
+        lane['_buffer'].enqueue('active', 8)
         await Promise.resolve()
         const flush = lane.flush()
 
-        lane.purge()
+        lane['_buffer'].purge()
         await expect(flush).resolves.toBeUndefined()
-        expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(0)
+        expect(lane['_buffer']._activeBytes).toBe(0)
 
         release?.()
         await lane.dispose()
     })
 
     it('resets queued byte state on purge and disposal', async () => {
-        const lane = new Lane<string>(
-            10,
-            () => {},
-            () => {},
-            10
-        )
-        lane.enqueue('queued', 8)
-        lane.purge()
-        expect((lane as unknown as { _queuedBytes: number })._queuedBytes).toBe(0)
-        expect(lane.enqueue('replacement', 10)).toBe(true)
+        const lane = new Lane<string>(new EventBuffer<string>(10, () => {}, 10))
+        lane['_buffer'].enqueue('queued', 8)
+        lane['_buffer'].purge()
+        expect(lane['_buffer']._queuedBytes).toBe(0)
+        expect(lane['_buffer'].enqueue('replacement', 10)).toBe(true)
 
         await lane.dispose()
 
-        expect((lane as unknown as { _queuedBytes: number; _activeBytes: number })._queuedBytes).toBe(0)
-        expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(0)
-        expect(lane.enqueue('disposed', 1)).toBe(false)
+        expect(lane['_buffer']._queuedBytes).toBe(0)
+        expect(lane['_buffer']._activeBytes).toBe(0)
+        expect(lane['_buffer'].enqueue('disposed', 1)).toBe(false)
     })
 
     it('clears active byte state when disposal finishes an in-flight delivery', async () => {
@@ -483,45 +457,41 @@ describe('Lane', () => {
         const stalled = new Promise<void>((resolve) => {
             release = resolve
         })
-        const lane = new Lane<string>(
-            10,
-            () => {},
-            () => {},
-            10
-        )
+        const lane = new Lane<string>(new EventBuffer<string>(10, () => {}, 10))
         lane.attach({
             async deliver() {
                 await stalled
             },
         })
-        lane.enqueue('active', 8)
+        lane['_buffer'].enqueue('active', 8)
         await Promise.resolve()
-        expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(8)
+        expect(lane['_buffer']._activeBytes).toBe(8)
 
         const disposal = lane.dispose()
         release?.()
         await disposal
 
-        expect((lane as unknown as { _queuedBytes: number; _activeBytes: number })._queuedBytes).toBe(0)
-        expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(0)
+        expect(lane['_buffer']._queuedBytes).toBe(0)
+        expect(lane['_buffer']._activeBytes).toBe(0)
     })
 
     it('contains throwing clocks and drop reporters', () => {
         const lane = new Lane<string>(
-            1,
-            () => {},
-            () => {
-                throw new Error('reporter failed')
-            },
-            1,
-            1,
-            () => {
-                throw new Error('clock failed')
-            }
+            new EventBuffer<string>(
+                1,
+                () => {
+                    throw new Error('reporter failed')
+                },
+                1,
+                1,
+                () => {
+                    throw new Error('clock failed')
+                }
+            )
         )
 
-        expect(() => lane.enqueue('first', 1)).not.toThrow()
-        expect(() => lane.enqueue('oversized', 2)).not.toThrow()
+        expect(() => lane['_buffer'].enqueue('first', 1)).not.toThrow()
+        expect(() => lane['_buffer'].enqueue('oversized', 2)).not.toThrow()
     })
 
     it('keeps completion bookkeeping bounded while a stalled drain overflows repeatedly', async () => {
@@ -531,7 +501,7 @@ describe('Lane', () => {
         })
         const delivered: string[] = []
         const lane = createLane<string>(1)
-        lane.enqueue('active')
+        lane['_buffer'].enqueue('active')
         lane.attach({
             batchSize: 1,
             async deliver(events) {
@@ -544,7 +514,7 @@ describe('Lane', () => {
         await Promise.resolve()
 
         for (let index = 0; index < 10_000; index++) {
-            lane.enqueue(String(index))
+            lane['_buffer'].enqueue(String(index))
         }
 
         expect((lane as unknown as { _settledId: number })._settledId).toBe(0)
@@ -559,11 +529,7 @@ describe('Lane', () => {
     it('contains a throwing batch-size getter and falls back to one event', async () => {
         const errors: unknown[] = []
         const delivered: string[][] = []
-        const lane = new Lane<string>(
-            10,
-            (error) => errors.push(error),
-            () => {}
-        )
+        const lane = new Lane<string>(new EventBuffer<string>(10, () => {}), (error) => errors.push(error))
         const batchSize = vi.fn(() => {
             throw new Error('batch size failed')
         })
@@ -575,8 +541,8 @@ describe('Lane', () => {
                 delivered.push([...events])
             },
         }
-        lane.enqueue('first')
-        lane.enqueue('second')
+        lane['_buffer'].enqueue('first')
+        lane['_buffer'].enqueue('second')
         lane.attach(delivery)
 
         await lane.flush()
@@ -604,10 +570,10 @@ describe('Lane', () => {
                 await (++calls === 1 ? first : second)
             },
         })
-        lane.enqueue('before')
+        lane['_buffer'].enqueue('before')
         const flush = lane.flush()
         await Promise.resolve()
-        lane.enqueue('after')
+        lane['_buffer'].enqueue('after')
 
         releaseFirst?.()
         await flush
@@ -620,15 +586,15 @@ describe('Lane', () => {
     it('purges queued work and ignores admissions after disposal', async () => {
         const delivered: string[] = []
         const lane = createLane<string>()
-        lane.enqueue('purged')
-        lane.purge()
+        lane['_buffer'].enqueue('purged')
+        lane['_buffer'].purge()
         lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
         })
         await lane.dispose()
-        lane.enqueue('disposed')
+        lane['_buffer'].enqueue('disposed')
         await lane.flush()
 
         expect(delivered).toEqual([])
@@ -645,12 +611,12 @@ describe('Lane', () => {
             },
         })
 
-        lane.enqueue('first')
-        lane.enqueue('second')
+        lane['_buffer'].enqueue('first')
+        lane['_buffer'].enqueue('second')
         await Promise.resolve()
         expect(batches).toEqual([])
 
-        lane.enqueue('third')
+        lane['_buffer'].enqueue('third')
         await lane.flush()
         expect(batches).toEqual([['first', 'second', 'third']])
     })
@@ -667,7 +633,7 @@ describe('Lane', () => {
                     batches.push([...events])
                 },
             })
-            lane.enqueue('first')
+            lane['_buffer'].enqueue('first')
 
             await vi.advanceTimersByTimeAsync(99)
             expect(batches).toEqual([])
@@ -699,8 +665,8 @@ describe('Lane', () => {
                     }
                 },
             })
-            lane.enqueue('first')
-            lane.enqueue('second')
+            lane['_buffer'].enqueue('first')
+            lane['_buffer'].enqueue('second')
             await vi.advanceTimersByTimeAsync(150)
             expect(batches).toEqual([['first']])
 
@@ -711,7 +677,7 @@ describe('Lane', () => {
 
             const backlog: string[][] = []
             const late = createLane<string>()
-            late.enqueue('waiting')
+            late['_buffer'].enqueue('waiting')
             await vi.advanceTimersByTimeAsync(100)
             late.attach({
                 flushAt: 2,
@@ -741,7 +707,7 @@ describe('Lane', () => {
                     return batches.length === 1 ? { retry: events } : undefined
                 },
             })
-            lane.enqueue('retry')
+            lane['_buffer'].enqueue('retry')
             await lane.flush()
             await Promise.resolve()
             expect(batches).toEqual([['retry']])
@@ -767,7 +733,7 @@ describe('Lane', () => {
                 return batches.length === 1 ? { retry: events } : undefined
             },
         })
-        lane.enqueue('retry')
+        lane['_buffer'].enqueue('retry')
 
         await lane.flush()
         expect(batches).toEqual([['retry']])
