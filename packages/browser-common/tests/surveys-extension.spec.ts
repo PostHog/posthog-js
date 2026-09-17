@@ -1,9 +1,11 @@
-import type { Mock as VitestMock } from 'vitest'
-import type { ApiResponse, Client, Disposable, RemoteConfigResult } from '@posthog/browser-common'
+/* oxlint-disable compat/compat -- Tests run in Node. */
+import './helpers/surveys-setup'
+import type { Mock } from 'vitest'
+import type { ApiResponse, Client, Disposable, RemoteConfigResult } from '../src/index'
 
-import { PostHogSurveys } from '@posthog/browser-common/surveys'
-import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '../surveys-config'
-import type { Survey } from '../posthog-surveys-types'
+import { PostHogSurveys } from '../src/surveys'
+import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '../src/surveys-config'
+import type { Survey } from '../src/types/surveys'
 
 const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
     const config: SurveysConfig = {
@@ -100,7 +102,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
             }
         })
         const { client } = createClient()
-        ;(client.onRemoteConfig as VitestMock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
+        ;(client.onRemoteConfig as Mock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
             handler({ ok: true, config: { surveys: true } as any })
             return { dispose: vi.fn() }
         })

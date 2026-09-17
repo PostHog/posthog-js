@@ -1,30 +1,35 @@
-import type { Mock as VitestMock } from 'vitest'
-import { surveyStorage } from '../../../utils/surveys-runtime-host'
+/* oxlint-disable compat/compat -- Tests run in Node. */
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
+import type { Mock } from 'vitest'
+import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+
 import '@testing-library/jest-dom'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
-import { SurveyPopup } from '../../../extensions/surveys'
-import * as surveyUtils from '@posthog/browser-common/surveys/surveys-extension-utils' // Import all utils
-import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
-import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
+import { SurveyPopup } from '../../src/surveys-renderer'
+import * as surveyUtils from '../../src/surveys/surveys-extension-utils' // Import all utils
+import { SurveyQuestionType, SurveyType } from '../../src/survey-constants'
+import type { Survey } from '../../src/types/surveys'
+import * as uuid from '../../src/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
-vi.mock('@posthog/browser-common/surveys/surveys-extension-utils', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@posthog/browser-common/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
+vi.mock('../../src/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
     getInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),
 }))
 
 // Mock uuidv7
-vi.mock('@posthog/browser-common/utils/uuidv7')
+vi.mock('../../src/utils/uuidv7')
 
-// Mock PostHog instance needed by event handlers
-const mockPosthog = {
+// Mock survey runtime host needed by event handlers
+const host = createSurveysRuntimeHost({
     capture: vi.fn(),
-    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
-    is_capturing: vi.fn(() => true),
-    reloadFeatureFlags: vi.fn(),
-}
+    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
+    canCapture: true,
+    reloadFlags: vi.fn(),
+})
 
 describe('SurveyPopup', () => {
     const mockSurvey: Survey = {
@@ -68,17 +73,17 @@ describe('SurveyPopup', () => {
     }
 
     // Mock functions passed as props
-    let mockRemoveSurveyFromFocus: VitestMock
-    let mockOnCloseConfirmationMessage: VitestMock
+    let mockRemoveSurveyFromFocus: Mock
+    let mockOnCloseConfirmationMessage: Mock
 
     // Type cast mocks for easier usage
-    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as VitestMock
+    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as Mock
     // Removed unused mocks for set/clear state
-    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
-    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as vi.Mock
-    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as VitestMock
-    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as VitestMock
-    const mockedUuidv7 = uuid.uuidv7 as VitestMock
+    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as Mock
+    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as Mock
+    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as Mock
+    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as Mock
+    const mockedUuidv7 = uuid.uuidv7 as Mock
 
     beforeEach(() => {
         cleanup()
@@ -114,7 +119,7 @@ describe('SurveyPopup', () => {
                 survey={{ ...mockSurvey, appearance }}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -129,7 +134,8 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                posthog={mockPosthog as any}
+                previewPageIndex={mockSurvey.questions.length} // Force confirmation
+                posthog={host as any}
             />
         )
         act(() => {
@@ -149,7 +155,8 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                posthog={mockPosthog as any}
+                previewPageIndex={mockSurvey.questions.length} // Force confirmation
+                posthog={host as any}
             />
         )
         act(() => {
@@ -170,12 +177,12 @@ describe('SurveyPopup', () => {
                 survey={mockSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, localStorage)
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
@@ -190,12 +197,12 @@ describe('SurveyPopup', () => {
                 survey={mockSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('Previous answer')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, localStorage)
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
@@ -223,7 +230,7 @@ describe('SurveyPopup', () => {
                 survey={mockSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
         // Either way the first question renders (never an empty container).
@@ -249,7 +256,7 @@ describe('SurveyPopup', () => {
                 survey={partialResponsesSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -267,7 +274,7 @@ describe('SurveyPopup', () => {
             survey: partialResponsesSurvey,
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
-            posthog: expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+            posthog: expect.objectContaining({ canCapture: true, storage: localStorage }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -297,7 +304,7 @@ describe('SurveyPopup', () => {
                 survey={goBackSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -332,7 +339,7 @@ describe('SurveyPopup', () => {
                 survey={mockSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -358,7 +365,7 @@ describe('SurveyPopup', () => {
             survey: mockSurvey,
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
-            posthog: expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+            posthog: expect.objectContaining({ canCapture: true, storage: localStorage }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -389,7 +396,7 @@ describe('SurveyPopup', () => {
                 }}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -419,7 +426,7 @@ describe('SurveyPopup', () => {
                 survey={mockSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
 
@@ -432,7 +439,7 @@ describe('SurveyPopup', () => {
 
         expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
             mockSurvey,
-            expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+            expect.objectContaining({ canCapture: true, storage: localStorage }),
             false
         )
         expect(realUtils.getInProgressSurveyState(mockSurvey)).toBeNull()
@@ -455,7 +462,7 @@ describe('SurveyPopup', () => {
                 survey={survey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
-                posthog={mockPosthog as any}
+                posthog={host as any}
             />
         )
         expect(screen.getByRole('textbox')).toBeVisible()
@@ -467,12 +474,12 @@ describe('SurveyPopup', () => {
                 <SurveyPopup
                     survey={mockSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
             await waitFor(() => {
-                expect(mockPosthog.capture).toHaveBeenCalledWith(
+                expect(host.capture).toHaveBeenCalledWith(
                     'survey shown',
                     expect.objectContaining({
                         $survey_id: mockSurvey.id,
@@ -487,7 +494,7 @@ describe('SurveyPopup', () => {
                 <SurveyPopup
                     survey={mockSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                     skipShownEvent={true}
                 />
             )
@@ -495,7 +502,7 @@ describe('SurveyPopup', () => {
             // Give it a tick to run the effect
             await new Promise((resolve) => setTimeout(resolve, 0))
 
-            expect(mockPosthog.capture).not.toHaveBeenCalledWith('survey shown', expect.anything())
+            expect(host.capture).not.toHaveBeenCalledWith('survey shown', expect.anything())
         })
     })
 
@@ -517,7 +524,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -526,7 +533,7 @@ describe('SurveyPopup', () => {
             expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
 
             // "survey shown" fires once for the popup, intro included
-            await waitFor(() => expect(mockPosthog.capture).toHaveBeenCalledWith('survey shown', expect.anything()))
+            await waitFor(() => expect(host.capture).toHaveBeenCalledWith('survey shown', expect.anything()))
 
             const startButton = screen.getByText('Get started')
             fireEvent.click(startButton)
@@ -536,7 +543,7 @@ describe('SurveyPopup', () => {
             // second "survey shown"
             expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
             expect(mockedDismissedSurveyEvent).not.toHaveBeenCalled()
-            expect(mockPosthog.capture).toHaveBeenCalledTimes(1)
+            expect(host.capture).toHaveBeenCalledTimes(1)
         })
 
         test('does not advance the intro screen on a window-level Enter press', () => {
@@ -545,7 +552,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -567,7 +574,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -581,7 +588,7 @@ describe('SurveyPopup', () => {
                     survey={mockSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -604,7 +611,7 @@ describe('SurveyPopup', () => {
                     }}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -618,7 +625,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                     isSurveyCompleted={true}
                 />
             )
@@ -636,7 +643,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                 />
             )
 
@@ -645,7 +652,7 @@ describe('SurveyPopup', () => {
 
             expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
                 introSurvey,
-                expect.objectContaining({ canCapture: true, storage: surveyStorage }),
+                expect.objectContaining({ canCapture: true, storage: localStorage }),
                 false
             )
             expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
@@ -657,7 +664,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                     previewPageIndex={-1}
                 />
             )
@@ -670,7 +677,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                     previewPageIndex={0}
                 />
             )
@@ -685,7 +692,7 @@ describe('SurveyPopup', () => {
                     survey={introSurvey}
                     removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                     isPopup={true}
-                    posthog={mockPosthog as any}
+                    posthog={host as any}
                     previewPageIndex={-1}
                     onPreviewSubmit={onPreviewSubmit}
                 />
