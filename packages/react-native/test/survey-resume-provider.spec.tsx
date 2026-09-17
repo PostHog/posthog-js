@@ -84,7 +84,12 @@ const survey = {
   })),
 } as Survey
 
-function makeClient(disk: Map<string, string>, surveys = [survey], flags = { eligible: true }) {
+function makeClient(
+  disk: Map<string, string>,
+  surveys = [survey],
+  flags = { eligible: true },
+  cachedSurveys: Survey[] | null = surveys
+) {
   const storage = createEventsStorage({
     getItem: async (key) => disk.get(key) ?? null,
     setItem: async (key, value) => {
@@ -98,6 +103,9 @@ function makeClient(disk: Map<string, string>, surveys = [survey], flags = { eli
     optedOut: false,
     ready: async () => {
       await storage.preloadPromise
+      cachedSurveys === null
+        ? storage.removeItem(PostHogPersistedProperty.Surveys)
+        : storage.setItem(PostHogPersistedProperty.Surveys, cachedSurveys)
     },
     _onSurveysReady: async () => {},
     getSurveys: async () => surveys,
@@ -225,3 +233,44 @@ it.each(['reset', 'optOut'])('invalidates mounted and stale callbacks on %s', as
   expect(client.capture).not.toHaveBeenCalled()
   expect(client.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
 })
+
+it.each([null, []] as const)(
+  'keeps progress unless an empty survey list is authoritative (cache=%s)',
+  async (cached) => {
+    const disk = new Map<string, string>()
+    client = makeClient(disk)
+    const first = mount()
+    await ready()
+    act(() => client.capture('trigger', {}))
+    fireEvent.click(await first.findByText('q1'))
+    const submissionId = lastModalProps.initialProgress.submissionId
+    await client.storage.waitForPersist()
+    first.unmount()
+
+    // A failed load or disableSurveys launch has no cached survey array.
+    client = makeClient(disk, [], { eligible: false }, cached === null ? null : [])
+    const unavailable = mount()
+    await ready()
+    await client.storage.waitForPersist()
+    unavailable.unmount()
+
+    client = makeClient(disk, [survey], { eligible: false })
+    const restored = mount()
+    await ready()
+    if (cached === null) {
+      expect(restored.queryByText('q2')).not.toBeNull()
+      fireEvent.click(restored.getByText('q2'))
+      expect(client.capture).toHaveBeenCalledWith(
+        'survey sent',
+        expect.objectContaining({
+          $survey_submission_id: submissionId,
+          $survey_response_q1: 'answer-q1',
+          $survey_completed: true,
+        })
+      )
+    } else {
+      expect(restored.queryByText('q2')).toBeNull()
+      expect(client.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toEqual([])
+    }
+  }
+)

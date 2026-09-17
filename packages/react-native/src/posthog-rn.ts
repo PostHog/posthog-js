@@ -1089,12 +1089,15 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
-    void super.optOut()
+    const coreOptOut = super.optOut()
     const clearProgress = (): Promise<void> => {
       this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
       return this._eventsStorage.waitForPersist()
     }
-    const result = this._isInitialized ? clearProgress() : this._initPromise.then(clearProgress)
+    const result = Promise.all([
+      coreOptOut,
+      this._isInitialized ? clearProgress() : this._initPromise.then(clearProgress),
+    ]).then(() => undefined)
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
     // native subscription handler keeps its own persisted record and retry loop. unregister is
     // deliberately allowed while opted out.
@@ -2271,8 +2274,8 @@ export class PostHog extends PostHogCore {
 
     const surveys = response.surveys
 
-    // If surveys is not an array, it means there are no surveys (its a boolean)
-    if (Array.isArray(surveys) && surveys.length > 0) {
+    // Keep an authoritative empty list distinct from an unavailable survey cache.
+    if (Array.isArray(surveys)) {
       this._cacheSurveys(surveys as Survey[], 'remote config')
     } else {
       this._cacheSurveys(null, 'remote config')

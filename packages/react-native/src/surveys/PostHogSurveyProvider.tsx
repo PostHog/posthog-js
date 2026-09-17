@@ -14,7 +14,7 @@ import {
   SurveyAppearance,
   SurveyAppearanceTheme,
 } from './surveys-utils'
-import { Survey, SurveyType, type SurveyResponses } from '@posthog/core'
+import { PostHogPersistedProperty, Survey, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
 import { PostHog } from '../posthog-rn'
@@ -159,7 +159,10 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       })
       .then((loadedSurveys) => {
         if (!mounted) return
-        progressStore.reconcile(loadedSurveys)
+        // An unavailable cache (failed load or disableSurveys) is not an empty project.
+        if (Array.isArray(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys))) {
+          progressStore.reconcile(loadedSurveys)
+        }
         setSurveys(loadedSurveys)
       })
       .catch(() => {})

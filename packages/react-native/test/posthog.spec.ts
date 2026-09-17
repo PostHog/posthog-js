@@ -597,6 +597,36 @@ describe('PostHog React Native', () => {
       expect(restored.getItem(PostHogPersistedProperty.OptedOut)).toBe(true)
     })
 
+    it.each(['resolve', 'reject'])('optOut awaits and propagates the core result (%s)', async (outcome) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      let resolve!: () => void
+      let reject!: (error: Error) => void
+      const coreResult = new Promise<void>((yes, no) => {
+        resolve = yes
+        reject = no
+      })
+      const coreOptOut = vi.spyOn(Object.getPrototypeOf(PostHog.prototype), 'optOut').mockReturnValue(coreResult)
+      try {
+        const settled = vi.fn()
+        const result = posthog.optOut()
+        void result.then(settled, settled)
+        await rnStorage.waitForPersist()
+        await Promise.resolve()
+        expect(settled).not.toHaveBeenCalled()
+        if (outcome === 'resolve') {
+          resolve()
+          await expect(result).resolves.toBeUndefined()
+        } else {
+          const error = new Error('core opt-out failed')
+          reject(error)
+          await expect(result).rejects.toBe(error)
+        }
+      } finally {
+        coreOptOut.mockRestore()
+      }
+    })
+
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,
