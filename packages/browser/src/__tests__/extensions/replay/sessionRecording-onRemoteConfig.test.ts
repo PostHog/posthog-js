@@ -561,6 +561,7 @@ describe('SessionRecording', () => {
             // Should fall back to persisted config and start recording
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording.status).toBe('active')
+            expect(registerForSessionMock).not.toHaveBeenCalledWith({ $sdk_debug_replay_stale_config: true })
         })
 
         it('does not start recording when config fetch fails and no persisted config exists', () => {
@@ -572,6 +573,7 @@ describe('SessionRecording', () => {
             // No persisted config to fall back to
             expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording.status).toBe('disabled')
+            expect(registerForSessionMock).not.toHaveBeenCalledWith({ $sdk_debug_replay_stale_config: true })
         })
 
         it('awaits config when config fetch fails and persisted config is stale', () => {
@@ -608,26 +610,53 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('awaiting_config')
         })
 
-        it('transitions to missing_config when config refresh fails', () => {
-            posthog.persistence?.register({
-                [SESSION_RECORDING_REMOTE_CONFIG]: {
-                    enabled: true,
-                    endpoint: '/s/',
-                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
-                },
+        describe.each(['expired', 'undated'])('%s persisted config', (age) => {
+            beforeEach(() => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: true,
+                        endpoint: '/s/',
+                        ...(age === 'expired'
+                            ? { cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000 }
+                            : {}),
+                    },
+                })
+                sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+                expect(sessionRecording.status).toBe('awaiting_config')
+                expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                    $sdk_debug_replay_stale_config: true,
+                })
             })
 
-            // First failure: triggers refresh
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('awaiting_config')
+            it.each<RemoteConfigResult>([{ ok: false }, makeFlagsResponse({})])(
+                'tags the session without starting recording when refresh returns %j',
+                (result) => {
+                    sessionRecording.onRemoteConfig(result)
+                    expect(sessionRecording.status).toBe('missing_config')
+                    expect(registerForSessionMock).toHaveBeenCalledWith({
+                        $sdk_debug_replay_stale_config: true,
+                    })
+                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
 
-            // Second failure: refresh came back empty, now missing
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+                    registerForSessionMock.mockClear()
+                    sessionRecording.onRemoteConfig(result)
+                    expect(sessionRecording.status).toBe('missing_config')
+                    expect(registerForSessionMock).not.toHaveBeenCalled()
+                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                }
+            )
 
-            // Third failure: stays missing
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+            it.each([false, { endpoint: '/s/' }])('does not tag a successful refresh: %j', (sessionRecordingConfig) => {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: sessionRecordingConfig }))
+                expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                    $sdk_debug_replay_stale_config: true,
+                })
+                if (sessionRecordingConfig === false) {
+                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                } else {
+                    expect(sessionRecording.status).toBe('active')
+                }
+            })
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {

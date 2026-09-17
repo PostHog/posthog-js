@@ -1954,6 +1954,7 @@ export class PostHog implements PostHogInterface {
             url,
             data,
             compression: 'best-available',
+            preferSyncCompression: options?.send_instantly,
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
             ...(isSessionRecording && data.properties?.$session_id

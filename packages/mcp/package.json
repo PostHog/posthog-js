@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.16.2",
+  "version": "0.16.4",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -11,6 +11,7 @@
     "directory": "packages/mcp"
   },
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json",
     "clean": "rimraf dist coverage",
     "lint": "oxlint --report-unused-disable-directives-severity error src && oxfmt --check harness",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix && oxfmt --write harness",

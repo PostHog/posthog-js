@@ -2,7 +2,7 @@
     "name": "rrdom-nodejs",
     "version": "0.0.8",
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='rrdom-nodejs^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc --noEmit",
@@ -44,7 +44,6 @@
         "compare-versions": "^4.1.3",
         "puppeteer": "^23.11.1",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
         "typescript": "catalog:"
     },

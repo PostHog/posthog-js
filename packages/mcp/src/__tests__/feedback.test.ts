@@ -9,6 +9,7 @@ import {
 } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
+import { deriveSessionIdFromConversation } from '../extensions/session'
 import type { FeedbackReport } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -58,6 +59,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(tool.description).toContain('missing capability')
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['feedback_type', 'summary']))
       expect(tool.inputSchema.properties.feedback_type.enum).toEqual(['missing_capability', 'issue', 'praise', 'other'])
+      expect(tool.inputSchema.properties.conversation_id).toBeUndefined()
       expect(tool.annotations.readOnlyHint).toBe(true)
     })
 
@@ -151,7 +153,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('captures $mcp_feedback with the report properties on a fresh instance', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { collectFeedback: true })
+      instrument(server, fakePostHog(), { collectFeedback: true, enableConversationId: true })
 
       const result = await callTool(client, SEND_FEEDBACK, {
         feedback_type: 'missing_capability',
@@ -163,6 +165,10 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       })
 
       expect(result.content[0].text).toContain('recorded')
+      expect(result.content).toHaveLength(2)
+      const promptBack = result.content.find((block: any) => block.text?.includes('"conversation_id"'))
+      const conversationId = JSON.parse(promptBack?.text ?? '{}').conversation_id
+      expect(conversationId).toEqual(expect.any(String))
 
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
@@ -170,6 +176,8 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         .find((e) => e.eventType === MCPAnalyticsEventType.mcpFeedback && e.resourceName === SEND_FEEDBACK)
       expect(event?.userIntent).toBe('No tool to delete multiple todos in one call.\n\nDeleted 20 todos one by one.')
       expect(event?.userIntentSource).toBe('context_parameter')
+      expect(event?.conversationId).toBe(conversationId)
+      expect(event?.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
 
       const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
       expect(payloads).toHaveLength(1)
@@ -181,6 +189,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSentiment]).toBe('negative')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackTaskCompleted]).toBe(true)
       expect(p[PostHogMCPAnalyticsProperty.ResourceName]).toBe(SEND_FEEDBACK)
+      expect(p[PostHogMCPAnalyticsProperty.ConversationId]).toBe(conversationId)
       // No raw arguments: the redacted $mcp_feedback_* properties are the captured surface.
       expect(p[PostHogMCPAnalyticsProperty.Parameters]).toBeUndefined()
 

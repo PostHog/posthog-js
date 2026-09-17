@@ -7,6 +7,7 @@ for (const config of configs) {
   config.plugins.push({
     name: 'simple-peer-light-declarations',
     generateBundle() {
+      this.addWatchFile('src/simple-peer-light.d.ts');
       this.emitFile({
         type: 'asset',
         fileName: 'simple-peer-light.d.ts',

@@ -1,0 +1,49 @@
+name: AI cassettes
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    affected:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/check-affected.yml
+        with:
+            package-name: '@posthog/ai'
+            additional-paths: |
+                .github/workflows/ai-cassettes.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/action.yaml
+                .github/actions/setup/action.yaml
+
+    replay:
+        permissions:
+            contents: read
+        needs: affected
+        if: needs.affected.outputs.is-affected == 'true'
+        runs-on: ubuntu-22.04
+        timeout-minutes: 15
+        env:
+            pnpm_config_enable_global_virtual_store: 'false'
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build current SDK packages
+              # Keep the checkout-local pnpm setting in nested build commands.
+              run: pnpm exec turbo run build --filter=@posthog/ai --env-mode=loose
+
+            - name: Replay without external network access
+              run: pnpm --filter @posthog/ai test:cassettes:offline

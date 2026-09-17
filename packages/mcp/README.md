@@ -81,6 +81,8 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
 - **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
   protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
   `enableConversationId`, which is **opt-in**. Without it every request is its own `$session_id`.
+  The `get_more_tools` and `send_feedback` virtual tools also use this handle, including calls handled
+  by a fresh server instance.
 - **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
   `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
   `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that
@@ -283,10 +285,11 @@ both advertises both tools. Like `get_more_tools`, a real tool that already uses
 wins: the SDK warns, skips injection, and delegates calls to the real handler.
 
 On a paginated catalogue (a `tools/list` response with a `nextCursor`), `instrument()` injects
-`send_feedback` on the first page only — the page every client reads, including clients that never
-follow `nextCursor` — so a compliant client's concatenated list carries it once. "First page" means
-a `tools/list` request with no cursor; an empty string is a valid cursor, so `cursor: ""` is a
-continuation page. Hosts using `prepareToolList()` directly own this rule themselves: pass
+its virtual tools (`send_feedback` and `get_more_tools`) on the first page only — the page every
+client reads, including clients that never follow `nextCursor` — so a compliant client's
+concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
+empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
+`prepareToolList()` directly own this rule themselves: pass `reportMissing: true` and
 `collectFeedback: true` only for the first page.
 
 Name collisions are detected on the first page only. A real tool named `send_feedback` (or

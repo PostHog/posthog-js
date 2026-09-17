@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.54.4
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+
+## 1.54.3
+
+### Patch Changes
+
+- [#5005](https://github.com/PostHog/posthog-js/pull/5005) [`6545d3f`](https://github.com/PostHog/posthog-js/commit/6545d3f059131774678643eb638e35564575e25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix declaration source mappings for DOMExceptionCoercer.
+  (2026-09-17)
+
 ## 1.54.2
 
 ### Patch Changes
