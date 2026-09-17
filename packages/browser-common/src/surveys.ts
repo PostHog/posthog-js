@@ -72,11 +72,7 @@ export class PostHogSurveys implements Extension {
     private _remoteConfigSubscription: Disposable | undefined
     private _disposed = false
     private _renderTimeouts = new Set<ReturnType<typeof setTimeout>>()
-    constructor(
-        private readonly _configSource: SurveysConfigSource,
-        // Hosts with synchronous storage can expose survey fetching before deferred setup.
-        private readonly _getClient?: () => Client
-    ) {}
+    constructor(private readonly _configSource: SurveysConfigSource) {}
 
     setup(client: Client): void | Promise<void> {
         if (this._disposed) {
@@ -310,9 +306,9 @@ export class PostHogSurveys implements Extension {
         if (this._disposed) {
             return
         }
-        const client = this._client ?? this._getClient?.()
+        const client = this._client
         if (!client) {
-            return
+            return callback([], { isLoaded: false, error: SURVEY_NOT_LOADED })
         }
         if (this._config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
@@ -420,7 +416,7 @@ export class PostHogSurveys implements Extension {
      * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
      */
     private _isSurveyCacheStale(): boolean {
-        const surveysLoadedAt = (this._client ?? this._getClient?.())?.kv.get(SURVEYS_LOADED_AT)
+        const surveysLoadedAt = this._client?.kv.get(SURVEYS_LOADED_AT)
         return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
     }
 
@@ -497,7 +493,7 @@ export class PostHogSurveys implements Extension {
     }
 
     private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
-        if (!(this._client ?? this._getClient?.())?.canCapture) {
+        if (!this._client?.canCapture) {
             return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
         }
         if (isNullish(this._surveyManager)) {
@@ -549,7 +545,7 @@ export class PostHogSurveys implements Extension {
     }
 
     renderSurvey(surveyId: string | Survey, selector: string, properties?: Properties) {
-        if (!(this._client ?? this._getClient?.())?.canCapture) {
+        if (!this._client?.canCapture) {
             return
         }
         if (isNullish(this._surveyManager)) {
@@ -592,7 +588,7 @@ export class PostHogSurveys implements Extension {
     }
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
-        if (!(this._client ?? this._getClient?.())?.canCapture) {
+        if (!this._client?.canCapture) {
             return
         }
         if (isNullish(this._surveyManager)) {
