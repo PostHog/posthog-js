@@ -729,9 +729,9 @@ describe('Autocapture system', () => {
         })
 
         describe('rageclick suppression for intentional repeated clicks', () => {
-            const rageClickThreeTimes = (el: Element): string[] => {
+            const rageClickThreeTimes = (el: Element, root: Element = el): string[] => {
                 autocapture['rageclicks'].clicks = []
-                document.body.appendChild(el)
+                document.body.appendChild(root)
                 const fakeEvent = makeMouseEvent({ target: el, clientX: 5, clientY: 5 })
                 Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
                 autocapture['_captureEvent'](fakeEvent)
@@ -739,7 +739,7 @@ describe('Autocapture system', () => {
                 autocapture['_captureEvent'](fakeEvent)
                 const captured = beforeSendMock.mock.calls.map((args) => args[0].event)
                 beforeSendMock.mockClear()
-                document.body.removeChild(el)
+                document.body.removeChild(root)
                 return captured
             }
 
@@ -873,6 +873,47 @@ describe('Autocapture system', () => {
                         el.setAttribute('aria-label', 'Scroll left')
 
                         expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose label sits in a child span do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const icon = document.createElement('span')
+                        icon.setAttribute('aria-hidden', 'true')
+                        const label = document.createElement('span')
+                        label.textContent = 'Next slide'
+                        button.appendChild(icon)
+                        button.appendChild(label)
+
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        button.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button inside a labelled carousel region still capture $rageclick', () => {
+                        const region = document.createElement('div')
+                        region.setAttribute('aria-label', 'Featured carousel')
+                        const button = document.createElement('button')
+                        button.textContent = 'Buy now'
+                        region.appendChild(button)
+
+                        expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on an arrow glyph beside link text still capture $rageclick', () => {
+                        const link = document.createElement('a')
+                        link.appendChild(document.createTextNode('Get started '))
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        link.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
                     })
 
                     it.each([

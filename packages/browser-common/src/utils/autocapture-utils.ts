@@ -204,6 +204,9 @@ interface ElementWithText {
     ariaLabel: string
 }
 
+const INTERACTIVE_TAGS = ['button', 'a', 'input', 'select', 'textarea', 'label']
+const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
+
 const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
 
 // our own word keywords match whole words, so "arrow" doesn't suppress "narrow results",
@@ -227,7 +230,7 @@ const matchesContentKeyword = (text: string, keyword: string, wholeWord: boolean
 
 function shouldIgnoreByContent(
     contentIgnorelist: boolean | string[] | undefined,
-    elementsWithText: ElementWithText[]
+    { safeText, ariaLabel }: ElementWithText
 ): boolean {
     if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
         return false
@@ -255,13 +258,31 @@ function shouldIgnoreByContent(
         return false
     }
 
-    return elementsWithText.some(({ safeText, ariaLabel }) => {
-        return keywords.some(
-            (keyword) =>
-                matchesContentKeyword(safeText, keyword, wholeWord) ||
-                matchesContentKeyword(ariaLabel, keyword, wholeWord)
-        )
-    })
+    return keywords.some(
+        (keyword) =>
+            matchesContentKeyword(safeText, keyword, wholeWord) || matchesContentKeyword(ariaLabel, keyword, wholeWord)
+    )
+}
+
+const isInteractiveElement = (el: Element): boolean =>
+    INTERACTIVE_TAGS.some((tag) => isTag(el, tag)) ||
+    includes(INTERACTIVE_ROLES, (el.getAttribute('role') || '').toLowerCase())
+
+// keywords describe the control that was clicked, so we read the label of the nearest interactive
+// ancestor: a region labelled "Featured carousel" must not suppress the "Buy now" button inside it,
+// and a label held in a child span must still be read when the click lands on the button itself
+function clickedControlText(el: Element, targetElementList: Element[]): ElementWithText {
+    let control = el
+    for (const candidate of targetElementList) {
+        if (isInteractiveElement(candidate)) {
+            control = candidate
+            break
+        }
+    }
+    return {
+        safeText: getDirectAndNestedSpanText(control).toLowerCase(),
+        ariaLabel: control.getAttribute('aria-label')?.toLowerCase().trim() || '',
+    }
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
@@ -338,14 +359,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element).toLowerCase(),
-        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
-    }))
 
-    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
+    if (contentIgnorelist && shouldIgnoreByContent(contentIgnorelist, clickedControlText(el, targetElementList))) {
         return false
     }
 

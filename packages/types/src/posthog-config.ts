@@ -123,7 +123,9 @@ export interface RageclickConfig {
      * - `false`: Disable content-based exclusion
      * - `string[]`: Use custom keywords (max 33 items, otherwise use css_selector_ignorelist)
      *
-     * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
+     * Checks the text and aria-label of the clicked control (the nearest button, link or other
+     * interactive ancestor) against the keywords, case-insensitive. The label of a surrounding
+     * region is not checked, so a carousel wrapper does not suppress the controls inside it.
      * The default word keywords match whole words, so 'arrow' doesn't suppress "Narrow results".
      * Word keywords you supply yourself match as substrings. Symbol-only keywords (e.g. '+', '-', '>')
      * always match exactly, so they don't suppress text like "sign-up", "5 > 3", or "C++".
