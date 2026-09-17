@@ -1,4 +1,4 @@
-/// <reference lib="dom" />
+// @vitest-environment jsdom
 
 import {
     getSafeText,
@@ -12,14 +12,17 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '@posthog/browser-common/utils/autocapture-utils'
-import { document } from '@posthog/browser-common/utils/globals'
-import { makeMouseEvent } from './helpers/mouse-event'
-import { createMockPostHog } from './helpers/posthog-instance'
-import { AutocaptureConfig, PostHogConfig } from '../types'
+} from '../../src/utils/autocapture-utils'
+import { makeMouseEvent } from '../helpers/dom-events'
+import type { AutocaptureConfig } from '@posthog/types'
+
+declare const jsdom: { reconfigure(options: { url: string }): void }
 
 describe(`Autocapture utility functions`, () => {
+    const originalUrl = window.location.href
+
     afterEach(() => {
+        jsdom.reconfigure({ url: originalUrl })
         document!.getElementsByTagName('html')[0].innerHTML = ''
         vi.restoreAllMocks()
     })
@@ -235,11 +238,7 @@ describe(`Autocapture utility functions`, () => {
         })
 
         describe('get_current_url override for url_allowlist/url_ignorelist', () => {
-            const setWindowLocation = (href: string) => {
-                Object.defineProperty(window, 'location', { value: { href }, writable: true, configurable: true })
-            }
-            const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string) =>
-                createMockPostHog({ config: { get_current_url: getCurrentUrl } as PostHogConfig })
+            const setWindowLocation = (href: string) => jsdom.reconfigure({ url: href })
 
             it('matches url_allowlist against the overridden URL', () => {
                 // raw browser URL is not in the allow list
@@ -249,14 +248,9 @@ describe(`Autocapture utility functions`, () => {
 
                 expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(false)
                 expect(
-                    shouldCaptureDomEvent(
-                        link,
-                        makeMouseEvent({}),
-                        config,
-                        undefined,
-                        undefined,
-                        posthogWith(() => 'https://app.example.com/page')
-                    )
+                    shouldCaptureDomEvent(link, makeMouseEvent({}), config, undefined, undefined, {
+                        config: { get_current_url: () => 'https://app.example.com/page' },
+                    })
                 ).toBe(true)
             })
 
@@ -267,14 +261,9 @@ describe(`Autocapture utility functions`, () => {
 
                 expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(true)
                 expect(
-                    shouldCaptureDomEvent(
-                        link,
-                        makeMouseEvent({}),
-                        config,
-                        undefined,
-                        undefined,
-                        posthogWith(() => 'https://app.example.com/internal-admin')
-                    )
+                    shouldCaptureDomEvent(link, makeMouseEvent({}), config, undefined, undefined, {
+                        config: { get_current_url: () => 'https://app.example.com/internal-admin' },
+                    })
                 ).toBe(false)
             })
         })
