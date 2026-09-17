@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Autocapture } from '../src/autocapture'
-import type { AutocaptureConfig } from '../src/autocapture-config'
+import type { AutocaptureConfig, AutocaptureConfigSource } from '../src/autocapture-config'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../src/constants'
 import { createTestClient } from './helpers/test-client'
 
@@ -112,5 +112,98 @@ describe('shared autocapture', () => {
         expect(() => extension.setup(client)).toThrow('listener failed')
         extension.dispose()
         expect(remove).toHaveBeenCalledWith('submit', expect.any(Function), true)
+    })
+
+    it('constructs with one SDK-neutral internal config', () => {
+        const configSource: AutocaptureConfigSource = {
+            refresh: (config) => {
+                config.enabled = true
+                config.rageclick = false
+                config.maskAllElementAttributes = false
+                config.maskAllText = false
+                config.disableCaptureUrlHashes = false
+                config.remoteRequestsDisabled = true
+            },
+        }
+        const extension = new Autocapture(configSource)
+        extensions.push(extension)
+        extension.setup(createTestClient())
+
+        expect(extension).not.toHaveProperty('_settings')
+        expect(extension['_config']).toEqual({
+            enabled: true,
+            rageclick: false,
+            maskAllElementAttributes: false,
+            maskAllText: false,
+            disableCaptureUrlHashes: false,
+            remoteRequestsDisabled: true,
+            url_allowlist: undefined,
+            url_ignorelist: undefined,
+        })
+    })
+
+    it('releases remote config and DOM listeners on dispose', () => {
+        const client = createTestClient()
+        const initialize = vi.spyOn(client.kv, 'initialize')
+        const onRemoteConfig = vi.spyOn(client, 'onRemoteConfig')
+        const { extension } = create({ remoteRequestsDisabled: true, capture_copied_text: true })
+        const captureEvent = vi.spyOn(extension as any, '_captureEvent')
+
+        extension.setup(client)
+        const remoteConfigHandler = onRemoteConfig.mock.calls[0][0]
+        const remoteConfigDispose = vi.spyOn(onRemoteConfig.mock.results[0].value, 'dispose')
+        expect(extension['_initialized']).toBe(true)
+        extension.dispose()
+        extension.dispose()
+
+        remoteConfigHandler?.({ ok: true, config: { autocapture_opt_out: false } })
+        click(document.querySelector('button')!)
+        document.dispatchEvent(new Event('copy', { bubbles: true }))
+
+        expect(initialize).not.toHaveBeenCalled()
+        expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+        expect(extension['_hasReceivedConfigResponse']).toBe(false)
+        expect(extension['_initialized']).toBe(false)
+        expect(captureEvent).not.toHaveBeenCalled()
+        expect(client.capturedEvents).toHaveLength(0)
+    })
+
+    describe('remote config DOM listener initialization', () => {
+        let extension: Autocapture
+        let config: AutocaptureConfig
+
+        beforeEach(() => {
+            ;({ extension, config } = create())
+            extension.setup(createTestClient())
+            vi.spyOn(extension, '_addDomEventHandlers')
+        })
+
+        it('should call _addDomEventHandlers if autocapture is enabled in client config', () => {
+            config.enabled = true
+            extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } })
+            expect(extension['_addDomEventHandlers']).toHaveBeenCalled()
+        })
+
+        it('should not call _addDomEventHandlers if autocapture is opted out in server config', () => {
+            extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: true } })
+            expect(extension['_addDomEventHandlers']).not.toHaveBeenCalled()
+        })
+
+        it('should not call _addDomEventHandlers if autocapture is disabled in client config', () => {
+            expect(extension['_addDomEventHandlers']).not.toHaveBeenCalled()
+            config.enabled = false
+
+            extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } })
+
+            expect(extension['_addDomEventHandlers']).not.toHaveBeenCalled()
+        })
+
+        it('should NOT call _addDomEventHandlers when the extension has already been initialized', () => {
+            extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } })
+            expect(extension['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
+
+            extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } })
+            expect(extension['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
+        })
     })
 })
