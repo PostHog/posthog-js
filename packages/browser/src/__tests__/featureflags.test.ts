@@ -4,7 +4,7 @@ import {
     parseFlagsResponse as normalizeFlagsResponse,
     PostHogFeatureFlags,
     FeatureFlagError,
-} from '../posthog-featureflags'
+} from '@posthog/browser-common/feature-flags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
