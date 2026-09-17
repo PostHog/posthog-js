@@ -1,0 +1,8 @@
+ARG NODE_IMAGE=node:24-bookworm-slim
+ARG RUNNER_IMAGE
+FROM ${NODE_IMAGE} AS native
+FROM ${RUNNER_IMAGE}
+COPY --from=native /usr/local/bin/node /usr/local/bin/node
+COPY consumer/ /runtime/consumer/
+COPY adapter/ /adapter/
+ENTRYPOINT ["python", "/adapter/image-entrypoint.py"]

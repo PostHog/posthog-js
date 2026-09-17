@@ -1,0 +1,16 @@
+# Build only a staged checkout; generated outputs never touch the selected SDK root.
+ARG NODE_IMAGE=node:24-bookworm-slim
+FROM ${NODE_IMAGE} AS build
+ENV CI=true HUSKY=0 PREK=0 TURBO_TELEMETRY_DISABLED=1
+WORKDIR /source
+COPY source/ ./
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
+RUN pnpm install --frozen-lockfile --filter posthog-node...
+RUN pnpm turbo run build --filter=posthog-node --force
+RUN mkdir -p /output/tarballs \
+    && cd /source/packages/types && pnpm pack --out /output/tarballs/types.tgz \
+    && cd /source/packages/core && pnpm pack --out /output/tarballs/core.tgz \
+    && cd /source/packages/node && pnpm pack --out /output/tarballs/posthog-node.tgz
+RUN node compliance/node/v2/build-consumer.mjs
+FROM scratch AS distribution
+COPY --from=build /output/ /
