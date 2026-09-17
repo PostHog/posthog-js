@@ -64,11 +64,13 @@ const noopHandler: listenerHandler = () => {
     //
 }
 
+// undefined means this frame cannot observe performance entries, so the caller can tell
+// "nothing to tear down" apart from "nothing started here"
 function initPerformanceObserver(
     cb: networkCallback,
     win: IWindow,
     options: Required<NetworkRecordOptions>
-): listenerHandler {
+): listenerHandler | undefined {
     // if we are only observing timings then we could have a single observer for all types, with buffer true,
     // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
     // will deal with those.
@@ -95,12 +97,12 @@ function initPerformanceObserver(
     const performanceObserverClass = win.PerformanceObserver as typeof PerformanceObserver | undefined
     const supportedEntryTypes = performanceObserverClass?.supportedEntryTypes
     if (!performanceObserverClass || !isArray(supportedEntryTypes)) {
-        return noopHandler
+        return undefined
     }
     const entryTypes = supportedEntryTypes.filter((x) => options.performanceEntryTypeToObserve.includes(x))
     if (!entryTypes.length) {
         // observe() throws when it is given no valid entry type
-        return noopHandler
+        return undefined
     }
 
     const observer = new performanceObserverClass((entries) => {
@@ -943,16 +945,25 @@ function initNetworkObserver(
     const performanceObserver = initPerformanceObserver(cb, win, networkOptions)
 
     // only wrap fetch and xhr if headers or body are being recorded
+    const wrapsNetworkPrimitives = networkOptions.recordHeaders || networkOptions.recordBody
+
+    // initialisedHandler is shared by every frame being recorded, so a frame that captures
+    // nothing must leave it for a frame that can, or one degraded frame silences the page
+    if (!performanceObserver && !wrapsNetworkPrimitives) {
+        active = false
+        return noopHandler
+    }
+
     let xhrObserver: listenerHandler = () => {}
     let fetchObserver: listenerHandler = () => {}
-    if (networkOptions.recordHeaders || networkOptions.recordBody) {
+    if (wrapsNetworkPrimitives) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
 
     initialisedHandler = () => {
         active = false
-        performanceObserver()
+        performanceObserver?.()
         xhrObserver()
         fetchObserver()
         initialisedHandler = null

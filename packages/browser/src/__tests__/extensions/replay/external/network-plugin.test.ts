@@ -521,6 +521,21 @@ describe('network plugin', () => {
                 cleanup()
             })
 
+            it('leaves the shared observer for a frame that can observe', () => {
+                const broken = createMockWindow()
+                delete broken.mockWindow.PerformanceObserver
+                const healthy = createMockWindow()
+
+                const plugin = getRecordNetworkPlugin()
+                const stopBroken = plugin.observer(() => {}, broken.mockWindow, {})
+                const stopHealthy = plugin.observer(() => {}, healthy.mockWindow, {})
+
+                expect(healthy.observerCallbacks.length).toBe(1)
+
+                stopHealthy()
+                stopBroken()
+            })
+
             it('still captures initial requests when the frame has no PerformanceObserver', () => {
                 const { mockWindow, performanceEntries } = createMockWindow()
                 delete mockWindow.PerformanceObserver
