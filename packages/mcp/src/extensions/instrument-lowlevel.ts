@@ -13,6 +13,7 @@ import {
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
 } from './feedback'
+import { getAnalyticsParameterOwnership } from './analytics-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
@@ -24,7 +25,6 @@ import {
   patchRequestHandlers,
   registerFallbackRequestHandler,
   captureToolCall,
-  getVirtualToolParameterOwnership,
   isToolAdvertised,
   type HandlerPatch,
 } from './instrumentation'
@@ -107,7 +107,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      parameterOwnership: getVirtualToolParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
+      parameterOwnership: getAnalyticsParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
@@ -127,7 +127,7 @@ async function handleToolCallRequest(
       explicitContextIntent: buildFeedbackIntent(report),
       omitCapturedParameters: true,
       extraEventProperties: buildFeedbackEventProperties(report),
-      parameterOwnership: getVirtualToolParameterOwnership(getFeedbackToolDescriptor(feedbackOptions).inputSchema),
+      parameterOwnership: getAnalyticsParameterOwnership(getFeedbackToolDescriptor(feedbackOptions).inputSchema),
       execute: async () => handleFeedback(report, feedbackOptions, data.logger),
     })
   }

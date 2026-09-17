@@ -38,7 +38,6 @@ import {
   traceResourceRequest,
   patchRequestHandlers,
   captureToolCall,
-  getVirtualToolParameterOwnership,
   isToolAdvertised,
   readToolMetaCategory,
   type HandlerPatch,
@@ -260,7 +259,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      parameterOwnership: getVirtualToolParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
+      parameterOwnership: getAnalyticsParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
@@ -280,7 +279,7 @@ async function handleToolCallRequest(
       explicitContextIntent: buildFeedbackIntent(report),
       omitCapturedParameters: true,
       extraEventProperties: buildFeedbackEventProperties(report),
-      parameterOwnership: getVirtualToolParameterOwnership(getFeedbackToolDescriptor(feedbackOptions).inputSchema),
+      parameterOwnership: getAnalyticsParameterOwnership(getFeedbackToolDescriptor(feedbackOptions).inputSchema),
       execute: async () => handleFeedback(report, feedbackOptions, data.logger),
     })
   }
