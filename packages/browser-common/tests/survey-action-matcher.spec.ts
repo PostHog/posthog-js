@@ -1,32 +1,20 @@
+import './helpers/surveys-setup'
+import type { SurveyActionHost } from '../src/survey-event-host'
 /// <reference lib="dom" />
 
-import { SurveyActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
-import { PostHogPersistence } from '../../../posthog-persistence'
-import { PostHog } from '../../../posthog-core'
-import { CaptureResult, PostHogConfig, Properties, PropertyMatchType } from '../../../types'
-import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
-import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
+import type { SurveyActionType, ActionStepStringMatching } from '../src/types/surveys'
+import type { Properties } from '@posthog/types'
+import type { PropertyMatchType } from '@posthog/core'
+import type { SurveyCapturedEvent as CaptureResult } from '../src/survey-event-host'
+import { ActionMatcher } from '../src/survey-action-matcher'
 
 describe('action-matcher', () => {
-    let config: PostHogConfig
-    let instance: PostHog
+    let host: SurveyActionHost
 
     beforeEach(() => {
-        config = createMockConfig({
-            token: 'testtoken',
-            api_host: 'https://app.posthog.com',
-            persistence: 'memory',
-        })
-
-        instance = createMockPostHog({
-            config: config,
-            persistence: new PostHogPersistence(config),
-            _addCaptureHook: vi.fn(),
-        })
-    })
-
-    afterEach(() => {
-        instance.persistence?.clear()
+        host = {
+            subscribeCapture: vi.fn(),
+        }
     })
 
     const createCaptureResult = (
@@ -35,14 +23,10 @@ describe('action-matcher', () => {
         additionalProperties?: Properties
     ): CaptureResult => {
         return {
-            $set: undefined,
-            $set_once: undefined,
             properties: {
                 $current_url: currentUrl,
                 ...additionalProperties,
             },
-            timestamp: undefined,
-            uuid: '0C984DA5-761F-4F75-9582-D2F95B43B04A',
             event: eventName,
         }
     }
@@ -77,7 +61,7 @@ describe('action-matcher', () => {
 
     it('can match action on event name', () => {
         const pageViewAction = createAction(3, '$mypageview') as unknown as SurveyActionType
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([pageViewAction])
         let pageViewActionMatched = false
 
@@ -96,7 +80,7 @@ describe('action-matcher', () => {
     it('keeps earlier actions when actions are registered incrementally', () => {
         const firstAction = createAction(3, '$first_action')
         const secondAction = createAction(4, '$second_action')
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         const matchedActions: string[] = []
         actionMatcher._addActionHook((actionName) => matchedActions.push(actionName))
 
@@ -110,7 +94,7 @@ describe('action-matcher', () => {
 
     it('can match action on current_url exact', () => {
         const pageViewAction = createAction(2, '$autocapture', 'https://us.posthog.com')
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([pageViewAction])
 
         let pageViewActionMatched = false
@@ -131,7 +115,7 @@ describe('action-matcher', () => {
 
     it('can match action on current_url regexp', () => {
         const pageViewAction = createAction(2, '$current_url_regexp', '[a-z][a-z].posthog.*', 'regex')
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([pageViewAction])
 
         let pageViewActionMatched = false
@@ -157,7 +141,7 @@ describe('action-matcher', () => {
             buttonClickedAction.steps[0].selector = '* > #__next .flex > button:nth-child(2)'
         }
 
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([buttonClickedAction])
         let buttonClickedActionMatched = false
 
@@ -183,7 +167,7 @@ describe('action-matcher', () => {
         const action = createAction(1, '$pageview', undefined, undefined, [
             { key: 'plan', value: 'pro', operator: 'exact' },
         ])
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([action])
 
         let matched = false
@@ -206,7 +190,7 @@ describe('action-matcher', () => {
                 '(^|;)button.*?\\.primary([-_a-zA-Z0-9\\.:"= \\[\\]\\(\\),]*?)?($|;|:([^;^\\s]*(;|$|\\s)))'
         }
 
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([buttonClickedAction])
         let matched = false
 
@@ -232,7 +216,7 @@ describe('action-matcher', () => {
             // No selector_regex - matching should fail (requires server-provided regex)
         }
 
-        const actionMatcher = new ActionMatcher(instance)
+        const actionMatcher = new ActionMatcher(host)
         actionMatcher.register([buttonClickedAction])
         let matched = false
 

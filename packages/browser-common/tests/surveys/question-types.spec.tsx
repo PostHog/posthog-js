@@ -1,17 +1,12 @@
+/* oxlint-disable compat/compat -- Tests run in Node. */
+// @vitest-environment jsdom
+import '../helpers/surveys-setup'
 import '@testing-library/jest-dom'
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
-import {
-    MultipleChoiceQuestion,
-    OpenTextQuestion,
-    RatingQuestion,
-} from '../../../extensions/surveys/components/QuestionTypes'
-import {
-    BasicSurveyQuestion,
-    MultipleSurveyQuestion,
-    RatingSurveyQuestion,
-    SurveyQuestionType,
-} from '../../../posthog-surveys-types'
+import { MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from '../../src/surveys/components/QuestionTypes'
+import { SurveyQuestionType } from '../../src/survey-constants'
+import type { BasicSurveyQuestion, MultipleSurveyQuestion, RatingSurveyQuestion } from '../../src/types/surveys'
 
 describe('MultipleChoiceQuestion', () => {
     const mockAppearance = {
