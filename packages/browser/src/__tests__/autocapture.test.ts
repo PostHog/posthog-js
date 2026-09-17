@@ -111,6 +111,7 @@ describe('Autocapture system', () => {
 
     describe('extension lifecycle', () => {
         it('retains the legacy wrapper and token while sharing the implementation and helpers', () => {
+            expect(Autocapture).toBe(SharedAutocapture)
             expect(autocapture).toBeInstanceOf(BrowserAutocapture)
             expect(autocapture).toBeInstanceOf(Autocapture)
             expect(autocapture).toBeInstanceOf(SharedAutocapture)

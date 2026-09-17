@@ -1,15 +1,9 @@
-import { Autocapture as SharedAutocapture } from '@posthog/browser-common/autocapture'
-import { AutocaptureExtension } from './extension-tokens'
-
+// Preserve deep-import compatibility with the published posthog-js/lib modules.
 export {
+    Autocapture,
     getAugmentPropertiesFromElement,
     previousElementSibling,
     getDefaultProperties,
     getPropertiesFromElement,
     autocapturePropertiesForElement,
 } from '@posthog/browser-common/autocapture'
-
-/** Legacy token typing for the shared autocapture extension. */
-export class Autocapture extends SharedAutocapture {
-    override readonly name = AutocaptureExtension
-}
