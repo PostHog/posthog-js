@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.74.2
+
+### Patch Changes
+
+- [#5006](https://github.com/PostHog/posthog-js/pull/5006) [`614e508`](https://github.com/PostHog/posthog-js/commit/614e5080753db6229e886f9f3d47f064b02d7cf8) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix source maps to point from the published JavaScript to the original TypeScript source.
+  (2026-09-17)
+
 ## 4.74.1
 
 ### Patch Changes
