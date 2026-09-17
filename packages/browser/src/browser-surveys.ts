@@ -3,6 +3,7 @@ import { isUndefined } from '@posthog/core'
 
 import type { PostHog } from './posthog-core'
 import { PostHogSurveys } from './posthog-surveys'
+import { SurveyEventName } from './posthog-surveys-types'
 import { extendURLParams } from './request'
 import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
 import type { Properties, QueuedRequestWithOptions } from './types'
@@ -87,8 +88,33 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
         }
     }
 
-    createEventReceiver(): SurveyEventReceiver {
-        return new SurveyEventReceiver(this._instance)
+    createEventReceiver(onActivationChanged: () => void): SurveyEventReceiver {
+        return new SurveyEventReceiver(this._instance, onActivationChanged)
+    }
+
+    onMatchingConditionsChanged(callback: () => void): () => void {
+        const unsubscribeCapture = this._instance._addCaptureHook((event) => {
+            // Capture hooks run from `eventCaptured`, after `PostHog.capture` has applied
+            // survey seen-state for dismissal/submission lifecycle events. Re-evaluate here
+            // so untargeted surveys are removed immediately as well as event/action surveys.
+            if (event === '$pageview' || event === SurveyEventName.DISMISSED || event === SurveyEventName.SENT) {
+                callback()
+            }
+        })
+        // onFeatureFlags may synchronously deliver its cached value while registering.
+        // The subscription establishes its own initial value after these hooks are attached.
+        let listening = false
+        const unsubscribeFlags = this._instance.onFeatureFlags(() => {
+            if (listening) {
+                callback()
+            }
+        })
+        listening = true
+        return () => {
+            listening = false
+            unsubscribeCapture()
+            unsubscribeFlags()
+        }
     }
 }
 
