@@ -60,20 +60,17 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-// an `entryTypes` observation never delivers an entry that completed before it started,
-// so a recorder that starts after the document loaded must read the navigation timings itself
+// a partial navigation entry is readable before load and the observer delivers it again once complete.
+// readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd` is final
+function isCompletedNavigationTiming(win: IWindow, entry: PerformanceEntry): entry is PerformanceNavigationTiming {
+    return isNavigationTiming(entry) && win.document?.readyState === 'complete' && entry.loadEventEnd > 0
+}
+
+// an `entryTypes` observation never delivers an entry that completed before it started
 function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
-    // while the document still loads the observer delivers the entry when it completes,
-    // so reading it here would capture partial timings and duplicate that delivery.
-    // readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd`
-    // proves the entry is final and was already delivered to any observer watching at the time
-    if (win.document?.readyState !== 'complete') {
-        return []
-    }
     return win.performance
         .getEntriesByType('navigation')
-        .filter(isNavigationTiming)
-        .filter((entry) => entry.loadEventEnd > 0)
+        .filter((entry): entry is PerformanceNavigationTiming => isCompletedNavigationTiming(win, entry))
 }
 
 function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
@@ -88,7 +85,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             .getEntries()
             .filter(
                 (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
+                    isCompletedNavigationTiming(win, entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
         cb({
