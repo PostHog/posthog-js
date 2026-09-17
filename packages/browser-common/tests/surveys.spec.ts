@@ -74,38 +74,33 @@ afterEach(() => {
 })
 
 describe('PostHogSurveys', () => {
-    it('uses a supplied client for fetching before setup without starting the renderer', async () => {
-        const { client, source, extensions } = create()
-        const getClient = vi.fn(() => client)
-        const surveys = new PostHogSurveys(source, getClient)
-        const subscribe = vi.spyOn(client, 'onRemoteConfig')
-        expect(getClient).not.toHaveBeenCalled()
-
-        const result = await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve))
-        expect(result).toEqual([definition])
-        expect(client.sentRequests).toHaveLength(1)
-        expect(client.kv.get(SURVEYS)).toEqual([definition])
-        expect(subscribe).not.toHaveBeenCalled()
-        expect(extensions.generateSurveys).not.toHaveBeenCalled()
-        expect(source.createEventReceiver).not.toHaveBeenCalled()
-
-        await surveys.setup(client)
-        getClient.mockClear()
+    it('reports unavailable until asynchronous setup completes, then serves cached surveys', async () => {
+        const { client, surveys, extensions } = create()
+        client.kv.set(SURVEYS, [definition])
+        let initialize!: () => void
+        vi.spyOn(client.kv, 'initialize').mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    initialize = resolve
+                })
+        )
         const callback = vi.fn()
+        const unavailable = { isLoaded: false, error: 'SDK is not enabled or survey functionality is not yet loaded' }
         surveys.getSurveys(callback)
-        expect(callback).toHaveBeenCalledWith([definition], { isLoaded: true })
-        expect(getClient).not.toHaveBeenCalled()
-        expect(subscribe).toHaveBeenCalledOnce()
-        surveys.dispose()
-    })
+        expect(callback).toHaveBeenLastCalledWith([], unavailable)
 
-    it('does not acquire the supplied client after disposal', () => {
-        const { client, source } = create()
-        const getClient = vi.fn(() => client)
-        const surveys = new PostHogSurveys(source, getClient)
+        const setup = surveys.setup(client)
+        surveys.getSurveys(callback, true)
+        expect(callback).toHaveBeenLastCalledWith([], unavailable)
+        expect(callback).toHaveBeenCalledTimes(2)
+        expect(client.sentRequests).toHaveLength(0)
+        expect(extensions.generateSurveys).not.toHaveBeenCalled()
+
+        initialize()
+        await setup
+        surveys.getSurveys(callback)
+        expect(callback).toHaveBeenLastCalledWith([definition], { isLoaded: true })
         surveys.dispose()
-        surveys.getSurveys(vi.fn())
-        expect(getClient).not.toHaveBeenCalled()
     })
 
     it.each([true, false, [], [definition]])('uses remote surveys %j only as the renderer gate', async (remote) => {

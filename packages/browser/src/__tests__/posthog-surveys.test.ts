@@ -706,16 +706,17 @@ describe('posthog-surveys', () => {
                 mockCallback.mockClear()
             })
 
-            it('should return cached surveys before shared extension setup', () => {
-                mockPostHog._getBrowserClientAdapter = vi.fn().mockReturnValue(createSurveysClient(mockPostHog))
+            it('reports unavailable before shared extension setup', () => {
                 const uninitializedSurveys = new BrowserSurveys(mockPostHog)
-                expect(mockPostHog._getBrowserClientAdapter).not.toHaveBeenCalled()
                 mockPostHog.get_property.mockReturnValue(mockSurveys)
                 const callback = vi.fn()
 
                 uninitializedSurveys.getSurveys(callback)
 
-                expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(callback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'SDK is not enabled or survey functionality is not yet loaded',
+                })
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
 
