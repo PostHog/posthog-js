@@ -131,6 +131,38 @@ describe('survey display logic', () => {
             vi.useRealTimers()
         }
     })
+
+    test('a throwing display logic is reported once and stops the interval instead of throwing every tick', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createMockPostHog({
+            surveys: {
+                getSurveys: vi.fn().mockImplementation(() => {
+                    throw error
+                }),
+            },
+            captureException: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+            capture: vi.fn(),
+            config: {
+                disable_surveys_automatic_display: false,
+            },
+        })
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).toBeCalledTimes(1)
+            expect(throwingPostHog.captureException).toHaveBeenCalledWith(error, {
+                survey_display_logic_failure: true,
+            })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
 })
 
 describe('usePopupVisibility', () => {

@@ -311,9 +311,14 @@ export class PostHogSurveys implements Extension {
 
         const surveys = client.kv.get<Survey[]>(SURVEYS)
         if (surveys && !forceReload) {
-            callback(surveys, { isLoaded: true })
-            if (this._shouldBackgroundRefreshSurveys()) {
-                this.getSurveys(() => {}, true)
+            // The callback runs synchronously here, so a throwing callback must not skip the
+            // background refresh and leave the cached surveys stale for the rest of the visit.
+            try {
+                callback(surveys, { isLoaded: true })
+            } finally {
+                if (this._shouldBackgroundRefreshSurveys()) {
+                    this.getSurveys(() => {}, true)
+                }
             }
             return
         }

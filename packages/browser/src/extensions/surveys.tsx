@@ -1234,6 +1234,8 @@ export const renderFeedbackWidgetPreview = ({
     render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
 }
 
+const MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES = 3
+
 // This is the main exported function
 export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | undefined) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
@@ -1254,18 +1256,9 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
         return surveyManager
     }
 
-    surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-
     let intervalId: number | undefined
-
-    const startInterval = () => {
-        if (!isUndefined(intervalId)) {
-            return
-        }
-        intervalId = setInterval(() => {
-            surveyManager.callSurveysAndEvaluateDisplayLogic(false)
-        }, 1000) as unknown as number
-    }
+    let consecutiveFailures = 0
+    let lastFailureMessage: string | undefined
 
     const stopInterval = () => {
         if (!isUndefined(intervalId)) {
@@ -1274,13 +1267,52 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
         }
     }
 
+    // The display logic runs once a second. An error used to escape the tick as an unhandled
+    // exception, so one failure became one exception per second for the whole visit. Report
+    // each distinct failure once instead, and give up after repeated failures.
+    const evaluateDisplayLogic = (forceReload: boolean) => {
+        if (consecutiveFailures >= MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES) {
+            return
+        }
+        try {
+            surveyManager.callSurveysAndEvaluateDisplayLogic(forceReload)
+            consecutiveFailures = 0
+            lastFailureMessage = undefined
+        } catch (error) {
+            const message = String(error)
+            const isRepeatedFailure = message === lastFailureMessage
+            consecutiveFailures = isRepeatedFailure ? consecutiveFailures + 1 : 1
+            lastFailureMessage = message
+            if (consecutiveFailures >= MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES) {
+                stopInterval()
+                logger.error(`Stopping survey display logic after ${consecutiveFailures} consecutive failures`, error)
+            } else {
+                logger.error('Error evaluating survey display logic', error)
+            }
+            if (!isRepeatedFailure) {
+                // The catch above hides the failure from error tracking, so report it once.
+                posthog.captureException(error, { survey_display_logic_failure: true })
+            }
+        }
+    }
+
+    const startInterval = () => {
+        if (!isUndefined(intervalId) || consecutiveFailures >= MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES) {
+            return
+        }
+        intervalId = setInterval(() => {
+            evaluateDisplayLogic(false)
+        }, 1000) as unknown as number
+    }
+
+    evaluateDisplayLogic(true)
     startInterval()
 
     const onVisibilityChange = () => {
         if (document.hidden) {
             stopInterval()
         } else {
-            surveyManager.callSurveysAndEvaluateDisplayLogic(false)
+            evaluateDisplayLogic(false)
             startInterval()
         }
     }
