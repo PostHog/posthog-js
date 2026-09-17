@@ -137,7 +137,15 @@ export function canCaptureSurvey(posthog: PostHog): boolean {
 export function getOtherProjectSurveyProgress(posthog: PostHog): unknown[] {
   const raw = posthog.getPersistedProperty<unknown>(PostHogPersistedProperty.SurveysInProgress)
   if (!Array.isArray(raw)) return []
-  return raw.filter((entry) => isRecord(entry) && isNonEmptyString(entry.project) && entry.project !== posthog.apiKey)
+  const counts = new Map<string, number>()
+  return raw.filter((entry) => {
+    if (!isRecord(entry) || !isNonEmptyString(entry.project) || entry.project === posthog.apiKey) return false
+    if (!isSavedProgress(entry, entry.project)) return false
+    const count = counts.get(entry.project) ?? 0
+    if (count >= MAX_PROGRESS) return false
+    counts.set(entry.project, count + 1)
+    return true
+  })
 }
 
 export class SurveyProgressStore {

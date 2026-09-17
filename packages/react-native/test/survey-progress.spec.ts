@@ -165,3 +165,39 @@ it.each(['save', 'remove', 'reconcile'] as const)('preserves another project on 
   expect(restored.store.load(survey)).toEqual(otherProgress)
   expect(current.store.load(survey)).toEqual(operation === 'save' ? progress : undefined)
 })
+
+it.each(['save', 'remove', 'reconcile'] as const)(
+  'prunes expired and excess other-project progress on %s',
+  async (operation) => {
+    const { open } = setup()
+    const other = open('other-project')
+    await other.storage.preloadPromise
+    other.store.save(survey, createSurveyProgress(survey))
+    const [entry] = other.storage.getItem(PostHogPersistedProperty.SurveysInProgress)
+    const recent = Array.from({ length: 25 }, (_, i) => ({ ...entry, surveyKey: `s${i}` }))
+    other.storage.setItem(PostHogPersistedProperty.SurveysInProgress, [
+      ...[undefined, Date.now() + 1, Date.now() - 30 * 24 * 60 * 60 * 1000].map((updatedAt) => ({
+        ...entry,
+        updatedAt,
+      })),
+      ...recent,
+      { ...entry, project: 'third-project' },
+    ])
+    await other.storage.waitForPersist()
+    const current = open()
+    await current.storage.preloadPromise
+    if (operation === 'save') current.store.save(survey, createSurveyProgress(survey))
+    if (operation === 'remove') current.store.remove(survey)
+    if (operation === 'reconcile') current.store.reconcile([])
+    await current.storage.waitForPersist()
+    const restored = open('other-project')
+    await restored.storage.preloadPromise
+    const entries = restored.storage.getItem(PostHogPersistedProperty.SurveysInProgress)
+    expect(entries.filter((saved: { project: string }) => saved.project === 'other-project')).toEqual(
+      recent.slice(0, 20)
+    )
+    expect(entries.filter((saved: { project: string }) => saved.project === 'third-project')).toEqual([
+      { ...entry, project: 'third-project' },
+    ])
+  }
+)

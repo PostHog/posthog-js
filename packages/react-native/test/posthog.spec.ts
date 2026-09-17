@@ -558,10 +558,17 @@ describe('PostHog React Native', () => {
     })
 
     it.each([false, true])('clears only this project on opt-out (pending preload=%s)', async (pendingPreload) => {
-      const otherProgress = { project: 'other-project', progress: { submissionId: 'other' } }
+      const otherProgress = {
+        project: 'other-project',
+        surveyKey: 'survey',
+        shape: 'shape',
+        updatedAt: Date.now(),
+        progress: { submissionId: 'other' },
+      }
       rnStorage.setItem(PostHogPersistedProperty.SurveysInProgress, [
         { project: '1', progress: { submissionId: 'old-user' } },
         otherProgress,
+        { ...otherProgress, updatedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 },
       ])
       await rnStorage.waitForPersist()
       let release!: () => void
