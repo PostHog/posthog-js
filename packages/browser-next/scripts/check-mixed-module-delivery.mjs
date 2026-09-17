@@ -150,6 +150,8 @@ for (const createFlags of [flags, commonJsFlags]) {
         results?.[0]?.enabled !== false
     )
         throw new Error('Mixed-module flags update failed')
+    if ((await client.getExtension('featureFlags').reloadFeatureFlags()).status !== 'skipped')
+        throw new Error('Mixed-module flags reload did not report disabled evaluation')
     subscription.dispose()
     await client.dispose()
 }

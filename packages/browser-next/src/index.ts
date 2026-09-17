@@ -71,4 +71,10 @@ export type {
     StorageLike,
 } from './types'
 
-export type { FlagsOptions, FlagsConfiguration, FlagsCallback, FeatureFlagResult } from './flags-options'
+export type {
+    FlagsOptions,
+    FlagsConfiguration,
+    FlagsCallback,
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+} from './flags-options'

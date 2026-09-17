@@ -21,3 +21,4 @@ export interface FlagsOptions {
 export type FlagsConfiguration = false | FlagsOptions
 export type FlagsCallback = (flags: FeatureFlagResult[], errorsLoading: boolean) => void
 export type { FeatureFlagResult, JsonType }
+export type { FeatureFlagsReloadResult } from '@posthog/browser-common/feature-flags'
