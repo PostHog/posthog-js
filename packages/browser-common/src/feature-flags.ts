@@ -263,6 +263,13 @@ export const QuotaLimitedResource = {
 } as const
 export type QuotaLimitedResource = (typeof QuotaLimitedResource)[keyof typeof QuotaLimitedResource]
 
+export interface FeatureFlagsReloadResult {
+    /** loaded: evaluation completed; error: request/evaluation failed; skipped: evaluation unavailable; cancelled: reset/disposal. */
+    status: 'loaded' | 'error' | 'skipped' | 'cancelled'
+}
+
+type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
+
 export class PostHogFeatureFlags implements Extension {
     readonly name: string = 'featureFlags'
     _override_warning: boolean = false
@@ -280,6 +287,8 @@ export class PostHogFeatureFlags implements Extension {
     // Bootstrap values are a transient view over the last durable flag snapshot.
     private _bootstrapState: FeatureFlagsState | undefined
     private _reloadingHandlers: Array<() => void> = []
+    private _pendingReloads = new Set<ReloadCompletion>()
+    private _activeReloads = new Set<ReloadCompletion>()
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
     private _requestGeneration: number = 0
@@ -481,6 +490,8 @@ export class PostHogFeatureFlags implements Extension {
         this._requestGeneration++
         this._additionalReloadRequested = false
         this._initializingClient = undefined
+        this._settleReloads(this._pendingReloads, 'cancelled')
+        this._settleReloads(this._activeReloads, 'cancelled')
         if (!this._client) {
             return
         }
@@ -919,6 +930,30 @@ export class PostHogFeatureFlags implements Extension {
         }, 5)
     }
 
+    /** Await the next requested evaluation, rather than cached or locally injected flag changes. */
+    reloadFeatureFlagsAsync(): Promise<FeatureFlagsReloadResult> {
+        if (
+            !this._client ||
+            this._reloadingDisabled ||
+            this._config.featureFlagsDisabled ||
+            this._config.remoteRequestsDisabled ||
+            this._hasStatusZeroCircuitBreakerTripped()
+        ) {
+            return Promise.resolve({ status: 'skipped' })
+        }
+        // Like the Client transport, the awaitable API requires Promise support.
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve) => {
+            this._pendingReloads.add(resolve)
+            this.reloadFeatureFlags()
+        })
+    }
+
+    private _settleReloads(completions: Set<ReloadCompletion>, status: FeatureFlagsReloadResult['status']): void {
+        completions.forEach((complete) => complete({ status }))
+        completions.clear()
+    }
+
     private _clearDebouncer(): void {
         clearTimeout(this._reloadDebouncer)
         this._reloadDebouncer = undefined
@@ -956,6 +991,7 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         const client = this._client
         if (!client || this._config.remoteRequestsDisabled || this._hasStatusZeroCircuitBreakerTripped()) {
+            this._settleReloads(this._pendingReloads, 'skipped')
             return
         }
         if (this._requestInFlight) {
@@ -995,6 +1031,9 @@ export class PostHogFeatureFlags implements Extension {
         const isPartialFlagsResponse = this._config.onlyEvaluateSurveyFeatureFlags
         const path = `/flags/?v=2${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
         const requestGeneration = this._requestGeneration
+        const completions = this._pendingReloads
+        this._pendingReloads = new Set()
+        this._activeReloads = completions
         this._requestInFlight = true
 
         const requestAdditionalReload = (): void => {
@@ -1016,6 +1055,7 @@ export class PostHogFeatureFlags implements Extension {
                 this.$anon_distinct_id = undefined
             }
             if (data.disable_flags && !this._additionalReloadRequested) {
+                this._settleReloads(completions, 'skipped')
                 return
             }
             this._flagsLoadedFromRemote = !errorsLoading
@@ -1048,6 +1088,14 @@ export class PostHogFeatureFlags implements Extension {
             } else if (!data.disable_flags) {
                 this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
             }
+            this._settleReloads(
+                completions,
+                data.disable_flags
+                    ? 'skipped'
+                    : flagErrors.length || (!json.flags && !json.featureFlags)
+                      ? 'error'
+                      : 'loaded'
+            )
             requestAdditionalReload()
         }
         const handleError = (error: unknown): void => {
@@ -1061,6 +1109,7 @@ export class PostHogFeatureFlags implements Extension {
             if (this._fallBackToPersistedFlags()) {
                 this._fireFeatureFlagsCallbacks(true)
             }
+            this._settleReloads(completions, 'error')
             requestAdditionalReload()
         }
 
@@ -1870,6 +1919,8 @@ export class PostHogFeatureFlags implements Extension {
 
     reset(): void {
         this._requestGeneration++
+        this._settleReloads(this._pendingReloads, 'cancelled')
+        this._settleReloads(this._activeReloads, 'cancelled')
         this._additionalReloadRequested = false
         this._baseEventProperties = {}
         this._eventPropertiesWithFlagValues = {}
