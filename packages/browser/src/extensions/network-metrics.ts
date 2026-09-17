@@ -25,7 +25,20 @@ const templatePath = (pathname: string): string =>
         .map((segment) => (isIdLikeSegment(segment) ? ':id' : segment))
         .join('/')
 
-const statusClass = (status: number | undefined): string => (status ? `${Math.floor(status / 100)}xx` : 'missing')
+// OTel's fallback `error.type` for a failure the instrumentation cannot name.
+const OTHER_ERROR = '_OTHER'
+
+// OTel semantic conventions for `http.client.request.duration`: 4xx and 5xx responses are
+// errors named by their status code; with no response the error is named by its class.
+const outcomeAttributes = (status: number | undefined, error: unknown): MetricAttributes => {
+    if (status) {
+        return status >= 400
+            ? { 'http.response.status_code': status, 'error.type': String(status) }
+            : { 'http.response.status_code': status }
+    }
+    const errorName = (error as { name?: unknown } | undefined)?.name
+    return { 'error.type': isString(errorName) && errorName ? errorName : OTHER_ERROR }
+}
 
 const networkConfig = (instance: PostHog): NetworkMetricsConfig | undefined => {
     const network = instance.config.metrics?.network
@@ -50,7 +63,8 @@ const record = (
     observed: Observed,
     status: number | undefined,
     start: number,
-    enabled: Enabled
+    enabled: Enabled,
+    error?: unknown
 ): void => {
     try {
         const config = enabled()
@@ -75,10 +89,11 @@ const record = (
             return
         }
         const attributes: MetricAttributes = {
-            method: request.method,
-            host: url?.hostname ?? '',
-            path: url ? templatePath(url.pathname) : '',
-            status_class: statusClass(normalisedStatus),
+            'http.request.method': request.method,
+            'server.address': url?.hostname ?? '',
+            'url.scheme': url ? url.protocol.slice(0, -1) : '',
+            'url.template': url ? templatePath(url.pathname) : '',
+            ...outcomeAttributes(normalisedStatus, error),
             ...config.attributes?.(request, { status: normalisedStatus, durationMs }),
         }
         instance.metrics?.histogram(name, durationMs, { unit: 'ms', attributes })
@@ -112,7 +127,7 @@ const patchFetch = (instance: PostHog, enabled: Enabled): (() => void) => {
                         return response
                     },
                     (error: unknown) => {
-                        record(instance, observed, undefined, start, enabled)
+                        record(instance, observed, undefined, start, enabled, error)
                         throw error
                     }
                 )
