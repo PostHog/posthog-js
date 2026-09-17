@@ -107,11 +107,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      parameterOwnership: getVirtualToolParameterOwnership(
-        data,
-        toolName,
-        getReportMissingToolDescriptor(toolName).inputSchema
-      ),
+      parameterOwnership: getVirtualToolParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
@@ -131,11 +127,7 @@ async function handleToolCallRequest(
       explicitContextIntent: buildFeedbackIntent(report),
       omitCapturedParameters: true,
       extraEventProperties: buildFeedbackEventProperties(report),
-      parameterOwnership: getVirtualToolParameterOwnership(
-        data,
-        toolName,
-        getFeedbackToolDescriptor(feedbackOptions).inputSchema
-      ),
+      parameterOwnership: getVirtualToolParameterOwnership(getFeedbackToolDescriptor(feedbackOptions).inputSchema),
       execute: async () => handleFeedback(report, feedbackOptions, data.logger),
     })
   }

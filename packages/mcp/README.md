@@ -81,6 +81,8 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
 - **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
   protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
   `enableConversationId`, which is **opt-in**. Without it every request is its own `$session_id`.
+  The `get_more_tools` and `send_feedback` virtual tools also use this handle, including calls handled
+  by a fresh server instance.
 - **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
   `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
   `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that

@@ -650,24 +650,11 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
  * `McpServer`/`Server`, the topology in ADR-0011 — would otherwise read every
  * injected parameter as not-ours and neither capture nor strip it.
  *
- * `conversation_id` still comes from the cache on purpose: resolving it here too
- * would start minting a handle, and appending its prompt-back block, on
- * instances that today mint none. That changes session anchoring (ADR-0004)
- * rather than closing this gap.
- *
- * `virtualToolInputSchema` is required (not defaulted to one specific virtual
- * tool's descriptor) so every call site names the tool it means; each caller
- * passes its own descriptor's `inputSchema`.
+ * `virtualToolInputSchema` is required so each caller passes its own virtual
+ * tool descriptor instead of using one shared default.
  */
-export function getVirtualToolParameterOwnership(
-  data: MCPAnalyticsData,
-  toolName: string,
-  virtualToolInputSchema: unknown
-): AnalyticsParameterOwnership {
-  return {
-    ...getAnalyticsParameterOwnership(virtualToolInputSchema),
-    conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
-  }
+export function getVirtualToolParameterOwnership(virtualToolInputSchema: unknown): AnalyticsParameterOwnership {
+  return getAnalyticsParameterOwnership(virtualToolInputSchema)
 }
 
 /**
