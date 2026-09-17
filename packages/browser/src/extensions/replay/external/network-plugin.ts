@@ -68,6 +68,9 @@ function isCompletedNavigationTiming(win: IWindow, entry: PerformanceEntry): ent
 
 // an `entryTypes` observation never delivers an entry that completed before it started
 function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
+    if (win.document?.readyState !== 'complete') {
+        return []
+    }
     return win.performance
         .getEntriesByType('navigation')
         .filter((entry): entry is PerformanceNavigationTiming => isCompletedNavigationTiming(win, entry))
