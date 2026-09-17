@@ -279,9 +279,21 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
             break
         }
     }
+
+    // an icon-only control often carries its label on the icon inside it, e.g.
+    // <button><svg aria-label="Next slide"/></button>, so we read aria-label from the click target
+    // up to the control and stop there, leaving a surrounding region's label out as before
+    let ariaLabel = ''
+    for (const candidate of targetElementList) {
+        ariaLabel = candidate.getAttribute('aria-label')?.toLowerCase().trim() || ariaLabel
+        if (candidate === control) {
+            break
+        }
+    }
+
     return {
         safeText: getDirectAndNestedSpanText(control).toLowerCase(),
-        ariaLabel: control.getAttribute('aria-label')?.toLowerCase().trim() || '',
+        ariaLabel,
     }
 }
 

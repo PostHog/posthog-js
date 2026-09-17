@@ -890,6 +890,15 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
                     })
 
+                    it('rapid clicks on a labelled icon inside an unlabelled button do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                        icon.setAttribute('aria-label', 'Next slide')
+                        button.appendChild(icon)
+
+                        expect(rageClickThreeTimes(icon, button)).not.toContain('$rageclick')
+                    })
+
                     it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
                         const button = document.createElement('button')
                         const glyph = document.createElement('span')
