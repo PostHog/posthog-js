@@ -44,6 +44,8 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
 }
 
 export { version } from './version'
+export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
+export type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
 export type {
     AnalyticsConfiguration,
     AnalyticsOptions,

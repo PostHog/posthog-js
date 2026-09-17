@@ -39,19 +39,22 @@ Use `analytics: false` to keep the default entrypoint buffer-only, or import `cr
 Flags dynamically load during `createPostHog()` by default. Initialization waits for the module and extension setup, not the network response. Use `flags: false` to omit automatic flags, or configure the extension through `flags`:
 
 ```ts
+import { createPostHog, FeatureFlagsExtension } from '@posthog/browser'
+
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     flags: { evaluationContexts: ['web'], requestTimeoutMs: 3_000 },
 })
-const subscription = posthog.onFeatureFlags((results, errorsLoading) => {
+const featureFlags = posthog.getExtension(FeatureFlagsExtension)
+const subscription = featureFlags?.onFeatureFlags((results, errorsLoading) => {
     if (!errorsLoading) console.log(results)
 })
-const result = posthog.getFeatureFlag('new-onboarding')
+const result = featureFlags?.getFeatureFlag('new-onboarding')
 if (result?.enabled) console.log(result.variant, result.payload)
-subscription.dispose()
+subscription?.dispose()
 ```
 
-`getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
+`FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `getExtension(FeatureFlagsExtension)` returns undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
 
 For static inclusion, import the factory explicitly and pass the same configuration:
 
@@ -67,6 +70,27 @@ const posthog = await createPostHog({
 An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
 
 Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
+
+## Extension lifecycle notifications
+
+Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+
+```ts
+import type { BrowserClient, Disposable } from '@posthog/browser'
+
+let subscription: Disposable | undefined
+const extension = {
+    name: 'identity-observer',
+    setup(client: BrowserClient) {
+        subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
+            console.log(previousDistinctId, distinctId)
+        })
+    },
+    dispose() {
+        subscription?.dispose()
+    },
+}
+```
 
 ## Capture and delivery
 
