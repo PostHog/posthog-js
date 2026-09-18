@@ -1,31 +1,12 @@
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
-import type { Compression, JsonType, PostHogConfig } from './types'
+import type { PostHogConfig } from './types'
 
 const logger = createLogger('[FeatureFlags]')
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
-export interface FeatureFlagsConfig {
-    readonly bootstrap: {
-        readonly featureFlags?: Readonly<Record<string, string | boolean>>
-        readonly featureFlagPayloads?: Readonly<Record<string, JsonType>>
-    }
-    readonly remoteRequestsDisabled: boolean
-    readonly featureFlagsDisabled: boolean
-    readonly onlyEvaluateSurveyFeatureFlags: boolean
-    readonly deduplicateCallsPerSession: boolean
-    readonly cacheTtlMs?: number
-    readonly refreshIntervalMs?: number
-    readonly idleRefreshBackoff: boolean
-    readonly requestTimeoutMs: number
-    readonly compression?: Compression | 'best-available'
-    readonly evaluationContexts: readonly string[]
-    readonly flagKeys?: readonly string[]
-}
-
-export interface FeatureFlagsConfigSource {
-    get(): Readonly<FeatureFlagsConfig>
-}
+export type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '@posthog/browser-common/feature-flags-config'
+import type { FeatureFlagsConfig, FeatureFlagsConfigSource } from '@posthog/browser-common/feature-flags-config'
 
 const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): FeatureFlagsConfig => ({
     bootstrap: {
