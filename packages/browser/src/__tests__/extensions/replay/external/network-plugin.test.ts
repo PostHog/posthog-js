@@ -581,6 +581,26 @@ describe('network plugin', () => {
                 ])
             })
 
+            it('leaves a mid-load navigation entry to the observer rather than dropping it', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.document.readyState = 'loading'
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
+                expect(callback).not.toHaveBeenCalled()
+
+                observerCallbacks[0]({
+                    getEntries: () => [createNavigationTimingEntry('https://example.com/app')],
+                } as PerformanceObserverEntryList)
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
             it('keeps observing when the mask function throws on the initial entries', () => {
                 const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
