@@ -15,6 +15,8 @@ const forbiddenInputs = [
     /(^|\/)\.\.\/rrweb\//,
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
+const flagsInput = /(^|\/)(feature-flags|flags)\.(m?js|ts)$/
+const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
 const buildOptions = {
@@ -55,12 +57,14 @@ const attribution = (result, outputKeys = Object.keys(result.metafile.outputs)) 
     return [...bytes].map(([input, value]) => ({ input, bytes: value })).sort((a, b) => b.bytes - a.bytes)
 }
 
-const report = async (name, result, outputs, outputKeys, forbidAnalytics) => {
+const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowFlags = false) => {
     const measured = sizes(outputs)
     const inputs = [...new Set(outputKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs)))]
     const forbidden = inputs.filter(
         (input) =>
-            forbiddenInputs.some((pattern) => pattern.test(input)) || (forbidAnalytics && analyticsInput.test(input))
+            (forbiddenInputs.some((pattern) => pattern.test(input)) && !(allowFlags && coreInput.test(input))) ||
+            (forbidAnalytics && analyticsInput.test(input)) ||
+            (!allowFlags && flagsInput.test(input))
     )
 
     stdout.write(
@@ -78,7 +82,7 @@ const report = async (name, result, outputs, outputKeys, forbidAnalytics) => {
     }
 }
 
-const measureStatic = async (name, fixture, forbidAnalytics) => {
+const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false) => {
     const result = await build({ ...buildOptions, entryPoints: [fixture] })
     const output = result.outputFiles[0]?.contents
     if (!output) {
@@ -87,14 +91,14 @@ const measureStatic = async (name, fixture, forbidAnalytics) => {
     if (forbidAnalytics && Object.keys(result.metafile.inputs).some((input) => automaticAnalyticsInput.test(input))) {
         throw new Error('The core bundle references automatic analytics')
     }
-    await report(name, result, [output], Object.keys(result.metafile.outputs), forbidAnalytics)
+    await report(name, result, [output], Object.keys(result.metafile.outputs), forbidAnalytics, allowFlags)
 }
 
-const measureLazy = async () => {
+const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automatic = true) => {
     const outputDirectory = 'bundle-output'
     const result = await build({
         ...buildOptions,
-        entryPoints: ['fixtures/lazy.ts'],
+        entryPoints: [fixture],
         splitting: true,
         outdir: outputDirectory,
     })
@@ -102,7 +106,7 @@ const measureLazy = async () => {
         result.outputFiles.map((file) => [relative(packageRoot, file.path).replaceAll('\\', '/'), file.contents])
     )
     const entry = Object.entries(result.metafile.outputs).find(([, details]) =>
-        details.entryPoint?.endsWith('fixtures/lazy.ts')
+        details.entryPoint?.endsWith(fixture)
     )?.[0]
     if (!entry) {
         throw new Error('The lazy bundle-size fixture did not produce an entry chunk')
@@ -137,17 +141,22 @@ const measureLazy = async () => {
     const initialKeys = [...initial]
     const totalKeys = Object.keys(result.metafile.outputs)
     if (
+        automatic &&
         !initialKeys.some((key) =>
             Object.keys(result.metafile.outputs[key].inputs).some((input) => automaticAnalyticsInput.test(input))
         )
     ) {
         throw new Error('The lazy initial bundle must include the automatic analytics factory')
     }
-    await report('lazy initial', result, contents(initialKeys), initialKeys, true)
-    await report('lazy total', result, contents(totalKeys), totalKeys, false)
+    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true)
+    const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
+    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true)
+    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true)
 }
 
 await measureStatic('core', 'fixtures/minimal.ts', true)
 await measureStatic('eager analytics', 'fixtures/eager.ts', false)
 await measureLazy()
+await measureStatic('static flags', 'fixtures/static-flags.ts', true, true)
+await measureLazy('dynamic flags', 'fixtures/dynamic-flags.ts', false)
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

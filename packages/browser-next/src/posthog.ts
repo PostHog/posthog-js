@@ -1,4 +1,5 @@
 import { loadRemoteConfig } from './remote-config'
+import type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
 import {
     type ApiResponse,
     type CaptureOptions,
@@ -117,11 +118,17 @@ class PostHogBrowserClient implements PostHog {
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onEvent: Client['onEvent']
     readonly onNewSession: PostHog['onNewSession']
+    readonly onIdentify: BrowserClient['onIdentify']
+    readonly onGroup: BrowserClient['onGroup']
+    readonly onReset: BrowserClient['onReset']
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
+    private readonly _identifyPublisher: Publisher<IdentifyInfo>
+    private readonly _groupPublisher: Publisher<GroupInfo>
+    private readonly _resetPublisher: Publisher<void>
     readonly _registry: ExtensionRegistry
     readonly _requestRuntime: RequestRuntime
     _captureSink: CaptureSink | undefined
@@ -172,6 +179,9 @@ class PostHogBrowserClient implements PostHog {
             this.logger.error('A remote configuration listener failed', error)
         )
         this._eventPublisher = new Publisher((error) => this.logger.error('An event listener failed', error))
+        this._identifyPublisher = new Publisher((error) => this.logger.error('An identify listener failed', error))
+        this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
+        this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
 
         const browserNavigator: BrowserNavigator | undefined =
@@ -240,6 +250,9 @@ class PostHogBrowserClient implements PostHog {
             return subscription
         }
         this.onEvent = this._eventPublisher.listener
+        this.onIdentify = this._identifyPublisher.listener
+        this.onGroup = this._groupPublisher.listener
+        this.onReset = this._resetPublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
         this._registry = new ExtensionRegistry(
             (extensionName) => this._createExtensionClient(extensionName),
@@ -484,14 +497,17 @@ class PostHogBrowserClient implements PostHog {
         if (distinctId === previousDistinctId) {
             if (!wasIdentified) {
                 this._state.identify(distinctId)
+                this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
                 this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
             } else if (hasPersonProperties) {
+                this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
                 this.capture('$set', null, captureOptions)
             }
             return
         }
 
         this._state.identify(distinctId)
+        this._identifyPublisher.publish({ distinctId, previousDistinctId, wasIdentified, set, setOnce })
         if (!wasIdentified) {
             this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
         } else if (hasPersonProperties) {
@@ -509,6 +525,7 @@ class PostHogBrowserClient implements PostHog {
         if (!changed && !properties) {
             return
         }
+        this._groupPublisher.publish({ type, key, changed, properties })
         this.capture('$groupidentify', {
             $group_type: type,
             $group_key: key,
@@ -522,6 +539,7 @@ class PostHogBrowserClient implements PostHog {
         }
         this._state.prepare()
         this._state.reset()
+        this._resetPublisher.publish(undefined)
     }
 
     async flush(): Promise<void> {
@@ -739,6 +757,9 @@ class PostHogBrowserClient implements PostHog {
                 .catch((error) => this.logger.error('Failed to dispose extensions', error))
             this._remoteConfigPublisher.dispose()
             this._eventPublisher.dispose()
+            this._identifyPublisher.dispose()
+            this._groupPublisher.dispose()
+            this._resetPublisher.dispose()
             this._newSessionPublisher.dispose()
             this._dynamicEventProperties.splice(0)
             await Promise.race([cleanup, timeout])
@@ -908,7 +929,7 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _createExtensionClient(extensionName: string): Client {
+    private _createExtensionClient(extensionName: string): BrowserClient {
         const host = this
         const logger = this.logger.createLogger(extensionName)
         const kv = this._state.keyValueStore(
@@ -950,6 +971,9 @@ class PostHogBrowserClient implements PostHog {
             sendRequest: (path, init) => host.sendRequest(path, init),
             onRemoteConfig: host.onRemoteConfig,
             onEvent: host.onEvent,
+            onIdentify: host.onIdentify,
+            onGroup: host.onGroup,
+            onReset: host.onReset,
             kv,
             logger,
         }

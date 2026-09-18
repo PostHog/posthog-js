@@ -22,7 +22,21 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             }
         }
     }
+    let flagsError: unknown
+    if (!extensions.some((extension) => extension.name === 'featureFlags')) {
+        try {
+            const configuration = options?.flags
+            if (configuration !== false) {
+                const snapshot = configuration && JSON.parse(JSON.stringify(configuration))
+                const { flags } = await import('./flags')
+                extensions.push(flags(snapshot))
+            }
+        } catch (error) {
+            flagsError = error
+        }
+    }
     const client = await createPostHogCore(options, extensions)
+    if (flagsError) client.logger.error('Automatic flags loading failed', flagsError)
     if (loadingError) {
         client.logger.error('Automatic analytics loading failed', loadingError)
     }
@@ -30,6 +44,8 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
 }
 
 export { version } from './version'
+export { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
+export type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
 export type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -54,3 +70,11 @@ export type {
     SessionContext,
     StorageLike,
 } from './types'
+
+export type {
+    FlagsOptions,
+    FlagsConfiguration,
+    FlagsCallback,
+    FeatureFlagResult,
+    FeatureFlagsReloadResult,
+} from './flags-options'
