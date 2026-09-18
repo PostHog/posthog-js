@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.54.5
+
+### Patch Changes
+
+- [#5012](https://github.com/PostHog/posthog-js/pull/5012) [`5c12a4c`](https://github.com/PostHog/posthog-js/commit/5c12a4c98f0131b9be53c2e105937f2e05ba3bde) Thanks [@yoarajota](https://github.com/yoarajota)! - Coerce survey and product tour property filter values to strings before matching, so a numeric filter value from the `/surveys` response no longer throws in `icontains`/`not_icontains`
+  (2026-09-18)
+
 ## 1.54.4
 
 ### Patch Changes
