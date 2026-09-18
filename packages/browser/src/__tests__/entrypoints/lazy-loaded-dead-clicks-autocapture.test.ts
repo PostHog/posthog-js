@@ -1408,6 +1408,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture.start(document)
 
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(closedRoot)).toBe(true)
         })
 
@@ -1457,16 +1458,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             ])
 
             expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
-        })
-
-        it('accepts several observe targets', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-            attachHost()
-
-            lazyLoadedDeadClicksAutocapture.start([document, shadowRoot])
-
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
         })
 
         it('forgets observed roots after stopping', () => {

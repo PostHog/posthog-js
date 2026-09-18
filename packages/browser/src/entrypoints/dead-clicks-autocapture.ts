@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
+import { isNull, isNumber, isUndefined } from '@posthog/core'
 import {
     getEventTarget,
     isTextSelectionTarget,
@@ -199,7 +199,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._onCapture = this._config.__onCapture
     }
 
-    start(observerTarget: Node | Node[]) {
+    start(observerTarget: Node) {
         this._startClickObserver()
         this._startScrollObserver()
         this._startSelectionChangedObserver()
@@ -211,14 +211,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
-    private _startMutationObserver(observerTarget: Node | Node[]) {
+    private _startMutationObserver(observerTarget: Node) {
         if (!this._mutationObserver) {
             const NativeMutationObserver = getNativeMutationObserverImplementation(assignableWindow)
             this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this._onMutation(mutations)
             })
-            const targets = isArray(observerTarget) ? observerTarget : [observerTarget]
-            for (const target of targets.concat(this._config.mutation_observer_roots)) {
+            // concat rather than spread, so a caller that provided something other than an array
+            // of roots becomes one entry for `_observeRoot` to reject instead of an iteration error
+            for (const target of [observerTarget].concat(this._config.mutation_observer_roots)) {
                 this._observeRoot(target)
             }
         }
