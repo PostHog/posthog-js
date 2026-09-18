@@ -294,9 +294,12 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
 
     // an icon-only control often carries its label on the icon inside it, e.g.
     // <button><svg aria-label="Next slide"/></button>, so we read aria-label from the click target
-    // up to the control and stop there, leaving a surrounding region's label out as before
+    // up to the control and stop there, so a wrapping region's aria-label is never used to match.
+    // the same walk collects the text of every element on the way, e.g. <a><strong>Next</strong></a>
     let ariaLabel = ''
+    const pathToControl: Element[] = []
     for (const candidate of targetElementList) {
+        pathToControl.push(candidate)
         ariaLabel = candidate.getAttribute('aria-label')?.toLowerCase().trim() || ariaLabel
         if (candidate === control) {
             break
@@ -304,7 +307,7 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
     }
 
     return {
-        safeText: controlLabelText(control).toLowerCase(),
+        safeText: controlLabelText(pathToControl, control).toLowerCase(),
         ariaLabel,
     }
 }
@@ -312,8 +315,21 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
 // an inline icon or an interpolated value splits a label across text nodes, and getSafeText joins
 // those with nothing, so <button>Next <svg/> page</button> would read as "nextpage" and no whole-word
 // keyword could match it. we keep the words apart for matching; $el_text keeps using getSafeText
-function controlLabelText(control: Element): string {
-    const text = `${joinSafeTextNodes(control, ' ')} ${joinNestedSpanText(control, ' ')}`.replace(/\s+/g, ' ').trim()
+function controlLabelText(pathToControl: Element[], control: Element): string {
+    // joinNestedSpanText(control) already reads spans reached from the control through spans only,
+    // so those are skipped on the path to avoid counting their text twice
+    let spanChain = true
+    const pathText = pathToControl
+        .slice()
+        .reverse()
+        .map((candidate) => {
+            if (candidate === control) {
+                return joinSafeTextNodes(candidate, ' ')
+            }
+            spanChain = spanChain && isTag(candidate, 'span')
+            return spanChain ? '' : joinSafeTextNodes(candidate, ' ')
+        })
+    const text = [...pathText, joinNestedSpanText(control, ' ')].join(' ').replace(/\s+/g, ' ').trim()
     return shouldCaptureValue(text) ? text : ''
 }
 

@@ -957,6 +957,34 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
                     })
 
+                    it('rapid clicks on a div inside a button labelled "Next slide" do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const div = document.createElement('div')
+                        div.textContent = 'Next slide'
+                        button.appendChild(div)
+
+                        expect(rageClickThreeTimes(div, button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a strong tag inside an anchor labelled "Next" do not capture $rageclick', () => {
+                        const link = document.createElement('a')
+                        const strong = document.createElement('strong')
+                        strong.textContent = 'Next'
+                        link.appendChild(strong)
+
+                        expect(rageClickThreeTimes(strong, link)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a span under a div inside a button labelled "Next" do not capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        const wrapper = document.createElement('div')
+                        const label = document.createElement('span')
+                        label.textContent = 'Next'
+                        wrapper.appendChild(label)
+                        button.appendChild(wrapper)
+                        expect(rageClickThreeTimes(label, button)).not.toContain('$rageclick')
+                    })
+
                     it.each([
                         'Add to cart',
                         'Submit',
