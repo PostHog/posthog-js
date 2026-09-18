@@ -298,11 +298,18 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onMutation(mutations: MutationRecord[]): void {
-        // we don't actually care about the content of the mutations, right now
-        this._lastMutation = Date.now()
-        // except that added content can bring a shadow root of its own, which the observer
-        // that reported the addition cannot see into
         for (const mutation of mutations) {
+            // a root we observe directly keeps reporting after its host leaves the page, but a
+            // change off the page is no sign of life for a click on it. observing the document
+            // alone never reported those, so this keeps the liveness signal to the live page.
+            // only an explicit `false` counts, so an environment without `isConnected` is unchanged
+            if (mutation.target?.isConnected === false) {
+                continue
+            }
+            // we don't actually care about the content of the mutations, right now
+            this._lastMutation = Date.now()
+            // except that added content can bring a shadow root of its own, which the observer
+            // that reported the addition cannot see into
             const addedNodes = mutation.addedNodes
             for (let i = 0; i < addedNodes.length; i++) {
                 const node = addedNodes[i]

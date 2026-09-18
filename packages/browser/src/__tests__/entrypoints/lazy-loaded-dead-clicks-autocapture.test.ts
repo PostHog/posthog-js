@@ -1436,6 +1436,29 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
         })
 
+        it('does not treat a change inside a detached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            host.remove()
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(undefined)
+        })
+
+        it('treats a change inside an attached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
         it('accepts several observe targets', () => {
             lazyLoadedDeadClicksAutocapture.stop()
             attachHost()
