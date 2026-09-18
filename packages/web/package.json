@@ -1,6 +1,6 @@
 {
   "name": "posthog-js-lite",
-  "version": "4.11.0",
+  "version": "4.12.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -14,6 +14,7 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.json",
     "clean": "rimraf dist coverage",
     "test:unit": "vitest run",
     "lint": "oxlint --report-unused-disable-directives-severity error src test",
@@ -39,6 +40,6 @@
     "jsdom": "catalog:",
     "vitest": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:native"
   }
 }

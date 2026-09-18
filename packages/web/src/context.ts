@@ -1,4 +1,4 @@
-import { currentTimestamp, detectBrowser, detectBrowserVersion, stripUrlHash } from '@posthog/core'
+import { currentTimestamp, detectBrowser, detectBrowserVersion, detectWebviewApp, stripUrlHash } from '@posthog/core'
 import { version } from './version'
 
 export function getContext(window: Window | undefined, disableCaptureUrlHashes: boolean = false): any {
@@ -6,10 +6,13 @@ export function getContext(window: Window | undefined, disableCaptureUrlHashes: 
   if (window?.navigator) {
     const userAgent = window.navigator.userAgent
     const osValue = os(window)
+    const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
     context = {
       ...context,
       ...(osValue !== undefined && { $os: osValue }),
       $browser: detectBrowser(userAgent, window.navigator.vendor),
+      ...(webviewApp && { $webview_app: webviewApp }),
+      ...(webviewAppVersion && { $webview_app_version: webviewAppVersion }),
       $referrer: window.document.referrer,
       $referring_domain: referringDomain(window.document.referrer),
       $device: device(userAgent),

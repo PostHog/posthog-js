@@ -154,7 +154,7 @@
         },
         {
           "category": "Error tracking",
-          "description": "Capture a caught exception manually",
+          "description": "Capture a caught exception manually\nExceptions also include capture-time `$app_state` (active, background, inactive or extension) on any platform where React Native AppState provides a known value. On iOS and Android, optional `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by `customAppProperties`, including the existing `$app_version` and `$app_build`. Override these fields with `additionalProperties`, or remove them using `before_send`.",
           "details": null,
           "id": "captureException",
           "showDocs": true,
@@ -229,7 +229,7 @@
         },
         {
           "category": "",
-          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus warm-start and foreground taps on Android — or the tap is counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
+          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus Android taps while the app is running if `@posthog/react-native-plugin` is older than 2.6.0. A notification PostHog sent is still counted once when both paths report it (same `posthog.invocation_id` and action within five minutes); one from another provider is counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
           "details": null,
           "id": "capturePushNotificationOpened",
           "showDocs": true,
@@ -1089,7 +1089,7 @@
         {
           "category": "Capture",
           "description": "Captures a screen view event.",
-          "details": "This function requires a name. You may also pass in an optional properties object. Screen name is automatically registered for the session and will be included in subsequent events.",
+          "details": "This function requires a name. You may also pass in an optional properties object. Once initialized, the screen name is registered immediately for subsequent events, including exceptions. During initialization, screen registration and event capture retain their call order. Exceptions use the last recorded screen, not a destination that has not yet been tracked.",
           "id": "screen",
           "showDocs": true,
           "title": "screen",
@@ -1289,7 +1289,7 @@
         },
         {
           "category": "Session Replay",
-          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
+          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nA refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds, and on subsequent feature flags loads while pending. This promise resolves after the initial attempt, without waiting for retries or guaranteeing recording is active. A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
           "details": null,
           "id": "startSessionRecording",
           "showDocs": true,
@@ -2830,8 +2830,16 @@
       "name": "Mechanism",
       "properties": [
         {
+          "type": "number",
+          "name": "exception_id"
+        },
+        {
           "type": "boolean",
           "name": "handled"
+        },
+        {
+          "type": "number",
+          "name": "parent_id"
         },
         {
           "type": "string",
@@ -2842,7 +2850,7 @@
           "name": "synthetic"
         },
         {
-          "type": "'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'",
+          "type": "string",
           "name": "type"
         }
       ],
@@ -3368,6 +3376,10 @@
         {
           "type": "string",
           "name": "componentStack"
+        },
+        {
+          "type": "() => void",
+          "name": "resetError"
         }
       ],
       "path": "dist/PostHogErrorBoundary.d.ts"
@@ -3395,6 +3407,10 @@
       "id": "PostHogErrorBoundaryState",
       "name": "PostHogErrorBoundaryState",
       "properties": [
+        {
+          "type": "boolean",
+          "name": "hasError"
+        },
         {
           "type": "string",
           "name": "componentStack"
@@ -3725,7 +3741,7 @@
           "name": "flushIntervalMs"
         },
         {
-          "description": "Max records per outbound POST. Keeps each request under the server's 2 MB cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
           "type": "number",
           "name": "maxBatchRecordsPerPost"
         },
@@ -3794,7 +3810,7 @@
           "name": "captureAppLifecycleEvents"
         },
         {
-          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. Android sees cold starts only; call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nNot supported on web.\ntrue",
+          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nOn iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to catch a tap that cold-launches the app. Two switches gate automatic capture there, and `false` on either one means the SDK sends no `$push_notification_opened` of its own (an explicit  call still captures):\n- This option set to `false` turns capture off when `setup()` runs and releases the launch hook, dropping the tap it was holding. The hook is still installed for the window between launch and `setup()`. - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist` (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your JS runs, and forces capture off at `setup()` even when this option is `true`. It is the same key posthog-flutter reads.\nNot supported on web.\ntrue",
           "type": "boolean",
           "name": "capturePushNotificationOpened"
         },
@@ -3819,7 +3835,7 @@
           "name": "enablePersistSessionIdAcrossRestart"
         },
         {
-          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nfalse",
+          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nThis option is read once, at setup. To record only some sessions, either gate recording from your project settings (sampling, a linked flag, or event triggers), or leave this option off and drive the recorder from your app with `startSessionRecording()` and `stopSessionRecording()`.\nfalse",
           "type": "boolean",
           "name": "enableSessionReplay"
         },
@@ -3847,6 +3863,11 @@
           "description": "Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`.\nCalled with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds.",
           "type": "PostHogPushIdentityProvider",
           "name": "pushIdentityProvider"
+        },
+        {
+          "description": "Configure rage click (rage tap) detection on iOS.\nThe native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them.\nAndroid is unaffected — posthog-android does not have native rage click detection.\nRequires `@posthog/react-native-plugin` version 2.7.0 or newer.",
+          "type": "PostHogRageClickConfig",
+          "name": "rageClickConfig"
         },
         {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
@@ -4055,6 +4076,33 @@
       "example": "(distinctId: string, appId: string) => Promise<string | null>"
     },
     {
+      "id": "PostHogRageClickConfig",
+      "name": "PostHogRageClickConfig",
+      "properties": [
+        {
+          "description": "Enable or disable rage click (rage tap) detection.\n\nWhen enabled the native SDK emits a `$rageclick` event whenever a user\ntaps the same area repeatedly in quick succession.",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Number of consecutive taps required to trigger a rage click.",
+          "type": "number",
+          "name": "minimumTapCount"
+        },
+        {
+          "description": "Maximum pixel distance between consecutive taps for them to still\ncount toward a rage click.",
+          "type": "number",
+          "name": "thresholdPoints"
+        },
+        {
+          "description": "Maximum time in seconds allowed between consecutive taps.",
+          "type": "number",
+          "name": "timeoutInterval"
+        }
+      ],
+      "path": "dist/types.d.ts"
+    },
+    {
       "id": "PostHogReactNativePluginExtended",
       "name": "PostHogReactNativePluginExtended",
       "properties": [
@@ -4168,6 +4216,11 @@
       "name": "PostHogSessionReplayConfig",
       "properties": [
         {
+          "description": "Capture touch coordinates in session replay. Set to false to keep screenshots\nwithout recording taps that could reveal sensitive input on a known keypad layout.\nDoes not change masking or `PostHogProvider` touch autocapture.\nAndroid and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;\nolder plugins and `posthog-react-native-session-replay` ignore this option.\nSet before constructing PostHog. Changes after initialization do not update native state.",
+          "type": "boolean",
+          "name": "captureTouches"
+        },
+        {
           "description": "Enable masking of all text and text input fields",
           "type": "boolean",
           "name": "maskAllTextInputs"
@@ -4215,6 +4268,21 @@
           "name": "verifyScreenshotMaskAlignment"
         },
         {
+          "description": "Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0.\nFor example, 0.5 captures half the width and height, or one quarter of the pixels.\nThe logical replay viewport is unchanged. Non-finite values use the native default.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.\nDoes not enable session replay or change compression quality or color mode.",
+          "type": "number",
+          "name": "screenshotScale"
+        },
+        {
+          "description": "Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated.\nHigher values generally retain more detail and produce larger payloads.\nCompression is lossy, except at quality 100 on Android 10, which uses lossless WebP.\nNon-finite values use the native default. Does not change screenshot resolution.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "number",
+          "name": "screenshotCompressionQuality"
+        },
+        {
+          "description": "Experimental. Screenshot bitmap pixel format. ARGB_8888 preserves transparency and color precision.\nRGB_565 uses half the bitmap memory but reduces color precision and removes alpha,\nmaking transparent window regions appear black. Unsupported devices fall back to ARGB_8888.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "\"ARGB_8888\" | \"RGB_565\"",
+          "name": "screenshotColorMode"
+        },
+        {
           "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
           "type": "boolean",
           "name": "screenshotModeBackgroundCapture"
@@ -4237,7 +4305,7 @@
           "name": "autoPresentSurveys"
         },
         {
-          "description": "The default appearance for surveys when not specified in PostHog.",
+          "description": "The default appearance for surveys when not specified in PostHog.\n\nAccepts the React Native-only appearance fields as well (e.g.\n`maxFontSizeMultiplier`) — they are merged into the same theme object the\nsurvey components read, and PostHog never sends them down.",
           "type": "SurveyAppearance",
           "name": "defaultSurveyAppearance"
         },
@@ -4445,14 +4513,21 @@
       "name": "SendLogsBatchOutcome",
       "properties": [],
       "path": "../core/src/posthog-core-stateless.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SendMetricsBatchOutcome",
       "name": "SendMetricsBatchOutcome",
       "properties": [],
       "path": "../core/src/metrics/types.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SeverityLevel",
@@ -4659,135 +4734,147 @@
       "path": "../core/src/types.ts"
     },
     {
-      "id": "SurveyAppearance",
-      "name": "SurveyAppearance",
+      "id": "SurveyAppearance_2",
+      "name": "SurveyAppearance_2",
       "properties": [
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "backgroundColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "textColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "submitButtonColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "submitButtonText"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "submitButtonTextColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "ratingButtonColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "ratingButtonActiveColor"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "inputBackground"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "inputTextColor"
         },
         {
-          "type": "boolean",
+          "type": "boolean | undefined",
           "name": "autoDisappear"
         },
         {
-          "type": "boolean",
+          "type": "boolean | undefined",
           "name": "displayThankYouMessage"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "thankYouMessageHeader"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "thankYouMessageDescription"
         },
         {
-          "type": "SurveyQuestionDescriptionContentType",
+          "type": "SurveyQuestionDescriptionContentType | undefined",
           "name": "thankYouMessageDescriptionContentType"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "thankYouMessageCloseButtonText"
         },
         {
-          "type": "boolean",
+          "type": "boolean | undefined",
           "name": "displayIntroScreen"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "introScreenHeader"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "introScreenDescription"
         },
         {
-          "type": "SurveyQuestionDescriptionContentType",
+          "type": "SurveyQuestionDescriptionContentType | undefined",
           "name": "introScreenDescriptionContentType"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "introScreenButtonText"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "borderColor"
         },
         {
-          "type": "SurveyPosition",
+          "type": "SurveyPosition | undefined",
           "name": "position"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "placeholder"
         },
         {
-          "type": "boolean",
+          "type": "boolean | undefined",
           "name": "shuffleQuestions"
         },
         {
-          "type": "number",
+          "type": "number | undefined",
           "name": "surveyPopupDelaySeconds"
         },
         {
-          "type": "boolean",
+          "type": "boolean | undefined",
           "name": "allowGoBack"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "backButtonText"
         },
         {
-          "type": "SurveyWidgetType",
+          "type": "SurveyWidgetType | undefined",
           "name": "widgetType"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "widgetSelector"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "widgetLabel"
         },
         {
-          "type": "string",
+          "type": "string | undefined",
           "name": "widgetColor"
         }
       ],
       "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyAppearance",
+      "name": "SurveyAppearance",
+      "properties": [
+        {
+          "description": "Caps how far survey text may grow under the OS text-size setting, as a multiple of its base size - React Native's `maxFontSizeMultiplier`, applied to every semantic `Text` and `TextInput` the survey renders. Icon-only text fallbacks do not scale because they occupy fixed-size icon boxes.\nPass a number to cap every role at once, or an object to cap them separately: a survey headline can usually take more scaling than a numeral inside a rating button, and a host app that already caps its own text by role will want to match those ceilings here.\nRoles left out of the object are uncapped, as they are today. Use `0` for no maximum, or a value of `1` or greater to set a cap. Other values below `1` (such as `0.8`) do not shrink text and are unsupported by React Native; depending on the platform and version, they may be ignored or rejected.\nLeave it unset (the default) and survey text scales without a ceiling. That is what the OS asks for, but not always what a fixed-size survey card can hold - at the largest accessibility sizes an unbounded 18pt headline renders roughly one word per line.\nReact Native only inherits this prop through nested `Text`, so a host app cannot apply it from the outside - it has to come in here.\nundefined (no ceiling)",
+          "type": "number | Partial<Record<SurveyTextRole, number>>",
+          "name": "maxFontSizeMultiplier"
+        }
+      ],
+      "path": "dist/surveys/surveys-utils.d.ts"
     },
     {
       "id": "SurveyAppearanceTheme",
@@ -4874,10 +4961,6 @@
           "name": "position"
         },
         {
-          "type": "string",
-          "name": "placeholder"
-        },
-        {
           "type": "number",
           "name": "surveyPopupDelaySeconds"
         },
@@ -4896,6 +4979,14 @@
         {
           "type": "string",
           "name": "inputTextColor"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
+        },
+        {
+          "type": "number | Partial<Record<SurveyTextRole, number>>",
+          "name": "maxFontSizeMultiplier"
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"
@@ -5108,6 +5199,13 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
+    },
+    {
+      "id": "SurveyTextRole",
+      "name": "SurveyTextRole",
+      "properties": [],
+      "path": "dist/surveys/surveys-utils.d.ts",
+      "example": "\"question\" | \"description\" | \"header\" | \"choice\" | \"input\" | \"button\" | \"ratingLabel\" | \"ratingNumber\" | \"validationHint\""
     },
     {
       "id": "SurveyTranslation",

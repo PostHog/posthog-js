@@ -4,7 +4,8 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { RemoteConfig } from '../../types'
+import { CaptureResult, RemoteConfig } from '../../types'
+import { jsonStringify } from '@posthog/browser-common/utils/request-utils'
 
 describe('ExceptionObserver', () => {
     let instance: PostHog
@@ -55,6 +56,128 @@ describe('ExceptionObserver', () => {
                 expect(sendExceptionEvent).not.toHaveBeenCalled()
             }
         )
+
+        it('captures an aggregate and its children in one event with their own stacks', () => {
+            const child = new TypeError('alternative')
+            child.stack = 'TypeError: alternative\n    at child (https://example.com/child.js:2:3)'
+            const aggregate = new AggregateError([child], 'group')
+            aggregate.stack = 'AggregateError: group\n    at root (https://example.com/root.js:4:5)'
+            const beforeSend = vi.fn((_event: CaptureResult | null) => null)
+            instance.set_config({ before_send: beforeSend })
+
+            instance.captureException(aggregate)
+
+            expect(beforeSend).toHaveBeenCalledTimes(1)
+            const event = beforeSend.mock.calls[0][0]!
+            expect(event.event).toBe('$exception')
+            expect(event.properties.$exception_list).toMatchObject([
+                { value: 'group', stacktrace: { frames: [{ filename: 'https://example.com/root.js' }] } },
+                { value: 'alternative', stacktrace: { frames: [{ filename: 'https://example.com/child.js' }] } },
+            ])
+            expect(event.properties.$exception_list.map((entry: { mechanism: unknown }) => entry.mechanism)).toEqual([
+                { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+                { type: 'chained', source: 'member', synthetic: false, exception_id: 1, parent_id: 0 },
+            ])
+        })
+
+        function captureAdditionalProperties(additionalProperties: Record<string, unknown>) {
+            const beforeSend = vi.fn((_event: CaptureResult | null) => null)
+            instance.set_config({ before_send: beforeSend })
+            instance.captureException(new Error('original exception'), additionalProperties)
+            expect(beforeSend).toHaveBeenCalledTimes(1)
+            return JSON.parse(jsonStringify(beforeSend.mock.calls[0][0])).properties
+        }
+
+        it('serializes Date and custom toJSON additional properties on the wire', () => {
+            class ErrorWithToJSON extends Error {
+                toJSON() {
+                    return { name: 'custom error', message: this.message }
+                }
+            }
+            const customDate = new Date('2025-01-02T03:04:05.000Z')
+            customDate.toJSON = () => 'custom date'
+            const toJSON = vi.fn(function (this: { value: string }, key: string) {
+                return `${key}: ${this.value}`
+            })
+            const properties = {
+                date: new Date('2025-01-02T03:04:05.000Z'),
+                invalidDate: new Date(NaN),
+                customDate,
+                error: new ErrorWithToJSON('custom message'),
+                nested: [{ custom: { value: 'kept', toJSON } }],
+                ordinary: { name: 'justin', age: 101, pets: ['dog', 'cat'], enabled: true, missing: null },
+            }
+
+            expect(captureAdditionalProperties(properties)).toMatchObject({
+                date: '2025-01-02T03:04:05.000Z',
+                invalidDate: null,
+                customDate: 'custom date',
+                error: { name: 'custom error', message: 'custom message' },
+                nested: [{ custom: 'custom: kept' }],
+                ordinary: properties.ordinary,
+            })
+            expect(toJSON).toHaveBeenCalledTimes(1)
+        })
+
+        it('serializes Error additional properties without losing custom fields or mutating inputs', () => {
+            const error = Object.assign(new TypeError('additional error'), { code: 'E_TEST' })
+            const properties = { error, nested: [{ error }] }
+            const expected = { name: 'TypeError', message: error.message, stack: error.stack, code: 'E_TEST' }
+
+            expect(captureAdditionalProperties(properties)).toMatchObject({
+                error: expected,
+                nested: [{ error: expected }],
+            })
+            expect(properties.error).toBe(error)
+            expect(Object.keys(error)).toEqual(['code'])
+        })
+
+        it('keeps additional properties available for before_send mutation before calling toJSON', () => {
+            const toJSON = vi.fn(function (this: { message: string }) {
+                return { message: this.message }
+            })
+            const error = Object.assign(new Error('original message'), { toJSON })
+            const beforeSend = vi.fn((event: CaptureResult | null) => {
+                expect(toJSON).not.toHaveBeenCalled()
+                expect(event!.properties.error).toBe(error)
+                event!.properties.error.message = 'updated message'
+                return null
+            })
+            instance.set_config({ before_send: beforeSend })
+            instance.captureException(new Error('original exception'), { error })
+
+            expect(beforeSend).toHaveBeenCalledTimes(1)
+            expect(JSON.parse(jsonStringify(beforeSend.mock.calls[0][0])).properties.error).toEqual({
+                message: 'updated message',
+            })
+            expect(toJSON).toHaveBeenCalledTimes(1)
+        })
+
+        it('contains serialization failures without re-entering exception capture', () => {
+            const toJSON = vi.fn(() => {
+                throw new Error('cannot serialize')
+            })
+            const beforeSend = vi.fn((event: CaptureResult | null) => {
+                jsonStringify(event)
+                return null
+            })
+            instance.set_config({ before_send: beforeSend })
+
+            expect(() =>
+                instance.captureException(new Error('original exception'), { value: { toJSON } })
+            ).not.toThrow()
+            expect(beforeSend).toHaveBeenCalledTimes(1)
+        })
+
+        it('preserves circular-reference handling and shared additional properties', () => {
+            const shared = { name: 'shared' }
+            const circular: Record<string, unknown> = { first: shared, second: shared }
+            circular.self = circular
+
+            expect(captureAdditionalProperties({ circular })).toMatchObject({
+                circular: { first: shared, second: shared, self: '[Circular]' },
+            })
+        })
 
         it('swallows errors while building a manually captured exception', () => {
             vi.spyOn(instance.exceptions, 'buildProperties').mockImplementation(() => {

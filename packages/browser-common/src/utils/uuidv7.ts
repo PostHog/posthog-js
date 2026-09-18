@@ -124,6 +124,24 @@ export class UUID {
     }
 }
 
+/** The largest `unix_ts_ms` field value a UUIDv7 can hold. */
+const MAX_UNIX_TS_MS = 0xffff_ffff_ffff
+
+/**
+ * Reads the clock as a value that `UUID.fromFieldsV7` accepts. `Date.now()` is not trustworthy on
+ * a host page: a system clock set before 1970 makes it negative, and a script or an extension that
+ * replaces it can make it fractional or non-finite. Each of those makes `fromFieldsV7` throw
+ * `RangeError: invalid field value`. A UUID is generated for every captured event, so that throw
+ * escapes into the host page instead of costing one event.
+ */
+const currentUnixTsMs = (): number => {
+    const now = Date.now()
+    if (!isNumber(now) || !isFinite(now)) {
+        return 0
+    }
+    return Math.min(Math.max(Math.floor(now), 0), MAX_UNIX_TS_MS)
+}
+
 /** Encapsulates the monotonic counter state. */
 class V7Generator {
     private _timestamp = 0
@@ -168,7 +186,7 @@ class V7Generator {
         const MAX_COUNTER = 0x3ff_ffff_ffff
         const ROLLBACK_ALLOWANCE = 10_000 // 10 seconds
 
-        const ts = Date.now()
+        const ts = currentUnixTsMs()
         if (ts > this._timestamp) {
             this._timestamp = ts
             this._resetCounter()
@@ -203,7 +221,7 @@ class V7Generator {
 declare const UUIDV7_DENY_WEAK_RNG: boolean
 
 /** Stores `crypto.getRandomValues()` available in the environment. */
-let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buffer) => {
+let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {

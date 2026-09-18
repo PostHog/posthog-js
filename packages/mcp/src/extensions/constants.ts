@@ -5,7 +5,7 @@
 
 export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
-export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): "Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization."`
+export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as "a user", "the customer", or "an account". Example: "Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution."`
 
 export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. "claude-opus-4-8", "gpt-5.2"). Used for analytics only. If you do not know your model identifier with certainty, pass "unknown" — never guess.`
 
@@ -25,6 +25,7 @@ export const POSTHOG_MCP_LIB_NAME = 'posthog-node-mcp'
 export const PostHogMCPAnalyticsEvent = {
   Custom: '$mcp_custom',
   Exception: '$exception',
+  Feedback: '$mcp_feedback',
   Identify: '$identify',
   Initialize: '$mcp_initialize',
   MissingCapability: '$mcp_missing_capability',
@@ -46,6 +47,14 @@ export const PostHogMCPAnalyticsProperty = {
   DurationMs: '$mcp_duration_ms',
   ErrorMessage: '$mcp_error_message',
   ErrorType: '$mcp_error_type',
+  FeedbackDetails: '$mcp_feedback_details',
+  FeedbackFrictionPoints: '$mcp_feedback_friction_points',
+  FeedbackSentiment: '$mcp_feedback_sentiment',
+  FeedbackSuggestedImprovement: '$mcp_feedback_suggested_improvement',
+  FeedbackSummary: '$mcp_feedback_summary',
+  FeedbackTaskCompleted: '$mcp_feedback_task_completed',
+  FeedbackTool: '$mcp_feedback_tool',
+  FeedbackType: '$mcp_feedback_type',
   IsError: '$mcp_is_error',
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',

@@ -235,6 +235,7 @@ export interface LazyLoadedSessionRecordingInterface {
     isStarted: boolean
     tryAddCustomEvent(tag: string, payload: any): boolean
     setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
+    flushBeforeIdentityReset?: () => void
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
@@ -291,6 +292,8 @@ interface PostHogExtensions {
         getMutationCost?: () => MutationCost
         getDeferredStylesheetStats?: () => DeferredStylesheetStats
         getDiscardedDurationSamples?: () => number
+        // see rrweb/src/record/observer.ts
+        getObserverInitFailures?: () => string[] | undefined
         resetSnapshotCostState?: () => void
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

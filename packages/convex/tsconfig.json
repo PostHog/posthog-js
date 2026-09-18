@@ -3,7 +3,6 @@
     "allowJs": true,
     "checkJs": true,
     "strict": true,
-
     "target": "ESNext",
     "lib": ["ES2021", "dom", "DOM.Iterable"],
     "jsx": "react-jsx",
@@ -12,7 +11,6 @@
     "noErrorTruncation": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-
     "composite": true,
     "isolatedModules": true,
     "declaration": true,
@@ -21,7 +19,8 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"]
   },
   "include": ["./src/**/*"]
 }

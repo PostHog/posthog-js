@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.50.5",
+  "version": "1.54.5",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -38,12 +38,15 @@
     "!src/__tests__"
   ],
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.build.json",
     "clean": "rimraf dist",
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "test:unit": "vitest run",
+    "test:unit": "NODE_OPTIONS=--expose-gc vitest run",
+    "test:built": "node --test scripts/check-declaration-sourcemap.mjs",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
@@ -85,6 +88,7 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   }
 }

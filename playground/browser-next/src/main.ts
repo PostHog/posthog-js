@@ -68,6 +68,7 @@ app.innerHTML = `
 }</textarea></label>
                 <div class="button-grid">
                     <button id="capture" class="primary">Capture one</button>
+                    <button id="capture-immediate">Capture immediate</button>
                     <button id="capture-five">Queue five</button>
                     <button id="capture-large">Capture 16 KiB</button>
                     <button id="flush">Flush now</button>
@@ -362,6 +363,15 @@ element<HTMLButtonElement>('initialize').addEventListener('click', () => enqueue
 element<HTMLButtonElement>('capture').addEventListener('click', () =>
     enqueue('Capture', async () => {
         await requireClient().capture(eventName(), syntheticProperties(configuredProperties()))
+    })
+)
+element<HTMLButtonElement>('capture-immediate').addEventListener('click', () =>
+    enqueue('Capture immediate', async () => {
+        const summary = await requireClient().captureImmediate(eventName(), syntheticProperties(configuredProperties()))
+        log(
+            summary.allPersisted ? 'sandbox' : 'error',
+            `Immediate capture submitted ${summary.submitted}; ${summary.notPersisted} not persisted`
+        )
     })
 )
 element<HTMLButtonElement>('capture-five').addEventListener('click', () =>

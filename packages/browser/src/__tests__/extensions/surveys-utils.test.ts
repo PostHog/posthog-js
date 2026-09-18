@@ -9,7 +9,7 @@ import {
 } from '../../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
-import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
+import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_LOGGER, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 
 describe('hasWaitPeriodPassed', () => {
     let originalDate: DateConstructor
@@ -653,9 +653,111 @@ describe('sendSurveyEvent', () => {
         localStorage.clear()
     })
 
+    it('leaves the draft and completion state untouched when capturing is opted out', () => {
+        const mockCapture = vi.fn()
+        const dispatch = vi.spyOn(window, 'dispatchEvent')
+        localStorage.setItem(
+            `${SURVEY_IN_PROGRESS_PREFIX}${baseSurvey.id}`,
+            JSON.stringify({ responses: { $survey_response_q1: 'Great!' } })
+        )
+        const before = { ...localStorage }
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockPostHog = {
+            capture: mockCapture,
+            reloadFeatureFlags: vi.fn(),
+            is_capturing: () => false,
+        } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(mockCapture).not.toHaveBeenCalled()
+        expect(mockPostHog.reloadFeatureFlags).not.toHaveBeenCalled()
+        expect(dispatch).not.toHaveBeenCalled()
+        expect({ ...localStorage }).toEqual(before)
+        expect(critical).not.toHaveBeenCalled()
+        dispatch.mockRestore()
+        critical.mockRestore()
+    })
+
+    it('stays silent while capturing is on', () => {
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: vi.fn(),
+            is_capturing: () => true,
+        } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(critical).not.toHaveBeenCalled()
+        critical.mockRestore()
+    })
+
+    // The surveys bundle is loaded from the CDN and can run against an older cached core.
+    // `is_capturing` was only added in posthog-js 1.260.0, so a submission must not throw there.
+    it('reads the consent gate of a core without is_capturing', () => {
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockCapture = vi.fn()
+        const mockPostHog = {
+            capture: mockCapture,
+            reloadFeatureFlags: vi.fn(),
+            has_opted_out_capturing: () => true,
+        } as unknown as PostHog
+
+        expect(() =>
+            sendSurveyEvent({
+                responses: { $survey_response_q1: 'Great!' },
+                survey: baseSurvey,
+                surveySubmissionId: 'submission-123',
+                isSurveyCompleted: true,
+                posthog: mockPostHog,
+            })
+        ).not.toThrow()
+
+        expect(critical).not.toHaveBeenCalled()
+        expect(mockCapture).not.toHaveBeenCalled()
+        critical.mockRestore()
+    })
+
+    it('stays silent on a core without is_capturing while the person is opted in', () => {
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: vi.fn(),
+            has_opted_out_capturing: () => false,
+        } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(critical).not.toHaveBeenCalled()
+        critical.mockRestore()
+    })
+
     it('includes custom properties in captured event', () => {
         const mockCapture = vi.fn()
-        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: vi.fn() } as unknown as PostHog
+        const mockPostHog = {
+            capture: mockCapture,
+            reloadFeatureFlags: vi.fn(),
+            is_capturing: () => true,
+        } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -682,7 +784,11 @@ describe('sendSurveyEvent', () => {
 
     it('works without custom properties', () => {
         const mockCapture = vi.fn()
-        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: vi.fn() } as unknown as PostHog
+        const mockPostHog = {
+            capture: mockCapture,
+            reloadFeatureFlags: vi.fn(),
+            is_capturing: () => true,
+        } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -700,7 +806,11 @@ describe('sendSurveyEvent', () => {
 
     it('reloads feature flags when the survey is completed so the internal targeting flag recomputes', () => {
         const mockReload = vi.fn()
-        const mockPostHog = { capture: vi.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: mockReload,
+            is_capturing: () => true,
+        } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -715,7 +825,11 @@ describe('sendSurveyEvent', () => {
 
     it('does not reload feature flags for a partial (not completed) response', () => {
         const mockReload = vi.fn()
-        const mockPostHog = { capture: vi.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: mockReload,
+            is_capturing: () => true,
+        } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },

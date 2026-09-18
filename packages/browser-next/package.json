@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser",
-    "version": "0.0.1",
+    "version": "0.0.3",
     "description": "A small, extension-based PostHog client for modern browsers",
     "license": "MIT",
     "private": true,
@@ -41,11 +41,12 @@
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests fixtures playwright playwright.config.ts scripts/*.mjs --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
-        "test:unit": "vitest run && rslib build && node scripts/check-mixed-module-delivery.mjs",
+        "test:unit": "vitest run",
+        "test:built": "node scripts/check-mixed-module-delivery.mjs",
         "test:browser": "playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
-        "check-types": "tsc --noEmit --project tsconfig.json",
+        "check-types": "node node_modules/typescript-legacy/bin/tsc --noEmit --project tsconfig.json",
         "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -57,7 +58,8 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "esbuild": "^0.25.0",
-        "typescript": "catalog:",
+        "typescript": "catalog:native",
+        "typescript-legacy": "catalog:",
         "vitest": "catalog:"
     }
 }

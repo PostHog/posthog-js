@@ -1,11 +1,28 @@
 import { getSurveyIterationKey } from '@posthog/core/surveys'
+import { isFunction } from '@posthog/core'
 
+import type { PostHog } from '../posthog-core'
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 export { doesSurveyActivateByEvent, getSurveyInteractionProperty, isSurveyIterationBased } from '@posthog/core/surveys'
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
+
+// Covers every state in which `capture()` drops events, not only an explicit opt-out: with
+// `opt_out_capturing_by_default` a visitor who has not answered the consent banner yet is also
+// not captured, and that person made no choice.
+export const SURVEY_CAPTURING_DISABLED = 'PostHog is not capturing, so a survey response cannot be recorded'
+
+/**
+ * `is_capturing()` was only added to the core in 1.260.0, and a newly deployed surveys bundle can
+ * still be loaded by an older cached core, so calling it directly would throw on every display
+ * poll. Fall back to that core's own consent gate: those versions have no cookieless mode, so
+ * `!has_opted_out_capturing()` is what `is_capturing()` would return there anyway.
+ */
+export function isCapturingEnabled(posthog: Pick<PostHog, 'is_capturing' | 'has_opted_out_capturing'>): boolean {
+    return isFunction(posthog.is_capturing) ? posthog.is_capturing() : !posthog.has_opted_out_capturing()
+}
 
 export function isSurveyRunning(survey: Survey): boolean {
     return !!(survey.start_date && !survey.end_date)

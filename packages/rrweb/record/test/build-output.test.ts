@@ -9,4 +9,26 @@ describe('build output', () => {
         expect(bundle).not.toContain('sourceMappingURL=image-bitmap-data-url-worker-')
         expect(bundle).toContain('sourceMappingURL=rrweb-record.js.map')
     })
+
+    it('emits matching ESM and CommonJS declarations', () => {
+        const esmDeclarations = readFileSync(resolve(__dirname, '../dist/index.d.ts'), 'utf8')
+        const commonJsDeclarations = readFileSync(resolve(__dirname, '../dist/index.d.cts'), 'utf8')
+
+        const expectedExports = [
+            'DeferredStylesheetStats',
+            'MutationCost',
+            'SnapshotCost',
+            'getDeferredStylesheetStats',
+            'getDiscardedDurationSamples',
+            'getLastSnapshotCost',
+            'getMutationCost',
+            'record',
+            'resetMaxDepthState',
+            'resetSnapshotCostState',
+            'wasMaxDepthReached',
+        ]
+
+        expect(commonJsDeclarations).toBe(esmDeclarations)
+        expectedExports.forEach((exportName) => expect(esmDeclarations).toContain(exportName))
+    })
 })

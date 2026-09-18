@@ -34,6 +34,7 @@ import {
   checkDataURLSize,
   recompressBase64Image,
   absolutifyURLs,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -265,11 +266,27 @@ export function transformAttribute(
 }
 
 export function ignoreAttribute(
-  tagName: string,
+  tagName: Lowercase<string>,
   name: string,
   _value: unknown,
 ): boolean {
-  return (tagName === 'video' || tagName === 'audio') && name === 'autoplay';
+  return (
+    (tagName === 'video' || tagName === 'audio') &&
+    toLowerCase(name) === 'autoplay'
+  );
+}
+
+/**
+ * Whether a `<link>`'s `rel` marks it as a stylesheet, matching `rel` as the
+ * space-separated, ASCII-case-insensitive token list it is. The distinction
+ * matters because `<link rel=preload as=style>` carries the same URL as the
+ * stylesheet it preloads while applying no CSS of its own.
+ */
+function isStylesheetLink(rel: unknown): boolean {
+  if (typeof rel !== 'string') {
+    return false;
+  }
+  return toLowerCase(rel).split(/\s+/).includes('stylesheet');
 }
 
 export function _isBlockedElement(
@@ -675,7 +692,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    text = SCRIPT_PLACEHOLDER;
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn
@@ -768,7 +785,16 @@ function serializeElementNode(
   // remote css
   // a blocked link is serialized as a dimensions-only placeholder, so reading its
   // sheet would be wasted work - and deferring it would leak CSS the block excluded
-  if (tagName === 'link' && inlineStylesheet && !needBlock) {
+  if (
+    tagName === 'link' &&
+    inlineStylesheet &&
+    !needBlock &&
+    // Only a real stylesheet link. `preload`/`prefetch` links carry the URL of
+    // a sheet without applying it, so the href lookup below happily resolves
+    // them to the loaded sheet - and then the whole stylesheet is inlined twice
+    // into the snapshot, once on an element the replayer must leave alone.
+    isStylesheetLink(attributes.rel)
+  ) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -1489,7 +1515,7 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    serializedNode.attributes.rel === 'stylesheet'
+    isStylesheetLink(serializedNode.attributes.rel)
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,
@@ -1705,7 +1731,7 @@ function snapshot(
 export function visitSnapshot(
   node: serializedNodeWithId,
   onVisit: (node: serializedNodeWithId) => unknown,
-) {
+): void {
   function walk(current: serializedNodeWithId) {
     onVisit(current);
     if (
@@ -1719,7 +1745,7 @@ export function visitSnapshot(
   walk(node);
 }
 
-export function cleanupSnapshot() {
+export function cleanupSnapshot(): void {
   // allow a new recording to start numbering nodes from scratch
   _id = 1;
 }

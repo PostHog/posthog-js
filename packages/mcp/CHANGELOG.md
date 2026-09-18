@@ -1,5 +1,85 @@
 # @posthog/mcp
 
+## 0.17.0
+
+### Minor Changes
+
+- [#4924](https://github.com/PostHog/posthog-js/pull/4924) [`be40430`](https://github.com/PostHog/posthog-js/commit/be40430a467d41a807a09aa03f02d192b6b04d24) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Enable model capture and conversation correlation by default. Advertised tool schemas gain an `llm_model` argument (never enforced at dispatch) and eligible tool results gain a conversation handle; `instrument(server, posthog, { captureModel: false, enableConversationId: false })` restores the previous shape. Fresh low-level instances now read both arguments under the ADR-0011 rule instead of staying silent.
+  (2026-09-17)
+
+## 0.16.4
+
+### Patch Changes
+
+- [#5009](https://github.com/PostHog/posthog-js/pull/5009) [`b4f58eb`](https://github.com/PostHog/posthog-js/commit/b4f58eb0ddec084f4011f080cb7fdc0461ed7ad6) Thanks [@gesh](https://github.com/gesh)! - Use conversation IDs for `get_more_tools` and `send_feedback` calls handled by fresh server instances.
+  (2026-09-17)
+
+## 0.16.3
+
+### Patch Changes
+
+- [#4967](https://github.com/PostHog/posthog-js/pull/4967) [`916e163`](https://github.com/PostHog/posthog-js/commit/916e16394de38e01789309ea314f23e6ad436c46) Thanks [@gesh](https://github.com/gesh)! - Inject the get_more_tools tool only on the first tools/list page, so a paginated catalogue's concatenated listing carries it once instead of once per page. A real first-page tool with the same name still wins (warning logged); a real tool on a later page is shadowed, with a warning when a client fetches that page — rename the SDK's tool with the `missingCapabilityToolName` option if your catalogue uses the name.
+  (2026-09-16)
+
+## 0.16.2
+
+### Patch Changes
+
+- [#4953](https://github.com/PostHog/posthog-js/pull/4953) [`2a6ddb9`](https://github.com/PostHog/posthog-js/commit/2a6ddb90b400df06a082bae32519ca08273d3926) Thanks [@gesh](https://github.com/gesh)! - Inject the send_feedback tool only on the first tools/list page (the request with no cursor), so a paginated catalogue's concatenated listing carries it once instead of once per page. A real first-page tool with the same name still wins: the SDK warns, skips injection, and forwards its calls. A real tool that only appears on a later page is not detected — the SDK logs a warning when a client fetches that page; rename the SDK's tool with `collectFeedback: { toolName }` if your catalogue uses the name.
+  (2026-09-15)
+
+## 0.16.1
+
+### Patch Changes
+
+- [#4915](https://github.com/PostHog/posthog-js/pull/4915) [`a5c1182`](https://github.com/PostHog/posthog-js/commit/a5c1182647cd82890d3b66dca1eeb27b8e4c0b91) Thanks [@gesh](https://github.com/gesh)! - Harden feedback validation, error handling, and tool-name collision routing.
+  (2026-09-14)
+
+## 0.16.0
+
+### Minor Changes
+
+- [#4870](https://github.com/PostHog/posthog-js/pull/4870) [`cc6373b`](https://github.com/PostHog/posthog-js/commit/cc6373bf42ba1cd777c6f7ecb5596e18d8df1cd5) Thanks [@gesh](https://github.com/gesh)! - Add the `send_feedback` virtual tool (new `collectFeedback` option): an honest, general agent-feedback channel with missing capabilities as the priority category. Every call emits a new `$mcp_feedback` event with `$mcp_feedback_type` and the other `$mcp_feedback_*` properties. Hosts can rename the tool, replace its description, declare `extraProperties` (captured as `$mcp_feedback_<key>`), and route reports to a real backend via `onFeedback` (`instrument()` path) or `prepareToolCall().feedbackReport` + `captureFeedback()` + `sendFeedbackResult()` (custom-dispatcher path). `reportMissing` / `get_more_tools` / `$mcp_missing_capability` are unchanged; new integrations should enable only `collectFeedback`.
+  (2026-09-11)
+
+## 0.15.0
+
+### Minor Changes
+
+- [#4830](https://github.com/PostHog/posthog-js/pull/4830) [`39420d8`](https://github.com/PostHog/posthog-js/commit/39420d893556a64c2514b523dddf00b8044856a4) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture resource discovery and reads from instrumented MCP servers. URL credential redaction (userinfo, credential-named query and fragment parameters) now applies to every captured string, including existing `$mcp_tool_call` parameters, responses, and error messages, so URLs already flowing through tool-call data will show `%5Bredacted%5D` values after upgrading.
+  (2026-09-10)
+
+## 0.14.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+  - posthog-node@5.51.8
+
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
+## 0.13.1
+
+### Patch Changes
+
+- [#4783](https://github.com/PostHog/posthog-js/pull/4783) [`6e9f931`](https://github.com/PostHog/posthog-js/commit/6e9f93123007a549142dac183f55ab648140005f) Thanks [@gesh](https://github.com/gesh)! - Reduce personal data in `$mcp_intent`, which is agent-narrated free text and could previously carry personal data a model read aloud.
+  - Automatically redact structured personal identifiers — email addresses, phone numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is captured. Redaction is always on, scoped to the intent only (structured tool `arguments` and results are untouched, since the same shapes are often legitimate data there), and best-effort for those well-defined shapes rather than free-form names or addresses. Identifiers grouped with Unicode spaces, dots, or slashes (as produced by copy-paste) and SSNs with space/dot separators are recognized. The email pattern uses bounded quantifiers so a pathological intent cannot cause quadratic-time backtracking.
+  - Strengthen the default injected `context` prompt so agents are less likely to write personal data in the first place: the privacy rule is now explicit and lists the identifiers to avoid, and it tells the agent to refer to people and accounts by role ('a user', 'the customer') rather than by identity.
+
+  `context: false` and `beforeSend` remain the ways to drop the field entirely. (2026-09-07)
+
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
 ## 0.13.0
 
 ### Minor Changes

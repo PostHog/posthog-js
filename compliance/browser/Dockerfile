@@ -18,19 +18,7 @@ RUN npm install -g pnpm@11.7.0
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Build posthog-js's workspace deps in the order their build scripts expect:
-#   - @posthog/types, @posthog/core, and @posthog/browser-common ship a `build` script
-#   - the in-tree @posthog/rrweb-* packages ship a `prepublish` script (their own
-#     `build` shells out to `pnpm turbo run prepublish`, which races with the
-#     outer turbo if invoked in parallel — running `prepublish` from the top-level
-#     turbo gives us the correct ordering across all rrweb packages with no nesting)
-RUN pnpm --filter @posthog/types build
-RUN pnpm --filter @posthog/core build
-RUN pnpm --filter @posthog/browser-common build
-RUN pnpm turbo run prepublish
-
-# Then build posthog-js (all its workspace deps now have populated `dist/` dirs).
-RUN pnpm --filter posthog-js build
+RUN pnpm turbo run build --filter=posthog-js
 
 # Set up adapter in separate directory
 WORKDIR /app/adapter

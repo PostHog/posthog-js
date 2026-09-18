@@ -29,7 +29,9 @@ describe('ErrorPropertiesBuilder', () => {
       const syntheticError = new Error()
       const frames = parseStack(syntheticError)
       expect(frames).toBeDefined()
-      expect(frames).toHaveLength(15)
+      // The test runner calls itself once per nested describe block, and the parser keeps one copy
+      // of a repeated frame cycle, so those repeats count as a single frame here.
+      expect(frames).toHaveLength(13)
     })
   })
 })

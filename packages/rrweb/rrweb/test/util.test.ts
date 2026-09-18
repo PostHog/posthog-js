@@ -9,6 +9,7 @@ import {
   getShadowHost,
   on,
   hookSetter,
+  callAllSafely,
 } from '../src/utils';
 
 describe('Utilities for other modules', () => {
@@ -310,6 +311,34 @@ describe('Utilities for other modules', () => {
       expect(getRootShadowHost(a.childNodes[0])).toBe(a.childNodes[0]);
       expect(shadowHostInDom(a.childNodes[0])).toBeTruthy();
       expect(inDom(a.childNodes[0])).toBeTruthy();
+    });
+  });
+
+  describe('callAllSafely', () => {
+    it('runs every handler when one throws', () => {
+      const calls: string[] = [];
+
+      callAllSafely([
+        () => calls.push('first'),
+        () => {
+          throw new Error('bad cleanup');
+        },
+        () => calls.push('last'),
+      ]);
+
+      expect(calls).toEqual(['first', 'last']);
+    });
+
+    it('skips a handler that is not callable', () => {
+      const calls: string[] = [];
+
+      expect(() =>
+        callAllSafely([
+          undefined as unknown as () => void,
+          () => calls.push('last'),
+        ]),
+      ).not.toThrow();
+      expect(calls).toEqual(['last']);
     });
   });
 });

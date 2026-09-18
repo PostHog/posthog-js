@@ -267,7 +267,7 @@ describe('PostHogMCP', () => {
       for (const tool of prepared) {
         expect(tool.inputSchema?.properties?.context).toMatchObject({ type: 'string' })
         expect(tool.inputSchema?.required).toContain('context')
-        expect(tool.inputSchema?.properties).not.toHaveProperty('llm_model')
+        expect(tool.inputSchema?.properties).toHaveProperty('llm_model')
       }
     })
 
@@ -282,7 +282,8 @@ describe('PostHogMCP', () => {
     })
 
     it('returns a fresh array even when nothing is added', () => {
-      const prepared = posthog.prepareToolList(tools, { context: false })
+      const client = new PostHogMCP('test', { disabled: true, captureModel: false })
+      const prepared = client.prepareToolList(tools, { context: false })
       expect(prepared).not.toBe(tools)
       expect(prepared).toEqual(tools)
     })
@@ -363,6 +364,35 @@ describe('PostHogMCP', () => {
         expect(call.args).toEqual({ llm_model: 'application-owned-value' })
         expect(call.llmModel).toBeUndefined()
         expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('captures a Codex metadata model without taking an application-owned llm_model argument', async () => {
+      const client = newClient({ captureModel: true })
+      const ownedTool = {
+        name: 'route-model',
+        inputSchema: {
+          type: 'object',
+          properties: { llm_model: { type: 'string', description: 'Application routing model' } },
+          required: ['llm_model'],
+        },
+      }
+      try {
+        client.prepareToolList([ownedTool])
+        const call = client.prepareToolCall(
+          'route-model',
+          { llm_model: 'application-owned-value' },
+          {
+            originalTool: ownedTool,
+            requestMeta: { 'x-codex-turn-metadata': { model: 'gpt-5.6-sol' } },
+          }
+        )
+
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBe('gpt-5.6-sol')
+        expect(call.llmModelSource).toBe('client_metadata')
       } finally {
         await client.shutdown()
       }

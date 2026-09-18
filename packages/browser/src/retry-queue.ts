@@ -3,7 +3,8 @@ import { RetriableRequestWithOptions } from './types'
 import { isPositiveNumber, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { window } from '@posthog/browser-common/utils/globals'
-import { PostHog } from './posthog-core'
+import type { PostHog } from './posthog-core'
+import { sendRequest } from './request-dispatch'
 import { extendURLParams } from './request'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
@@ -49,9 +50,16 @@ export class RetryQueue {
     constructor(private _instance: PostHog) {
         this._queue = []
         this._areWeOnline = true
+        this.resume()
+    }
 
+    resume(): void {
         if (!isUndefined(window) && 'onLine' in window.navigator) {
             this._areWeOnline = window.navigator.onLine
+
+            if (this._onlineListener) {
+                return
+            }
 
             this._onlineListener = () => {
                 this._areWeOnline = true
@@ -71,22 +79,29 @@ export class RetryQueue {
         return this._queue.length
     }
 
-    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
+    retriableRequest(
+        { retriesPerformedSoFar, ...options }: RetriableRequestWithOptions,
+        transportOverride?: RetriableRequestWithOptions['transport']
+    ): void {
         if (isPositiveNumber(retriesPerformedSoFar)) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        this._instance._send_request({
-            ...options,
-            callback: (response) => {
+        sendRequest(
+            this._instance,
+            transportOverride ? { ...options, transport: transportOverride } : options,
+            (response, retryAfterMs) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
 
                     if ((retriesPerformedSoFar ?? 0) < maxRetries) {
-                        this._enqueue({
-                            retriesPerformedSoFar,
-                            ...options,
-                        })
+                        this._enqueue(
+                            {
+                                retriesPerformedSoFar,
+                                ...options,
+                            },
+                            retryAfterMs
+                        )
                         return
                     }
 
@@ -98,15 +113,15 @@ export class RetryQueue {
                 }
 
                 options.callback?.(response)
-            },
-        })
+            }
+        )
     }
 
-    private _enqueue(requestOptions: RetriableRequestWithOptions): void {
+    private _enqueue(requestOptions: RetriableRequestWithOptions, retryAfterMs?: number): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
-        const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
+        const msToNextRetry = Math.max(pickNextRetryDelay(retriesPerformedSoFar), retryAfterMs ?? 0)
         const retryAt = Date.now() + msToNextRetry
 
         this._queue.push({ retryAt, requestOptions })

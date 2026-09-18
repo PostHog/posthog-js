@@ -26,6 +26,7 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
     const source: SurveysConfigSource = {
         get: vi.fn(() => ({ ...config })),
         isOptedOut: vi.fn(() => false),
+        isCapturing: vi.fn(() => true),
         getExtensions: vi.fn(() => extensions),
         createEventReceiver: vi.fn(() => receiver as any),
     }

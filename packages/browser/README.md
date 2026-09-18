@@ -10,3 +10,11 @@ SDK usage examples and code snippets live in the official documentation so they 
 ## Documentation
 
 - [JavaScript library docs](https://posthog.com/docs/libraries/js)
+
+## Surveys and capture
+
+Built-in surveys stay hidden while event capture is disabled, including before consent when `opt_out_capturing_by_default` is enabled. This applies to automatic display, `displaySurvey()` (including `ignoreConditions`), and `renderSurvey()`. Delayed surveys recheck capture before appearing.
+
+`canRenderSurvey()` and `canRenderSurveyAsync()` return a disabled reason in this state. Custom integrations can still discover surveys through `getActiveMatchingSurveys()`.
+
+If capture stops while a survey is open, submitting keeps the answers in the form and shows an error. It does not mark the survey complete or clear its saved progress. The person can retry after capture is enabled again.

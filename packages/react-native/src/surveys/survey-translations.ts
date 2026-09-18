@@ -21,9 +21,9 @@ export function detectUserLanguage(instance: PostHog): string | null {
 
 export function applySurveyTranslationForUser(
   survey: Survey,
-  instance: PostHog
+  instance: PostHog,
+  userLanguage = detectUserLanguage(instance)
 ): { survey: Survey; language: string | null } {
-  const userLanguage = detectUserLanguage(instance)
   const logger = getLogger(instance)
 
   if (!userLanguage) {

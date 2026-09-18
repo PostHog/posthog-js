@@ -72,7 +72,12 @@ export function toContentString(content: unknown): string {
       return JSON.stringify(content)
     } catch {
       // Fallback for circular refs, BigInt, or objects with throwing toJSON
-      return String(content)
+      try {
+        return String(content)
+      } catch {
+        // Custom coercion can throw, and null-prototype objects may have none.
+        return ''
+      }
     }
   }
   return String(content)
@@ -133,7 +138,6 @@ export const getModelParams = (
     'language',
     'response_format',
     'timestamp_granularities',
-    'service_tier',
   ] as const
 
   for (const key of paramKeys) {
@@ -141,27 +145,12 @@ export const getModelParams = (
       modelParams[key] = (params as any)[key]
     }
   }
+  // Only the tier the provider served may appear here: a requested tier can be refused,
+  // and cost processing prices from this value.
   if (responseServiceTier != null) {
     modelParams.service_tier = responseServiceTier
   }
   return modelParams
-}
-
-/**
- * Helper to format responses (non-streaming) for consumption
- */
-export const formatResponse = (response: any, provider: string, client?: FullAiCaptureGate): FormattedMessage[] => {
-  if (!response) {
-    return []
-  }
-  if (provider === 'anthropic') {
-    return formatResponseAnthropic(response)
-  } else if (provider === 'openai') {
-    return formatResponseOpenAI(response)
-  } else if (provider === 'gemini') {
-    return formatResponseGemini(response, client)
-  }
-  return []
 }
 
 export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
@@ -405,7 +394,7 @@ function toSafeString(input: unknown): string {
   }
 }
 
-export const truncate = (input: unknown, client?: FullAiCaptureGate): string => {
+export const truncate = (input: unknown, client?: FullAiCaptureGate, maxBytes = MAX_OUTPUT_SIZE): string => {
   const str = toSafeString(input)
   if (str === '') {
     return ''
@@ -417,14 +406,14 @@ export const truncate = (input: unknown, client?: FullAiCaptureGate): string => 
 
   // Check if we need to truncate and ensure STRING_FORMAT is respected
   const buffer = sharedTextEncoder.encode(str)
-  if (buffer.length <= MAX_OUTPUT_SIZE) {
+  if (buffer.length <= maxBytes) {
     // Ensure STRING_FORMAT is respected
     return sharedTextDecoder.decode(buffer)
   }
 
   // Truncate the buffer and ensure a valid string is returned.
   // fatal: false means we get U+FFFD at the end if truncation broke the encoding.
-  const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
+  const truncatedBuffer = buffer.slice(0, maxBytes)
   let truncatedStr = sharedTextDecoder.decode(truncatedBuffer)
   if (truncatedStr.endsWith('\uFFFD')) {
     truncatedStr = truncatedStr.slice(0, -1)

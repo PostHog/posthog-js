@@ -6,6 +6,7 @@ export type Properties = Record<string, any>
 export type PostHogErrorBoundaryFallbackProps = {
   error: unknown
   componentStack: string
+  resetError: () => void
 }
 
 export type PostHogErrorBoundaryProps = {
@@ -15,11 +16,13 @@ export type PostHogErrorBoundaryProps = {
 }
 
 type PostHogErrorBoundaryState = {
+  hasError: boolean
   componentStack: string | null
   error: unknown
 }
 
 const INITIAL_STATE: PostHogErrorBoundaryState = {
+  hasError: false,
   componentStack: null,
   error: null,
 }
@@ -36,32 +39,34 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
   }
 
   static getDerivedStateFromError(error: unknown): Partial<PostHogErrorBoundaryState> {
-    return { error }
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: unknown, errorInfo: React.ErrorInfo): void {
-    const { additionalProperties } = this.props
-    let currentProperties
-    if (isFunction(additionalProperties)) {
-      currentProperties = additionalProperties(error)
-    } else if (typeof additionalProperties === 'object') {
-      currentProperties = additionalProperties
-    }
-    const { client } = this.context
-    client?.captureException(error, currentProperties)
-
     const { componentStack } = errorInfo
-    this.setState({
-      error,
-      componentStack: componentStack ?? null,
-    })
+    this.setState({ componentStack: componentStack ?? null })
+
+    try {
+      const { additionalProperties } = this.props
+      const currentProperties = isFunction(additionalProperties) ? additionalProperties(error) : additionalProperties
+      this.context.client?.captureException(error, {
+        ...currentProperties,
+        ...(componentStack ? { $exception_component_stack: componentStack } : {}),
+      })
+    } catch {
+      // Reporting failures must not escape the boundary and crash its parent.
+    }
+  }
+
+  private resetError = (): void => {
+    this.setState(INITIAL_STATE)
   }
 
   public render(): React.ReactNode {
     const { children, fallback } = this.props
     const state = this.state
 
-    if (state.error == null) {
+    if (!state.hasError) {
       return isFunction(children) ? children() : children
     }
 
@@ -69,6 +74,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
       ? (React.createElement(fallback, {
           error: state.error,
           componentStack: state.componentStack ?? '',
+          resetError: this.resetError,
         }) as React.ReactNode)
       : fallback
 

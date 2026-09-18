@@ -1,6 +1,6 @@
 {
     "name": "@posthog/types",
-    "version": "1.409.0",
+    "version": "1.412.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -20,6 +20,7 @@
         "!src/__tests__"
     ],
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "clean": "rimraf dist",
         "lint": "oxlint --report-unused-disable-directives-severity error src",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
@@ -38,7 +39,8 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "typescript": "catalog:",
-        "vitest": "catalog:"
+        "typescript": "catalog:native",
+        "vitest": "catalog:",
+        "typescript-legacy": "catalog:"
     }
 }

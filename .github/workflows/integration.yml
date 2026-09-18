@@ -4,8 +4,7 @@ env:
   POSTHOG_API_HOST: https://us.i.posthog.com
   POSTHOG_PROJECT_ID: 11213
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -13,6 +12,8 @@ concurrency:
 
 jobs:
   affected:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -25,6 +26,8 @@ jobs:
         .github/actions/setup/action.yaml
 
   browsers:
+    permissions:
+      contents: read
     name: Test on ${{ matrix.tests.name }}
     needs: affected
     runs-on: ubuntu-22.04
@@ -57,20 +60,38 @@ jobs:
         if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
         run: echo "Skipping ${{ matrix.tests.name }} integration tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check integration credentials
+        id: credentials
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        shell: bash
+        run: |
+          missing=()
+          for name in POSTHOG_API_HOST POSTHOG_PROJECT_ID POSTHOG_PROJECT_API_KEY POSTHOG_PERSONAL_API_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::notice::Skipping integration tests; missing required environment variables: ${missing[*]}"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.credentials.outputs.available == 'true'
 
       - uses: ./.github/actions/setup
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         with:
           build: false
 
       - name: Build packages
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         run: pnpm build
 
       - name: Run ${{ matrix.tests.name }} test
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}

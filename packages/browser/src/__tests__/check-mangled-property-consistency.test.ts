@@ -1,4 +1,41 @@
-import { validatePropertyClassification } from '../../scripts/check-mangled-property-consistency'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import { encode } from '@jridgewell/sourcemap-codec'
+import { extractPropertyNames, validatePropertyClassification } from '../../scripts/check-mangled-property-consistency'
+
+describe('mangled property extraction', () => {
+    it.each(['name', 'parenthesis'])('includes class methods mapped at the %s', (mappingPosition) => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-property-map-'))
+        const jsPath = path.join(directory, 'bundle.js')
+        const mapPath = `${jsPath}.map`
+        const code = 'class A{constructor(){}_onOptOut(){}}'
+        fs.writeFileSync(jsPath, code)
+        fs.writeFileSync(
+            mapPath,
+            JSON.stringify({
+                names: ['_onOptOut'],
+                mappings: encode([
+                    [
+                        [
+                            code.indexOf('_onOptOut') + (mappingPosition === 'parenthesis' ? '_onOptOut'.length : 0),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ],
+                    ],
+                ]),
+            })
+        )
+        try {
+            expect(extractPropertyNames(jsPath, mapPath, true)).toEqual({ _onOptOut: ['_onOptOut'] })
+            expect(extractPropertyNames(jsPath, mapPath)).toEqual({})
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true })
+        }
+    })
+})
 
 describe('mangled property consistency classification', () => {
     const abiProperties = ['_crossesBoundary']

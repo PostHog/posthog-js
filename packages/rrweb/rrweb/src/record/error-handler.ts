@@ -4,11 +4,11 @@ type Callback = (...args: unknown[]) => unknown;
 
 let errorHandler: ErrorHandler | undefined;
 
-export function registerErrorHandler(handler: ErrorHandler | undefined) {
+export function registerErrorHandler(handler: ErrorHandler | undefined): void {
   errorHandler = handler;
 }
 
-export function unregisterErrorHandler() {
+export function unregisterErrorHandler(): void {
   errorHandler = undefined;
 }
 

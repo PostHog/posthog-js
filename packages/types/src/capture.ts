@@ -88,7 +88,18 @@ export interface CaptureOptions {
     _noTruncate?: boolean
 
     /**
-     * If set, skips the batched queue
+     * If set, sends the event immediately instead of adding it to the batched queue.
+     *
+     * The batched queue drains with `sendBeacon` when the page hides, and an immediate send does
+     * not use that queue. On an active page, the SDK keeps its normal transport so failed requests
+     * can be retried. By default this is `fetch`, which keeps small requests alive across a navigation,
+     * or XHR when `fetch` is unavailable. Once PostHog's own `pagehide` handler (or `unload` fallback)
+     * marks the page as unloading, the SDK prefers `sendBeacon`, unless an explicit transport,
+     * a required response, or `request_headers` prevent it. Captures from `beforeunload` or `pagehide`
+     * listeners that run before PostHog's handler still use their normal transport. This is best effort,
+     * not a guarantee: XHR and requests too large for `fetch` keepalive can be cancelled by navigation.
+     * To always use a beacon, set `{ transport: 'sendBeacon' }`, but note that accepted beacons cannot
+     * report server failures to the SDK for retries.
      */
     send_instantly?: boolean
 

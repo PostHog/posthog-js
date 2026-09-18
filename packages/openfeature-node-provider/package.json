@@ -1,6 +1,6 @@
 {
   "name": "@posthog/openfeature-node-provider",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -33,6 +33,7 @@
     }
   },
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.build.json",
     "clean": "rimraf dist",
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
@@ -67,6 +68,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "posthog-node": "workspace:*",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   }
 }

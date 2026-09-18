@@ -15,6 +15,7 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "build": "rslib build",
         "clean": "rimraf dist",
         "lint": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs'",
@@ -43,6 +44,7 @@
         "rollup": "~4.53.2",
         "vite": "^8.0.16",
         "@vitest/coverage-v8": "catalog:",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
     }
 }

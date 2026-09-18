@@ -31,6 +31,15 @@ type pendingCanvasMutationsMap = Map<
 // resolution. matches the floor the PostHog SDK applies before passing the option in.
 const MIN_CANVAS_RESOLUTION_SCALE = 0.1;
 
+// Each path below turns canvas capture off for the whole session, so it must say why:
+// otherwise the user sees an empty canvas in playback and no canvas events at all.
+const CSP_BLOB_HINT =
+  'A page CSP that omits blob: from worker-src or script-src blocks it';
+
+function warnCanvasCapture(message: string, ...details: unknown[]): void {
+  console.warn(`[replay] canvas capture: ${message}`, ...details);
+}
+
 export class CanvasManager {
   private pendingCanvasMutations: pendingCanvasMutationsMap = new Map();
   private rafStamps: RafStamps = { latestId: 0, invokeId: null };
@@ -50,17 +59,17 @@ export class CanvasManager {
   // map would otherwise keep suppressing an idle canvas forever — leaving the
   // new snapshot's epoch without any frame to repaint that canvas from after
   // a seek. Called after each full snapshot so every canvas re-emits one frame.
-  public onFullSnapshot() {
+  public onFullSnapshot(): void {
     this.resetFrameDedup?.();
   }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
-  public acquire() {
+  public acquire(): void {
     this.refCount += 1;
   }
 
-  public reset() {
+  public reset(): void {
     if (this.refCount > 0) {
       this.refCount -= 1;
     }
@@ -87,19 +96,19 @@ export class CanvasManager {
     }
   }
 
-  public freeze() {
+  public freeze(): void {
     this.frozen = true;
   }
 
-  public unfreeze() {
+  public unfreeze(): void {
     this.frozen = false;
   }
 
-  public lock() {
+  public lock(): void {
     this.locked = true;
   }
 
-  public unlock() {
+  public unlock(): void {
     this.locked = false;
   }
 
@@ -176,6 +185,9 @@ export class CanvasManager {
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
+      warnCanvasCapture(
+        'disabled because this browser does not support OffscreenCanvas',
+      );
       return;
     }
 
@@ -201,19 +213,31 @@ export class CanvasManager {
     // The inline worker is materialized by the bundler as a `blob:` object URL and loaded via
     // `importScripts(blobURL)` inside the worker. A strict page CSP (worker-src/script-src blob:),
     // an ad blocker, or a transient network hiccup can make that load fail — synchronously as a
-    // thrown error here, or asynchronously as a worker error event. Either way, quietly disable
+    // thrown error here, or asynchronously as a worker error event. Either way, warn and disable
     // canvas snapshotting instead of letting an uncaught NetworkError escape and pollute error
     // tracking; the rest of session replay keeps working.
     let worker: ImageBitmapDataURLRequestWorker;
     try {
       worker = new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
-    } catch {
+    } catch (error) {
+      warnCanvasCapture(
+        `disabled because the encode worker did not start. ${CSP_BLOB_HINT}`,
+        error,
+      );
+      // this returns before resetObservers is assigned, so teardown has nothing to
+      // call: undo the getContext patch here or it stays on the page forever,
+      // forcing preserveDrawingBuffer while nothing is being captured
+      canvasContextReset();
       return;
     }
 
     let workerErrored = false;
-    worker.onerror = () => {
+    worker.onerror = (error) => {
       workerErrored = true;
+      warnCanvasCapture(
+        `stopped because the encode worker failed. ${CSP_BLOB_HINT}`,
+        error,
+      );
       // stop the capture loop; nothing can be encoded without the worker.
       cancelAnimationFrame(rafId);
       worker.terminate?.();
@@ -267,6 +291,8 @@ export class CanvasManager {
       });
     };
 
+    let maskSkipWarned = false;
+    let snapshotFailureWarned = false;
     const timeBetweenSnapshots = 1000 / fps;
     let lastSnapshotTime = 0;
     let rafId: number;
@@ -307,6 +333,9 @@ export class CanvasManager {
       getCanvas()
         .forEach(async (canvas: HTMLCanvasElement) => {
           const id = this.mirror.getId(canvas);
+          // every canvas the mirror does not know yet shares id -1: one dedup key in the
+          // encode worker, and a mutation the player cannot apply to any node
+          if (id === -1) return;
           if (snapshotInProgressMap.get(id)) return;
 
           // The browser throws if the canvas is 0 in size
@@ -362,6 +391,12 @@ export class CanvasManager {
               displayHeight,
             );
             if (maskRegions === SKIP_FRAME) {
+              if (!maskSkipWarned) {
+                maskSkipWarned = true;
+                warnCanvasCapture(
+                  'dropped a frame because the mask provider did not return valid regions. A provider that always fails records no canvas frames at all',
+                );
+              }
               snapshotInProgressMap.set(id, false);
               return;
             }
@@ -392,7 +427,14 @@ export class CanvasManager {
               },
               [bitmap],
             );
-          } catch {
+          } catch (error) {
+            if (!snapshotFailureWarned) {
+              snapshotFailureWarned = true;
+              warnCanvasCapture(
+                'dropped a frame because the snapshot failed. A canvas that fails every frame records no canvas frames at all',
+                error,
+              );
+            }
             snapshotInProgressMap.set(id, false);
           }
         });
@@ -464,7 +506,7 @@ export class CanvasManager {
     this.rafIdTimestamp = requestAnimationFrame(setLatestRAFTimestamp);
   }
 
-  flushPendingCanvasMutations() {
+  flushPendingCanvasMutations(): void {
     this.pendingCanvasMutations.forEach(
       (_values: canvasMutationCommand[], canvas: HTMLCanvasElement) => {
         const id = this.mirror.getId(canvas);
@@ -476,7 +518,7 @@ export class CanvasManager {
     );
   }
 
-  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number) {
+  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number): void {
     if (this.frozen || this.locked) {
       return;
     }

@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.51.6",
+  "version": "5.52.4",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -11,6 +11,7 @@
     "directory": "packages/node"
   },
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json",
     "clean": "rimraf dist coverage",
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
@@ -21,7 +22,7 @@
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -46,12 +47,14 @@
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog/types": "workspace:^",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "rxjs": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   },
   "peerDependencies": {
     "rxjs": "^7.0.0"

@@ -13,7 +13,7 @@ import type {
     NetworkRequest,
     SessionRecordingCanvasOptions,
 } from './session-recording'
-import type { SegmentAnalytics } from './segment'
+import type { SegmentAnalytics, SegmentIntegrationConfig } from './segment'
 import type { PostHog } from './posthog'
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
@@ -164,22 +164,22 @@ export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
      */
-    distinctID?: string
+    distinctID?: string | null
 
     /**
      * Whether `distinctID` already identifies a known person profile.
      */
-    isIdentifiedID?: boolean
+    isIdentifiedID?: boolean | null
 
     /**
      * Feature flag values to use immediately until the SDK fetches fresh values.
      */
-    featureFlags?: Record<string, boolean | string>
+    featureFlags?: Record<string, boolean | string> | null
 
     /**
      * Feature flag payloads to use together with bootstrapped `featureFlags`.
      */
-    featureFlagPayloads?: Record<string, JsonType>
+    featureFlagPayloads?: Record<string, JsonType> | null
 
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
@@ -188,7 +188,7 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      */
-    sessionID?: string
+    sessionID?: string | null
 }
 
 export interface ResetOptions {
@@ -296,7 +296,7 @@ export interface DeadClickCandidate {
     scrollDelayMs?: number
     // time between click and the most recent mutation
     mutationDelayMs?: number
-    // time between click and the most recent selection changed event
+    // delay to the closest selection changed event; pre-candidate delays are stored only within the suppression window
     selectionChangedDelayMs?: number
     // delay between the click and the nearest visibility change within the suppression window, on
     // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
@@ -365,7 +365,12 @@ export type DeadClicksAutoCaptureConfig = {
     scroll_threshold_ms?: number
 
     /**
-     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     * We'll not consider a click to be a dead click if it selects/unselects text or moves a caret
+     * in editable content during its mouse gesture, regardless of how long the button is held.
+     * Selection changes outside a matching gesture suppress the click when they occur within
+     * `selection_change_threshold_ms` milliseconds immediately before or after it.
+     * When a closed shadow root hides whether a caret belongs to editable content, only the timed window applies.
+     * A value of 0 disables selection-based suppression.
      *
      * @default 100
      */
@@ -709,8 +714,18 @@ export interface SessionRecordingOptions {
     /**
      * Captures sanitized Schema.org JSON-LD as session replay custom events.
      * JSON-LD inside a text mask or blocked element is never captured.
-     * The recorder keeps `@id` values without changes.
+     * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
+     * It drops property branches that are not on the allowlist.
+     * Retained strings starting with `http://`, `https://`, `//`, `/`, `./`, or `../` use replay URL masking, including query parameter and hash settings.
+     * This applies to nested entities and scalar arrays, but not to the fixed `@context`, normalized `@type`, or captured DOM IDs.
+     * Other strings, including bare relative paths and URLs embedded in text, are unchanged.
+     * A URL rejected by the masking callback is omitted. If the callback throws, the script is not captured.
+     * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
+     * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
+     * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
@@ -765,6 +780,8 @@ export interface SessionRecordingOptions {
      * Attributes left off the list are invisible to replay, so only set this when
      * that loss of fidelity is acceptable. When unset (the default) or set to an
      * empty array, all attributes are observed.
+     *
+     * A list without `id` also stops `captureJsonLd` from keeping `@id` fragments.
      *
      * Normally only altered alongside posthog support guidance.
      */
@@ -1094,8 +1111,64 @@ export interface LogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/** The request a network metric describes. */
+export interface NetworkMetricsRequest {
+    /** The full request URL, including the query string. */
+    url: string
+    /** The HTTP method in upper case, e.g. 'GET'. */
+    method: string
+}
+
+/** How a network request ended. */
+export interface NetworkMetricsResponse {
+    /** The HTTP status code. `undefined` when the request failed before a response arrived. */
+    status: number | undefined
+    /**
+     * How long the request took, in milliseconds. The end boundary follows the
+     * transport: a `fetch` is measured to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     */
+    durationMs: number
+}
+
+/**
+ * Options for automatic HTTP and HTTPS `fetch` and `XMLHttpRequest` duration
+ * metrics. Recording never changes the request or its settlement. Fetch returns
+ * a derived promise so rejected requests remain observable to the caller.
+ */
+export interface NetworkMetricsConfig {
+    /**
+     * The metric name. A string is used for every request. A function is
+     * called once per request; return a falsy value to skip that request.
+     *
+     * @default 'http.client.request.duration'
+     */
+    name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
+    /**
+     * Adds attributes to each recorded request. The result is merged over the
+     * default attributes, so it can also replace them, e.g. to set
+     * `url.template` to a route template. Keep attribute values low-cardinality.
+     *
+     * The default attributes follow the OTel HTTP client semantic conventions:
+     * `http.request.method`, `server.address`, `server.port`, `url.scheme`,
+     * `url.template`, `http.response.status_code` and `error.type`.
+     *
+     * The default `url.template` replaces each all-digit or uuid-like path
+     * segment with `:id`. Ids that carry a prefix or suffix, such as
+     * `order-123` or `38217.pdf`, are kept as they are, so return your own
+     * `url.template` for those routes.
+     *
+     * `http.response.status_code` is only set when a response arrived.
+     * `error.type` is the status code for a 4xx or 5xx response, the error
+     * name (e.g. `TypeError`) for a rejected fetch, or `_OTHER` when no
+     * response arrived and there is no error.
+     */
+    attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
+}
+
 /**
  * Options for the posthog.metrics API (count, gauge, histogram).
+ * Shared by every SDK; browser-only options live in `BrowserMetricsConfig`.
  */
 export interface MetricsConfig {
     /**
@@ -1146,6 +1219,23 @@ export interface MetricsConfig {
      * sample (return `null` to drop) before it is aggregated.
      */
     beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
+}
+
+/**
+ * Metrics configuration options for the browser SDK. Adds the options that
+ * only the browser SDK implements to the shared metrics options.
+ */
+export interface BrowserMetricsConfig extends MetricsConfig {
+    /**
+     * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
+     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
+     * with other protocols are not recorded. Each transport is measured to the
+     * boundary its API exposes: a `fetch` to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     *
+     * @default undefined
+     */
+    network?: boolean | NetworkMetricsConfig
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -1528,7 +1618,7 @@ export interface PostHogConfig {
      *
      * @default undefined
      */
-    metrics?: MetricsConfig
+    metrics?: BrowserMetricsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.
@@ -1556,7 +1646,8 @@ export interface PostHogConfig {
     identity_distinct_id?: string
 
     /**
-     * HMAC-SHA256 of `identity_distinct_id` using the project's API secret.
+     * HMAC-SHA256 of `identity_distinct_id`, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      * Must be provided together with `identity_distinct_id`.
      */
     identity_hash?: string
@@ -1925,6 +2016,11 @@ export interface PostHogConfig {
      * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
      * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
      *
+     * This also stops surveys from displaying. PostHog creates an internal targeting flag for
+     * almost every survey, and every flag evaluates to false while flags are disabled. If you use
+     * surveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey
+     * flags only.
+     *
      * @default false
      */
     advanced_disable_feature_flags: boolean
@@ -2041,16 +2137,31 @@ export interface PostHogConfig {
     /**
      * Controls how often feature flags are automatically refreshed in long-running sessions.
      *
-     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
-     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     * The default interval is 5 minutes (300000ms) to pick up server-side flag changes without
+     * requiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set
+     * positive interval stays fixed, even when the page gets no user interaction.
+     *
+     * **Each refresh is a billable feature flag request.** A page that stays open all day makes
+     * up to 288 requests per day on the default interval, and every open tab and every named
+     * instance refreshes on its own timer, so they add up. Set this option to `0` to stop the
+     * background refreshes if that cost is not useful to you.
      *
      * **Tradeoffs:**
-     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
-     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.
      * - **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
+     *
+     * When this option is omitted, a visible page that gets no user interaction (such as a
+     * dashboard, a page being read, a video player, or a kiosk) doubles the interval after every
+     * refresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.
+     * The next click, key press, wheel, touch, or return to visibility restores the five-minute
+     * default. Scrolling driven by a script, such as an auto-playing carousel, does not count as
+     * an interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop
+     * background refreshes completely.
+     *
      * This option does not reload remote config.
      *
      * @default 300000 (5 minutes)
@@ -2142,11 +2253,26 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
 
     /**
-     * The segment analytics object.
+     * The Segment analytics object, or integration configuration.
+     *
+     * @example
+     * ```ts
+     * segment: {
+     *     analytics: window.analytics,
+     *     filterProperties: (properties) => {
+     *         for (const key in properties) {
+     *             if (key.startsWith('$sdk_debug_')) {
+     *                 delete properties[key]
+     *             }
+     *         }
+     *         return properties
+     *     }
+     * }
+     * ```
      *
      * @see https://posthog.com/docs/libraries/segment
      */
-    segment?: SegmentAnalytics
+    segment?: SegmentAnalytics | SegmentIntegrationConfig
 
     /**
      * Determines whether to capture heatmaps.

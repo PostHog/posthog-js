@@ -1,5 +1,6 @@
 {
     "name": "flags",
+    "packageManager": "pnpm@11.7.0",
     "version": "1.0.0",
     "main": "server.js",
     "scripts": {
