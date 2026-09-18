@@ -8,9 +8,6 @@
  * from https://github.com/LiosK/uuidv7/blob/e501462ea3d23241de13192ceae726956f9b3b7d/src/index.ts
  */
 
-// polyfill for IE11
-import { window } from './globals'
-
 import { isNumber, isUndefined } from '@posthog/core'
 
 if (!Math.trunc) {
@@ -221,7 +218,7 @@ class V7Generator {
 declare const UUIDV7_DENY_WEAK_RNG: boolean
 
 /** Stores `crypto.getRandomValues()` available in the environment. */
-let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T = (buffer) => {
+const weakRandomValues = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T): T => {
     // fall back on Math.random() unless the flag is set to true
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
@@ -234,10 +231,12 @@ let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffe
     return buffer
 }
 
-// detect Web Crypto API
-if (window && !isUndefined(window.crypto) && crypto.getRandomValues) {
-    getRandomValues = (buffer) => crypto.getRandomValues(buffer)
-}
+// Select the browser capability only when a UUID is requested.
+let getRandomValues: typeof weakRandomValues | undefined
+const selectRandomValues = (): typeof weakRandomValues =>
+    typeof window !== 'undefined' && !isUndefined(window.crypto) && crypto.getRandomValues
+        ? (buffer) => crypto.getRandomValues(buffer)
+        : weakRandomValues
 
 /**
  * Wraps `crypto.getRandomValues()` and compatibles to enable buffering; this
@@ -249,7 +248,7 @@ class DefaultRandom {
     private _cursor = Infinity
     nextUint32(): number {
         if (this._cursor >= this._buffer.length) {
-            getRandomValues(this._buffer)
+            ;(getRandomValues ??= selectRandomValues())(this._buffer)
             this._cursor = 0
         }
         return this._buffer[this._cursor++]!
