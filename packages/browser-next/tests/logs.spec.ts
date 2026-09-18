@@ -1,5 +1,5 @@
 import type { Client } from '@posthog/browser-common'
-import { createPostHog } from '../src'
+import { createPostHog, FeatureFlagsExtension } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { logs } from '../src/logs'
 import type { LogsOptions } from '../src/logs'
@@ -26,7 +26,7 @@ const remoteConfig = {
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...defaults,
-        ...(options.remoteConfigLoader ? {} : { remoteConfig }),
+        remoteConfig,
         fetch: false,
         ...options,
     })
@@ -173,13 +173,14 @@ describe('logs', () => {
 
     it('does not wait for remote config and captures once its enablement arrives', async () => {
         const { output } = browser()
-        let resolve!: (value: typeof remoteConfig & { logs: { captureConsoleLogs: boolean } }) => void
-        const loaded = new Promise<typeof remoteConfig & { logs: { captureConsoleLogs: boolean } }>((done) => {
+        let resolve!: (value: Response) => void
+        const loaded = new Promise<Response>((done) => {
             resolve = done
         })
-        const client = await create({ remoteConfigLoader: () => loaded })
+        const client = await createPostHog({ ...defaults, fetch: () => loaded })
+        clients.push(client)
         const original = output.log
-        resolve({ ...remoteConfig, logs: { captureConsoleLogs: true } })
+        resolve(new Response(JSON.stringify({ ...remoteConfig, logs: { captureConsoleLogs: true } })))
         await client.getRemoteConfig()
         expect(output.log).not.toBe(original)
     })
@@ -439,7 +440,7 @@ describe('logs', () => {
                 return new Response('{}')
             },
         })
-        client.updateFlags({ enabled: true, disabled: false, variant: 'a' })
+        client.getExtension(FeatureFlagsExtension)!.updateFlags({ enabled: true, disabled: false, variant: 'a' })
         const captured = vi.fn()
         client.onEvent(captured)
         client.captureLog({ body: 'flags' })
