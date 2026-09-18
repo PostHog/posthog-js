@@ -63,6 +63,7 @@ const REMOTE_CONFIG_EVENT = 'extensionsRemoteConfig'
 /** One shared extension client and lifecycle host per browser-v1 PostHog instance. */
 export class BrowserClientAdapter implements Client, Disposable {
     readonly kv: KeyValueStore
+    readonly onSession: Listener<string>
     readonly onEvent: Listener<CapturedEventInfo>
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
@@ -78,6 +79,20 @@ export class BrowserClientAdapter implements Client, Disposable {
         this._logger = logger
         this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
+        this.onSession = (handler) => {
+            if (this._disposed) {
+                return createDisposable(() => {})
+            }
+            return createDisposable(
+                this.instance.onSessionId((sessionId) => {
+                    try {
+                        handler(sessionId)
+                    } catch (error) {
+                        this._logger.error('Browser extension session listener failed', error)
+                    }
+                })
+            )
+        }
         this.onEvent = (handler) => {
             const unsubscribe = this.instance.on('eventCaptured', (event) => {
                 try {
@@ -154,6 +169,10 @@ export class BrowserClientAdapter implements Client, Disposable {
         }
     }
 
+    get isOptedOut(): boolean {
+        return this.instance.consent.isOptedOut()
+    }
+
     get canCapture(): boolean {
         return !this._isClosing() && this.instance.is_capturing()
     }
@@ -183,6 +202,7 @@ export class BrowserClientAdapter implements Client, Disposable {
             uuid: options.uuid,
             $set: options.set as Properties | undefined,
             $set_once: options.setOnce as Properties | undefined,
+            ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
         }
         this.instance.capture(event as EventName, properties, captureOptions)
     }
@@ -201,11 +221,12 @@ export class BrowserClientAdapter implements Client, Disposable {
     }
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
-        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
+        const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
+        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', pathWithQuery)
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
             ...(path === '/i/v1/logs' && (!init.target || init.target === 'api') ? { batchKey: 'logs' } : {}),
-            url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
+            url: endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,
             timeout: init.timeoutMs,

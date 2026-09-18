@@ -1,6 +1,7 @@
+import type { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlags } from './flags-token'
 
-/** Package-private flag context for logs without exposure events. */
+/** Lookup view only; the facade owns setup and disposal. */
 export interface FlagsExtension extends FeatureFlags {
-    getActiveFlags(): string[]
+    readonly _shared: PostHogFeatureFlags
 }

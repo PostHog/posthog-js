@@ -1,3 +1,16 @@
+export {
+    SurveyEventType,
+    SurveyWidgetType,
+    SurveyPosition,
+    SurveyTabPosition,
+    SurveyType,
+    SurveyQuestionType,
+    SurveyQuestionBranchingType,
+    SurveySchedule,
+    SurveyEventName,
+    SurveyEventProperties,
+    DisplaySurveyType,
+} from './survey-constants'
 /**
  * Public surface for browser extensions shared across PostHog JavaScript SDK
  * clients.

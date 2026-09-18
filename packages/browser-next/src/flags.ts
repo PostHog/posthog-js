@@ -2,6 +2,7 @@ import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import type { BrowserClient } from './browser-client'
+import type { FlagsExtension } from './flags-internal'
 import type { FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
@@ -29,16 +30,13 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
-    const extension: FeatureFlags & { getActiveFlags(): string[] } = {
+    const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
-        getActiveFlags: () => (disposed ? [] : shared.getFlags()),
+        _shared: shared,
         setup: async (value: BrowserClient) => {
             client = value
             await shared.setup(value)
-            if (disposed) {
-                shared.dispose()
-                return
-            }
+            if (disposed) return
             subscriptions.push(
                 value.onIdentify(({ distinctId, previousDistinctId, wasIdentified, set, setOnce }) => {
                     if (distinctId !== previousDistinctId) {
@@ -106,6 +104,7 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
             }
         },
         dispose: () => {
+            if (disposed) return
             disposed = true
             subscriptions.splice(0).forEach((subscription) => subscription.dispose())
             shared.dispose()

@@ -1,123 +1,109 @@
-import type { ApiResponse, Client, KeyValueStore, SendRequestInit } from '@posthog/browser-common'
-import { isUndefined } from '@posthog/core'
-
 import type { PostHog } from './posthog-core'
-import { PostHogSurveys } from './posthog-surveys'
-import { extendURLParams } from './request'
-import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
-import type { Properties, QueuedRequestWithOptions } from './types'
+import { PostHogSurveys } from '@posthog/browser-common/surveys'
+import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '@posthog/browser-common/surveys-config'
+import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
+import type { Client, Extension, ExtensionToken } from '@posthog/browser-common'
 import { assignableWindow } from './utils/globals'
-import { SurveyEventReceiver } from './utils/survey-event-receiver'
-
-class InitialSurveysKeyValueStore implements KeyValueStore {
-    constructor(private readonly _instance: PostHog) {}
-
-    initialize(): void {}
-
-    get<T = unknown>(key: string): T | undefined
-    get<T extends object>(keys: readonly (keyof T & string)[]): Partial<T>
-    get(keyOrKeys: string | readonly string[]): unknown {
-        if (typeof keyOrKeys === 'string') {
-            return this._instance.get_property(keyOrKeys)
-        }
-        const values: Record<string, unknown> = {}
-        for (const key of keyOrKeys) {
-            const value = this._instance.get_property(key)
-            if (!isUndefined(value)) {
-                values[key] = value
-            }
-        }
-        return values
-    }
-
-    set(key: string, value: unknown): void
-    set(values: Record<string, unknown>): void
-    set(keyOrValues: string | Record<string, unknown>, value?: unknown): void {
-        this._instance.register(
-            (typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues) as Properties
-        )
-    }
-
-    remove(keyOrKeys: string | readonly string[]): void {
-        if (typeof keyOrKeys === 'string') {
-            this._instance.unregister(keyOrKeys)
-            return
-        }
-        keyOrKeys.forEach((key) => this._instance.unregister(key))
-    }
-}
-
-const createInitialSurveysClientState = (instance: PostHog): Pick<Client, 'projectToken' | 'kv'> => ({
-    get projectToken() {
-        return instance.config.token
-    },
-    kv: new InitialSurveysKeyValueStore(instance),
-})
+import { BrowserClientAdapter } from './extensions/browser-client'
 
 class BrowserSurveysConfigSource implements SurveysConfigSource {
-    constructor(private readonly _instance: PostHog) {}
+    constructor(private readonly _instance?: PostHog) {}
 
     get(): SurveysConfig {
-        const config = this._instance.config
+        const config = this._instance?.config
         return {
-            disableSurveys: config.disable_surveys,
-            cookielessMode: !!config.cookieless_mode,
-            advancedEnableSurveys: config.advanced_enable_surveys,
-            requestTimeoutMs: config.surveys_request_timeout_ms,
+            disableSurveys: !!config?.disable_surveys,
+            cookielessMode: !!config?.cookieless_mode,
+            advancedEnableSurveys: !!config?.advanced_enable_surveys,
+            requestTimeoutMs: config?.surveys_request_timeout_ms ?? 10000,
+            prefillFromUrl: !!config?.surveys?.prefillFromUrl,
+            automaticDisplay: !config?.disable_surveys_automatic_display,
+            featureFlagEvaluation: !config?.advanced_disable_feature_flags,
+            overrideLanguage: config?.override_display_language,
+            prepareStylesheet: config?.prepare_external_dependency_stylesheet,
+            get_current_url: config?.get_current_url,
+            uiHost: this._instance?.requestRouter?.endpointFor('ui', ''),
         }
-    }
-
-    isOptedOut(): boolean {
-        return this._instance.consent.isOptedOut()
-    }
-
-    isCapturing(): boolean {
-        return this._instance.is_capturing()
     }
 
     getExtensions(): SurveysExtensionHost | undefined {
         const extensions = assignableWindow?.__PosthogExtensions__
-        if (!extensions) {
-            return
-        }
+        if (!extensions || !this._instance) return
+        const instance = this._instance
         const { generateSurveys, loadExternalDependency } = extensions
         return {
             generateSurveys: generateSurveys
-                ? (isSurveysEnabled) => generateSurveys(this._instance, isSurveysEnabled)
+                ? (isSurveysEnabled) => generateSurveys(instance, isSurveysEnabled)
                 : undefined,
             loadExternalDependency: loadExternalDependency
-                ? (callback) => loadExternalDependency(this._instance, 'surveys', callback)
+                ? (callback) => loadExternalDependency(instance, 'surveys', callback)
                 : undefined,
         }
     }
+}
 
-    createEventReceiver(): SurveyEventReceiver {
-        return new SurveyEventReceiver(this._instance)
+/** Browser-v1 configuration and lazy-loading adapter for the shared surveys extension. */
+export class BrowserSurveys extends PostHogSurveys {
+    constructor(instance: PostHog) {
+        super(new BrowserSurveysConfigSource(instance))
     }
 }
 
-/** Browser-v1 compatibility wrapper for the shared surveys extension. */
-export class BrowserSurveys extends PostHogSurveys {
-    constructor(private readonly _instance: PostHog) {
-        super(new BrowserSurveysConfigSource(_instance), createInitialSurveysClientState(_instance))
-    }
-
-    protected override _sendSurveysRequest(path: string, init: SendRequestInit): Promise<ApiResponse> {
-        const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
-        // oxlint-disable-next-line compat/compat -- Shared extension transport is intentionally Promise-based.
-        return new Promise((resolve) => {
-            this._instance._send_request({
-                method: init.method,
-                url: this._instance.requestRouter.endpointFor(init.target ?? 'api', pathWithQuery),
-                data: init.body as QueuedRequestWithOptions['data'],
-                headers: init.headers,
-                timeout: init.timeoutMs,
-                fireCallbackOnDrop: true,
-                transport: init.transport,
-                compression: init.compression,
-                timestampMode: init.sentAt,
-                callback: resolve,
-            })
+/** Released cores own survey orchestration; the lazy renderer only borrows their capabilities. */
+class LegacySurveyClient extends BrowserClientAdapter {
+    override readonly onEvent: Client['onEvent']
+    constructor(instance: PostHog) {
+        super(instance)
+        this.onEvent = (handler) => ({
+            dispose: instance._addCaptureHook((event, payload) => {
+                if (payload) handler({ event, properties: payload.properties })
+            }),
         })
     }
+
+    override get canCapture(): boolean {
+        // is_capturing was introduced in 1.260.0, alongside cookieless capture.
+        return this.instance.is_capturing ? this.instance.is_capturing() : !this.instance.has_opted_out_capturing()
+    }
+
+    override get isOptedOut(): boolean {
+        return this.instance.has_opted_out_capturing()
+    }
+
+    override getExtension<T extends Extension>(name: ExtensionToken<T>): T | undefined
+    override getExtension<T extends Extension = Extension>(name: string): T | undefined
+    override getExtension<T extends Extension = Extension>(name: string): T | undefined {
+        // Old cores have the same scalar flags operations, but no shared extension registry.
+        return (name === 'featureFlags'
+            ? this.instance.featureFlags
+            : name === 'autocapture'
+              ? this.instance.autocapture
+              : undefined) as unknown as T | undefined
+    }
+}
+
+const legacyContexts = new WeakMap<PostHog, SurveyRenderContext>()
+
+/** Called by the lazy bundle and preview entrypoint, never as a modern pre-setup fallback. */
+export function getSurveyRenderContext(instance?: PostHog): SurveyRenderContext | undefined {
+    const config = new BrowserSurveysConfigSource(instance)
+    if (!instance)
+        return {
+            get config() {
+                return config.get()
+            },
+        }
+    if (instance.surveys?.getRenderContext) return instance.surveys.getRenderContext()
+    let context = legacyContexts.get(instance)
+    if (!context) {
+        context = {
+            client: new LegacySurveyClient(instance),
+            get config() {
+                return config.get()
+            },
+            surveys: instance.surveys,
+        }
+        legacyContexts.set(instance, context)
+    }
+    return context
 }

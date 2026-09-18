@@ -42,6 +42,7 @@ export interface AnalyticsDelivery extends LaneDelivery<AnalyticsMessage> {
 export interface AnalyticsDriver {
     flush(): Promise<void>
     deliverImmediate: AnalyticsDelivery['deliverImmediate']
+    deliverUnload(messages: readonly AnalyticsMessage[]): void
     dispose(): Promise<void>
 }
 
@@ -59,6 +60,7 @@ export interface CaptureSink {
     admitted(): void
     flush(reason?: 'flush' | 'shutdown'): Promise<void>
     deliverImmediate(message: AnalyticsMessage, canContinue: () => boolean): Promise<CaptureSummary>
+    deliverUnload(message: AnalyticsMessage, canContinue: () => boolean): void
     purge(): void
 }
 

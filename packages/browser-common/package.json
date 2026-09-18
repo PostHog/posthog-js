@@ -55,6 +55,39 @@
             ],
             "console-logs": [
                 "dist/console-logs.d.ts"
+            ],
+            "surveys": [
+                "dist/surveys.d.ts"
+            ],
+            "surveys-config": [
+                "dist/surveys-config.d.ts"
+            ],
+            "survey-event-host": [
+                "dist/survey-event-host.d.ts"
+            ],
+            "survey-action-matcher": [
+                "dist/survey-action-matcher.d.ts"
+            ],
+            "survey-event-receiver-base": [
+                "dist/survey-event-receiver-base.d.ts"
+            ],
+            "survey-event-receiver": [
+                "dist/survey-event-receiver.d.ts"
+            ],
+            "survey-render-context": [
+                "dist/survey-render-context.d.ts"
+            ],
+            "surveys-renderer": [
+                "dist/surveys-renderer.d.ts"
+            ],
+            "surveys/surveys-extension-utils": [
+                "dist/surveys/surveys-extension-utils.d.ts"
+            ],
+            "surveys/icons": [
+                "dist/surveys/icons.d.ts"
+            ],
+            "surveys/survey-translations": [
+                "dist/surveys/survey-translations.d.ts"
             ]
         }
     },
@@ -118,6 +151,61 @@
             "types": "./dist/console-logs.d.ts",
             "import": "./dist/console-logs.mjs",
             "require": "./dist/console-logs.js"
+        },
+        "./surveys": {
+            "types": "./dist/surveys.d.ts",
+            "import": "./dist/surveys.mjs",
+            "require": "./dist/surveys.js"
+        },
+        "./surveys-config": {
+            "types": "./dist/surveys-config.d.ts",
+            "import": "./dist/surveys-config.mjs",
+            "require": "./dist/surveys-config.js"
+        },
+        "./survey-event-host": {
+            "types": "./dist/survey-event-host.d.ts",
+            "require": "./dist/survey-event-host.js",
+            "import": "./dist/survey-event-host.mjs"
+        },
+        "./survey-action-matcher": {
+            "types": "./dist/survey-action-matcher.d.ts",
+            "require": "./dist/survey-action-matcher.js",
+            "import": "./dist/survey-action-matcher.mjs"
+        },
+        "./survey-event-receiver-base": {
+            "types": "./dist/survey-event-receiver-base.d.ts",
+            "require": "./dist/survey-event-receiver-base.js",
+            "import": "./dist/survey-event-receiver-base.mjs"
+        },
+        "./survey-event-receiver": {
+            "types": "./dist/survey-event-receiver.d.ts",
+            "require": "./dist/survey-event-receiver.js",
+            "import": "./dist/survey-event-receiver.mjs"
+        },
+        "./survey-render-context": {
+            "types": "./dist/survey-render-context.d.ts",
+            "require": "./dist/survey-render-context.js",
+            "import": "./dist/survey-render-context.mjs"
+        },
+        "./surveys-renderer": {
+            "types": "./dist/surveys-renderer.d.ts",
+            "require": "./dist/surveys-renderer.js",
+            "import": "./dist/surveys-renderer.mjs"
+        },
+        "./surveys/surveys-extension-utils": {
+            "types": "./dist/surveys/surveys-extension-utils.d.ts",
+            "require": "./dist/surveys/surveys-extension-utils.js",
+            "import": "./dist/surveys/surveys-extension-utils.mjs"
+        },
+        "./surveys/icons": {
+            "types": "./dist/surveys/icons.d.ts",
+            "require": "./dist/surveys/icons.js",
+            "import": "./dist/surveys/icons.mjs"
+        },
+        "./surveys/survey-translations": {
+            "types": "./dist/surveys/survey-translations.d.ts",
+            "require": "./dist/surveys/survey-translations.js",
+            "import": "./dist/surveys/survey-translations.mjs"
         }
     },
     "scripts": {
@@ -132,12 +220,18 @@
     },
     "dependencies": {
         "@posthog/core": "workspace:^",
-        "@posthog/types": "workspace:^"
+        "@posthog/types": "workspace:^",
+        "preact": "^10.29.3"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rsbuild/plugin-react": "^2.1.0",
         "@rslib/core": "catalog:",
+        "@testing-library/dom": "catalog:",
+        "@testing-library/jest-dom": "catalog:",
+        "@testing-library/preact": "catalog:",
         "jsdom": "catalog:",
+        "lightningcss": "^1.33.0",
         "typescript": "catalog:native",
         "vitest": "catalog:"
     }
