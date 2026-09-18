@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.434.2
+
+### Patch Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey answer snapshots and response event properties with React Native for consistent partial response reporting.
+  (2026-09-18)
+- Updated dependencies [[`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9)]:
+  - @posthog/core@1.55.0
+
 ## 1.434.1
 
 ### Patch Changes
