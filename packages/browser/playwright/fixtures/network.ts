@@ -131,7 +131,11 @@ export class NetworkPage {
     async mockStatic(staticOverrides: Record<string, string | undefined>) {
         await Promise.all(
             files.map((file) => {
-                return this.page.route(`**/static/${file}*`, async (route) => {
+                // The SDK asks the asset host for its own version, so a lazily loaded file arrives as
+                // `/static/<version>/<file>`. Without the optional version segment the route misses
+                // and the test reads the published bundle instead of the one just built.
+                const pattern = new RegExp(`/static/(?:[\\d.]+/)?${file.replace(/\./g, '\\.')}(?:\\?.*)?$`)
+                return this.page.route(pattern, async (route) => {
                     const source = staticOverrides[file] ?? file
                     await route.fulfill({
                         headers: { loaded: 'using relative path by playwright', source: source },
