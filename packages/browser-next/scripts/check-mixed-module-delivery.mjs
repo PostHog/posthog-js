@@ -63,6 +63,8 @@ let logs
 let commonJsLogs
 let commonJsFlags
 let surveys
+let autocapture
+let commonJsAutocapture
 let commonJsSurveys
 try {
     const require = createRequire(import.meta.url)
@@ -77,6 +79,8 @@ try {
     ;({ logs: commonJsLogs } = require('@posthog/browser/logs'))
     ;({ surveys } = await import('@posthog/browser/surveys'))
     ;({ surveys: commonJsSurveys } = require('@posthog/browser/surveys'))
+    ;({ autocapture } = await import('@posthog/browser/autocapture'))
+    ;({ autocapture: commonJsAutocapture } = require('@posthog/browser/autocapture'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -276,3 +280,18 @@ for (const factory of [surveys, commonJsSurveys]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM surveys entrypoints and SSR lifecycle passed\n')
+
+for (const factory of [autocapture, commonJsAutocapture]) {
+    const extension = factory()
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [extension],
+    })
+    assert.equal(client.getExtension('autocapture'), extension)
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM autocapture entrypoints and SSR lifecycle passed\n')

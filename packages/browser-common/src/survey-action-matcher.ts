@@ -118,7 +118,14 @@ export class ActionMatcher {
     private _checkStepUrl(event?: CaptureResult, step?: ActionStepType): boolean {
         // CHECK CONDITIONS, OTHERWISE SKIPPED
         if (step?.url) {
-            const eventUrl = event?.properties?.$current_url
+            let eventUrl = event?.properties?.$current_url
+            if (!event?.properties || !('$current_url' in event.properties)) {
+                try {
+                    eventUrl = this._host?.getActionUrl?.()
+                } catch {
+                    return false
+                }
+            }
             if (!eventUrl || typeof eventUrl !== 'string') {
                 return false
             }

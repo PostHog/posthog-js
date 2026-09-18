@@ -1,3 +1,6 @@
+import { autocaptureHarness } from './autocapture-fixture'
+window.autocaptureHarness = autocaptureHarness
+
 import { surveysHarness } from './surveys-fixture'
 window.surveysHarness = surveysHarness
 import { logs } from '../src/logs'

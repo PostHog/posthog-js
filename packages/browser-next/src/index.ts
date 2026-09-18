@@ -1,3 +1,4 @@
+import { snapshotAutocaptureOptions } from './autocapture-options'
 import { snapshotSurveysOptions } from './surveys-options'
 import { snapshotLogsOptions } from './logs-options'
 import type { PostHog, PostHogOptions } from './types'
@@ -22,6 +23,16 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             } catch (error) {
                 loadingError = error
             }
+        }
+    }
+    let autocaptureError: unknown
+    let autocaptureOptions: ReturnType<typeof snapshotAutocaptureOptions> | undefined
+    if (!extensions.some((extension) => extension.name === 'autocapture')) {
+        try {
+            const configuration = options?.autocapture
+            if (configuration !== false) autocaptureOptions = snapshotAutocaptureOptions(configuration)
+        } catch (error) {
+            autocaptureError = error
         }
     }
     let flagsError: unknown
@@ -63,7 +74,16 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             surveysError = error
         }
     }
+    if (autocaptureOptions) {
+        try {
+            const { autocapture } = await import('./autocapture')
+            extensions.push(autocapture(autocaptureOptions))
+        } catch (error) {
+            autocaptureError = error
+        }
+    }
     const client = await createPostHogCore(options, extensions)
+    if (autocaptureError) client.logger.error('Automatic autocapture loading failed', autocaptureError)
     if (surveysError) client.logger.error('Automatic surveys loading failed', surveysError)
     if (logsError) client.logger.error('Automatic logs loading failed', logsError)
     if (flagsError) client.logger.error('Automatic flags loading failed', flagsError)
@@ -119,3 +139,5 @@ export type {
     DisplaySurveyOptions,
     SurveyRenderReason,
 } from './surveys-options'
+
+export type { AutocaptureOptions, AutocaptureConfiguration, RageclickOptions } from './autocapture-options'

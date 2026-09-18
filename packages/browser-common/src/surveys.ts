@@ -271,9 +271,13 @@ export class PostHogSurveys implements Extension {
             return
         }
         this._surveyManager = generateSurveysFn(isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(this._client!, this)
+        this._surveyEventReceiver = this._createEventReceiver(this._client!)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
+    }
+
+    protected _createEventReceiver(client: Client): SurveyEventReceiver {
+        return new SurveyEventReceiver(client, this)
     }
 
     /** Helper to handle errors during survey loading */
@@ -407,14 +411,16 @@ export class PostHogSurveys implements Extension {
             (survey) =>
                 isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
         )
-        if (eventOrActionBasedSurveys.length > 0) {
-            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-        }
+        this._registerSurveyTriggers(eventOrActionBasedSurveys)
 
         // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
         // main-blob write-back from a stale `__surveys` entry.
         client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
         return { surveys, context: { isLoaded: true } }
+    }
+
+    protected _registerSurveyTriggers(surveys: Survey[]): void {
+        if (surveys.length > 0) this._surveyEventReceiver?.register(surveys)
     }
 
     /**
