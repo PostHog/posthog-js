@@ -1,15 +1,7 @@
 // Native signatures are pinned to posthog-node 5.52.4 (see README.md).
 import { randomUUID } from 'node:crypto'
 
-export const routes = [
-    '/setup',
-    '/capture',
-    '/capture_ai',
-    '/flush',
-    '/get_feature_flag',
-    '/reload_feature_flags',
-    '/wait_for_local_evaluation_ready',
-]
+export const routes = ['/setup', '/capture', '/capture_ai', '/flush', '/get_feature_flag', '/reload_feature_flags']
 export const failure = (kind, code, message) => ({ kind: 'harness', failure: { kind, code, message } })
 class BindingGap extends Error {
     constructor(kind, code, message) {
@@ -208,11 +200,6 @@ export class Binding {
             } else if (route === '/reload_feature_flags') {
                 checkKeys(args, [], route)
                 result = await this.client.reloadFeatureFlags()
-            } else if (route === '/wait_for_local_evaluation_ready') {
-                checkKeys(args, ['timeout_ms'], route)
-                result = await this.client.waitForLocalEvaluationReady(
-                    ...(own(args, 'timeout_ms') ? [args.timeout_ms] : [])
-                )
             } else {
                 checkKeys(args, ['key', 'distinct_id', ...Object.keys(flagFields)], route)
                 const options = rename(

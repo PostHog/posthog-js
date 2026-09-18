@@ -4,7 +4,9 @@ import { createServer, request as httpRequest } from 'node:http'
 import { once } from 'node:events'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { setImmediate } from 'node:timers/promises'
 import { startServer, protocol } from './server.mjs'
 
 const consumer = process.env.POSTHOG_NODE_CONSUMER
@@ -116,10 +118,17 @@ for (const mode of ['v0', 'v1'])
             const capture = traffic.find(({ path }) => path.startsWith(mode === 'v0' ? '/batch' : '/i/v1/analytics'))
             assert.ok(capture)
             assert.ok(capture.body.includes('slice'))
-            assert.deepEqual((await invoke('/wait_for_local_evaluation_ready', { timeout_ms: 5000 })).outcome, {
-                kind: 'value',
-                value: true,
-            })
+            assert.deepEqual(
+                (
+                    await invoke('/get_feature_flag', {
+                        key: 'flag',
+                        distinct_id: 'person',
+                        only_evaluate_locally: true,
+                        send_event: false,
+                    })
+                ).outcome,
+                { kind: 'value', value: true }
+            )
             for (const value of [true, false, true]) {
                 active = value
                 assert.deepEqual((await invoke('/reload_feature_flags')).outcome, { kind: 'void' })
@@ -151,6 +160,68 @@ for (const mode of ['v0', 'v1'])
             assert.equal(traffic.filter(({ path }) => /^\/(flags|decide)\/?(?:\?|$)/.test(path)).length, 0)
         })
     }
+
+test('a single public local-only getter waits for delayed initial definitions', { timeout: 5000 }, async (t) => {
+    const { PostHog } = createRequire(resolve(consumer, 'package.json'))('posthog-node')
+    const traffic = []
+    const firstDefinitions = Promise.withResolvers()
+    const mock = createServer((request, response) => {
+        traffic.push(request.url)
+        response.setHeader('content-type', 'application/json')
+        if (request.url.startsWith('/flags/definitions')) firstDefinitions.resolve(response)
+        else response.end('{}')
+    })
+    mock.listen(0, '127.0.0.1')
+    await once(mock, 'listening')
+    const client = new PostHog('phc_test', {
+        host: `http://127.0.0.1:${mock.address().port}`,
+        secretKey: 'phx_test',
+        flushInterval: 0,
+    })
+    let response = null
+    t.after(async () => {
+        if (response && !response.writableEnded) response.end('{"flags":[]}')
+        await client.shutdown()
+        mock.closeAllConnections()
+        await new Promise((done) => mock.close(done))
+    })
+
+    // Hold the first HTTP response open before invoking the genuine public getter.
+    response = await firstDefinitions.promise
+    let settled = false
+    const result = client.getFeatureFlag('flag', 'person', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+    })
+    result.then(
+        () => {
+            settled = true
+        },
+        () => {
+            settled = true
+        }
+    )
+    await setImmediate()
+    assert.equal(settled, false, 'the getter must remain pending while definitions are withheld')
+    response.end(
+        JSON.stringify({
+            flags: [
+                {
+                    id: 1,
+                    key: 'flag',
+                    active: true,
+                    filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+                },
+            ],
+            group_type_mapping: {},
+            cohorts: {},
+        })
+    )
+    assert.equal(await result, true)
+    await client.shutdown()
+    assert.equal(traffic.filter((path) => path.startsWith('/flags/definitions')).length, 1)
+    assert.equal(traffic.filter((path) => /^\/(flags|decide)\/?(?:\?|$)/.test(path)).length, 0)
+})
 
 test('transport errors remain non-200; SDK throws are completions and case IDs cannot be reused', async (t) => {
     const { post, allocate, invoke, close } = await harness(t)

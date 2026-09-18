@@ -19,7 +19,6 @@ async function spies(run, captureMode = 'v0') {
         flush: undefined,
         getFeatureFlag: undefined,
         reloadFeatureFlags: undefined,
-        waitForLocalEvaluationReady: undefined,
     }
     for (const name of Object.keys(results)) {
         originals.set(name, Object.getOwnPropertyDescriptor(PostHog.prototype, name))
@@ -88,7 +87,7 @@ test('setup preserves omission and maps only explicit config, including false/ze
         })
 })
 
-test('local reload and readiness call only their public methods with native arguments and results', async () => {
+test('local reload calls its public method with native arguments and results', async () => {
     await spies(async (binding, calls, results) => {
         await setup(binding)
         assert.deepEqual(await binding.invoke('/reload_feature_flags', {}), { kind: 'sdk', outcome: { kind: 'void' } })
@@ -96,24 +95,8 @@ test('local reload and readiness call only their public methods with native argu
             ['constructor', ['test-project']],
             ['reloadFeatureFlags', []],
         ])
-        for (const args of [{}, { timeout_ms: 0 }, { timeout_ms: null }, { timeout_ms: false }, { timeout_ms: 5000 }]) {
-            for (const value of [true, false, undefined, null]) {
-                results.waitForLocalEvaluationReady = value
-                assert.deepEqual(
-                    (await binding.invoke('/wait_for_local_evaluation_ready', args)).outcome,
-                    value === undefined ? { kind: 'undefined' } : { kind: 'value', value }
-                )
-                assert.deepEqual(calls.at(-1), [
-                    'waitForLocalEvaluationReady',
-                    Object.hasOwn(args, 'timeout_ms') ? [args.timeout_ms] : [],
-                ])
-            }
-        }
-        assert.equal(calls.length, 22)
         results.reloadFeatureFlags = new Error('native reload failure')
         assert.equal((await binding.invoke('/reload_feature_flags', {})).outcome.kind, 'thrown')
-        results.waitForLocalEvaluationReady = new Error('native readiness failure')
-        assert.equal((await binding.invoke('/wait_for_local_evaluation_ready', {})).outcome.kind, 'thrown')
     })
 })
 
