@@ -532,6 +532,10 @@ export class PostHog implements PostHogInterface {
         if (!extension) {
             return
         }
+        if (this._isSharedExtension(extension)) {
+            this._browserClientAdapter?.remove(extension)
+            return
+        }
         const idx = this._extensions.indexOf(extension)
         if (idx !== -1) {
             this._extensions.splice(idx, 1)
@@ -540,7 +544,11 @@ export class PostHog implements PostHogInterface {
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         this._removeExtension(oldExt)
-        this._extensions.push(newExt)
+        if (this._isSharedExtension(newExt)) {
+            void this._getBrowserClientAdapter().add(newExt)
+        } else {
+            this._extensions.push(newExt)
+        }
         newExt.initialize?.()
         return newExt
     }
@@ -1159,8 +1167,16 @@ export class PostHog implements PostHogInterface {
         if (ext.siteApps) {
             this._extensions.push((this.siteApps = new ext.siteApps(this)))
         }
-        if (ext.sessionRecording && !startInCookielessMode) {
-            this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
+        if (ext.sessionRecording && !startInCookielessMode && !this._isShutdown) {
+            this.sessionRecording = new ext.sessionRecording(this)
+            if (this._isSharedExtension(this.sessionRecording)) {
+                void this._getBrowserClientAdapter().add(this.sessionRecording)
+                initTasks.push(() => {
+                    void this.sessionRecording?.initialize()
+                })
+            } else {
+                this._extensions.push(this.sessionRecording)
+            }
         }
         if (!this.config.disable_scroll_properties) {
             initTasks.push(() => {
@@ -3867,7 +3883,10 @@ export class PostHog implements PostHogInterface {
 
         this._isShutdown = true
         this._getBrowserClientAdapter().dispose()
-        this.sessionRecording?.dispose()
+        const recording: Extension | undefined = this.sessionRecording
+        if (recording && !this._isSharedExtension(recording)) {
+            this.sessionRecording?.dispose()
+        }
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
@@ -4736,8 +4755,9 @@ export class PostHog implements PostHogInterface {
                 // Replay the cached remote config result so the new recorder picks up
                 // server-side settings (enable flag, endpoint, sampling) that arrived while
                 // we were still in cookieless mode and sessionRecording didn't yet exist.
-                if (this._lastRemoteConfig) {
-                    this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
+                const recording: Extension = this.sessionRecording
+                if (this._lastRemoteConfig && !this._isSharedExtension(recording)) {
+                    recording.onRemoteConfig?.(this._lastRemoteConfig)
                 }
             }
         }

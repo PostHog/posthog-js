@@ -10,6 +10,10 @@ const ruleTester = new RuleTester({
 
 ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
     valid: [
+        {
+            code: "import { LazyLoadedSessionRecording } from '../../src/replay/external/lazy-loaded-session-recorder'",
+            filename: '/project/packages/browser-common/tests/replay/lazy-loaded-session-recorder.spec.ts',
+        },
         // Allowed imports from entrypoints
         {
             code: "import { something } from '@/extensions/replay/external/denylist'",

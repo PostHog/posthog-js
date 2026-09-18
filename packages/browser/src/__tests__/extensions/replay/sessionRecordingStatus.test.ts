@@ -1,3 +1,4 @@
+import { replayTriggerClient } from './replay-trigger-client'
 import {
     ACTIVE,
     allMatchSessionRecordingStatus,
@@ -52,7 +53,7 @@ const defaultTriggersStatus: RecordingTriggersStatus = {
 }
 
 const makeLinkedFlagMatcher = (linkedFlag: string | null, linkedFlagSeen: boolean): LinkedFlagMatching => {
-    const lfm = new LinkedFlagMatching(fakePostHog)
+    const lfm = new LinkedFlagMatching(replayTriggerClient(fakePostHog))
     lfm.linkedFlag = linkedFlag
     lfm.linkedFlagSeen = linkedFlagSeen
     return lfm

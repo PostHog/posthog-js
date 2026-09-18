@@ -1,3 +1,4 @@
+import { replayTriggerClient } from './replay-trigger-client'
 import * as fc from 'fast-check'
 import {
     URLTriggerMatching,
@@ -80,7 +81,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             }),
         })
 
-        urlTriggerMatching = new URLTriggerMatching(mockPostHog)
+        urlTriggerMatching = new URLTriggerMatching(replayTriggerClient(mockPostHog))
         // Reset URL tracking state for each test
         ;(urlTriggerMatching as any)._lastCheckedUrl = ''
     })

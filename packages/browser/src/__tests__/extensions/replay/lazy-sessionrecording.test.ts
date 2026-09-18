@@ -369,7 +369,9 @@ describe('Lazy SessionRecording', () => {
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
+        posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
         sessionRecording = new SessionRecording(posthog)
+        sessionRecording.setup(posthog._getBrowserClientAdapter())
     })
 
     afterEach(() => {
@@ -387,7 +389,9 @@ describe('Lazy SessionRecording', () => {
             const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
             const visibilityHistory = mockVisibilityHistory('hidden')
             try {
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -414,7 +418,9 @@ describe('Lazy SessionRecording', () => {
             const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
             const visibilityHistory = mockVisibilityHistory('visible', 'hidden')
             try {
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -450,7 +456,9 @@ describe('Lazy SessionRecording', () => {
                         new LazyLoadedSessionRecording(ph)
                     callback()
                 })
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -480,7 +488,9 @@ describe('Lazy SessionRecording', () => {
             const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
             const visibilityHistory = mockVisibilityHistory('hidden')
             try {
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 visibilityState.mockReturnValue('visible')
                 document.dispatchEvent(new Event('visibilitychange'))
                 visibilityState.mockReturnValue('hidden')
@@ -516,7 +526,9 @@ describe('Lazy SessionRecording', () => {
             const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
             const visibilityHistory = mockVisibilityHistory('hidden')
             try {
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -5788,7 +5800,7 @@ describe('Lazy SessionRecording', () => {
 
             // Set up a force idle listener
             const mockListener = vi.fn()
-            sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener'] = mockListener
+            sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener'] = { dispose: mockListener }
             expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeDefined()
 
             sessionRecording.stopRecording()
@@ -5808,7 +5820,7 @@ describe('Lazy SessionRecording', () => {
 
             // The listener is created in onRemoteConfig via _persistRemoteConfig
             const mockListener = vi.fn()
-            sessionRecording['_persistFlagsOnSessionListener'] = mockListener
+            sessionRecording['_persistFlagsOnSessionListener'] = { dispose: mockListener }
             expect(sessionRecording['_persistFlagsOnSessionListener']).toBeDefined()
 
             sessionRecording.stopRecording()
@@ -5847,7 +5859,9 @@ describe('Lazy SessionRecording', () => {
             const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
             const visibilityHistory = mockVisibilityHistory('hidden')
             try {
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -6124,7 +6138,9 @@ describe('Lazy SessionRecording', () => {
 
             sessionRecording.stopRecording()
             ;(posthog.capture as vi.Mock).mockClear()
+            posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
             sessionRecording = new SessionRecording(posthog)
+            sessionRecording.setup(posthog._getBrowserClientAdapter())
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -7346,7 +7362,9 @@ describe('Lazy SessionRecording', () => {
             ;(posthog.capture as Mock).mockClear()
 
             // the next page load in the same tab, so the same session and the same window
+            posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
             sessionRecording = new SessionRecording(posthog)
+            sessionRecording.setup(posthog._getBrowserClientAdapter())
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
@@ -7384,7 +7402,9 @@ describe('Lazy SessionRecording', () => {
                 unload()
                 sessionRecording.stopRecording()
                 ;(posthog.capture as Mock).mockClear()
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: { minimumDurationMilliseconds: 1500 },
@@ -7422,7 +7442,9 @@ describe('Lazy SessionRecording', () => {
                 JSON.stringify({ ...parkedBuffer(), sessionId: 'some-other-session' })
             )
 
+            posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
             sessionRecording = new SessionRecording(posthog)
+            sessionRecording.setup(posthog._getBrowserClientAdapter())
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
@@ -7439,12 +7461,21 @@ describe('Lazy SessionRecording', () => {
                 const sessionStartTimestamp = startBelowMinimumDuration()
                 const previousRecorder = sessionRecording['_lazyLoadedSessionRecording']
                 unload()
-                expect(window!.sessionStorage.getItem(previousRecorder['_pendingBufferStorageKey'])).not.toBeNull()
+                expect(
+                    window!.sessionStorage.getItem(
+                        'ph' +
+                            PENDING_BUFFER_STORAGE_SUFFIX +
+                            '_' +
+                            JSON.stringify([config.persistence_name || config.token, config.token])
+                    )
+                ).not.toBeNull()
                 sessionRecording.stopRecording()
                 ;(posthog.capture as Mock).mockClear()
 
                 config.token = nextToken
+                posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
                 sessionRecording = new SessionRecording(posthog)
+                sessionRecording.setup(posthog._getBrowserClientAdapter())
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
                 )
@@ -7466,14 +7497,20 @@ describe('Lazy SessionRecording', () => {
         it('does not restore legacy parked data whose project token is unknown', () => {
             const sessionStartTimestamp = startBelowMinimumDuration()
             unload()
-            const key = sessionRecording['_lazyLoadedSessionRecording']['_pendingBufferStorageKey']
+            const key =
+                'ph' +
+                PENDING_BUFFER_STORAGE_SUFFIX +
+                '_' +
+                JSON.stringify([config.persistence_name || config.token, config.token])
             const parked = window!.sessionStorage.getItem(key)!
             sessionRecording.stopRecording()
             window!.sessionStorage.clear()
             window!.sessionStorage.setItem('ph_test-token' + PENDING_BUFFER_STORAGE_SUFFIX, parked)
             ;(posthog.capture as Mock).mockClear()
 
+            posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
             sessionRecording = new SessionRecording(posthog)
+            sessionRecording.setup(posthog._getBrowserClientAdapter())
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
             )
@@ -8882,7 +8919,9 @@ describe('Lazy SessionRecording', () => {
 
             sessionRecording.stopRecording()
             ;(posthog.capture as vi.Mock).mockClear()
+            posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
             sessionRecording = new SessionRecording(posthog)
+            sessionRecording.setup(posthog._getBrowserClientAdapter())
 
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

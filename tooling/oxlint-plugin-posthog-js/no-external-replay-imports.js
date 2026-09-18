@@ -5,6 +5,7 @@ module.exports = {
             filename.includes('src/entrypoints') ||
             filename.includes('src/extensions/replay/external') ||
             filename.includes('__tests__') ||
+            filename.includes('/browser-common/tests/') ||
             filename.includes('/playwright/')
 
         function isRestrictedImport(importPath) {

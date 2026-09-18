@@ -483,6 +483,9 @@ importers:
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
+      fflate:
+        specifier: ^0.4.8
+        version: 0.4.8
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*

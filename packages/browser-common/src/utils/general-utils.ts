@@ -1,5 +1,5 @@
 import { hasOwnProperty, isArray, isError, isFormData, isNullish, isNumber, isString } from '@posthog/core'
-import type { PostHogConfig, Properties } from '@posthog/types'
+import type { Properties } from '@posthog/types'
 
 import { logger } from './logger'
 
@@ -243,6 +243,6 @@ export function migrateConfigField<T>(
 
 const TOOLBAR_INTERNAL_INSTANCE_NAME = 'ph_toolbar_internal'
 
-export function isToolbarInstance(config: Pick<PostHogConfig, 'name'>): boolean {
+export function isToolbarInstance(config: { name: string }): boolean {
     return config.name === TOOLBAR_INTERNAL_INSTANCE_NAME
 }

@@ -1,3 +1,5 @@
+import { BrowserClientKeyValueStore } from '../../../extensions/browser-client-kv'
+import { createReplayFlushedSizeWriter } from '../../../extensions/replay/replay-host'
 import { FlushedSizeTracker } from '../../../extensions/replay/external/flushed-size-tracker'
 import { PostHog } from '../../../posthog-core'
 import { vi } from 'vitest'
@@ -26,7 +28,9 @@ describe('FlushedSizeTracker', () => {
             persistence,
         })
 
-        tracker = new FlushedSizeTracker(mockPostHog)
+        tracker = new FlushedSizeTracker({ kv: new BrowserClientKeyValueStore(mockPostHog) }, () =>
+            createReplayFlushedSizeWriter(mockPostHog)
+        )
     })
 
     afterEach(() => {
@@ -45,9 +49,12 @@ describe('FlushedSizeTracker', () => {
                 persistence: undefined,
             })
 
-            expect(() => new FlushedSizeTracker(invalidPostHog)).toThrow(
-                'it is not valid to not have persistence and be this far into setting up the application'
-            )
+            expect(
+                () =>
+                    new FlushedSizeTracker({ kv: new BrowserClientKeyValueStore(invalidPostHog) }, () =>
+                        createReplayFlushedSizeWriter(invalidPostHog)
+                    )
+            ).toThrow('it is not valid to not have persistence and be this far into setting up the application')
         })
 
         it('throws error when persistence is null', () => {
@@ -56,9 +63,12 @@ describe('FlushedSizeTracker', () => {
                 persistence: null,
             })
 
-            expect(() => new FlushedSizeTracker(invalidPostHog)).toThrow(
-                'it is not valid to not have persistence and be this far into setting up the application'
-            )
+            expect(
+                () =>
+                    new FlushedSizeTracker({ kv: new BrowserClientKeyValueStore(invalidPostHog) }, () =>
+                        createReplayFlushedSizeWriter(invalidPostHog)
+                    )
+            ).toThrow('it is not valid to not have persistence and be this far into setting up the application')
         })
     })
 

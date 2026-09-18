@@ -176,7 +176,11 @@ describe('SessionRecording', () => {
             return new LazyLoadedSessionRecording(posthog)
         }
 
+        posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
+
         sessionRecording = new SessionRecording(posthog)
+
+        sessionRecording.setup(posthog._getBrowserClientAdapter())
     })
 
     afterEach(() => {

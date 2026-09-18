@@ -51,6 +51,15 @@ export class ExtensionRuntime implements Disposable {
         return this._extensions.get(name) as T | undefined
     }
 
+    /** Removes this registration synchronously, including while setup is pending. */
+    remove(extension: Extension): void {
+        if (this._extensions.get(extension.name) !== extension) {
+            return
+        }
+        this._extensions.delete(extension.name)
+        this._disposeExtension(extension)
+    }
+
     /** Releases every registered extension once in reverse registration order without waiting for pending setup. */
     dispose(): void {
         if (this._disposed) {

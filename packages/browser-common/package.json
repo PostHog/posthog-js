@@ -37,6 +37,9 @@
             ],
             "utils/*": [
                 "dist/utils/*.d.ts"
+            ],
+            "replay/*": [
+                "dist/replay/*.d.ts"
             ]
         }
     },
@@ -70,6 +73,11 @@
             "types": "./dist/utils/*.d.ts",
             "require": "./dist/utils/*.js",
             "import": "./dist/utils/*.mjs"
+        },
+        "./replay/*": {
+            "types": "./dist/replay/*.d.ts",
+            "require": "./dist/replay/*.js",
+            "import": "./dist/replay/*.mjs"
         }
     },
     "scripts": {
@@ -84,7 +92,8 @@
     },
     "dependencies": {
         "@posthog/core": "workspace:^",
-        "@posthog/types": "workspace:^"
+        "@posthog/types": "workspace:^",
+        "fflate": "^0.4.8"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",

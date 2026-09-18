@@ -1,3 +1,4 @@
+import { replayTriggerClient } from './replay-trigger-client'
 import {
     BUFFERING,
     DISABLED,
@@ -74,7 +75,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -90,7 +91,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -105,7 +106,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -121,7 +122,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             expect(matcher.group.minDurationMs).toBe(0)
         })
     })
@@ -341,7 +342,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')
@@ -358,7 +359,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('pageview', onActivate, 'session-1')
             expect(onActivate).not.toHaveBeenCalled()
@@ -380,7 +381,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(replayTriggerClient(fakePostHog), group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')

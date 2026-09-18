@@ -222,7 +222,9 @@ function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
         [SESSION_RECORDING_IS_SAMPLED]: undefined,
     })
 
+    posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
     const sessionRecording = new SessionRecording(posthog)
+    sessionRecording.setup(posthog._getBrowserClientAdapter())
     sessionRecording.onRemoteConfig({
         ok: true,
         config: { sessionRecording: { endpoint: '/s/' } } as unknown as RemoteConfig,
