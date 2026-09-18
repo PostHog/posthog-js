@@ -7,6 +7,8 @@ import { testPage } from './page'
 // read directory ../../dist and get all files
 const files = fs.readdirSync(path.join(__dirname, '../../dist'))
 
+const escapeForRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 export const testNetwork = testPage.extend<{
     network: NetworkPage
     mockIngestion: boolean
@@ -134,7 +136,7 @@ export class NetworkPage {
                 // The SDK asks the asset host for its own version, so a lazily loaded file arrives as
                 // `/static/<version>/<file>`. Without the optional version segment the route misses
                 // and the test reads the published bundle instead of the one just built.
-                const pattern = new RegExp(`/static/(?:[\\d.]+/)?${file.replace(/\./g, '\\.')}(?:\\?.*)?$`)
+                const pattern = new RegExp(`/static/(?:[\\d.]+/)?${escapeForRegExp(file)}(?:\\?.*)?$`)
                 return this.page.route(pattern, async (route) => {
                     const source = staticOverrides[file] ?? file
                     await route.fulfill({

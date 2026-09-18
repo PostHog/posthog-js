@@ -68,7 +68,13 @@ describe('ErrorEventCoercer', () => {
 
     expect(
       buildException(
-        new FakeErrorEvent({ error, message: error.message, filename: 'webkit-masked-url://hidden/', lineno: 27, colno: 33 })
+        new FakeErrorEvent({
+          error,
+          message: error.message,
+          filename: 'webkit-masked-url://hidden/',
+          lineno: 27,
+          colno: 33,
+        })
       )
     ).toMatchObject({
       type: 'TypeError',
@@ -87,9 +93,7 @@ describe('ErrorEventCoercer', () => {
       new FakeErrorEvent({ error, message: 'boom', filename: 'webkit-masked-url://hidden/', lineno: 27, colno: 33 })
     )
 
-    expect(exception.stacktrace?.frames).toEqual([
-      expect.objectContaining({ filename: 'https://example.com/app.js' }),
-    ])
+    expect(exception.stacktrace?.frames).toEqual([expect.objectContaining({ filename: 'https://example.com/app.js' })])
   })
 
   it('preserves the message and location when there is no Error object', () => {
