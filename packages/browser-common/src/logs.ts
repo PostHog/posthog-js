@@ -147,7 +147,7 @@ export class PostHogLogs implements Extension {
         return undefined
     }
 
-    private _listenForReconnect(): void {
+    protected _listenForReconnect(): void {
         if (this._listeningForReconnect) return
         try {
             this._window = typeof window === 'undefined' ? undefined : window
@@ -640,6 +640,7 @@ export class PostHogLogs implements Extension {
                 })
             }, LOGS_SEND_TIMEOUT_MS)
 
+            const isRequestReady = this._isRequestReady
             this._client!.sendRequest('/i/v1/logs', {
                 method: 'POST',
                 query: { token: this._client!.projectToken },
@@ -649,7 +650,7 @@ export class PostHogLogs implements Extension {
             }).then(
                 (response) => {
                     const status = response.statusCode
-                    this._trackEndpointReachability(status)
+                    this._trackEndpointReachability(status, isRequestReady)
                     if (status >= 200 && status < 300) {
                         settle({ kind: 'ok' })
                     } else if (status === 413) {
@@ -689,9 +690,10 @@ export class PostHogLogs implements Extension {
     }
 
     // Feeds the status-0 circuit breaker checked at the top of `_sendLogsBatch`.
-    private _trackEndpointReachability(statusCode: number): void {
-        // A pre-initialization drop is not evidence that the endpoint is blocked.
-        if (statusCode === 0 && !this._isRequestReady) return
+    private _trackEndpointReachability(statusCode: number, isRequestReady: boolean): void {
+        // A pre-initialization drop is not evidence that the endpoint is blocked,
+        // even if initialization ran before the response Promise settled.
+        if (statusCode === 0 && !isRequestReady) return
         this._consecutiveStatusZeroFailures = updateStatusZeroFailureCount(
             statusCode,
             this._consecutiveStatusZeroFailures,
