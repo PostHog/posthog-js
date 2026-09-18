@@ -122,6 +122,8 @@ export class TestClient implements Client {
     private _eventPublisher = new Publisher<CapturedEventInfo>()
     private _remoteConfigPublisher = new Publisher<RemoteConfigResult>()
 
+    private _sessionPublisher = new Publisher<string>()
+    readonly onSession = this._sessionPublisher.listener
     readonly onEvent = this._eventPublisher.listener
     readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
         const subscription = this._remoteConfigPublisher.listener(handler)

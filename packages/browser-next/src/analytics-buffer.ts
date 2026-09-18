@@ -148,6 +148,23 @@ export const createAnalyticsExtension = (
             }
             return deliverImmediate.call(driver, [message], canContinue)
         },
+        deliverUnload(message, canContinue) {
+            const send = () => {
+                if (disposed || !canContinue()) {
+                    return
+                }
+                try {
+                    driver?.deliverUnload([message])
+                } catch (error) {
+                    host.reportFailure(error)
+                }
+            }
+            if (driver) {
+                send()
+            } else {
+                void ensureDelivery('immediate').then(send, (error) => host.reportFailure(error))
+            }
+        },
         purge: () => buffer.purge(),
         dispose() {
             disposed = true
