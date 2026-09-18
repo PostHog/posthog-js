@@ -1,5 +1,3 @@
-import { h } from 'preact'
-
 import type { SurveyAppearance } from '../../types/surveys'
 
 import { useContext } from 'preact/hooks'

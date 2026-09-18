@@ -4,8 +4,8 @@ import './helpers/surveys-setup'
 import type { Mock } from 'vitest'
 import type { JSDOM } from 'jsdom'
 declare const jsdom: JSDOM
-import { createSurveysRuntimeHost } from './helpers/surveys-runtime-host'
-import type { MockSurveysRuntimeHost } from './helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from './helpers/survey-render-context'
+import type { MockSurveyRenderContext } from './helpers/survey-render-context'
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import { within } from '@testing-library/dom'
 import {
@@ -101,9 +101,8 @@ describe('survey display logic', () => {
         },
     ]
 
-    const host = createSurveysRuntimeHost({
+    const host = createSurveyRenderContext({
         getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
-        getReplayUrl: vi.fn(),
         canCapture: true,
         capture: vi.fn().mockImplementation((eventName) => eventName),
         automaticDisplay: !false,
@@ -161,8 +160,7 @@ describe('usePopupVisibility', () => {
         current_iteration_start_date: null,
         feature_flag_keys: null,
     }
-    const host = createSurveysRuntimeHost({
-        getReplayUrl: vi.fn(),
+    const host = createSurveyRenderContext({
         canCapture: true,
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
@@ -320,8 +318,7 @@ describe('usePopupVisibility close animation path', () => {
         current_iteration_start_date: null,
         feature_flag_keys: null,
     }
-    const host = createSurveysRuntimeHost({
-        getReplayUrl: vi.fn(),
+    const host = createSurveyRenderContext({
         canCapture: true,
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
@@ -453,7 +450,7 @@ describe('usePopupVisibility close animation path', () => {
 })
 
 describe('SurveyManager', () => {
-    let host: MockSurveysRuntimeHost
+    let host: MockSurveyRenderContext
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
     // Several nested describes/tests below construct their own SurveyManager and reassign
@@ -463,7 +460,7 @@ describe('SurveyManager', () => {
     // the outer afterEach can dispose all of them, not just whichever one `surveyManager`
     // currently points to.
     let createdSurveyManagers: SurveyManager[] = []
-    const createSurveyManager = (instance: MockSurveysRuntimeHost): SurveyManager => {
+    const createSurveyManager = (instance: MockSurveyRenderContext): SurveyManager => {
         const manager = new SurveyManager(instance)
         createdSurveyManagers.push(manager)
         return manager
@@ -513,8 +510,7 @@ describe('SurveyManager', () => {
             },
         ]
 
-        host = createSurveysRuntimeHost({
-            getReplayUrl: vi.fn(),
+        host = createSurveyRenderContext({
             canCapture: true,
             capture: vi.fn(),
             hasLoadedFlags: true,
@@ -758,7 +754,7 @@ describe('SurveyManager', () => {
             vi.useFakeTimers()
             const survey = makeDelayedSurvey('older-core-survey', 60)
             host.getSurveys = vi.fn((cb) => cb([survey]))
-            host.eventReceiver = { getSurveys: () => [survey.id] } as MockSurveysRuntimeHost['eventReceiver']
+            host.eventReceiver = { getSurveys: () => [survey.id] } as MockSurveyRenderContext['eventReceiver']
 
             expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
             vi.advanceTimersByTime(60_000)
@@ -895,7 +891,7 @@ describe('SurveyManager', () => {
                 appearance: { widgetType: SurveyWidgetType.Tab, widgetLabel: 'Feedback' },
             }
             const { container, getByRole } = render(
-                Preact.createElement(FeedbackWidget, { survey: widgetSurvey, posthog: host as MockSurveysRuntimeHost })
+                Preact.createElement(FeedbackWidget, { survey: widgetSurvey, posthog: host as MockSurveyRenderContext })
             )
             isCapturing.mockReturnValue(false)
 
@@ -1546,9 +1542,8 @@ describe('SurveyManager', () => {
                 shouldShowConfirmation: false,
             },
         ])('should show confirmation=$shouldShowConfirmation for $scenario', ({ search, shouldShowConfirmation }) => {
-            const host = createSurveysRuntimeHost({
+            const host = createSurveyRenderContext({
                 prefillFromUrl: true,
-                getReplayUrl: vi.fn(),
                 canCapture: true,
                 capture: vi.fn(),
                 isFlagEnabled: vi.fn().mockReturnValue(true),
@@ -1607,9 +1602,8 @@ describe('SurveyManager', () => {
 
         it('retains the auto-advanced prefilled answer through a later manual submit', async () => {
             localStorage.clear()
-            const host = createSurveysRuntimeHost({
+            const host = createSurveyRenderContext({
                 prefillFromUrl: true,
-                getReplayUrl: vi.fn(),
                 canCapture: true,
                 capture: vi.fn(),
                 isFlagEnabled: vi.fn().mockReturnValue(true),
@@ -1671,15 +1665,14 @@ describe('SurveyManager', () => {
     })
 
     describe('timeout management', () => {
-        let host: MockSurveysRuntimeHost
+        let host: MockSurveyRenderContext
         let surveyManager: SurveyManager
         let mockSurvey: Survey
 
         beforeEach(() => {
             vi.useFakeTimers()
             // Set up mocks
-            host = createSurveysRuntimeHost({
-                getReplayUrl: vi.fn(),
+            host = createSurveyRenderContext({
                 canCapture: true,
                 capture: vi.fn(),
                 isFlagEnabled: vi.fn().mockReturnValue(true),
@@ -2048,7 +2041,7 @@ describe('SurveyManager', () => {
     })
 
     describe('URL prefill auto-submit behavior', () => {
-        let host: MockSurveysRuntimeHost
+        let host: MockSurveyRenderContext
         let surveyManager: SurveyManager
         let originalLocation: string
 
@@ -2060,8 +2053,7 @@ describe('SurveyManager', () => {
 
             jsdom.reconfigure({ url: new URL(window.location.pathname, window.location.origin).href })
 
-            host = createSurveysRuntimeHost({
-                getReplayUrl: vi.fn(),
+            host = createSurveyRenderContext({
                 canCapture: true,
                 capture: vi.fn(),
                 isFlagEnabled: vi.fn().mockReturnValue(true),
@@ -2363,7 +2355,7 @@ describe('SurveyManager', () => {
 })
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
-    let posthog: MockSurveysRuntimeHost
+    let posthog: MockSurveyRenderContext
     let mockRemoveSurveyFromFocus: Mock
     let originalLocationHref: string
     let originalPushState: typeof window.history.pushState
@@ -2397,7 +2389,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     beforeEach(() => {
         // Mock survey runtime host
-        posthog = createSurveysRuntimeHost({ capture: vi.fn(), getReplayUrl: vi.fn(), canCapture: true })
+        posthog = createSurveyRenderContext({ capture: vi.fn(), canCapture: true })
 
         mockRemoveSurveyFromFocus = vi.fn()
 

@@ -1,4 +1,6 @@
-import type { SurveysRuntimeHost } from '../surveys-runtime-host'
+import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
+import type { Properties } from '@posthog/types'
+import type { SurveyRenderContext } from '../survey-render-context'
 import type { Survey } from '../types/surveys'
 import { createLogger } from '../utils/logger'
 import { applySurveyTranslation, detectSurveyLanguage } from '@posthog/core/surveys'
@@ -11,19 +13,14 @@ const logger = createLogger('[SurveyTranslations]')
  * 2. person properties 'language' (allows programmatic control via posthog.identify())
  * 3. navigator.language or navigator.userLanguage (browser language)
  *
- * TODO: Consider adding dynamic language change detection in the future:
- * - Listen to 'languagechange' event on window (https://developer.mozilla.org/en-US/docs/Web/API/Window/languagechange_event)
- * - Listen to config changes (once we add config change events to SurveysRuntimeHost core)
- * - Re-render survey when language changes mid-session
- *
- * @param instance - SurveysRuntimeHost instance to retrieve config and person properties
+ * @param instance - SurveyRenderContext instance to retrieve config and person properties
  * @returns The detected language code (e.g., 'fr', 'es', 'en-US') or null if not found
  */
-export function detectUserLanguage(instance: SurveysRuntimeHost): string | null {
+export function detectUserLanguage(instance: SurveyRenderContext): string | null {
     return detectSurveyLanguage(
         {
-            overrideLanguage: instance.overrideLanguage,
-            storedPersonProperties: instance.storedPersonProperties,
+            overrideLanguage: instance.config.overrideLanguage,
+            storedPersonProperties: instance.client?.kv.get<Properties>(STORED_PERSON_PROPERTIES_KEY),
             locale:
                 typeof navigator !== 'undefined'
                     ? navigator.language || (navigator as Navigator & { userLanguage?: string }).userLanguage
@@ -36,12 +33,12 @@ export function detectUserLanguage(instance: SurveysRuntimeHost): string | null 
 /**
  * Applies translations to a survey based on the user's language from person properties
  * @param survey - The original survey object
- * @param instance - SurveysRuntimeHost instance to retrieve person properties
+ * @param instance - SurveyRenderContext instance to retrieve person properties
  * @returns An object containing the translated survey and the language used (or null if no translation applied)
  */
 export function applySurveyTranslationForUser(
     survey: Survey,
-    instance: SurveysRuntimeHost
+    instance: SurveyRenderContext
 ): { survey: Survey; language: string | null } {
     const userLanguage = detectUserLanguage(instance)
 

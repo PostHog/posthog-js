@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen } from '@testing-library/preact'
@@ -14,9 +14,8 @@ vi.mock('../../src/surveys/surveys-extension-utils', async (importOriginal) => (
     dismissedSurveyEvent: vi.fn(),
 }))
 
-const host = createSurveysRuntimeHost({
+const host = createSurveyRenderContext({
     capture: vi.fn(),
-    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
     canCapture: true,
     reloadFlags: vi.fn(),
 })

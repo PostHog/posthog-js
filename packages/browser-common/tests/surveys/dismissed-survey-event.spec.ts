@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
 import type { Mock } from 'vitest'
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import { dismissedSurveyEvent, setInProgressSurveyState } from '../../src/surveys/surveys-extension-utils'
 import { SurveyQuestionType, SurveyType } from '../../src/survey-constants'
@@ -39,7 +39,7 @@ describe('dismissedSurveyEvent', () => {
             },
             localStorage
         )
-        const host = createSurveysRuntimeHost({ capture: vi.fn(), getReplayUrl: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: vi.fn(), canCapture: true })
 
         dismissedSurveyEvent(survey, host, false, 'fr')
 
@@ -58,7 +58,7 @@ describe('dismissedSurveyEvent', () => {
             },
             localStorage
         )
-        const host = createSurveysRuntimeHost({ capture: vi.fn(), getReplayUrl: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: vi.fn(), canCapture: true })
 
         dismissedSurveyEvent(survey, host, false, 'fr')
 
@@ -69,7 +69,7 @@ describe('dismissedSurveyEvent', () => {
     it('falls back to the current display language when the survey was dismissed without answering', () => {
         // No in-progress state at all — nothing was ever answered, so there's no answer-time
         // language to prefer.
-        const host = createSurveysRuntimeHost({ capture: vi.fn(), getReplayUrl: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: vi.fn(), canCapture: true })
 
         dismissedSurveyEvent(survey, host, false, 'fr')
 

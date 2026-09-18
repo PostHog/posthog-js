@@ -1,4 +1,5 @@
-import { SurveyEventReceiver } from '../utils/survey-event-receiver'
+import { BrowserClientAdapter } from '../extensions/browser-client'
+import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { ProductTourEventReceiver } from '../utils/product-tour-event-receiver'
 import type { PostHog } from '../posthog-core'
 import {
@@ -18,13 +19,16 @@ it.each([
         const register = vi.fn((values) => Object.assign(props, values))
         const unregister = vi.fn((key) => delete props[key])
         const instance = {
-            persistence: { props, register, unregister },
+            persistence: { props, register, unregister, get_property: (key: string) => props[key] },
             onSessionId: (callback: (sessionId: string) => void) => {
                 callback('new')
                 return () => {}
             },
         } as unknown as PostHog
-        const receiver = new Receiver(instance)
+        const receiver =
+            Receiver === SurveyEventReceiver
+                ? new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
+                : new ProductTourEventReceiver(instance)
         expect(props[activatedKey]).toEqual([])
         expect(props[sessionKey]).toBeUndefined()
         receiver.dispose()
