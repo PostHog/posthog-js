@@ -132,14 +132,18 @@ describe('survey display logic', () => {
         }
     })
 
-    const createThrowingPostHog = (nextError: () => unknown, isExceptionCaptureEnabled: boolean) =>
+    const createThrowingPostHog = (
+        nextError: () => unknown,
+        isExceptionCaptureEnabled: boolean,
+        hasCaptureException = true
+    ) =>
         createMockPostHog({
             surveys: {
                 getSurveys: vi.fn().mockImplementation(() => {
                     throw nextError()
                 }),
             },
-            captureException: vi.fn(),
+            ...(hasCaptureException ? { captureException: vi.fn() } : {}),
             exceptionObserver: { isEnabled: isExceptionCaptureEnabled },
             get_session_replay_url: vi.fn(),
             is_capturing: vi.fn(() => true),
@@ -187,6 +191,23 @@ describe('survey display logic', () => {
             expect(throwingPostHog.captureException).toHaveBeenNthCalledWith(2, secondError, {
                 survey_display_logic_failure: true,
             })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
+    // `captureException` was only added to the core in 1.160.0, and a newly deployed surveys
+    // bundle can still be loaded by an older cached core.
+    test('a core without captureException still contains the failure and stops the interval', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(() => error, true, false)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
         } finally {
             surveyManager?.dispose()
             vi.useRealTimers()

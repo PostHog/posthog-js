@@ -1295,8 +1295,9 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
             if (isNewFailure && posthog.exceptionObserver?.isEnabled) {
                 // The catch above hides the failure from error tracking, so report it once.
                 // Only projects that turned exception capture on get the report, because an
-                // SDK-generated event must not bypass `capture_exceptions`.
-                posthog.captureException(error, { survey_display_logic_failure: true })
+                // SDK-generated event must not bypass `capture_exceptions`. The call is
+                // optional because an older cached core can load this bundle without it.
+                posthog.captureException?.(error, { survey_display_logic_failure: true })
             }
         }
     }
