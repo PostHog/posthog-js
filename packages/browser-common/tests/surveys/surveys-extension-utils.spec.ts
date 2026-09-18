@@ -765,7 +765,7 @@ describe('sendSurveyEvent', () => {
                 surveyLanguage: 'fr',
                 questionSnapshots: { q1: 'Votre avis ?' },
             }
-            setInProgressSurveyState(baseSurvey, progress)
+            setInProgressSurveyState(baseSurvey, progress, localStorage)
 
             sendSurveyEvent({
                 ...progress,
@@ -787,7 +787,7 @@ describe('sendSurveyEvent', () => {
                 sessionRecordingUrl: `https://us.posthog.com/project/${host.client!.projectToken}/replay/${host.client!.session.sessionId}`,
                 $set: { '$survey_responded/test-survey-id': true },
             })
-            expect(getInProgressSurveyState(baseSurvey)).toEqual(completed ? null : progress)
+            expect(getInProgressSurveyState(baseSurvey, localStorage)).toEqual(completed ? null : progress)
             expect(host.reloadFlags).toHaveBeenCalledTimes(completed ? 1 : 0)
         }
     )
