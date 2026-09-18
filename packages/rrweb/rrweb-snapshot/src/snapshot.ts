@@ -77,7 +77,16 @@ let canvasCtx: CanvasRenderingContext2D | null;
 
 // a tainted canvas fails on every snapshot, so warn once rather than on each one
 let taintedCanvasWarned = false;
-function warnTaintedCanvasOnce(error: unknown): void {
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time like the img inline path does, rather than blaming taint
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      'Cannot read canvas pixels, so this canvas is left out of the recording.',
+      error,
+    );
+    return;
+  }
   if (taintedCanvasWarned) return;
   taintedCanvasWarned = true;
   console.warn(
@@ -945,7 +954,7 @@ function serializeElementNode(
         }
       }
     } catch (err) {
-      warnTaintedCanvasOnce(err);
+      warnCanvasUnreadable(err);
     }
   }
   // save image offline

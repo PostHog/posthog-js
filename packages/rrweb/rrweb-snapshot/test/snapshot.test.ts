@@ -784,7 +784,7 @@ describe('canvas rr_dataURL with a configured canvas mask provider', () => {
     const canvas = document.createElement('canvas');
     (canvas as { __context?: string }).__context = '2d';
     const taint = () => {
-      throw new Error('SecurityError: tainted canvas');
+      throw new DOMException('tainted canvas', 'SecurityError');
     };
     canvas.getContext = (() => ({
       getImageData: taint,
@@ -801,10 +801,28 @@ describe('canvas rr_dataURL with a configured canvas mask provider', () => {
     warn.mockRestore();
   });
 
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    serializeCanvas(canvas, () => false);
+    serializeCanvas(canvas, () => false);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    warn.mockRestore();
+  });
+
   it('serializes a tainted unobserved-context canvas without its pixels', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = () => {
-      throw new Error('SecurityError: tainted canvas');
+      throw new DOMException('tainted canvas', 'SecurityError');
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
