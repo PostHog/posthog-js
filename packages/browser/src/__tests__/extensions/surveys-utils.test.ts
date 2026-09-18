@@ -1,12 +1,14 @@
+import { getSurveyRenderContext } from '../../browser-surveys'
+import { surveyStorage } from '@posthog/browser-common/utils/survey-storage'
 import {
     doesSurveyUrlMatch,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
-} from '../../extensions/surveys/surveys-extension-utils'
+} from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
-import { Survey, SurveyType } from '../../posthog-surveys-types'
-import { SURVEY_LOGGER } from '../../utils/survey-utils'
+import { Survey, SurveyType } from '@posthog/browser-common'
+import { SURVEY_LOGGER } from '@posthog/browser-common/utils/survey-utils'
 
 describe('doesSurveyUrlMatch', () => {
     const mockWindowLocation = (href: string | undefined) => {
@@ -21,8 +23,8 @@ describe('doesSurveyUrlMatch', () => {
     })
 
     describe('get_current_url override', () => {
-        const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string): PostHog =>
-            ({ config: { get_current_url: getCurrentUrl } }) as PostHog
+        const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string) =>
+            getSurveyRenderContext({ config: { get_current_url: getCurrentUrl } } as PostHog)!
 
         it('matches against the overridden URL instead of window.location.href', () => {
             // raw browser URL would not match the survey condition
@@ -83,7 +85,7 @@ describe('sendSurveyEvent', () => {
                 survey: baseSurvey,
                 surveySubmissionId: 'submission-123',
                 isSurveyCompleted: true,
-                posthog: mockPostHog,
+                posthog: getSurveyRenderContext(mockPostHog),
             })
         ).not.toThrow()
 
@@ -105,7 +107,7 @@ describe('sendSurveyEvent', () => {
             survey: baseSurvey,
             surveySubmissionId: 'submission-123',
             isSurveyCompleted: true,
-            posthog: mockPostHog,
+            posthog: getSurveyRenderContext(mockPostHog),
         })
 
         expect(critical).not.toHaveBeenCalled()
@@ -119,7 +121,7 @@ describe('survey storage adapter', () => {
             throw new Error('storage unavailable')
         })
 
-        expect(hasWaitPeriodPassed(7)).toBe(true)
+        expect(hasWaitPeriodPassed(7, surveyStorage)).toBe(true)
 
         getItemSpy.mockRestore()
     })
@@ -128,7 +130,7 @@ describe('survey storage adapter', () => {
             throw new Error('storage unavailable')
         })
 
-        expect(getSurveySeen({ id: 'storage-unavailable' } as Survey)).toBe(false)
+        expect(getSurveySeen({ id: 'storage-unavailable' } as Survey, surveyStorage)).toBe(false)
 
         getItemSpy.mockRestore()
     })

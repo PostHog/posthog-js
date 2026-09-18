@@ -19,10 +19,8 @@ import { SurveyManager } from '../src/surveys-renderer'
 import { PostHogSurveys } from '../src/surveys'
 import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '../src/surveys-config'
 import { TestClient } from './helpers/test-client'
-import { createSurveysRuntimeHost } from './helpers/surveys-runtime-host'
-import type { MockSurveysRuntimeHost } from './helpers/surveys-runtime-host'
-import { createSurveyTriggerHost } from './helpers/survey-trigger-host'
-import { SurveyEventReceiver } from '../src/survey-event-receiver'
+import { createSurveyRenderContext } from './helpers/survey-render-context'
+import type { MockSurveyRenderContext } from './helpers/survey-render-context'
 import { SurveySchedule, SurveyType } from '../src/survey-constants'
 import type { Survey } from '../src/types/surveys'
 import {
@@ -40,7 +38,7 @@ const flushPromises = async (): Promise<void> => {
 describe('surveys orchestration', () => {
     describe('PostHogSurveys Class', () => {
         let client: TestClient
-        let host: MockSurveysRuntimeHost
+        let host: MockSurveyRenderContext
         let config: SurveysConfig
         let extensions: SurveysExtensionHost | undefined
         let source: SurveysConfigSource
@@ -112,7 +110,7 @@ describe('surveys orchestration', () => {
                 advancedEnableSurveys: false,
                 requestTimeoutMs: 10000,
             }
-            host = createSurveysRuntimeHost({
+            host = createSurveyRenderContext({
                 hasLoadedFlags: true,
                 getCachedSurveys: () => client.kv.get(SURVEYS),
                 getFlag: vi.fn((key) => flagsResponse.featureFlags[key]),
@@ -126,7 +124,6 @@ describe('surveys orchestration', () => {
             source = {
                 get: () => config,
                 getExtensions: () => extensions,
-                createEventReceiver: () => new SurveyEventReceiver(createSurveyTriggerHost({ kv: client.kv })),
             }
             surveys = new PostHogSurveys(source)
             surveys.setup(client)

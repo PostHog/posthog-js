@@ -1,4 +1,3 @@
-import { h } from 'preact'
 import { IconPosthogLogo } from '../icons'
 
 interface PostHogLogoProps {

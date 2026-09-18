@@ -60,9 +60,6 @@ export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_g
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
 export const GROUPS = '$groups'
-export const SURVEYS_ACTIVATED = '$surveys_activated'
-export const SURVEYS_ACTIVATED_SESSION = '$surveys_activated_session'
-export const SURVEYS_ACTIVATED_TIMESTAMPS = '$surveys_activated_timestamps'
 export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
 export const PRODUCT_TOURS_ACTIVATED_SESSION = '$product_tours_activated_session'
@@ -109,6 +106,9 @@ export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
 export {
     SURVEYS,
+    SURVEYS_ACTIVATED,
+    SURVEYS_ACTIVATED_SESSION,
+    SURVEYS_ACTIVATED_TIMESTAMPS,
     SURVEYS_LOADED_AT,
     SURVEYS_CACHE_TTL_MS,
     SURVEYS_REFRESH_BACKOFF_MS,

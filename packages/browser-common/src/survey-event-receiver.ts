@@ -3,21 +3,42 @@ import { isNumber } from '@posthog/core'
 import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION, SURVEYS_ACTIVATED_TIMESTAMPS } from './surveys-config'
 import type { Survey } from './types/surveys'
 import { SurveyEventName } from './survey-constants'
-import type { SurveyEventHost } from './survey-event-host'
-import type { KeyValueStore } from './persistence'
+import type { Client } from './client'
+import type { Extension } from './extension'
 import { SURVEY_LOGGER as logger } from './utils/survey-utils'
 import { type ActivationOutcome, EventReceiver } from './survey-event-receiver-base'
 import { createLogger } from './utils/logger'
 
-export interface SurveyTriggerHost extends SurveyEventHost {
-    kv: KeyValueStore
+export interface SurveyTriggerHost {
     getSurveys(callback: (surveys: Survey[]) => void): void
-    cancelSurvey(id: string): void
+    cancelPendingSurvey(id: string): void
 }
 
 export class SurveyEventReceiver extends EventReceiver<Survey> {
-    constructor(private readonly _surveys: SurveyTriggerHost) {
-        super(_surveys)
+    constructor(
+        private readonly _client: Client,
+        private readonly _surveys: SurveyTriggerHost
+    ) {
+        super({
+            subscribeCapture: (listener) => {
+                const subscription = _client.onEvent((event) => listener(event.event, event))
+                return () => subscription.dispose()
+            },
+            subscribeSession: (listener) => {
+                const subscription = _client.onSession(listener)
+                return () => subscription.dispose()
+            },
+            getSessionId: () => _client.session.sessionId,
+            getProperty: (key) => _client.kv.get(key),
+            setElementSelectors: (selectors) =>
+                _client
+                    .getExtension<
+                        Extension & {
+                            setElementSelectors(selectors: Set<string>): void
+                        }
+                    >('autocapture')
+                    ?.setElementSelectors(selectors),
+        })
         this._subscribeSession()
     }
 
@@ -34,11 +55,11 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
     }
 
     protected _writeActivationTimestamps(timestamps: Record<string, number>): void {
-        this._surveys.kv.set({ [SURVEYS_ACTIVATED_TIMESTAMPS]: timestamps })
+        this._client.kv.set({ [SURVEYS_ACTIVATED_TIMESTAMPS]: timestamps })
     }
 
     protected _clearActivationTimestampsStore(): void {
-        this._surveys.kv.remove(SURVEYS_ACTIVATED_TIMESTAMPS)
+        this._client.kv.remove(SURVEYS_ACTIVATED_TIMESTAMPS)
     }
 
     /**
@@ -64,7 +85,7 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
     }
 
     protected _cancelPendingItem(itemId: string): void {
-        this._surveys.cancelSurvey(itemId)
+        this._surveys.cancelPendingSurvey(itemId)
     }
 
     protected _getLogger(): ReturnType<typeof createLogger> {
@@ -72,15 +93,15 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
     }
 
     protected _setActivatedItems(eligibleItems: string[]): void {
-        this._surveys.kv.set({ [SURVEYS_ACTIVATED]: eligibleItems })
+        this._client.kv.set({ [SURVEYS_ACTIVATED]: eligibleItems })
     }
 
     protected _setActivatedSession(sessionId: string): void {
-        this._surveys.kv.set({ [SURVEYS_ACTIVATED_SESSION]: sessionId })
+        this._client.kv.set({ [SURVEYS_ACTIVATED_SESSION]: sessionId })
     }
 
     protected _clearActivatedSession(): void {
-        this._surveys.kv.remove(SURVEYS_ACTIVATED_SESSION)
+        this._client.kv.remove(SURVEYS_ACTIVATED_SESSION)
     }
 
     protected _isItemPermanentlyIneligible(): boolean {

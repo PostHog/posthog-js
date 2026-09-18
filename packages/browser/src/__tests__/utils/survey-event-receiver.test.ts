@@ -1,10 +1,11 @@
+import { BrowserClientAdapter } from '../../extensions/browser-client'
 /// <reference lib="dom" />
-import { SurveyType, SurveyQuestionType, Survey, SurveyEventName, SurveySchedule } from '../../posthog-surveys-types'
+import { SurveyType, SurveyQuestionType, Survey, SurveyEventName, SurveySchedule } from '@posthog/browser-common'
 import { SURVEYS_ACTIVATED_TIMESTAMPS } from '../../constants'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../types'
-import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
+import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 describe('survey-event-receiver', () => {
@@ -49,15 +50,17 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                on: (_event, listener) =>
+                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
+                sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: currentSessionId }) } as any,
                 getSurveys: vi.fn((callback) => callback([survey])),
-                get_session_id: () => currentSessionId,
+
                 onSessionId: (listener: (sessionId: string) => void) => {
                     sessionIdListeners.push(listener)
                     return () => {}
                 },
             })
-            const receiver = new SurveyEventReceiver(instance)
+            const receiver = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             receiver.register([survey])
             const hook = mockAddCaptureHook.mock.calls[0][0]
             return { receiver, hook }
@@ -121,20 +124,28 @@ describe('survey-event-receiver', () => {
             // armed in this session...
             expect(receiver.getSurveys()).toContain('lifecycle-survey')
             // ...but never written to persistence, so a reload does not re-display it
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('persists a non-repeatable survey only once shown, so it survives a reload', () => {
             const { hook } = setup(makeSurvey({}))
 
             hook('trigger_event')
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
 
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
-            expect(new SurveyEventReceiver(instance).getSurveys()).toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).toContain(
+                'lifecycle-survey'
+            )
 
             hook(SurveyEventName.DISMISSED, surveyEventPayload('lifecycle-survey', SurveyEventName.DISMISSED))
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('does not re-display a shown-but-unanswered survey in a brand-new session', () => {
@@ -143,11 +154,15 @@ describe('survey-event-receiver', () => {
             // Triggered and shown in session-1 (persisted so it survives a reload)...
             hook('trigger_event')
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
-            expect(new SurveyEventReceiver(instance).getSurveys()).toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).toContain(
+                'lifecycle-survey'
+            )
 
             // ...but a brand-new session (no fresh trigger event) must not re-display it.
             currentSessionId = 'session-2'
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('re-arms in a new session only when the trigger fires again', () => {
@@ -158,7 +173,7 @@ describe('survey-event-receiver', () => {
 
             // New session: stale activation is dropped until the trigger fires again.
             currentSessionId = 'session-2'
-            const afterRollover = new SurveyEventReceiver(instance)
+            const afterRollover = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             afterRollover.register([makeSurvey({})])
             expect(afterRollover.getSurveys()).not.toContain('lifecycle-survey')
 
@@ -179,7 +194,9 @@ describe('survey-event-receiver', () => {
             rotateSession('session-2')
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
             // Cleared from persistence too, so a subsequent reload doesn't resurrect it.
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('keeps a shown survey when the session id fires but is unchanged (e.g. window-id-only change)', () => {
@@ -204,7 +221,9 @@ describe('survey-event-receiver', () => {
 
             hook('trigger_event')
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('consumes on shown when the survey cannot be resolved (does not promote to persistence)', () => {
@@ -219,7 +238,9 @@ describe('survey-event-receiver', () => {
             hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
 
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
 
         it('getSurveys() returns the union of armed (memory) and shown (persisted) surveys', () => {
@@ -239,11 +260,13 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                on: (_event, listener) =>
+                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
+                sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: currentSessionId }) } as any,
                 getSurveys: vi.fn((callback) => callback([armed, shown])),
-                get_session_id: () => currentSessionId,
+                onSessionId: () => () => {},
             })
-            const receiver = new SurveyEventReceiver(instance)
+            const receiver = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             receiver.register([armed, shown])
             const hook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -254,7 +277,7 @@ describe('survey-event-receiver', () => {
             // Both are active in-session (the union of memory + persistence)...
             expect(receiver.getSurveys()).toEqual(expect.arrayContaining(['armed-survey', 'shown-survey']))
             // ...but only the shown one survives a reload.
-            const afterReload = new SurveyEventReceiver(instance)
+            const afterReload = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             expect(afterReload.getSurveys()).toContain('shown-survey')
             expect(afterReload.getSurveys()).not.toContain('armed-survey')
         })
@@ -278,7 +301,9 @@ describe('survey-event-receiver', () => {
 
             receiver.reset()
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'lifecycle-survey'
+            )
         })
     })
 
@@ -319,16 +344,19 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                _addCaptureHook: mockAddCaptureHook,
+                on: (_event, listener) =>
+                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
                 getSurveys: vi.fn((callback) => callback([survey])),
-                get_session_id: () => (hasSession ? currentSessionId : undefined),
+                sessionManager: {
+                    checkAndGetSessionAndWindowId: () => ({ sessionId: hasSession ? currentSessionId : undefined }),
+                } as any,
                 cancelPendingSurvey: vi.fn(),
                 onSessionId: (listener: (sessionId: string) => void) => {
                     sessionIdListeners.push(listener)
                     return () => {}
                 },
             })
-            const receiver = new SurveyEventReceiver(instance)
+            const receiver = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             receiver.register([survey])
             const hook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
             return { receiver, hook }
@@ -354,7 +382,7 @@ describe('survey-event-receiver', () => {
             expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
 
             // A fresh receiver reading the same persistence models the next page load.
-            const afterNav = new SurveyEventReceiver(instance)
+            const afterNav = new SurveyEventReceiver(new BrowserClientAdapter(instance), instance)
             expect(afterNav.getSurveys()).toContain('delayed-survey')
             expect(afterNav.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
         })
@@ -387,7 +415,9 @@ describe('survey-event-receiver', () => {
             expect(receiver.getSurveys()).toContain('delayed-survey')
             // In-memory only: no timestamp and it does not survive a reload.
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('delayed-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'delayed-survey'
+            )
         })
 
         it('drops the delayed activation and pending timer when the session rotates', () => {
@@ -399,7 +429,11 @@ describe('survey-event-receiver', () => {
             rotateSession('session-2')
             expect(receiver.getSurveys()).not.toContain('delayed-survey')
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
-            expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(
+                new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getActivationTimestamp(
+                    'delayed-survey'
+                )
+            ).toBeUndefined()
             expect(instance.cancelPendingSurvey).toHaveBeenCalledWith('delayed-survey')
         })
 
@@ -448,7 +482,11 @@ describe('survey-event-receiver', () => {
             // ...but with no activation time the next page counts the whole delay down again
             // instead of re-rendering the survey instantly.
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
-            expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(
+                new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getActivationTimestamp(
+                    'delayed-survey'
+                )
+            ).toBeUndefined()
         })
 
         it('does not record a new activation time when the trigger fires again after the survey is shown', () => {
@@ -470,7 +508,9 @@ describe('survey-event-receiver', () => {
             expect(receiver.getSurveys()).toContain('delayed-survey')
             // ...but with no session to scope it, it is not persisted across a reload.
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
-            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('delayed-survey')
+            expect(new SurveyEventReceiver(new BrowserClientAdapter(instance), instance).getSurveys()).not.toContain(
+                'delayed-survey'
+            )
         })
     })
 })

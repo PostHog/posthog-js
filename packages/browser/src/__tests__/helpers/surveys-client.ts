@@ -20,6 +20,9 @@ export const createSurveysClient = (posthog: PostHog): Client =>
                 ),
             remove: (keyOrKeys: string | readonly string[]) => posthog.persistence?.unregister(keyOrKeys),
         },
+        session: { sessionId: 'session' },
+        onSession: () => ({ dispose: () => {} }),
+        onEvent: () => ({ dispose: () => {} }),
         onRemoteConfig: () => ({ dispose: () => {} }),
         sendRequest: (path: string, init: SendRequestInit = {}): Promise<ApiResponse> =>
             new Promise((resolve) => {

@@ -1,5 +1,6 @@
-import { SurveyManager } from '../../extensions/surveys'
-import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
+import { getSurveyRenderContext } from '../../browser-surveys'
+import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
+import { Survey, SurveyQuestionType, SurveyType } from '@posthog/browser-common'
 import { beforeEach } from 'vitest'
 import { PostHog } from '../../posthog-core'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
@@ -63,6 +64,7 @@ describe('SurveyManager', () => {
             is_capturing: vi.fn(() => true),
             capture: vi.fn(),
             featureFlags: {
+                onFeatureFlags: vi.fn(() => () => {}),
                 hasLoadedFlags: true,
                 _send_request: vi
                     .fn()
@@ -75,14 +77,15 @@ describe('SurveyManager', () => {
             },
         })
 
-        surveyManager = new SurveyManager(mockPostHog)
+        surveyManager = new SurveyManager(getSurveyRenderContext(mockPostHog)!)
     })
 
     it('resolves feature flags through the extension registry', () => {
         const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
         vi.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
         vi.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
-        mockPostHog.getExtension = vi.fn(() => registeredFeatureFlags) as PostHog['getExtension']
+        const client = getSurveyRenderContext(mockPostHog)!.client!
+        client.getExtension = vi.fn(() => registeredFeatureFlags) as typeof client.getExtension
         const survey = {
             ...mockSurveys[0],
             linked_flag_key: 'linked-flag-key',
@@ -90,7 +93,7 @@ describe('SurveyManager', () => {
         }
 
         expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
-        expect(mockPostHog.getExtension).toHaveBeenCalledWith(FeatureFlagsExtension)
+        expect(getSurveyRenderContext(mockPostHog)!.client!.getExtension).toHaveBeenCalledWith(FeatureFlagsExtension)
         expect(registeredFeatureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', { send_event: true })
         expect(registeredFeatureFlags.getFeatureFlag).toHaveBeenCalledWith('linked-flag-key', { send_event: false })
         expect(mockPostHog.featureFlags.isFeatureEnabled).not.toHaveBeenCalled()
