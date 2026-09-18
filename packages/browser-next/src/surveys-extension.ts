@@ -67,7 +67,6 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     })
             },
         }),
-
     }
     const shared = new (class extends PostHogSurveys {
         override loadIfEnabled(): void {
@@ -127,17 +126,26 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             const scoped = Object.create(value) as Client
             Object.defineProperty(scoped, 'kv', { value: storage.kv })
             const renderClient = Object.create(scoped) as Client
-            const read = (key: string) => key === STORED_PERSON_PROPERTIES_KEY
-                ? host?.getFlagsContext?.()?.personProperties
-                : storage!.kv.get(key)
+            const read = (key: string) =>
+                key === STORED_PERSON_PROPERTIES_KEY
+                    ? host?.getFlagsContext?.()?.personProperties
+                    : storage!.kv.get(key)
             const renderKv: KeyValueStore = {
                 ...storage.kv,
-                get: ((keys: string | readonly string[]) => typeof keys === 'string'
-                    ? read(keys)
-                    : Object.fromEntries(keys.map((key) => [key, read(key)]))) as KeyValueStore['get'],
+                get: ((keys: string | readonly string[]) =>
+                    typeof keys === 'string'
+                        ? read(keys)
+                        : Object.fromEntries(keys.map((key) => [key, read(key)]))) as KeyValueStore['get'],
             }
             Object.defineProperty(renderClient, 'kv', { value: renderKv })
-            runtimeHost = { client: renderClient, get config() { return source.get() }, surveys: shared, storage }
+            runtimeHost = {
+                client: renderClient,
+                get config() {
+                    return source.get()
+                },
+                surveys: shared,
+                storage,
+            }
             remoteSubscription = value.onRemoteConfig((result) => {
                 if (result.ok) {
                     const surveys = result.config.surveys

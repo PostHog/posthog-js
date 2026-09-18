@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { createPostHog } from '../src'
+import { createPostHog, FeatureFlagsExtension } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
 import { surveys } from '../src/surveys'
 import { generateSurveys } from '@posthog/browser-common/surveys-renderer'
 import type { PostHog, PostHogOptions } from '../src/types'
 import type { Survey, SurveyCallback } from '../src/surveys-options'
-import type { SurveysRuntimeHost } from '@posthog/browser-common/surveys-runtime-host'
+import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
 import { MemoryStorage } from './helpers'
 
 const definition: Survey = {
@@ -45,7 +45,7 @@ const clients: PostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...base,
-        ...(options.remoteConfigLoader ? {} : { remoteConfig: { ...remote, surveys: false } }),
+        remoteConfig: { ...remote, surveys: false },
         fetch: false,
         ...options,
     })
@@ -56,7 +56,7 @@ const getSurveys = (client: PostHog, forceReload = false) =>
     new Promise<Survey[]>((resolve) => client.getSurveys(resolve, forceReload))
 const renderer = () => {
     const dispose = vi.fn()
-    const generateSurveys = vi.fn((_host: SurveysRuntimeHost, _enabled: boolean | undefined) => ({
+    const generateSurveys = vi.fn((_host: SurveyRenderContext, _enabled: boolean | undefined) => ({
         dispose,
         getActiveMatchingSurveys: (callback: SurveyCallback) => callback([definition], { isLoaded: true }),
         checkSurveyEligibility: () => ({ eligible: true }),
@@ -246,26 +246,29 @@ describe('surveys', () => {
     it.each(['enabled', 'disabled', 'disposed'] as const)(
         'handles late remote enablement after manual setup: %s',
         async (mode) => {
-            let resolve!: (config: { surveys: true } & typeof remote) => void
-            const remoteConfigLoader = () =>
-                new Promise<{ surveys: true } & typeof remote>((done) => {
-                    resolve = done
-                })
+            let resolve!: (response: Response) => void
+            const remoteResponse = new Promise<Response>((done) => {
+                resolve = done
+            })
             let manager: ReturnType<typeof generateSurveys>
             const interval = vi.spyOn(globalThis, 'setInterval')
-            const client = await create({
-                remoteConfigLoader,
+            const client = await createPostHog({
+                ...base,
                 extensions: [
                     createSurveys({ automaticDisplay: mode !== 'disabled' }, async () => ({
                         generateSurveys: (host, enabled) => (manager = generateSurveys(host, enabled)),
                     })),
                 ],
-                fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+                fetch: async (url) =>
+                    new URL(String(url)).pathname.endsWith('/config')
+                        ? remoteResponse
+                        : new Response(JSON.stringify({ surveys: [definition] })),
             })
+            clients.push(client)
             await getSurveys(client)
             expect(interval).not.toHaveBeenCalled()
             if (mode === 'disposed') await client.dispose()
-            resolve({ ...remote, surveys: true })
+            resolve(new Response(JSON.stringify({ ...remote, surveys: true })))
             await new Promise((done) => setTimeout(done, 0))
             expect(interval.mock.calls.filter(([, delay]) => delay === 1000)).toHaveLength(mode === 'enabled' ? 1 : 0)
             manager?.startAutomaticDisplay()
@@ -294,9 +297,9 @@ describe('surveys', () => {
         })
         const captured = vi.fn()
         client.onEvent(captured)
-        client.updateFlags({ 'survey-targeting-gate': false })
+        client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': false })
         expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: false })
-        client.updateFlags({ 'survey-targeting-gate': true })
+        client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': true })
         expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: true })
         expect(captured.mock.calls.some(([event]) => event.event === '$feature_flag_called')).toBe(false)
     })
