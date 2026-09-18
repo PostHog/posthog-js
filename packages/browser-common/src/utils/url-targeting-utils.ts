@@ -1,7 +1,6 @@
 import { isFunction, isString, isUndefined } from '@posthog/core'
 import type { PostHogConfig } from '@posthog/types'
 
-import { window } from './globals'
 import { logger } from './logger'
 
 export type UrlTargetingInstance = {
@@ -46,6 +45,6 @@ export function applyUrlTargetingOverride(instance: UrlTargetingInstance | undef
  * `get_current_url` override should stay cheap.
  */
 export function getTargetingUrl(instance: UrlTargetingInstance | undefined): string | undefined {
-    const defaultUrl = window?.location?.href
+    const defaultUrl = typeof window !== 'undefined' ? window.location?.href : undefined
     return isUndefined(defaultUrl) ? undefined : applyUrlTargetingOverride(instance, defaultUrl)
 }
