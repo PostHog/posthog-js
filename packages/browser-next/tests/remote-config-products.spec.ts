@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createPostHog } from '../src'
+import { createPostHog, FeatureFlagsExtension } from '../src'
 import { localRemoteConfig } from './helpers'
 
 it('shares default JSON configuration across flags, logs, surveys and autocapture', async () => {
@@ -37,7 +37,9 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
     })
     try {
         await client.getRemoteConfig()
-        await vi.waitFor(() => expect(client.getFeatureFlag('remote')?.enabled).toBe(true))
+        await vi.waitFor(() =>
+            expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('remote')?.enabled).toBe(true)
+        )
         const surveys = await new Promise((resolve) => client.getSurveys((values) => resolve(values)))
         expect(surveys).toEqual([])
         expect(requests).toContain('/api/surveys/')

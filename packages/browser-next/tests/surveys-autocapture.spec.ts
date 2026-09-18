@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { createPostHog } from '../src'
+import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { autocapture } from '../src/autocapture'
 import { surveys } from '../src/surveys'
 import type { SurveysExtension } from '../src/surveys-internal'
@@ -56,6 +57,11 @@ describe('survey autocapture selectors', () => {
         document.body.innerHTML = '<button class="first">First</button>'
         const surveyExtension = surveys({ automaticDisplay: false }) as SurveysExtension
         const captured = vi.fn()
+        const autocaptureExtension = autocapture() as ReturnType<typeof autocapture> & {
+            setElementSelectors(selectors: Set<string>): void
+        }
+        const setSelectors = vi.spyOn(autocaptureExtension, 'setElementSelectors')
+        const disposeReceiver = vi.spyOn(SurveyEventReceiver.prototype, 'dispose')
         const client = await createPostHog({
             ...base,
             storage: false,
@@ -67,11 +73,13 @@ describe('survey autocapture selectors', () => {
                         await new Promise<void>((resolve) => surveyExtension.getSurveys(() => resolve()))
                     },
                 },
-                autocapture(),
+                autocaptureExtension,
             ],
             fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
         })
         clients.push(client)
+        expect(setSelectors).toHaveBeenCalledOnce()
+        expect(setSelectors).toHaveBeenCalledWith(new Set(['.first']))
         client.onEvent(captured)
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(
@@ -82,6 +90,10 @@ describe('survey autocapture selectors', () => {
         exposed.clear()
         expect(surveyExtension.getElementSelectors()).toEqual(new Set(['.first']))
         surveyExtension.dispose?.()
+        surveyExtension.dispose?.()
+        expect(disposeReceiver).toHaveBeenCalledOnce()
+        expect(setSelectors).toHaveBeenCalledTimes(2)
+        expect(setSelectors).toHaveBeenLastCalledWith(new Set())
         captured.mockClear()
         document.querySelector('button')!.click()
         expect(captured.mock.calls[0]![0].properties.$element_selectors).toBeUndefined()
