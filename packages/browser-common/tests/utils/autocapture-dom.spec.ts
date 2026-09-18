@@ -1,6 +1,4 @@
-/// <reference lib="dom" />
-
-import sinon from 'sinon'
+// @vitest-environment jsdom
 
 import {
     getSafeText,
@@ -14,14 +12,17 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '@posthog/browser-common/utils/autocapture-utils'
-import { document } from '@posthog/browser-common/utils/globals'
-import { makeMouseEvent } from './autocapture.test'
-import { createMockPostHog } from './helpers/posthog-instance'
-import { AutocaptureConfig, PostHogConfig } from '../types'
+} from '../../src/utils/autocapture-utils'
+import { makeMouseEvent } from '../helpers/dom-events'
+import type { AutocaptureConfig } from '@posthog/types'
+
+declare const jsdom: { reconfigure(options: { url: string }): void }
 
 describe(`Autocapture utility functions`, () => {
+    const originalUrl = window.location.href
+
     afterEach(() => {
+        jsdom.reconfigure({ url: originalUrl })
         document!.getElementsByTagName('html')[0].innerHTML = ''
         vi.restoreAllMocks()
     })
@@ -233,11 +234,7 @@ describe(`Autocapture utility functions`, () => {
         })
 
         describe('get_current_url override for url_allowlist/url_ignorelist', () => {
-            const setWindowLocation = (href: string) => {
-                Object.defineProperty(window, 'location', { value: { href }, writable: true, configurable: true })
-            }
-            const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string) =>
-                createMockPostHog({ config: { get_current_url: getCurrentUrl } as PostHogConfig })
+            const setWindowLocation = (href: string) => jsdom.reconfigure({ url: href })
 
             it('matches url_allowlist against the overridden URL', () => {
                 // raw browser URL is not in the allow list
@@ -247,14 +244,9 @@ describe(`Autocapture utility functions`, () => {
 
                 expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(false)
                 expect(
-                    shouldCaptureDomEvent(
-                        link,
-                        makeMouseEvent({}),
-                        config,
-                        undefined,
-                        undefined,
-                        posthogWith(() => 'https://app.example.com/page')
-                    )
+                    shouldCaptureDomEvent(link, makeMouseEvent({}), config, undefined, undefined, {
+                        config: { get_current_url: () => 'https://app.example.com/page' },
+                    })
                 ).toBe(true)
             })
 
@@ -265,14 +257,9 @@ describe(`Autocapture utility functions`, () => {
 
                 expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(true)
                 expect(
-                    shouldCaptureDomEvent(
-                        link,
-                        makeMouseEvent({}),
-                        config,
-                        undefined,
-                        undefined,
-                        posthogWith(() => 'https://app.example.com/internal-admin')
-                    )
+                    shouldCaptureDomEvent(link, makeMouseEvent({}), config, undefined, undefined, {
+                        config: { get_current_url: () => 'https://app.example.com/internal-admin' },
+                    })
                 ).toBe(false)
             })
         })
@@ -491,22 +478,22 @@ describe(`Autocapture utility functions`, () => {
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
         it(`shouldn't inadvertently replace DOM nodes`, () => {
             // setup
-            ;(el as any).replace = sinon.spy()
+            ;(el as any).replace = vi.fn()
 
             // test
             input.name = el as any
             shouldCaptureElement(parent1) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
+            expect((el as any).replace).not.toHaveBeenCalled()
             input.name = ''
 
             parent1.id = el as any
             shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
+            expect((el as any).replace).not.toHaveBeenCalled()
             parent1.id = ''
 
             input.type = el as any
             shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
+            expect((el as any).replace).not.toHaveBeenCalled()
             input.type = ''
 
             // cleanup
