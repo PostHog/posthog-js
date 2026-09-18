@@ -1,5 +1,5 @@
 import { SessionIdManager } from '../sessionid'
-import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { patch } from '@posthog/browser-common/replay/patch'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'

@@ -97,7 +97,9 @@
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@posthog/rrweb-utils": "workspace:*",
         "@rslib/core": "catalog:",
+        "fast-check": "^2.17.0",
         "jsdom": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-/* oxlint-disable compat/compat */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionRecording } from '../../src/replay/session-recording'
 import type { ReplayHost, ReplayOptions } from '../../src/replay/host'

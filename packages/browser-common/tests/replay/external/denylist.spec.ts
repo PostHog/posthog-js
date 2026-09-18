@@ -1,6 +1,6 @@
 import { expect } from 'vitest'
-import { NetworkRecordOptions } from '../../../../types'
-import { isHostOnDenyList } from '../../../../extensions/replay/external/denylist'
+import { NetworkRecordOptions } from '../../../src/replay/types'
+import { isHostOnDenyList } from '../../../src/replay/external/denylist'
 
 describe('network host denylist', () => {
     const testCases = [

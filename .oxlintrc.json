@@ -275,7 +275,7 @@
             }
         },
         {
-            "files": ["packages/browser/src/__tests__/**"],
+            "files": ["packages/browser/src/__tests__/**", "packages/browser-common/tests/replay/**"],
             "rules": {
                 "no-console": "off",
                 "no-restricted-globals": "off",

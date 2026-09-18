@@ -19,7 +19,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { resolveLogsConfig } from './logs-defaults'
 import { BUFFERED_CONSOLE_LEVELS } from './logs-types'
 import type { BufferedConsoleEntry, BufferedConsoleLevel } from './logs-types'
-import { patch } from './extensions/replay/rrweb-plugins/patch'
+import { patch } from '@posthog/browser-common/replay/patch'
 import { originalConsoleMethod } from './utils/console-original'
 import { LogsExtension } from './extension-tokens'
 import {

@@ -19,7 +19,7 @@ import {
     TRIGGER_DISABLED,
     TRIGGER_PENDING,
     URLTriggerMatching,
-} from '../../../extensions/replay/external/triggerMatching'
+} from '../../src/replay/external/triggerMatching'
 
 describe('V1 Backward Compatibility', () => {
     const defaultTriggersStatus: RecordingTriggersStatus = {

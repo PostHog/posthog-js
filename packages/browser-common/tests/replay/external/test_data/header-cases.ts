@@ -6,7 +6,7 @@
 //   - playwright/mocked/session-recording/csrf-headers-preserved.spec.ts
 
 // Headers PostHog redacts from the recording via HEADER_DENY_LIST
-// in src/extensions/replay/external/config.ts. The invariant: the
+// in src/replay/external/config.ts. The invariant: the
 // wrapper must redact them in the recording but NEVER strip them
 // from the actual outgoing request to the server.
 export const sensitiveHeaderCases = [

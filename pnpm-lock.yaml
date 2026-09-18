@@ -490,9 +490,15 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/rrweb-utils':
+        specifier: workspace:*
+        version: link:../rrweb/utils
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@5.8.2)
+      fast-check:
+        specifier: ^2.17.0
+        version: 2.17.0
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0

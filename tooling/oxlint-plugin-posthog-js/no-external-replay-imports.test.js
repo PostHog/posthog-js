@@ -11,6 +11,14 @@ const ruleTester = new RuleTester({
 ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
     valid: [
         {
+            code: "import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/external/network-plugin'",
+            filename: '/project/packages/browser/src/entrypoints/recorder.ts',
+        },
+        {
+            code: "import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/external/network-plugin'",
+            filename: '/project/packages/browser-common/src/replay/external/recorder.ts',
+        },
+        {
             code: "import { LazyLoadedSessionRecording } from '../../src/replay/external/lazy-loaded-session-recorder'",
             filename: '/project/packages/browser-common/tests/replay/lazy-loaded-session-recorder.spec.ts',
         },
@@ -51,6 +59,26 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
         },
     ],
     invalid: [
+        {
+            code: "import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/external/network-plugin'",
+            filename: '/project/packages/browser/src/posthog-core.ts',
+            errors: [
+                {
+                    message:
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
+                },
+            ],
+        },
+        {
+            code: "import('@posthog/browser-common/replay/external/network-plugin')",
+            filename: '/project/packages/browser/src/posthog-core.ts',
+            errors: [
+                {
+                    message:
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
+                },
+            ],
+        },
         // Disallowed import from regular source file
         {
             code: "import { something } from '@/extensions/replay/external/denylist'",
@@ -58,7 +86,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -69,7 +97,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -80,7 +108,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                 },
             ],
         },
@@ -91,7 +119,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             errors: [
                 {
                     message:
-                        'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                        'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                 },
             ],
         },
