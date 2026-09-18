@@ -1098,6 +1098,15 @@ function record<T = eventWithTime>(
       // the snapshot emits, and that emit can stop this recorder too
       if (stopped) return;
       const cleanup = observe(document);
+      // observe() starts the plugins, and a plugin observer can emit while it sets
+      // up - the network plugin replays the performance entries the page already
+      // has - so the stop can land here too. It drained `handlers` before this
+      // cleanup existed, so pushing it there would leave every observer observe()
+      // just started with no reachable stop path; release them directly instead.
+      if (stopped) {
+        if (typeof cleanup === 'function') callAllSafely([cleanup]);
+        return;
+      }
       if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
