@@ -43,6 +43,7 @@ declare global {
             optIn(): void
             shutdown(): Promise<void>
             restored(): boolean
+            pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number; aborted: boolean }>
         }
         consentHarness: ConsentHarness
     }
@@ -240,5 +241,41 @@ window.logsHarness = {
     },
     restored() {
         return console.log === originalLog
+    },
+    async pagehideDuringShutdown() {
+        let beacon: Blob | undefined
+        let signal: AbortSignal | undefined
+        let fetches = 0
+        const client = await createPostHog({
+            projectToken: 'ph_browser_logs_shutdown',
+            storage: false,
+            capturePageview: false,
+            disableBotDetection: true,
+            navigator: {
+                sendBeacon: (_url, body) => {
+                    beacon = body as Blob
+                    return true
+                },
+            },
+            fetch: (_url, init) => {
+                fetches++
+                signal = init?.signal ?? undefined
+                return new Promise<Response>(() => {})
+            },
+            extensions: [logs({ flushIntervalMs: 0 })],
+            remoteConfig: {
+                supportedCompression: [],
+                toolbarParams: {},
+                toolbarVersion: 'toolbar',
+                isAuthenticated: false,
+                siteApps: [],
+            },
+        })
+        client.captureLog({ body: 'pending navigation' })
+        const closing = client.shutdown(10)
+        window.dispatchEvent(new Event('pagehide'))
+        const body = await beacon?.text()
+        await closing
+        return { beacon: body ?? '', fetches, aborted: signal?.aborted ?? false }
     },
 }

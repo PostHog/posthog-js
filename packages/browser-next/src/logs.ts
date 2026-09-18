@@ -51,7 +51,7 @@ export const logs = (options: LogsOptions = {}): Extension => {
         }
     })({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true })
     const pagehide = () => {
-        if (!disposed && client?.canCapture) shared.flushLogs('sendBeacon')
+        if (!disposed) shared.flushLogs('sendBeacon')
     }
     const extension: LogsExtension = {
         name: 'logs',
