@@ -1289,8 +1289,10 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
             } else {
                 logger.error('Error evaluating survey display logic', error)
             }
-            if (!isRepeatedFailure) {
+            if (!isRepeatedFailure && posthog.exceptionObserver?.isEnabled) {
                 // The catch above hides the failure from error tracking, so report it once.
+                // Only projects that turned exception capture on get the report, because an
+                // SDK-generated event must not bypass `capture_exceptions`.
                 posthog.captureException(error, { survey_display_logic_failure: true })
             }
         }

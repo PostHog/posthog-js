@@ -132,16 +132,15 @@ describe('survey display logic', () => {
         }
     })
 
-    test('a throwing display logic is reported once and stops the interval instead of throwing every tick', () => {
-        vi.useFakeTimers()
-        const error = new SyntaxError('Invalid or unexpected token')
-        const throwingPostHog = createMockPostHog({
+    const createThrowingPostHog = (error: unknown, isExceptionCaptureEnabled: boolean) =>
+        createMockPostHog({
             surveys: {
                 getSurveys: vi.fn().mockImplementation(() => {
                     throw error
                 }),
             },
             captureException: vi.fn(),
+            exceptionObserver: { isEnabled: isExceptionCaptureEnabled },
             get_session_replay_url: vi.fn(),
             is_capturing: vi.fn(() => true),
             capture: vi.fn(),
@@ -149,6 +148,11 @@ describe('survey display logic', () => {
                 disable_surveys_automatic_display: false,
             },
         })
+
+    test('a throwing display logic is reported once and stops the interval instead of throwing every tick', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(error, true)
 
         const surveyManager = generateSurveys(throwingPostHog, true)
         try {
@@ -158,6 +162,22 @@ describe('survey display logic', () => {
             expect(throwingPostHog.captureException).toHaveBeenCalledWith(error, {
                 survey_display_logic_failure: true,
             })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
+    test('a throwing display logic is not reported when exception capture is disabled', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(error, false)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).not.toBeCalled()
         } finally {
             surveyManager?.dispose()
             vi.useRealTimers()
