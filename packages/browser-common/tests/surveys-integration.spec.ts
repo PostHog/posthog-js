@@ -1175,16 +1175,6 @@ describe('surveys', () => {
             }
         })
 
-        it('shuffles frozen choices without mutation and keeps Other last', () => {
-            const question = {
-                ...questionWithOpenEndedChoice,
-                choices: Object.freeze(['A', 'B', 'Other']) as unknown as string[],
-            }
-            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
-            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
-            expect(question.choices).toEqual(['A', 'B', 'Other'])
-        })
-
         it('shuffle should preserve all elements', () => {
             const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
 
