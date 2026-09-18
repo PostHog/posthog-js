@@ -80,6 +80,23 @@ export const EVENT_TO_PERSON_PROPERTIES = [
 
 export const MASKED = '<masked>'
 
+/**
+ * Applies the hash and query param rules that `$current_url` follows to any URL. Callers that
+ * record a URL for later capture, rather than reading `location` at capture time, use this so the
+ * recorded value matches what the SDK would have sent then.
+ */
+export function maskUrl<T extends string | undefined>(
+    href: T,
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[],
+    disableCaptureUrlHashes: boolean = false
+): T extends string ? string : undefined {
+    const paramsToMask = maskPersonalDataProperties
+        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
+        : []
+    return maskQueryParams(disableCaptureUrlHashes ? stripUrlHash(href) : href, paramsToMask, MASKED) as any
+}
+
 // Campaign params that can be read from the cookie store
 export const COOKIE_CAMPAIGN_PARAMS = [
     'li_fat_id', // linkedin
@@ -300,9 +317,6 @@ export function getEventProperties(
     if (!userAgent) {
         return {}
     }
-    const paramsToMask = maskPersonalDataProperties
-        ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
-        : []
     const [os_name, os_version] = detectOS(userAgent)
     const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
     const browserHints = getBrowserDetectionHints()
@@ -348,10 +362,11 @@ export function getEventProperties(
             $timezone_offset: getTimezoneOffset(),
         }),
         {
-            $current_url: maskQueryParams(
-                disableCaptureUrlHashes ? stripUrlHash(location?.href) : location?.href,
-                paramsToMask,
-                MASKED
+            $current_url: maskUrl(
+                location?.href,
+                maskPersonalDataProperties,
+                customPersonalDataProperties,
+                disableCaptureUrlHashes
             ),
             $host: location?.host,
             $pathname: location?.pathname,

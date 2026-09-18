@@ -5,10 +5,21 @@ import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
 import { isObject } from '@posthog/core'
+import { maskUrl } from '@posthog/browser-common/utils/event-utils'
+import { isAwaitingConsent } from '../consent'
+import type { Properties } from '@posthog/types'
 import type { CapturePageviewOptions } from '../types'
 import type { Extension } from './types'
 
 type HistoryLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
+
+type NavigationType = 'pushState' | 'replaceState' | 'popstate' | 'hashchange'
+
+type PendingPageview = { properties: Properties; timestamp: Date }
+
+// A consent banner usually closes within seconds, so this only has to cover a short burst of
+// navigation. The cap keeps a page that never gets consent from growing the buffer without limit.
+const MAX_PENDING_PAGEVIEWS = 50
 
 /**
  * Captures pageviews when selected URL components change through the history API, browser back/forward navigation,
@@ -19,6 +30,7 @@ export class HistoryAutocapture implements Extension {
     private _popstateListener: (() => void) | undefined
     private _hashchangeListener: (() => void) | undefined
     private _lastLocation: HistoryLocation | undefined
+    private _pendingPageviews: PendingPageview[] = []
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -140,7 +152,7 @@ export class HistoryAutocapture implements Extension {
         )
     }
 
-    private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate' | 'hashchange'): void {
+    private _capturePageview(navigationType: NavigationType): void {
         try {
             const currentLocation = this._getCurrentLocation()
 
@@ -149,13 +161,62 @@ export class HistoryAutocapture implements Extension {
             }
 
             if (this._hasLocationChanged(currentLocation)) {
-                this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
+                if (isAwaitingConsent(this._instance)) {
+                    // capture() drops the event before it is built while consent is pending, so hold
+                    // the navigation and send it once the user opts in.
+                    this._addPendingPageview(navigationType)
+                } else {
+                    this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
+                }
             }
 
             this._lastLocation = currentLocation
         } catch (error) {
             logger.error(`Error capturing ${navigationType} pageview`, error)
         }
+    }
+
+    private _addPendingPageview(navigationType: NavigationType): void {
+        const { mask_personal_data_properties, custom_personal_data_properties, disable_capture_url_hashes } =
+            this._instance.config
+
+        this._pendingPageviews.push({
+            // The URL and the path have to travel with the event: by the time it is sent the user
+            // has navigated on, so `location` no longer describes this navigation.
+            properties: {
+                navigation_type: navigationType,
+                $current_url: maskUrl(
+                    window?.location?.href,
+                    mask_personal_data_properties,
+                    custom_personal_data_properties,
+                    disable_capture_url_hashes
+                ),
+                $pathname: window?.location?.pathname,
+            },
+            timestamp: new Date(),
+        })
+
+        if (this._pendingPageviews.length > MAX_PENDING_PAGEVIEWS) {
+            this._pendingPageviews.shift()
+        }
+    }
+
+    /**
+     * Sends the navigations that happened while consent was pending, each with the timestamp and the
+     * URL it was seen at.
+     */
+    public flushPendingPageviews(): void {
+        const pending = this._pendingPageviews
+        this._pendingPageviews = []
+
+        for (const { properties, timestamp } of pending) {
+            this._instance.capture(EVENT_PAGEVIEW, properties, { timestamp })
+        }
+    }
+
+    /** Drops the held navigations, for when the user rejects consent rather than granting it. */
+    public discardPendingPageviews(): void {
+        this._pendingPageviews = []
     }
 
     private _setupPopstateListener(): void {
