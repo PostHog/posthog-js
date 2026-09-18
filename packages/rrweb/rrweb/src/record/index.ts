@@ -337,6 +337,14 @@ function record<T = eventWithTime>(
   // observer set onto handlers this stop already drained - one no stop handler can
   // remove. Every callback boundary in init() therefore re-checks this flag.
   let stopped = false;
+  // init() is meant to run once, but the deferred-start listeners stay registered
+  // until the stop drains them, and page code can dispatch its own DOMContentLoaded
+  // after the browser's (a common way to bootstrap late-injected scripts). A second
+  // run would take another full snapshot and stack a second observer set on the
+  // first: the stylesheet observer restores the exact function it captured, so the
+  // forward-order drain reinstalls the older patch and leaves CSSStyleSheet.prototype
+  // wrapped for the life of the page.
+  let initialized = false;
   const {
     emit,
     checkoutEveryNms,
@@ -1093,7 +1101,10 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
-      if (stopped) return;
+      if (stopped || initialized) return;
+      // set before the snapshot, so a repeat dispatch from inside its own emit
+      // bails out too instead of nesting a second init in this one
+      initialized = true;
       takeFullSnapshot();
       // the snapshot emits, and that emit can stop this recorder too
       if (stopped) return;
