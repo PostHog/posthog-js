@@ -323,7 +323,7 @@ describe('serializeArg with dataURLOptions', () => {
   it('should not throw when a tainted canvas refuses toDataURL', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = () => {
-      throw new Error('SecurityError: tainted canvas');
+      throw new DOMException('tainted canvas', 'SecurityError');
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -339,6 +339,24 @@ describe('serializeArg with dataURLOptions', () => {
     // a tainted canvas fails on every draw, so only the first one warns
     serializeArg(canvas, window, context, defaultDataURLOptions);
     expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
     warn.mockRestore();
   });
 

@@ -8,7 +8,16 @@ const TRANSPARENT_PIXEL =
 // matches the other canvas capture warnings, which canvas-manager.ts emits: that
 // module cannot lend its helper here, because it imports this one through 2d.ts.
 let taintedCanvasWarned = false;
-function warnTaintedCanvasOnce(error: unknown): void {
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time rather than blaming taint and going quiet
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      '[replay] canvas capture: this canvas draws blank because its pixels cannot be read.',
+      error,
+    );
+    return;
+  }
   if (taintedCanvasWarned) return;
   taintedCanvasWarned = true;
   console.warn(
@@ -121,7 +130,7 @@ export function serializeArg(
       // On the WebGL path this runs inside the page's own canvas call, so an
       // escaping throw breaks the page and not just the recording. Replay needs
       // a loadable image here, otherwise `drawImage` throws on a broken one.
-      warnTaintedCanvasOnce(error);
+      warnCanvasUnreadable(error);
       src = TRANSPARENT_PIXEL;
     }
     return {
