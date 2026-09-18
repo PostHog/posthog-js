@@ -2892,10 +2892,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // inert for ordinary sites. Users can raise it, or set 0 to disable.
             inlineStylesheetBudgetRules: 10_000,
             recordCrossOriginIframes: false,
-            // rrweb defaults to the window load event, which waits for every image, font
-            // and subframe, so a page whose load event is late or never fires records
-            // nothing. The DOM is all a full snapshot needs.
-            recordAfter: 'DOMContentLoaded',
             sampling: undefined,
             attributeFilter: undefined,
         }
@@ -3058,6 +3054,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 return true
             },
             ...sessionRecordingOptions,
+            // rrweb defaults to the window load event, which waits for every image, font
+            // and subframe, so a page whose load event is late or never fires records
+            // nothing. A full snapshot only needs the DOM to exist, not every resource
+            // loaded; a stylesheet still pending at snapshot time goes through the
+            // deferred inlining above. Set after the spread so it is not a user option.
+            recordAfter: 'DOMContentLoaded',
         })
 
         if (!this._stopRrweb) {

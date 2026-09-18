@@ -7102,6 +7102,16 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('ignores a user-supplied recordAfter, it is not a session_recording option', () => {
+            posthog.config.session_recording = { ...posthog.config.session_recording, recordAfter: 'load' } as any
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ recordAfter: 'DOMContentLoaded' })
+            )
+        })
+
         it('reports attached: false while rrweb holds a stop handler but has not begun observing', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
