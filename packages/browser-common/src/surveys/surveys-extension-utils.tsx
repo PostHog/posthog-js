@@ -21,7 +21,7 @@ import {
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../utils/survey-utils'
-import { isNullish, type SurveyResponses } from '@posthog/core'
+import { isNullish, isUndefined, type SurveyResponses } from '@posthog/core'
 import {
     buildSurveyResponseEventProperties,
     canSurveyActivateRepeatedly,
@@ -459,8 +459,8 @@ export const sendSurveyEvent = ({
             responses,
             submissionId: surveySubmissionId,
             completed: isSurveyCompleted,
-            ...(surveyLanguage !== undefined && { surveyLanguage }),
-            ...(questionSnapshots !== undefined && { questionSnapshots }),
+            ...(!isUndefined(surveyLanguage) && { surveyLanguage }),
+            ...(!isUndefined(questionSnapshots) && { questionSnapshots }),
         }),
         ...properties,
         $set: {
@@ -492,12 +492,12 @@ const _buildSurveyEventProperties = (
     ...buildSurveyResponseEventProperties({
         event,
         survey,
-        ...(inProgressSurvey?.responses !== undefined && { responses: inProgressSurvey.responses }),
-        ...(inProgressSurvey?.surveySubmissionId !== undefined && {
+        ...(!isUndefined(inProgressSurvey?.responses) && { responses: inProgressSurvey.responses }),
+        ...(!isUndefined(inProgressSurvey?.surveySubmissionId) && {
             submissionId: inProgressSurvey.surveySubmissionId,
         }),
-        ...(inProgressSurvey?.surveyLanguage !== undefined && { surveyLanguage: inProgressSurvey.surveyLanguage }),
-        ...(inProgressSurvey?.questionSnapshots !== undefined && {
+        ...(!isUndefined(inProgressSurvey?.surveyLanguage) && { surveyLanguage: inProgressSurvey.surveyLanguage }),
+        ...(!isUndefined(inProgressSurvey?.questionSnapshots) && {
             questionSnapshots: inProgressSurvey.questionSnapshots,
         }),
     }),
