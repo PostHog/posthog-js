@@ -1,4 +1,5 @@
 import { window } from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { SESSION_RECORDING_IS_SAMPLED } from '../constants'
 import {
     resetSessionStorageSupported,
@@ -200,6 +201,22 @@ describe('createLocalPlusCookieStore', () => {
 
         expect(cookieStore._parse(name)).toEqual({ distinct_id: 'identified-user' })
         setSpy.mockRestore()
+    })
+
+    it.each([
+        ['warns once when it discards a cookie distinct_id', 'ph_conflict_posthog', 'cookie-id', 1],
+        ['stays quiet when both stores agree', 'ph_agreement_posthog', 'local-id', 0],
+    ])('%s', (_label, name, cookieDistinctId, expectedWarnings) => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+        window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'local-id' }))
+        cookieStore._set(name, { distinct_id: cookieDistinctId })
+        const store = createLocalPlusCookieStore()
+
+        expect(store._parse(name)).toEqual({ distinct_id: 'local-id' })
+        store._parse(name)
+
+        expect(warnSpy).toHaveBeenCalledTimes(expectedWarnings)
+        warnSpy.mockRestore()
     })
 
     it('reports the localStorage write succeeded even when the cookie mirror throws', () => {
