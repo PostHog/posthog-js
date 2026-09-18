@@ -10,7 +10,9 @@ import { createFetch, localRemoteConfig } from './helpers'
 const logger = { error: vi.fn() } as unknown as Client['logger']
 const makeRegistry = () => new ExtensionRegistry(() => ({}) as Client, logger)
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+    vi.restoreAllMocks()
+})
 
 describe('extension lookup views', () => {
     it('keeps the flags facade public and gives shared consumers its implementation', async () => {
