@@ -957,6 +957,26 @@ describe('Autocapture system', () => {
                         expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
                     })
 
+                    it('rapid clicks on a decorative icon aria-label inside a text link still capture $rageclick', () => {
+                        const link = document.createElement('a')
+                        link.appendChild(document.createTextNode('Get started '))
+                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                        icon.setAttribute('aria-label', 'arrow right icon')
+                        link.appendChild(icon)
+
+                        expect(rageClickThreeTimes(icon, link)).toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on an icon inside a button whose own aria-label does not match still capture $rageclick', () => {
+                        const button = document.createElement('button')
+                        button.setAttribute('aria-label', 'Buy now')
+                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                        icon.setAttribute('aria-label', 'arrow')
+                        button.appendChild(icon)
+
+                        expect(rageClickThreeTimes(icon, button)).toContain('$rageclick')
+                    })
+
                     it('rapid clicks on a div inside a button labelled "Next slide" do not capture $rageclick', () => {
                         const button = document.createElement('button')
                         const div = document.createElement('div')

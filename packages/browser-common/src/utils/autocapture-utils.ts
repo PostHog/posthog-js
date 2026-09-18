@@ -299,8 +299,15 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
         }
     }
 
+    const safeText = controlLabelText(pathToControl, control).toLowerCase()
+
+    // a control's own label (text or its own aria-label) wins over a descendant icon's aria-label
+    if (safeText && !control.getAttribute('aria-label')) {
+        ariaLabel = ''
+    }
+
     return {
-        safeText: controlLabelText(pathToControl, control).toLowerCase(),
+        safeText,
         ariaLabel,
     }
 }
