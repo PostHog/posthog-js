@@ -546,8 +546,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushHoldReason: FlushHoldReason | undefined
     private _lastLoggedFlushHold: string | undefined
     // fresh-start holds ship on a clean unload (passive visits are captured, matching
-    // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
+    // pre-hold behavior); holds born from an idle rotation don't — that unload ship was the incident
     private _heldEpochShipsOnUnload = false
+    // set for a rotation the app caused (reset(), cleared storage) rather than one the session
+    // manager forced on an untouched tab. Only the forced kind repeats on a timer, so an
+    // app-driven rotation opens a fresh visit and its held epoch ships on unload like any other
+    private _rotationHoldShipsOnUnload = false
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
@@ -1401,6 +1405,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const wasLikelyReset = changeReason.noSessionId
+        this._rotationHoldShipsOnUnload = wasLikelyReset
         const shouldLinkSessions =
             !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
@@ -1643,7 +1648,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._isRestartingForSessionIdChange = false
         }
         this._setFlushHold(holdNextEpoch ? 'no_interaction_since_session_rotated' : undefined)
-        this._heldEpochShipsOnUnload = false
+        this._heldEpochShipsOnUnload = holdNextEpoch && this._rotationHoldShipsOnUnload
+        this._rotationHoldShipsOnUnload = false
     }
 
     // Keep the hold and its reported reason synchronized during normal recording transitions.
@@ -2612,8 +2618,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
-        // but only if the document was ever visible. Rotation-born holds stay held, and an
-        // overflowed hold has nothing playable left to ship.
+        // but only if the document was ever visible. Rotation-born holds stay held unless the
+        // app caused the rotation, and an overflowed hold has nothing playable left to ship.
         if (
             this._holdFlushUntilInteraction &&
             this._heldEpochShipsOnUnload &&
