@@ -4,11 +4,16 @@ module.exports = {
         const isAllowedFile =
             filename.includes('src/entrypoints') ||
             filename.includes('src/extensions/replay/external') ||
+            filename.includes('/browser-common/src/replay/external/') ||
             filename.includes('__tests__') ||
             filename.includes('/browser-common/tests/') ||
             filename.includes('/playwright/')
 
         function isRestrictedImport(importPath) {
+            if (importPath.startsWith('@posthog/browser-common/replay/external/')) {
+                return true
+            }
+
             // Handle absolute paths with aliases
             if (importPath.startsWith('@/') || importPath.startsWith('~/')) {
                 return importPath.includes('extensions/replay/external')
@@ -32,7 +37,7 @@ module.exports = {
                         context.report({
                             node,
                             message:
-                                'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                                'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                         })
                     }
                 }
@@ -45,7 +50,7 @@ module.exports = {
                             context.report({
                                 node,
                                 message:
-                                    'Code from src/extensions/replay/external can only be imported by files in src/extensions/replay/external, src/entrypoints, test files, or playwright specs',
+                                    'Lazy replay code can only be imported by lazy replay implementations, SDK entrypoints, test files, or playwright specs',
                             })
                         }
                     }

@@ -1,11 +1,10 @@
-import { MutationThrottler } from '../../../extensions/replay/external/mutation-throttler'
-import {
-    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    MUTATION_SOURCE_TYPE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
-import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
+// @vitest-environment jsdom
+
+import { MutationThrottler } from '../../src/replay/external/mutation-throttler'
+import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from '../../src/replay/external/sessionrecording-utils'
+import type { rrwebRecord } from '../../src/replay/rrweb'
 import { vi } from 'vitest'
-import type { eventWithTime, mutationData } from '../../../extensions/replay/types/rrweb-types'
+import type { eventWithTime, mutationData } from '../../src/replay/rrweb-types'
 
 vi.useFakeTimers()
 

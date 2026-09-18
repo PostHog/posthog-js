@@ -1,5 +1,5 @@
 import { assignableWindow } from '../utils/globals'
-import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { patch } from '@posthog/browser-common/replay/patch'
 import { originalConsoleMethod } from '../utils/console-original'
 import type { BufferedConsoleEntry, BufferedConsoleLevel } from '../logs-types'
 import { LogsExtension } from '../extension-tokens'

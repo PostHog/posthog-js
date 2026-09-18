@@ -7,9 +7,12 @@ import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { PostHog } from '../../../posthog-core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../../../utils/globals'
-import { EventType, IncrementalSource } from '../../../extensions/replay/types/rrweb-types'
+import { EventType, IncrementalSource } from '@posthog/browser-common/replay/rrweb-types'
 import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
-import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
+import {
+    FULL_SNAPSHOT_EVENT_TYPE,
+    META_EVENT_TYPE,
+} from '@posthog/browser-common/replay/external/sessionrecording-utils'
 
 const mouse = () => ({
     type: EventType.IncrementalSnapshot,

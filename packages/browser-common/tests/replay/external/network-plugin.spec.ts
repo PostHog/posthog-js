@@ -1,10 +1,11 @@
+// @vitest-environment jsdom
 /// <reference lib="dom" />
 
 import { expect } from 'vitest'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
-import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
-import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
-import { defaultConfig } from '../../../../posthog-core'
+import { buildNetworkRequestOptions } from '../../../src/replay/external/config'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../src/replay/types'
+import { createReplayOptions } from '../helpers/replay-options'
 import {
     _contentLengthExceedsLimit,
     _readBody,
@@ -12,7 +13,7 @@ import {
     getRecordNetworkPlugin,
     NEVER_RECORD_BODY_CONTENT_TYPES,
     shouldRecordBody,
-} from '../../../../extensions/replay/external/network-plugin'
+} from '../../../src/replay/external/network-plugin'
 
 // Mock Request class since jsdom might not provide it
 class MockRequest {
@@ -330,12 +331,12 @@ describe('network plugin', () => {
             ) as PerformanceEntry
             performanceEntries.push(entry)
             const callback = vi.fn()
-            const posthogConfig = defaultConfig()
+            const options = createReplayOptions()
             const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
                 request.method === 'GET' ? request : undefined
             )
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
-            const networkOptions = buildNetworkRequestOptions(posthogConfig, { recordPerformance: true })
+            options.recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, { recordPerformance: true })
             const plugin = getRecordNetworkPlugin(networkOptions)
             const cleanup = plugin.observer(callback, mockWindow, networkOptions)
 
@@ -371,12 +372,12 @@ describe('network plugin', () => {
             ) as PerformanceEntry
             performanceEntries.push(entry)
             const callback = vi.fn()
-            const posthogConfig = defaultConfig()
+            const options = createReplayOptions()
             const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
                 request.name === entry.name ? null : request
             )
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
-            const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+            options.recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, {
                 recordPerformance: true,
             })
             const plugin = getRecordNetworkPlugin(networkOptions)
@@ -411,10 +412,10 @@ describe('network plugin', () => {
             ) as PerformanceEntry
             performanceEntries.push(entry)
             const callback = vi.fn()
-            const posthogConfig = defaultConfig()
+            const options = createReplayOptions()
             const maskNetworkRequestFn = vi.fn(({ url }: { url: string }) => (url === entry.name ? null : { url }))
-            posthogConfig.session_recording.maskNetworkRequestFn = maskNetworkRequestFn
-            const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+            options.recording.maskNetworkRequestFn = maskNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, {
                 recordPerformance: true,
             })
             const plugin = getRecordNetworkPlugin(networkOptions)
@@ -443,7 +444,7 @@ describe('network plugin', () => {
 
             const callback = vi.fn()
             const networkOptions = buildNetworkRequestOptions(
-                { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                () => ({ ...createReplayOptions(), apiHost: 'https://example.com/ingest' }),
                 { recordPerformance: true }
             )
             const plugin = getRecordNetworkPlugin(networkOptions)
@@ -462,7 +463,7 @@ describe('network plugin', () => {
 
             const callback = vi.fn()
             const networkOptions = buildNetworkRequestOptions(
-                { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                () => ({ ...createReplayOptions(), apiHost: 'https://example.com/ingest' }),
                 { recordPerformance: true }
             )
             const plugin = getRecordNetworkPlugin(networkOptions)

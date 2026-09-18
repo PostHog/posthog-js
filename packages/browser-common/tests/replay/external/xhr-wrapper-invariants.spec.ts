@@ -2,8 +2,8 @@
  * @vitest-environment node
  */
 
-import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
-import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
+import { getRecordNetworkPlugin } from '../../../src/replay/external/network-plugin'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../src/replay/types'
 import { csrfHeaderCases, sensitiveHeaderCases } from './test_data/header-cases'
 
 class MockPerformanceObserver {

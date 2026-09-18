@@ -1,7 +1,7 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page, BrowserContext } from '@playwright/test'
-import { csrfHeaderCases } from '../../../src/__tests__/extensions/replay/external/test_data/header-cases'
+import { csrfHeaderCases } from '../../../../browser-common/tests/replay/external/test_data/header-cases'
 import { readFileSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 
