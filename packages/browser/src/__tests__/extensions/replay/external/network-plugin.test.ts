@@ -581,6 +581,24 @@ describe('network plugin', () => {
                 ])
             })
 
+            it('keeps observing when the mask function throws on the initial entries', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                const start = () =>
+                    (cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                        maskRequestFn: () => {
+                            throw new Error('mask fn threw')
+                        },
+                    }))
+
+                expect(start).not.toThrow()
+                expect(callback).not.toHaveBeenCalled()
+                expect(observerCallbacks).toHaveLength(1)
+            })
+
             it('skips the navigation entry when navigation timings are not observed', () => {
                 const { mockWindow, performanceEntries } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
