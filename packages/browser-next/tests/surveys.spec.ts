@@ -1,4 +1,14 @@
 // @vitest-environment jsdom
+import { detectUserLanguage } from '@posthog/browser-common/surveys/survey-translations'
+import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
+import { getSurveyStorage } from '@posthog/browser-common/survey-render-context'
+import {
+    setInProgressSurveyState,
+    getInProgressSurveyState,
+    getSurveySeen,
+    sendSurveyAbandonedEvent,
+    dismissedSurveyEvent,
+} from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { createPostHog, FeatureFlagsExtension } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
@@ -77,6 +87,84 @@ afterEach(async () => {
 })
 
 describe('surveys', () => {
+    it.each(['selected', 'memory'] as const)('isolates %s UI state and reset from ambient storage', async (mode) => {
+        const contexts: SurveyRenderContext[] = []
+        const make = () =>
+            create({
+                storage: mode === 'selected' ? new MemoryStorage() : false,
+                extensions: [
+                    createSurveys({ automaticDisplay: false }, async () => ({
+                        generateSurveys(context, enabled) {
+                            contexts.push(context)
+                            return generateSurveys(context, enabled)
+                        },
+                    })),
+                ],
+                fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+            })
+        const first = await make()
+        const second = await make()
+        await getSurveys(first)
+        await getSurveys(second)
+        const [one, two] = contexts as [SurveyRenderContext, SurveyRenderContext]
+        const ambient = vi.spyOn(globalThis, 'localStorage', 'get').mockImplementation(() => {
+            throw new Error('ambient storage')
+        })
+        const state = {
+            surveySubmissionId: 'selected',
+            lastQuestionIndex: 0,
+            responses: { $survey_response: 'answer' },
+        }
+        try {
+            setInProgressSurveyState(definition, state, getSurveyStorage(one))
+            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toBeNull()
+            sendSurveyAbandonedEvent(definition, one)
+            expect(getSurveyStorage(one).getItem('abandonedSurvey_survey-test')).toBe('true')
+            expect(getSurveyStorage(two).getItem('abandonedSurvey_survey-test')).toBeNull()
+            dismissedSurveyEvent(definition, one)
+            expect(getSurveySeen(definition, getSurveyStorage(one))).toBe(true)
+            expect(getSurveySeen(definition, getSurveyStorage(two))).toBe(false)
+            setInProgressSurveyState(definition, state, getSurveyStorage(two))
+            first.reset()
+            expect(getSurveySeen(definition, getSurveyStorage(one))).toBe(false)
+            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toEqual(state)
+            second.reset()
+            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toBeNull()
+            expect(ambient).not.toHaveBeenCalled()
+        } finally {
+            ambient.mockRestore()
+        }
+    })
+
+    it('reads live person language and evaluation configuration through the renderer client', async () => {
+        let context!: SurveyRenderContext
+        const client = await create({
+            flags: { featureFlagEvaluation: false },
+            extensions: [
+                createSurveys({ automaticDisplay: false }, async () => ({
+                    generateSurveys(value, enabled) {
+                        context = value
+                        return generateSurveys(value, enabled)
+                    },
+                })),
+            ],
+            fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+        })
+        await getSurveys(client)
+        client.identify('person', { language: 'fr' })
+        expect(detectUserLanguage(context)).toBe('fr')
+        expect(context.config.featureFlagEvaluation).toBe(false)
+        expect(context.client!.kv.get([STORED_PERSON_PROPERTIES_KEY, '$surveys'])).toMatchObject({
+            [STORED_PERSON_PROPERTIES_KEY]: { language: 'fr' },
+            '$surveys': [definition],
+        })
+        expect(detectUserLanguage({ ...context, config: { ...context.config, overrideLanguage: 'de' } })).toBe('de')
+        client.identify('person', { language: 'es' })
+        expect(detectUserLanguage(context)).toBe('es')
+        client.reset()
+        expect(context.client!.kv.get(STORED_PERSON_PROPERTIES_KEY)).toBeUndefined()
+    })
+
     it('installs orchestration by default but keeps false remote config from fetching definitions', async () => {
         const fetch = vi.fn()
         const client = await create({ fetch })

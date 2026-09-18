@@ -25,6 +25,7 @@ for (const format of ['js', 'mjs']) {
 
 const guardedGlobals = [
     'addEventListener',
+    'crypto',
     'document',
     'fetch',
     'localStorage',
