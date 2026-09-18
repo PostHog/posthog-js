@@ -71,7 +71,10 @@ export class BrowserClientAdapter implements Client, Disposable {
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _disposed = false
 
-    constructor(readonly instance: PostHog) {
+    constructor(
+        readonly instance: PostHog,
+        private readonly _isClosing: () => boolean = () => false
+    ) {
         this._logger = logger
         this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
@@ -152,7 +155,7 @@ export class BrowserClientAdapter implements Client, Disposable {
     }
 
     get canCapture(): boolean {
-        return this.instance.is_capturing()
+        return !this._isClosing() && this.instance.is_capturing()
     }
 
     get projectToken(): string {
@@ -201,6 +204,7 @@ export class BrowserClientAdapter implements Client, Disposable {
         const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
+            ...(path === '/i/v1/logs' && (!init.target || init.target === 'api') ? { batchKey: 'logs' } : {}),
             url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,

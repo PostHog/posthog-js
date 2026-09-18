@@ -94,6 +94,21 @@ const getResolvedSymbol = (node: ts.Node, checker: ts.TypeChecker): ts.Symbol | 
     return symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
 }
 
+const isLogsCaptureHintKey = (symbol: ts.Symbol | undefined): boolean =>
+    !!symbol?.declarations?.some((declaration) => {
+        const source = path.relative(REPOSITORY_ROOT, declaration.getSourceFile().fileName)
+        return (
+            ['packages/browser-common/src/logs-config.ts', 'packages/browser-common/dist/logs-config.d.ts'].includes(
+                source
+            ) &&
+            ts.isPropertySignature(declaration) &&
+            ts.isIdentifier(declaration.name) &&
+            declaration.name.text === 'captureHintKey' &&
+            ts.isInterfaceDeclaration(declaration.parent) &&
+            declaration.parent.name.text === 'LogsConfigSource'
+        )
+    })
+
 const getSymbolInitializer = (symbol: ts.Symbol | undefined): ts.Expression | undefined => {
     const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0]
     return declaration && (ts.isVariableDeclaration(declaration) || ts.isPropertyDeclaration(declaration))
@@ -445,7 +460,11 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
             // Policy is checked at each client.kv write; forwarding implementations are checked at their callers.
             if (
                 isForwardedKeyValueStoreKey(expression, node, checker) ||
-                isForwardedFeatureFlagsStateKey(expression, node, checker)
+                isForwardedFeatureFlagsStateKey(expression, node, checker) ||
+                (relativeFilePath === 'packages/browser-common/src/logs.ts' &&
+                    expression &&
+                    ts.isPropertyAccessExpression(expression) &&
+                    isLogsCaptureHintKey(getResolvedSymbol(expression.name, checker)))
             ) {
                 return
             }
@@ -578,6 +597,21 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
         }
 
         const visit = (node: ts.Node) => {
+            // The shared logs write forwards this SDK-selected key; check the injection instead.
+            if (
+                (ts.isPropertyAssignment(node) || ts.isGetAccessorDeclaration(node)) &&
+                ts.isObjectLiteralExpression(node.parent) &&
+                ts.isIdentifier(node.name) &&
+                node.name.text === 'captureHintKey' &&
+                isLogsCaptureHintKey(checker.getContextualType(node.parent)?.getProperty('captureHintKey'))
+            ) {
+                recordResolution(
+                    ts.isPropertyAssignment(node) ? node.initializer : undefined,
+                    node,
+                    'LogsConfigSource.captureHintKey',
+                    true
+                )
+            }
             if (ts.isCallExpression(node)) {
                 const methodName = getMethodName(node.expression)
                 const receiver = getReceiver(node.expression)
@@ -1059,6 +1093,50 @@ describe('persistence key policy', () => {
         expect([...featureFlagsWrapper.resolvedKeys]).toEqual(
             expect.arrayContaining([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE, constants.HEATMAPS_ENABLED_SERVER_SIDE])
         )
+    })
+
+    it('checks the injected logs persistence key without exempting unrelated dynamic keys', () => {
+        const configPath = path.join(REPOSITORY_ROOT, 'packages/browser-common/src/logs-config.ts')
+        const analyze = (key: string, extra = '') =>
+            collectPersistenceKeyIdentifiers([
+                {
+                    filePath: configPath,
+                    sourceText: 'export interface LogsConfigSource { readonly captureHintKey: string }',
+                },
+                {
+                    filePath: path.join(REPOSITORY_ROOT, 'packages/browser-common/src/logs.ts'),
+                    sourceText: `
+                import type { LogsConfigSource } from './logs-config'
+                function persist(config: LogsConfigSource) { client.kv.set(config.captureHintKey, true) }
+                ${extra}
+            `,
+                },
+                {
+                    filePath: path.join(REPOSITORY_ROOT, 'packages/browser/src/logs-config-example.ts'),
+                    sourceText: `
+                import type { LogsConfigSource } from '../../browser-common/src/logs-config'
+                const LOGS_KEY = '${constants.LOGS_CAPTURE_ENABLED_SERVER_SIDE}'
+                const UNKNOWN_KEY = '$unknown_logs_key'
+                const config: LogsConfigSource = { captureHintKey: ${key} }
+            `,
+                },
+            ])
+        const valid = analyze('LOGS_KEY')
+        expect(valid.issues).toEqual([])
+        expect([...valid.resolvedKeys]).toEqual([constants.LOGS_CAPTURE_ENABLED_SERVER_SIDE])
+        expect(analyze('UNKNOWN_KEY').issues).toEqual([expect.stringContaining('has no persistence key policy')])
+        expect(analyze("'$logs_capture_enabled_server_side'").issues).toEqual([
+            expect.stringContaining('must use constants'),
+        ])
+        expect(
+            analyze(
+                'LOGS_KEY',
+                `
+            const unrelated: { captureHintKey: string } = { captureHintKey: 'raw' }
+            client.kv.set(unrelated.captureHintKey, true)
+        `
+            ).issues
+        ).toEqual([expect.stringContaining('must resolve to a persistence key constant')])
     })
 
     it('analyzes callers instead of a KeyValueStore implementation forwarding its runtime key', () => {
