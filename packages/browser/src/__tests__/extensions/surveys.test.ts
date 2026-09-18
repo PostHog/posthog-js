@@ -132,11 +132,11 @@ describe('survey display logic', () => {
         }
     })
 
-    const createThrowingPostHog = (error: unknown, isExceptionCaptureEnabled: boolean) =>
+    const createThrowingPostHog = (nextError: () => unknown, isExceptionCaptureEnabled: boolean) =>
         createMockPostHog({
             surveys: {
                 getSurveys: vi.fn().mockImplementation(() => {
-                    throw error
+                    throw nextError()
                 }),
             },
             captureException: vi.fn(),
@@ -152,7 +152,7 @@ describe('survey display logic', () => {
     test('a throwing display logic is reported once and stops the interval instead of throwing every tick', () => {
         vi.useFakeTimers()
         const error = new SyntaxError('Invalid or unexpected token')
-        const throwingPostHog = createThrowingPostHog(error, true)
+        const throwingPostHog = createThrowingPostHog(() => error, true)
 
         const surveyManager = generateSurveys(throwingPostHog, true)
         try {
@@ -168,10 +168,35 @@ describe('survey display logic', () => {
         }
     })
 
+    test('failures that alternate are reported once each and still stop the interval', () => {
+        vi.useFakeTimers()
+        const firstError = new SyntaxError('Invalid or unexpected token')
+        const secondError = new TypeError('Cannot read properties of null')
+        const sequence = [firstError, secondError, firstError]
+        let tick = 0
+        const throwingPostHog = createThrowingPostHog(() => sequence[tick++] ?? firstError, true)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).toBeCalledTimes(2)
+            expect(throwingPostHog.captureException).toHaveBeenNthCalledWith(1, firstError, {
+                survey_display_logic_failure: true,
+            })
+            expect(throwingPostHog.captureException).toHaveBeenNthCalledWith(2, secondError, {
+                survey_display_logic_failure: true,
+            })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
     test('a throwing display logic is not reported when exception capture is disabled', () => {
         vi.useFakeTimers()
         const error = new SyntaxError('Invalid or unexpected token')
-        const throwingPostHog = createThrowingPostHog(error, false)
+        const throwingPostHog = createThrowingPostHog(() => error, false)
 
         const surveyManager = generateSurveys(throwingPostHog, true)
         try {

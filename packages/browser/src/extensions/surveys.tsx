@@ -30,7 +30,7 @@ import {
     SURVEY_LOGGER as logger,
     SURVEY_CAPTURING_DISABLED,
 } from '../utils/survey-utils'
-import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
+import { isArray, isError, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { FeatureFlagsExtension } from '../extension-tokens'
 import type { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -1258,7 +1258,7 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     let intervalId: number | undefined
     let consecutiveFailures = 0
-    let lastFailureMessage: string | undefined
+    const reportedFailures = new Set<string>()
 
     const stopInterval = () => {
         if (!isUndefined(intervalId)) {
@@ -1269,7 +1269,9 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     // The display logic runs once a second. An error used to escape the tick as an unhandled
     // exception, so one failure became one exception per second for the whole visit. Report
-    // each distinct failure once instead, and give up after repeated failures.
+    // each distinct failure once instead, and give up after repeated failures. The counter
+    // holds every failing tick, so failures that alternate still stop the loop. Both the
+    // counter and the reported set are cleared by a success.
     const evaluateDisplayLogic = (forceReload: boolean) => {
         if (consecutiveFailures >= MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES) {
             return
@@ -1277,19 +1279,20 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
         try {
             surveyManager.callSurveysAndEvaluateDisplayLogic(forceReload)
             consecutiveFailures = 0
-            lastFailureMessage = undefined
+            reportedFailures.clear()
         } catch (error) {
-            const message = String(error)
-            const isRepeatedFailure = message === lastFailureMessage
-            consecutiveFailures = isRepeatedFailure ? consecutiveFailures + 1 : 1
-            lastFailureMessage = message
+            consecutiveFailures += 1
+            // A message alone merges throw sites that share their text, so key on the stack too.
+            const signature = String(error) + (isError(error) ? error.stack : '')
+            const isNewFailure = !reportedFailures.has(signature)
+            reportedFailures.add(signature)
             if (consecutiveFailures >= MAX_CONSECUTIVE_DISPLAY_LOGIC_FAILURES) {
                 stopInterval()
                 logger.error(`Stopping survey display logic after ${consecutiveFailures} consecutive failures`, error)
             } else {
                 logger.error('Error evaluating survey display logic', error)
             }
-            if (!isRepeatedFailure && posthog.exceptionObserver?.isEnabled) {
+            if (isNewFailure && posthog.exceptionObserver?.isEnabled) {
                 // The catch above hides the failure from error tracking, so report it once.
                 // Only projects that turned exception capture on get the report, because an
                 // SDK-generated event must not bypass `capture_exceptions`.
