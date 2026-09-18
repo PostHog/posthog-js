@@ -1,4 +1,3 @@
-import { window } from './globals'
 import { logger } from './logger'
 
 export interface SurveyStorage {
@@ -11,7 +10,7 @@ export interface SurveyStorage {
 export const surveyStorage: SurveyStorage = {
     getItem(key) {
         try {
-            return window?.localStorage.getItem(key) ?? null
+            return typeof window !== 'undefined' ? window.localStorage.getItem(key) : null
         } catch (error) {
             logger.error('localStorage error: ' + error)
             return null

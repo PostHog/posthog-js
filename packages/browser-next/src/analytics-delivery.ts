@@ -49,7 +49,11 @@ const summarizeCapture = (
     })
 }
 
-const observeLifecycle = (context: AnalyticsDeliveryContext, setOnline: (online: boolean) => void): Disposable => {
+const observeLifecycle = (
+    context: AnalyticsDeliveryContext,
+    setOnline: (online: boolean) => void,
+    beforeTeardown?: () => void
+): Disposable => {
     let teardownEvent: 'pagehide' | 'unload' = 'unload'
     try {
         if ('onpagehide' in globalThis) {
@@ -94,6 +98,7 @@ const observeLifecycle = (context: AnalyticsDeliveryContext, setOnline: (online:
     register(teardownEvent, () =>
         invoke(() => {
             if (context.canRetry()) {
+                beforeTeardown?.()
                 context.teardown(CAPTURE_V1_TEARDOWN_BUDGET_BYTES)
             }
         })
@@ -112,7 +117,7 @@ const observeLifecycle = (context: AnalyticsDeliveryContext, setOnline: (online:
 }
 
 /** Attaches delivery machinery to the analytics extension's existing event buffer. */
-export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client, host, options) => {
+export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client, host, options, beforeTeardown) => {
     const lane = new Lane(
         buffer,
         (error) => host.reportFailure(error),
@@ -157,9 +162,13 @@ export const createAnalyticsDelivery: AnalyticsDeliveryFactory = (buffer, client
     })
     try {
         online = isOnline(context)
-        lifecycleSubscription = observeLifecycle(context, (value) => {
-            online = value
-        })
+        lifecycleSubscription = observeLifecycle(
+            context,
+            (value) => {
+                online = value
+            },
+            beforeTeardown
+        )
     } catch (error) {
         context.reportFailure(error)
     }
