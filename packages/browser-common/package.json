@@ -55,6 +55,9 @@
             ],
             "logs-config": [
                 "dist/logs-config.d.ts"
+            ],
+            "console-logs": [
+                "dist/console-logs.d.ts"
             ]
         }
     },
@@ -118,6 +121,11 @@
             "types": "./dist/logs-config.d.ts",
             "require": "./dist/logs-config.js",
             "import": "./dist/logs-config.mjs"
+        },
+        "./console-logs": {
+            "types": "./dist/console-logs.d.ts",
+            "import": "./dist/console-logs.mjs",
+            "require": "./dist/console-logs.js"
         }
     },
     "scripts": {
