@@ -1010,14 +1010,22 @@ describe('Autocapture system', () => {
 
             describe('when content_ignorelist is a custom array', () => {
                 beforeEach(() => {
-                    posthog.config.rageclick = { content_ignorelist: ['arrow'] }
+                    posthog.config.rageclick = { content_ignorelist: ['load'] }
                 })
 
-                it('a custom keyword still matches as a substring', () => {
+                it('a custom keyword that is not a shipped default still matches as a substring', () => {
+                    const el = document.createElement('button')
+                    el.textContent = 'Download'
+
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
+
+                it('a shipped default keyword no longer matches as a substring in a custom array', () => {
+                    posthog.config.rageclick = { content_ignorelist: ['arrow'] }
                     const el = document.createElement('button')
                     el.textContent = 'Narrow results'
 
-                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                    expect(rageClickThreeTimes(el)).toContain('$rageclick')
                 })
             })
 
@@ -1038,6 +1046,13 @@ describe('Autocapture system', () => {
                     'rapid clicks on a "%s" button do not capture $rageclick',
                     (text) => {
                         expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['Preview', 'Narrow results', 'Open slideshow'])(
+                    'rapid clicks on a "%s" button still capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
                     }
                 )
 

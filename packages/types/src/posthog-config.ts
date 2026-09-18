@@ -126,9 +126,11 @@ export interface RageclickConfig {
      * Checks the text and aria-label of the clicked control (the nearest button, link or other
      * interactive ancestor) against the keywords, case-insensitive. The label of a surrounding
      * region is not checked, so a carousel wrapper does not suppress the controls inside it.
-     * The default word keywords match whole words, so 'arrow' doesn't suppress "Narrow results".
-     * Word keywords you supply yourself match as substrings. Symbol-only keywords (e.g. '+', '-', '>')
-     * always match exactly, so they don't suppress text like "sign-up", "5 > 3", or "C++".
+     * The built-in word keywords (next/previous/carousel/slide/scroll/arrow/etc.) match whole words
+     * wherever they appear, even inside a list you pass yourself, so 'arrow' doesn't suppress
+     * "Narrow results". Any other word keyword you add matches as a substring. Symbol-only keywords
+     * (e.g. '+', '-', '>') always match exactly, so they don't suppress text like "sign-up", "5 > 3",
+     * or "C++".
      *
      * A `rageclick` object of your own replaces the date-gated default below the `'2025-11-30'`
      * defaults, and whenever you pass one to `set_config`. Set this property explicitly to keep

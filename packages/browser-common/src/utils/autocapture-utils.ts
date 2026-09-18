@@ -231,12 +231,13 @@ each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
 })
 
 // symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
-// a user-supplied array keeps matching word keywords as substrings, as it always has
-const matchesContentKeyword = (text: string, keyword: string, wholeWord: boolean): boolean => {
+// a shipped word keyword matches whole words wherever it appears, including inside a list the user
+// built themselves; any other word keyword the user adds keeps matching as a substring
+const matchesContentKeyword = (text: string, keyword: string): boolean => {
     if (!isWordKeyword(keyword)) {
         return text === keyword
     }
-    const wholeWordRegex = wholeWord ? DEFAULT_WORD_KEYWORD_REGEXES[keyword] : undefined
+    const wholeWordRegex = DEFAULT_WORD_KEYWORD_REGEXES[keyword]
     return wholeWordRegex ? wholeWordRegex.test(text) : text.includes(keyword)
 }
 
@@ -249,15 +250,9 @@ function shouldIgnoreByContent(
     }
 
     let keywords: string[]
-    let wholeWord: boolean
     if (contentIgnorelist === true) {
         keywords = DEFAULT_CONTENT_IGNORELIST
-        wholeWord = true
     } else if (isArray(contentIgnorelist)) {
-        // our own lists match whole words; a list the user built themselves keeps substring matching
-        const isDefaultList =
-            contentIgnorelist === DEFAULT_CONTENT_IGNORELIST ||
-            contentIgnorelist === DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS
         if (contentIgnorelist.length > MAX_CONTENT_IGNORELIST_ENTRIES) {
             logger.error(
                 `[PostHog] content_ignorelist array cannot exceed ${MAX_CONTENT_IGNORELIST_ENTRIES} items. Use css_selector_ignorelist for more complex matching.`
@@ -265,14 +260,12 @@ function shouldIgnoreByContent(
             return false
         }
         keywords = contentIgnorelist.map((k) => k.toLowerCase())
-        wholeWord = isDefaultList
     } else {
         return false
     }
 
     return keywords.some(
-        (keyword) =>
-            matchesContentKeyword(safeText, keyword, wholeWord) || matchesContentKeyword(ariaLabel, keyword, wholeWord)
+        (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
     )
 }
 
