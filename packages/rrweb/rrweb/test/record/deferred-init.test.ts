@@ -52,9 +52,44 @@ describe('deferred init after stop', () => {
     expect(record.isRecording()).toBe(false);
   });
 
-  it('does not observe when the full snapshot emit stops the recorder', () => {
-    recordAndStopOn(EventType.FullSnapshot);
+  it('does not snapshot or observe when the Meta emit stops the recorder', () => {
+    const eventsAfterStop = recordAndStopOn(EventType.Meta);
 
+    expect(eventsAfterStop).toEqual([]);
     expect(record.isRecording()).toBe(false);
+  });
+
+  it('does not observe or emit when the full snapshot emit stops the recorder', () => {
+    const eventsAfterStop = recordAndStopOn(EventType.FullSnapshot);
+
+    expect(eventsAfterStop).toEqual([]);
+    expect(record.isRecording()).toBe(false);
+  });
+
+  // the browser SDK's session rotation stops and immediately starts a replacement
+  // from inside the emit; the stale callback must not snapshot into its stream
+  it('a replacement started from the DomContentLoaded emit sees exactly one full snapshot', () => {
+    const readyState = vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
+
+    const replacementEvents: eventWithTime[] = [];
+    let replaced = false;
+
+    stop = record({
+      recordAfter: 'DOMContentLoaded',
+      emit: (event) => {
+        if (replaced || event.type !== EventType.DomContentLoaded) return;
+        replaced = true;
+        stop?.();
+        // the browser is 'interactive' while DOMContentLoaded dispatches, so the
+        // replacement inits synchronously
+        readyState.mockReturnValue('interactive');
+        stop = record({ emit: (e) => replacementEvents.push(e) });
+      },
+    });
+
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+
+    expect(replacementEvents.filter((e) => e.type === EventType.FullSnapshot)).toHaveLength(1);
+    expect(record.isRecording()).toBe(true);
   });
 });

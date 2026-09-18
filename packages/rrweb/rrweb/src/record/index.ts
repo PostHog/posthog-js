@@ -697,6 +697,9 @@ function record<T = eventWithTime>(
         },
         isCheckout,
       );
+      // the Meta emit can stop this recorder and start a replacement; the rest
+      // of the snapshot would then run against the replacement's shared state
+      if (stopped) return;
 
       // Any deferred inlining from the previous snapshot targets mirror ids that this
       // snapshot is about to replace, so drop it rather than emitting stale mutations.
@@ -781,6 +784,9 @@ function record<T = eventWithTime>(
         },
         isCheckout,
       );
+      // same for the FullSnapshot emit: the stop already drained the buffers
+      // and reset the mirror this tail would otherwise unlock and emit against
+      if (stopped) return;
       mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
       canvasManager.onFullSnapshot();
 
