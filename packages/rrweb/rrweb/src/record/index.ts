@@ -769,6 +769,11 @@ function record<T = eventWithTime>(
         // leave links queued for the next one
         deferredStylesheetLinks = takeDeferredStylesheetLinks();
       }
+      // the serialize pass runs the user's mask callbacks, and one of those can
+      // stop this recorder and start a replacement; the tree it just built is
+      // keyed to a mirror the replacement has already reset, so emitting it now
+      // would land a second, conflicting full snapshot in the replacement's stream
+      if (stopped) return;
 
       if (!node) {
         return console.warn('Failed to snapshot the document');
