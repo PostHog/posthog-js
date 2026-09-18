@@ -239,7 +239,7 @@ export interface LazyLoadedSessionRecordingInterface {
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
-    start: (observerTarget: Node) => void
+    start: (observerTarget: Node | Node[]) => void
     stop: () => void
 }
 

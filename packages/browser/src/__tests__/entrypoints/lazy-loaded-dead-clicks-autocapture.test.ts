@@ -1347,4 +1347,87 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
     })
+
+    describe('shadow roots', () => {
+        let host: HTMLElement
+        let shadowRoot: ShadowRoot
+        let shadowButton: HTMLButtonElement
+
+        const attachHost = (): void => {
+            host = document.createElement('div')
+            document.body.appendChild(host)
+            shadowRoot = host.attachShadow({ mode: 'open' })
+            shadowButton = document.createElement('button')
+            shadowButton.textContent = 'shadow control'
+            shadowRoot.appendChild(shadowButton)
+        }
+
+        afterEach(() => {
+            host?.remove()
+        })
+
+        it('observes an open shadow root that exists when detection starts', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            attachHost()
+
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes an open shadow root attached after detection starts when a click happens inside it', () => {
+            attachHost()
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
+
+            // a real click crosses the shadow boundary, so the root is in its composed path
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the shadow root of added content', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const wrapper = document.createElement('div')
+            wrapper.appendChild(host)
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([{ addedNodes: [wrapper] } as unknown as MutationRecord])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes roots given in mutation_observer_roots, e.g. a closed shadow root', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            host = document.createElement('div')
+            document.body.appendChild(host)
+            const closedRoot = host.attachShadow({ mode: 'closed' })
+
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                mutation_observer_roots: [closedRoot],
+            })
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(closedRoot)).toBe(true)
+        })
+
+        it('accepts several observe targets', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            attachHost()
+
+            lazyLoadedDeadClicksAutocapture.start([document, shadowRoot])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('forgets observed roots after stopping', () => {
+            attachHost()
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            lazyLoadedDeadClicksAutocapture.stop()
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
+        })
+    })
 })
