@@ -278,10 +278,24 @@ const isInteractiveElement = (el: Element): boolean =>
 // and a label held in a child span must still be read when the click lands on the button itself
 function clickedControlText(el: Element, targetElementList: Element[]): ElementWithText {
     let control = el
+    let foundTagOrRoleControl = false
     for (const candidate of targetElementList) {
         if (isInteractiveElement(candidate)) {
             control = candidate
+            foundTagOrRoleControl = true
             break
+        }
+    }
+
+    // a non-semantic control is often just a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses
+    if (!foundTagOrRoleControl && window) {
+        for (const candidate of targetElementList) {
+            try {
+                if (window.getComputedStyle(candidate).getPropertyValue('cursor') === 'pointer') {
+                    control = candidate
+                    break
+                }
+            } catch {}
         }
     }
 

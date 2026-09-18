@@ -1017,6 +1017,40 @@ describe('Autocapture system', () => {
                     ])('rapid clicks on a "%s" button still capture $rageclick', (text) => {
                         expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
                     })
+
+                    it('rapid clicks on an icon inside a cursor:pointer div labelled "Next slide" do not capture $rageclick', () => {
+                        const div = document.createElement('div')
+                        div.style.cursor = 'pointer'
+                        div.setAttribute('aria-label', 'Next slide')
+                        const icon = document.createElement('i')
+                        div.appendChild(icon)
+
+                        expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
+                    })
+
+                    it("rapid clicks on a sibling span inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
+                        const div = document.createElement('div')
+                        div.style.cursor = 'pointer'
+                        const label = document.createElement('span')
+                        label.textContent = 'Next'
+                        const other = document.createElement('span')
+                        other.textContent = 'x'
+                        div.appendChild(label)
+                        div.appendChild(other)
+
+                        expect(rageClickThreeTimes(other, div)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button inside a cursor:pointer labelled carousel region still capture $rageclick (tag control wins)', () => {
+                        const region = document.createElement('div')
+                        region.style.cursor = 'pointer'
+                        region.setAttribute('aria-label', 'Featured carousel')
+                        const button = document.createElement('button')
+                        button.textContent = 'Buy now'
+                        region.appendChild(button)
+
+                        expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                    })
                 }
             )
 
