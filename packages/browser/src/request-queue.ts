@@ -59,6 +59,11 @@ export class RequestQueue {
         this._setFlushTimeout()
     }
 
+    clear(): void {
+        this._clearFlushTimeout()
+        this._queue = []
+    }
+
     private _setFlushTimeout(): void {
         if (this._isPaused) {
             return
