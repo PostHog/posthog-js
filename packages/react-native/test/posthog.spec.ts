@@ -221,6 +221,27 @@ describe('PostHog React Native', () => {
     expect(posthog.getDistinctId()).toEqual('bar')
   })
 
+  it.each([
+    { surveys: [], expected: [] },
+    { surveys: false, expected: undefined },
+  ])('caches remote config surveys $surveys as $expected', async ({ surveys, expected }) => {
+    ;(globalThis as any).window.fetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({ surveys }),
+    }))
+    posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+    })
+
+    await posthog.ready()
+    await posthog._onSurveysReady()
+
+    expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual(expected)
+  })
+
   it('should allow customising of native app properties', async () => {
     posthog = new PostHog('test-token', {
       customAppProperties: { $app_name: 'custom' },
