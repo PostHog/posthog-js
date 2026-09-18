@@ -1004,6 +1004,23 @@ describe('posthog-surveys', () => {
                 })
             })
 
+            it('still refreshes in the background when the callback throws on the cached path', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                mockPostHog.get_property.mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                mockPostHog._send_request.mockImplementation(() => {})
+
+                expect(() =>
+                    surveys.getSurveys(() => {
+                        throw new Error('callback failed')
+                    })
+                ).toThrow('callback failed')
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+
             it('does not start a second background refresh while one is already in flight', () => {
                 const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
                 mockPostHog.get_property.mockImplementation((key: string) => {

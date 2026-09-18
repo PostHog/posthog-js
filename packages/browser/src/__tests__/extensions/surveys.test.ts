@@ -131,6 +131,104 @@ describe('survey display logic', () => {
             vi.useRealTimers()
         }
     })
+
+    const createThrowingPostHog = (
+        nextError: () => unknown,
+        isExceptionCaptureEnabled: boolean,
+        hasCaptureException = true
+    ) =>
+        createMockPostHog({
+            surveys: {
+                getSurveys: vi.fn().mockImplementation(() => {
+                    throw nextError()
+                }),
+            },
+            ...(hasCaptureException ? { captureException: vi.fn() } : {}),
+            exceptionObserver: { isEnabled: isExceptionCaptureEnabled },
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+            capture: vi.fn(),
+            config: {
+                disable_surveys_automatic_display: false,
+            },
+        })
+
+    test('a throwing display logic is reported once and stops the interval instead of throwing every tick', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(() => error, true)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).toBeCalledTimes(1)
+            expect(throwingPostHog.captureException).toHaveBeenCalledWith(error, {
+                survey_display_logic_failure: true,
+            })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
+    test('failures that alternate are reported once each and still stop the interval', () => {
+        vi.useFakeTimers()
+        const firstError = new SyntaxError('Invalid or unexpected token')
+        const secondError = new TypeError('Cannot read properties of null')
+        const sequence = [firstError, secondError, firstError]
+        let tick = 0
+        const throwingPostHog = createThrowingPostHog(() => sequence[tick++] ?? firstError, true)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).toBeCalledTimes(2)
+            expect(throwingPostHog.captureException).toHaveBeenNthCalledWith(1, firstError, {
+                survey_display_logic_failure: true,
+            })
+            expect(throwingPostHog.captureException).toHaveBeenNthCalledWith(2, secondError, {
+                survey_display_logic_failure: true,
+            })
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
+    // `captureException` was only added to the core in 1.160.0, and a newly deployed surveys
+    // bundle can still be loaded by an older cached core.
+    test('a core without captureException still contains the failure and stops the interval', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(() => error, true, false)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
+
+    test('a throwing display logic is not reported when exception capture is disabled', () => {
+        vi.useFakeTimers()
+        const error = new SyntaxError('Invalid or unexpected token')
+        const throwingPostHog = createThrowingPostHog(() => error, false)
+
+        const surveyManager = generateSurveys(throwingPostHog, true)
+        try {
+            expect(() => vi.advanceTimersByTime(10000)).not.toThrow()
+            expect(throwingPostHog.surveys.getSurveys).toBeCalledTimes(3)
+            expect(throwingPostHog.captureException).not.toBeCalled()
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
+    })
 })
 
 describe('usePopupVisibility', () => {
