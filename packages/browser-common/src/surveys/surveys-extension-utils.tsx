@@ -1,7 +1,6 @@
 import type { PostHogFeatureFlags } from '../feature-flags'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
-import { getSurveyReplayUrl } from '../survey-render-context'
-import { surveyStorage } from '../utils/survey-storage'
+import { getSurveyReplayUrl, getSurveyStorage } from '../survey-render-context'
 import { type VNode, cloneElement, createContext, type JSX } from 'preact'
 import type { SurveyRenderContext } from '../survey-render-context'
 import type { SurveyStorage } from '../utils/survey-storage'
@@ -446,7 +445,7 @@ export const sendSurveyEvent = ({
     if (!posthog.client?.canCapture) {
         return
     }
-    setSurveySeen(survey, surveyStorage)
+    setSurveySeen(survey, getSurveyStorage(posthog))
     posthog.client?.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -470,7 +469,7 @@ export const sendSurveyEvent = ({
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey, surveyStorage)
+        clearInProgressSurveyState(survey, getSurveyStorage(posthog))
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
@@ -517,7 +516,7 @@ export const dismissedSurveyEvent = (
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
+    const inProgressSurvey = getInProgressSurveyState(survey, getSurveyStorage(posthog))
     // Prefer the language snapshotted when the user last answered (answer-time language),
     // which is legitimately `null` when no translation matched at answer time — that must not
     // fall through to the current display language. Only fall back to the current display
@@ -531,8 +530,8 @@ export const dismissedSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     })
-    clearInProgressSurveyState(survey, surveyStorage)
-    setSurveySeen(survey, surveyStorage)
+    clearInProgressSurveyState(survey, getSurveyStorage(posthog))
+    setSurveySeen(survey, getSurveyStorage(posthog))
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
@@ -544,7 +543,7 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderC
 
     const abandonedKey = getSurveyAbandonedKey(survey)
     try {
-        if (surveyStorage.getItem(abandonedKey) === 'true') {
+        if (getSurveyStorage(posthog).getItem(abandonedKey) === 'true') {
             return
         }
     } catch {
@@ -552,13 +551,13 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderC
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
+    const inProgressSurvey = getInProgressSurveyState(survey, getSurveyStorage(posthog))
     if (!inProgressSurvey) {
         return
     }
 
     try {
-        surveyStorage.setItem(abandonedKey, 'true')
+        getSurveyStorage(posthog).setItem(abandonedKey, 'true')
     } catch {
         // localStorage not available
     }

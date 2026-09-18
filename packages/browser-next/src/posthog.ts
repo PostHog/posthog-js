@@ -1165,10 +1165,7 @@ export const createPostHogCore = async (
     }
     for (const extension of extensions) {
         try {
-            const shared =
-                extension.name === 'featureFlags'
-                    ? (extension as FlagsExtension)._shared
-                    : undefined
+            const shared = extension.name === 'featureFlags' ? (extension as FlagsExtension)._shared : undefined
             if (extension.name === 'surveys') {
                 ;(extension as SurveysExtension).initialize?.(client._surveysHost)
             }
