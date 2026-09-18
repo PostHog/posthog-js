@@ -13,6 +13,9 @@ import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { getNativeMutationObserverImplementation } from '@posthog/browser-common/utils/prototype-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+
+const logger = createLogger('[Dead Clicks]')
 
 function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -57,6 +60,12 @@ function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
 
 function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
+}
+
+// a JavaScript caller can put anything in the public mutation_observer_roots option. we duck-type
+// instead of using `instanceof Node`, so that a node from another realm still counts as a node
+function isNode(candidate: unknown): candidate is Node {
+    return isNumber((candidate as Node | undefined)?.nodeType)
 }
 
 // a liveness transition only counts if it fired within the suppression window on one side of the
@@ -218,7 +227,16 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // An observed subtree stops at a shadow boundary, so a click that re-renders inside a shadow
     // root looks like nothing happened. Each root we want changes from needs its own observe call.
     private _observeRoot(root: Node | null | undefined): void {
-        if (!root || !this._mutationObserver || this._observedRoots.has(root)) {
+        if (!root || !this._mutationObserver) {
+            return
+        }
+        // a root from mutation_observer_roots is whatever the caller provided. both WeakSet.add
+        // and observe throw on a value that is not a node, and that throw escapes posthog.init
+        if (!isNode(root)) {
+            logger.warn('ignoring a mutation_observer_roots entry that is not a DOM node', root)
+            return
+        }
+        if (this._observedRoots.has(root)) {
             return
         }
         this._observedRoots.add(root)
