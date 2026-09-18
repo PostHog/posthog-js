@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.1
+
+### Patch Changes
+
+- [#4980](https://github.com/PostHog/posthog-js/pull/4980) [`7e07338`](https://github.com/PostHog/posthog-js/commit/7e0733809584c9d02aa0b50067c3f4c7fc6b8c1a) Thanks [@posthog](https://github.com/apps/posthog)! - Capture the document navigation timing in the replay network waterfall when recording starts after the page has loaded, and stop recording a partial duplicate of that entry when recording starts while the page is still loading
+  (2026-09-18)
+
 ## 1.434.0
 
 ### Minor Changes
