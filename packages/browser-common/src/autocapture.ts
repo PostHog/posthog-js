@@ -1,6 +1,7 @@
 import type { Client } from './client'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
+import type { ExtensionToken } from './token'
 import { addEventListener, each, extend } from './utils/general-utils'
 import {
     autocaptureCompatibleElements,
@@ -302,8 +303,10 @@ export function autocapturePropertiesForElement(
     return { props, target }
 }
 
+export const AutocaptureExtension = 'autocapture' as ExtensionToken<Autocapture>
+
 export class Autocapture implements Extension {
-    readonly name: string = 'autocapture'
+    readonly name = AutocaptureExtension
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _hasReceivedConfigResponse: boolean = false
