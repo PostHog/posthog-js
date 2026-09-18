@@ -62,6 +62,6 @@
         "jsdom": "catalog:",
         "vitest": "catalog:",
         "@ampproject/remapping": "2.3.0",
-        "typescript-legacy": "npm:typescript@5.8.2"
+        "typescript-legacy": "catalog:"
     }
 }

@@ -59,7 +59,7 @@
         "@rslib/core": "catalog:",
         "esbuild": "^0.25.0",
         "typescript": "catalog:native",
-        "typescript-legacy": "npm:typescript@5.8.2",
+        "typescript-legacy": "catalog:",
         "vitest": "catalog:"
     }
 }

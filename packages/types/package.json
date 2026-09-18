@@ -41,6 +41,6 @@
         "@rslib/core": "catalog:",
         "typescript": "catalog:native",
         "vitest": "catalog:",
-        "typescript-legacy": "npm:typescript@5.8.2"
+        "typescript-legacy": "catalog:"
     }
 }

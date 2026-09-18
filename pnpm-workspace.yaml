@@ -36,6 +36,7 @@ catalog:
   tsdown: 0.22.14
   tslib: ^2.5.0
   typescript: 5.8.2
+  typescript-legacy: npm:typescript@5.8.2
   vite: ^8.2.2
   vitest: ^1.6.1
 

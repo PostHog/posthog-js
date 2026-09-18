@@ -87,6 +87,9 @@ catalogs:
     typescript:
       specifier: 5.8.2
       version: 5.8.2
+    typescript-legacy:
+      specifier: npm:typescript@5.8.2
+      version: 5.8.2
     vite:
       specifier: ^8.2.2
       version: 8.2.2
@@ -526,7 +529,7 @@ importers:
         specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
-        specifier: npm:typescript@5.8.2
+        specifier: 'catalog:'
         version: typescript@5.8.2
       vitest:
         specifier: 'catalog:'
@@ -658,7 +661,7 @@ importers:
         specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
-        specifier: npm:typescript@5.8.2
+        specifier: 'catalog:'
         version: typescript@5.8.2
       vitest:
         specifier: 'catalog:'
@@ -978,7 +981,7 @@ importers:
         specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
-        specifier: npm:typescript@5.8.2
+        specifier: 'catalog:'
         version: typescript@5.8.2
       vitest:
         specifier: 'catalog:'
@@ -1627,7 +1630,7 @@ importers:
         specifier: catalog:native
         version: 7.0.2
       typescript-legacy:
-        specifier: npm:typescript@5.8.2
+        specifier: 'catalog:'
         version: typescript@5.8.2
       vitest:
         specifier: 'catalog:'
