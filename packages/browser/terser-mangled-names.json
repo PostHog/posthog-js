@@ -760,6 +760,7 @@
         "_resyncTimer",
         "_retryAfter",
         "_retryQueue",
+        "_rotationHoldShipsOnUnload",
         "_rrwebError",
         "_rrwebStartAttempted",
         "_runBeforeSend",
