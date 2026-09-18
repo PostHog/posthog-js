@@ -46,7 +46,7 @@
         "rolldown-plugin-dts": "catalog:",
         "vite": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "catalog:"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "@posthog/rrweb-types": "workspace:*",

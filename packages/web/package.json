@@ -40,6 +40,6 @@
     "jsdom": "catalog:",
     "vitest": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:native"
   }
 }

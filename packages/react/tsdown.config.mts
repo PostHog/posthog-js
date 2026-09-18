@@ -1,6 +1,6 @@
 import * as remappingModule from '@ampproject/remapping'
 import type { SourceMap, SourceMapInput, SourceMapLoader } from '@ampproject/remapping'
-import ts from 'typescript'
+import ts from 'typescript-legacy'
 import { defineConfig, type CopyEntry, type CopyOptions, type Rolldown, type UserConfig } from 'tsdown'
 
 const remapping = remappingModule.default as unknown as (

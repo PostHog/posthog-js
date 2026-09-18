@@ -48,7 +48,9 @@ it.each(['@posthog/rrdom', '@posthog/rrweb-snapshot'])(
                     files: ['consumer.mts', 'consumer.cts'],
                 })
             )
-            const result = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc')], {
+            const compilerManifest = require.resolve('typescript/package.json')
+            const compiler = path.resolve(path.dirname(compilerManifest), require(compilerManifest).bin.tsc)
+            const result = spawnSync(process.execPath, [compiler], {
                 cwd: fixture,
                 encoding: 'utf8',
             })

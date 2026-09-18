@@ -43,7 +43,7 @@
         "@posthog-tooling/rrweb-build": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:"
+        "typescript": "catalog:native"
     },
     "peerDependencies": {
         "@posthog/rrweb": "workspace:*"

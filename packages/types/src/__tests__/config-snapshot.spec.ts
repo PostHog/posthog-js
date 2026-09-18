@@ -1,4 +1,4 @@
-import ts from 'typescript'
+import ts from 'typescript-legacy'
 import path from 'path'
 
 type ProcessedType = string | Record<string, string | string[] | Record<string, any> | any[]> | ProcessedType[]

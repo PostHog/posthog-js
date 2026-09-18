@@ -38,7 +38,7 @@
     "devDependencies": {
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "catalog:native",
         "vite": "catalog:"
     },
     "peerDependencies": {

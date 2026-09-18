@@ -63,7 +63,7 @@
     "devDependencies": {
         "vite": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "catalog:"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "fflate": "^0.4.4",

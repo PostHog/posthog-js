@@ -49,7 +49,7 @@
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:native"
   },
   "keywords": [
     "posthog",
