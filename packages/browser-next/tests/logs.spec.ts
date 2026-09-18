@@ -312,6 +312,83 @@ describe('logs', () => {
         expect(sendBeacon).toHaveBeenCalledOnce()
     })
 
+    it.each(['accepted', 'rejected', 'unavailable'] as const)(
+        'hands off logs on pagehide during pending shutdown when Beacon is %s',
+        async (beacon) => {
+            const { window } = browser()
+            const add = vi.spyOn(window, 'addEventListener')
+            const remove = vi.spyOn(window, 'removeEventListener')
+            const sendBeacon = vi.fn(() => beacon === 'accepted')
+            const fetch = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) => new Promise<Response>(() => {}))
+            const client = await create({
+                navigator: beacon === 'unavailable' ? false : { sendBeacon },
+                disableBotDetection: true,
+                fetch,
+                logs: { flushIntervalMs: 0 },
+            })
+            client.captureLog({ body: 'pending' })
+            const closing = client.shutdown(10)
+            expect(fetch).toHaveBeenCalledOnce()
+            try {
+                expect(fetch.mock.calls[0]![1]?.keepalive).not.toBe(true)
+                client.captureLog({ body: 'too late' })
+                expect((await client.sendRequest('/ordinary')).statusCode).toBe(0)
+                window.dispatchEvent(new Event('pagehide'))
+                if (beacon === 'accepted') {
+                    expect(sendBeacon).toHaveBeenCalledOnce()
+                    const blob = (sendBeacon.mock.calls as unknown as Array<[string, Blob]>)[0]![1]
+                    expect(records(JSON.parse(await blob.text())).map((record) => record.body)).toEqual([
+                        { stringValue: 'pending' },
+                    ])
+                    expect(fetch).toHaveBeenCalledOnce()
+                } else {
+                    expect(sendBeacon).toHaveBeenCalledTimes(beacon === 'unavailable' ? 0 : 1)
+                    expect(fetch).toHaveBeenCalledTimes(2)
+                    expect(fetch.mock.calls[1]![1]?.keepalive).toBe(true)
+                    expect(
+                        records(JSON.parse(String(fetch.mock.calls[1]![1]?.body))).map((record) => record.body)
+                    ).toEqual([{ stringValue: 'pending' }])
+                }
+            } finally {
+                await vi.advanceTimersByTimeAsync(10)
+                await closing
+            }
+            expect(fetch.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true)
+            expect(vi.getTimerCount()).toBe(0)
+            for (const [type, listener] of add.mock.calls) {
+                expect(
+                    remove.mock.calls.some(([removedType, removed]) => removedType === type && removed === listener)
+                ).toBe(true)
+            }
+            const attempts = fetch.mock.calls.length
+            const beacons = sendBeacon.mock.calls.length
+            window.dispatchEvent(new Event('pagehide'))
+            expect(fetch).toHaveBeenCalledTimes(attempts)
+            expect(sendBeacon).toHaveBeenCalledTimes(beacons)
+        }
+    )
+
+    it('does not dispatch denied pagehide work or revive it after consent returns', async () => {
+        const { window } = browser()
+        const sendBeacon = vi.fn(() => true)
+        const fetch = vi.fn(async () => new Response('{}'))
+        const client = await create({ navigator: { sendBeacon }, disableBotDetection: true, fetch })
+        client.captureLog({ body: 'withdrawn' })
+        client.optOut()
+        window.dispatchEvent(new Event('pagehide'))
+        expect(sendBeacon).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+        client.optIn()
+        window.dispatchEvent(new Event('pagehide'))
+        await client.flush()
+        expect(sendBeacon).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+        await client.dispose()
+        window.dispatchEvent(new Event('pagehide'))
+        expect(sendBeacon).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+    })
+
     it('contains synchronous transport failures and retires denied in-flight work', async () => {
         let finish!: (response: Response) => void
         const fetch = vi.fn(
