@@ -6,16 +6,23 @@ import { isUndefined } from '@posthog/core'
 import Mock = vi.Mock
 import {
     SESSION_RECORDING_REMOTE_CONFIG,
-    CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_OVERRIDE_SAMPLING,
+    SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
     RECORDING_REMOTE_CONFIG_TTL_MS,
-    RECORDING_BUFFER_TIMEOUT,
-    RECORDING_MAX_EVENT_SIZE,
 } from '../../src/replay/constants'
 import { createDisposable } from '../../src/disposable'
 import { SessionRecording } from '../../src/replay/session-recording'
-import { LazyLoadedSessionRecording } from '../../src/replay/external/lazy-loaded-session-recorder'
+import {
+    LazyLoadedSessionRecording,
+    RECORDING_BUFFER_TIMEOUT,
+    RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_MAX_EVENT_SIZE,
+    SEVEN_MEGABYTES,
+} from '../../src/replay/external/lazy-loaded-session-recorder'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -23,6 +30,8 @@ import {
 } from '../../src/replay/external/sessionrecording-utils'
 import {
     EventType,
+    IncrementalSource,
+    type pluginEvent,
     type customEvent,
     type metaEvent,
     type fullSnapshotEvent,
@@ -33,6 +42,63 @@ import {
 import type { RemoteConfigResult } from '../../src/types/remote-config'
 import type { RemoteConfig } from '../../src/replay/types'
 import { createReplayClient } from './helpers/replay-client'
+
+const EMPTY_BUFFER = {
+    data: [],
+    sizes: [],
+    sessionId: null,
+    size: 0,
+    windowId: null,
+}
+
+const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
+    ({
+        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+        data: {
+            source: IncrementalSource.StyleDeclaration,
+        },
+        ...event,
+    }) as incrementalSnapshotEvent
+
+const createIncrementalMutationEvent = (mutations?: { texts: any[] }) => {
+    const mutationData = {
+        texts: mutations?.texts || [],
+        attributes: [],
+        removes: [],
+        adds: [],
+        isAttachIframe: true,
+    }
+    return createIncrementalSnapshot({
+        data: {
+            source: 0,
+            ...mutationData,
+        },
+    })
+}
+
+const createIncrementalStyleSheetEvent = (mutations?: { adds: any[] }) => {
+    return createIncrementalSnapshot({
+        data: {
+            // doesn't need to be a valid style sheet event
+            source: 8,
+            id: 1,
+            styleId: 1,
+            removes: [],
+            adds: mutations.adds || [],
+            replace: 'something',
+            replaceSync: 'something',
+        },
+    })
+}
+
+const createPluginSnapshot = (event = {}): pluginEvent => ({
+    type: EventType.Plugin,
+    data: {
+        plugin: 'plugin',
+        payload: {},
+    },
+    ...event,
+})
 
 const originalLocation = window.location
 const assignableWindow = window as Window & {
@@ -116,6 +182,18 @@ describe('Lazy SessionRecording', () => {
             version: 'fake',
             wasMaxDepthReached: vi.fn(() => false),
             resetMaxDepthState: vi.fn(),
+            getLastSnapshotCost: vi.fn(() => null),
+            getMutationCost: vi.fn(() => ({ slowestBatchMs: 0 })),
+            getDeferredStylesheetStats: vi.fn(() => ({
+                deferredCount: 0,
+                failedCount: 0,
+                abandonedCount: 0,
+                totalMs: 0,
+                slowestSliceMs: 0,
+            })),
+            getDiscardedDurationSamples: vi.fn(() => 0),
+            getObserverInitFailures: vi.fn(() => undefined),
+            resetSnapshotCostState: vi.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: vi.fn(),
@@ -145,6 +223,7 @@ describe('Lazy SessionRecording', () => {
 
     afterEach(() => {
         sessionRecording.dispose({ discardBufferedEvents: true })
+        fixture.controller.dispose({ discardBufferedEvents: true })
         fixture.client.dispose()
         delete (window as any).__PosthogExtensions__
         delete assignableWindow.POSTHOG_DEBUG
@@ -2247,7 +2326,7 @@ describe('Lazy SessionRecording', () => {
                     clientSide: boolean | undefined,
                     expected: boolean
                 ) => {
-                    fixture.client.kv.set({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: serverSide })
+                    fixture.client.kv.set({ ['$console_log_recording_enabled_server_side']: serverSide })
                     options.consoleLogRecordingEnabled = clientSide
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_isConsoleLogCaptureEnabled']).toBe(
                         expected
@@ -3132,6 +3211,2992 @@ describe('Lazy SessionRecording', () => {
 
             expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
+        })
+    })
+    describe('URL masking with maskCapturedNetworkRequestFn', () => {
+        it('masks personal data query params and hashes in rrweb meta URLs', () => {
+            options.maskPersonalData = true
+            options.stripUrlHash = true
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+            releaseInteractionHold()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?gclid=secret123&other=value#section' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?gclid=<masked>&other=value',
+                            },
+                        }),
+                    ],
+                })
+            )
+        })
+
+        it('uses maskCapturedNetworkRequestFn to mask page URLs when configured', () => {
+            const maskFn = vi.fn((data) => {
+                // CapturedNetworkRequest uses 'name' for the URL
+                if (data.name) {
+                    return { ...data, name: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            options.recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+            releaseInteractionHold()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123&other=value' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123&other=value',
+                })
+            )
+
+            // Verify the URL was masked in the captured snapshot
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]&other=value',
+                            },
+                        }),
+                    ],
+                })
+            )
+        })
+
+        it('falls back to deprecated maskNetworkRequestFn when maskCapturedNetworkRequestFn is not set', () => {
+            const deprecatedMaskFn = vi.fn((data) => {
+                if (data.url) {
+                    return { ...data, url: data.url.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            options.recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+            releaseInteractionHold()
+
+            // Emit a meta event with a URL containing a sensitive token
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the deprecated masking function was called
+            expect(deprecatedMaskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Verify the URL was masked
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                })
+            )
+        })
+
+        it('prefers maskCapturedNetworkRequestFn over deprecated maskNetworkRequestFn', () => {
+            const newMaskFn = vi.fn((data) => ({ ...data, name: 'masked-by-new' }))
+            const deprecatedMaskFn = vi.fn((data) => ({ ...data, url: 'masked-by-deprecated' }))
+
+            options.recording.maskCapturedNetworkRequestFn = newMaskFn
+            options.recording.maskNetworkRequestFn = deprecatedMaskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+            releaseInteractionHold()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Should only call the new function, not the deprecated one
+            expect(newMaskFn).toHaveBeenCalled()
+            expect(deprecatedMaskFn).not.toHaveBeenCalled()
+
+            // Should use the result from the new function
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'masked-by-new',
+                            },
+                        }),
+                    ],
+                })
+            )
+        })
+
+        it('supports backward compatibility when maskCapturedNetworkRequestFn returns url instead of name', () => {
+            // Some users might mistakenly return 'url' property instead of 'name'
+            const maskFn = vi.fn((data) => {
+                if (data.name) {
+                    return { url: data.name.replace(/token=[^&]+/, 'token=[REDACTED]') }
+                }
+                return data
+            })
+
+            options.recording.maskCapturedNetworkRequestFn = maskFn
+
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/' },
+                })
+            )
+            sessionRecording['_onScriptLoaded']()
+            releaseInteractionHold()
+
+            _emit(
+                createMetaSnapshot({
+                    data: { href: 'https://example.com/?token=secret123' },
+                })
+            )
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify the masking function was called with 'name' property
+            expect(maskFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/?token=secret123',
+                })
+            )
+
+            // Should still work even though user returned 'url' instead of 'name'
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $snapshot_data: [
+                        expect.objectContaining({
+                            data: {
+                                href: 'https://example.com/?token=[REDACTED]',
+                            },
+                        }),
+                    ],
+                })
+            )
+        })
+    })
+
+    describe('$snapshot_host stamping', () => {
+        const startRecorder = () => {
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording['_onScriptLoaded']()
+        }
+
+        it('stamps the current hostname on every flushed $snapshot', () => {
+            fakeNavigateTo('https://sub.example.com/some/path?query=1')
+            startRecorder()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const snapshotCalls = (fixture.recorderHost.captureSnapshot as vi.Mock).mock.calls.filter(
+                (call) => call[0] === '/s/'
+            )
+            expect(snapshotCalls.length).toBe(2)
+            snapshotCalls.forEach((call) => {
+                expect(call[1].$snapshot_host).toBe('sub.example.com')
+            })
+        })
+
+        it('stamps the host of the masked URL when a masking function rewrites it', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            options.recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: 'https://masked.example.net/',
+            })
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({ $snapshot_host: 'masked.example.net' })
+            )
+        })
+
+        it('omits the property when masking removes the URL', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            options.recording.maskCapturedNetworkRequestFn = () => null
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.not.objectContaining({ $snapshot_host: expect.anything() })
+            )
+        })
+
+        it('omits the property when the masked URL does not parse', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            options.recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: 'not a url',
+            })
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.not.objectContaining({ $snapshot_host: expect.anything() })
+            )
+        })
+    })
+
+    describe('V2 Trigger Groups Integration', () => {
+        it('describes pending conditions within trigger groups', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'error-group',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'trigger group "Error Tracking": event condition not matched',
+            ])
+        })
+
+        it('uses the active snapshot interval immediately after a trigger group matches', () => {
+            vi.useFakeTimers()
+            try {
+                options.recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            version: 2,
+                            triggerGroups: [
+                                {
+                                    id: 'error-group',
+                                    name: 'Error Tracking',
+                                    sampleRate: 1.0,
+                                    conditions: {
+                                        matchType: 'any',
+                                        events: [{ name: '$exception' }],
+                                    },
+                                },
+                            ],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = vi.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                fixture.client.publishEvent('$exception')
+                expect(sessionRecording.status).toBe('sampled')
+
+                vi.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                vi.useRealTimers()
+            }
+        })
+
+        it('registers session properties when trigger group matches and is sampled', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'error-group',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Trigger the event
+            fixture.client.publishEvent('$exception')
+
+            // Should transition to sampled
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Verify session properties were registered
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: 'error-group',
+                            name: 'Error Tracking',
+                            matched: true,
+                            sampled: true,
+                        }),
+                    ]),
+                })
+            )
+        })
+
+        it('respects URL blocklist even when trigger group matches', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'all-events',
+                                name: 'All Events',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$pageview' }],
+                                },
+                            },
+                        ],
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/admin',
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Navigate to blocked URL
+            fakeNavigateTo('https://test.com/admin')
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            // Trigger event on blocked URL
+            fixture.client.publishEvent('$pageview')
+
+            // Should be PAUSED, not SAMPLED (blocklist takes priority)
+            expect(sessionRecording.status).toBe('paused')
+        })
+
+        it('tracks multiple trigger groups with union behavior', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'errors',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                            {
+                                id: 'pageviews',
+                                name: 'Pageview Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$pageview' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            // Trigger both groups
+            fixture.client.publishEvent('$exception')
+            fixture.client.publishEvent('$pageview')
+
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Should track both groups
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({ id: 'errors', sampled: true }),
+                        expect.objectContaining({ id: 'pageviews', sampled: true }),
+                    ]),
+                })
+            )
+
+            // Find the call with the trigger groups property
+            const callsWithProperty = registerSpy.mock.calls.filter(
+                (call) => call[0].$sdk_debug_replay_matched_recording_trigger_groups
+            )
+            expect(callsWithProperty.length).toBeGreaterThan(0)
+            const groups =
+                callsWithProperty[callsWithProperty.length - 1][0].$sdk_debug_replay_matched_recording_trigger_groups
+            expect(groups).toHaveLength(2)
+        })
+
+        it('triggers immediately when trigger group has empty conditions', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'all-sessions',
+                                name: 'All Sessions',
+                                sampleRate: 1.0,
+                                minDurationMs: 0,
+                                conditions: {
+                                    matchType: 'any',
+                                    // Empty conditions - no events, urls, or flags
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            // Should immediately trigger without needing any events
+            // Status should be sampled (not buffering)
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Verify session properties were registered
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: 'all-sessions',
+                            name: 'All Sessions',
+                            matched: true,
+                            sampled: true,
+                        }),
+                    ]),
+                })
+            )
+        })
+
+        it('does not reuse a sampled-in trigger group decision when sampleRate is lowered to 0', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
+
+            sessionRecording.stopRecording()
+            ;(fixture.recorderHost.captureSnapshot as vi.Mock).mockClear()
+            sessionRecording = new SessionRecording(() => options)
+            sessionRecording.setup(fixture.client)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            {
+                name: 'missing sampleRate',
+                storedDecision: { sessionId, sampled: true },
+            },
+            {
+                name: 'non-numeric sampleRate',
+                storedDecision: { sessionId, sampleRate: '1.0', sampled: true },
+            },
+        ])('does not reuse a trigger group decision with $name', ({ storedDecision }) => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            fixture.client.kv.set({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: storedDecision,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 0.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 0,
+                sampled: false,
+            })
+        })
+
+        it('does not reuse a legacy sampled-out trigger group decision when sampleRate is raised to 1', () => {
+            const group = {
+                id: 'all-sessions',
+                name: 'All Sessions',
+                conditions: {
+                    matchType: 'any' as const,
+                },
+            }
+
+            fixture.client.kv.set({
+                [SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id]: false,
+            })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [{ ...group, sampleRate: 1.0 }],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
+                sessionId,
+                sampleRate: 1,
+                sampled: true,
+            })
+        })
+
+        it('respects sampleRate < 1.0 and samples out when triggered', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'low-sample-group',
+                                name: 'Low Sample Rate',
+                                sampleRate: 0.0, // Always samples out
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: 'test_event' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Trigger the event
+            fixture.client.publishEvent('test_event')
+
+            // Should be DISABLED (matched but sampled out = don't record)
+            expect(sessionRecording.status).toBe('disabled')
+
+            // Verify session properties show matched: true, sampled: false (for debugging)
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: 'low-sample-group',
+                            name: 'Low Sample Rate',
+                            matched: true,
+                            sampled: false,
+                        }),
+                    ]),
+                })
+            )
+        })
+
+        it('matchType all requires ALL conditions to match before triggering', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'checkout-errors',
+                                name: 'Checkout Errors',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'all',
+                                    events: [{ name: 'error' }],
+                                    urls: [{ url: '/checkout', matching: 'regex' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Navigate to matching URL first
+            fakeNavigateTo('https://test.com/checkout')
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            // URL matches but no event yet - should still be buffering
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Fire event on matching URL (both conditions now met)
+            fixture.client.publishEvent('error')
+
+            // Now should be sampled (ALL conditions met)
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Verify session properties
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: 'checkout-errors',
+                            name: 'Checkout Errors',
+                            matched: true,
+                            sampled: true,
+                        }),
+                    ]),
+                })
+            )
+        })
+
+        it('respects minDurationMs and delays full recording until duration passes', () => {
+            const registerSpy = vi.spyOn(fixture.recorderHost, 'registerSessionProperties')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'long-session-group',
+                                name: 'Long Sessions',
+                                sampleRate: 1.0,
+                                minDurationMs: 1500,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: 'test_event' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Trigger the event
+            fixture.client.publishEvent('test_event')
+
+            // Should be sampled (matched and sampled - status doesn't depend on minDuration)
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Verify session properties show matched and sampled
+            expect(registerSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    $sdk_debug_replay_matched_recording_trigger_groups: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: 'long-session-group',
+                            name: 'Long Sessions',
+                            matched: true,
+                            sampled: true,
+                        }),
+                    ]),
+                })
+            )
+
+            // Send events with timestamp below minimum duration
+            const { sessionStartTimestamp } = fixture.client.session
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+
+            // Still below minimum - buffer shouldn't flush yet
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(true)
+            // Status remains 'sampled' - minDuration doesn't affect status, only buffer flushing
+
+            // Emit event that passes minimum duration
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1600 }))
+
+            // Now duration is past minimum, should transition to sampled
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(1600)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(false)
+        })
+
+        it('blocks event trigger activation when per-event property filters fail', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-errors',
+                                name: 'High Value Errors',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase_error',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but property filter fails
+            fixture.client.publishEvent('purchase_error', { amount: 50 })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches and property filter passes
+            fixture.client.publishEvent('purchase_error', { amount: 200 })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('treats multiple same-name event entries as a disjunction of property filters', () => {
+            // Regression: A group may list the same event name twice with different property
+            // filters to express OR between clauses (e.g. "purchase amount > 100" OR
+            // "purchase by a VIP"). An earlier .find()-based implementation only ever
+            // evaluated the first clause, making subsequent same-name entries unreachable.
+            fixture.client.kv.set({ $stored_person_properties: { tier: 'vip' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-or-vip',
+                                name: 'High Value Or VIP Purchases',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'tier', type: 'person', operator: 'exact', value: 'vip' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // First clause (amount > 100) fails, but second clause (tier = vip) matches.
+            // With .find() the first entry would be chosen and the group would never activate.
+            fixture.client.publishEvent('purchase', { amount: 50 })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('does not activate when all same-name event clauses fail', () => {
+            // Companion regression: when no same-name clause passes, activation is still blocked.
+            fixture.client.kv.set({ $stored_person_properties: { tier: 'free' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'high-value-or-vip',
+                                name: 'High Value Or VIP Purchases',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'tier', type: 'person', operator: 'exact', value: 'vip' },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Neither clause matches: amount is 50 (< 100) and tier is free (not vip).
+            fixture.client.publishEvent('purchase', { amount: 50 })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // A later event that matches the second clause should still activate.
+            fixture.client.kv.set({ $stored_person_properties: { tier: 'vip' } })
+            fixture.client.publishEvent('purchase', { amount: 50 })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('blocks trigger activation when group-level property filters fail', () => {
+            // Set person properties
+            fixture.client.kv.set({ $stored_person_properties: { country: 'DE' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-only',
+                                name: 'US Only',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Event name matches but group-level person property fails (country is DE, not US)
+            fixture.client.publishEvent('$exception')
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Update person properties to US
+            fixture.client.kv.set({ $stored_person_properties: { country: 'US' } })
+
+            // Now it should match
+            fixture.client.publishEvent('$exception')
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('checks both group-level and per-event properties (both must pass)', () => {
+            fixture.client.kv.set({ $stored_person_properties: { country: 'US' } })
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'us-high-value',
+                                name: 'US High Value',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [
+                                        {
+                                            name: 'purchase',
+                                            properties: [
+                                                { key: 'amount', type: 'event', operator: 'gt', value: '100' },
+                                            ],
+                                        },
+                                    ],
+                                    properties: [{ key: 'country', type: 'person', operator: 'exact', value: 'US' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Group passes (US) but per-event fails (amount 50)
+            fixture.client.publishEvent('purchase', { amount: 50 })
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Both pass
+            fixture.client.publishEvent('purchase', { amount: 200 })
+            expect(sessionRecording.status).toBe('sampled')
+        })
+
+        it('stops checking triggers after initial buffer flush (performance optimization)', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'group-1',
+                                name: 'Group 1',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: 'trigger_event' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+            // Trigger the event
+            fixture.client.publishEvent('trigger_event')
+            expect(sessionRecording.status).toBe('sampled')
+
+            // Add some data to buffer
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            // Manually trigger flush complete (simulating post-flush state)
+            // The actual call happens inside _flushBuffer when V2 is active
+            lazyRecorder['_strategy']?.onFlushComplete()
+
+            // Verify the optimization flag is set
+            expect(lazyRecorder['_strategy']?.['_hasCompletedInitialFlush']).toBe(true)
+
+            // Emit another event - the strategy should short-circuit and stop checking
+            // We can't directly verify the hook was removed since it's internal to the strategy,
+            // but we can verify the status doesn't change (optimization working)
+            const statusBefore = sessionRecording.status
+            fixture.client.publishEvent('another_event')
+            const statusAfter = sessionRecording.status
+
+            // Status should remain the same (no new trigger processing)
+            expect(statusAfter).toBe(statusBefore)
+        })
+    })
+
+    describe('sampling', () => {
+        it('does not emit to capture if the sample rate is 0', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                })
+            )
+            expect(sessionRecording.status).toBe('disabled')
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+        })
+
+        it('does emit to capture if the sample rate is null', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: null },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('active')
+        })
+
+        it('stores excluded session when excluded', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(false)
+        })
+
+        it.each([
+            {
+                scenario: 'keeps stored sampled-in decisions when the sampleRate is unchanged',
+                setup: () => {
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '1.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: 1,
+            },
+            {
+                scenario: 'resamples stored sampled-in decisions when the sampleRate is lowered to 0',
+                setup: () => {
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: 1,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => '!' + sessionId,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'resamples legacy sampled-in decisions without a stored sampleRate',
+                setup: () => {
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'disabled',
+                expectedIsSampled: () => '!' + sessionId,
+                expectedSampleRate: 0,
+            },
+            {
+                scenario: 'keeps already-applied sampling overrides when the later sampleRate is 0',
+                setup: () => {
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_IS_SAMPLED]: sessionId,
+                        [SESSION_RECORDING_SAMPLE_RATE]: null,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+            {
+                scenario: 'keeps explicit sampling overrides when sampleRate is 0',
+                setup: () => {
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
+                    })
+                },
+                sampleRate: '0.00',
+                expectedStatus: 'sampled',
+                expectedIsSampled: () => sessionId,
+                expectedSampleRate: null,
+            },
+        ])('$scenario', ({ setup, sampleRate, expectedStatus, expectedIsSampled, expectedSampleRate }) => {
+            setup()
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate },
+                })
+            )
+
+            expect(sessionRecording.status).toBe(expectedStatus)
+            expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
+            expect(fixture.client.kv.get(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
+        })
+
+        it('does not reuse a sampled-in decision when sampleRate is lowered to 0 for URL + linked flag ALL match', () => {
+            const sessionRecordingConfig = {
+                endpoint: '/s/',
+                linkedFlag: 'the-flag-key',
+                urlTriggers: [{ url: 'start-on-me', matching: 'regex' as const }],
+                triggerMatchType: 'all' as const,
+            }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '1.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.({ 'the-flag-key': true })
+            fakeNavigateTo('https://test.com/start-on-me')
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+
+            sessionRecording.stopRecording()
+            ;(fixture.recorderHost.captureSnapshot as vi.Mock).mockClear()
+            sessionRecording = new SessionRecording(() => options)
+            sessionRecording.setup(fixture.client)
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { ...sessionRecordingConfig, sampleRate: '0.00' },
+                })
+            )
+
+            onFeatureFlagsCallback?.({ 'the-flag-key': true })
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording.status).toBe('disabled')
+            expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+        })
+
+        it('does emit to capture if the sample rate is 1', () => {
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '1.00' },
+                })
+            )
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            expect(sessionRecording.status).toBe('sampled')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isSampled']).toStrictEqual(true)
+
+            // don't wait two seconds for the flush timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalled()
+        })
+
+        it('turning sample rate to null, means sessions are no longer sampled out', () => {
+            // set sample rate to 0, i.e. no sessions will run
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+            )
+            // then check that a session is sampled out (stored tagged with its session id)
+            expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+            expect(sessionRecording.status).toBe('disabled')
+
+            // then turn sample rate to null
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
+            )
+
+            // then check that a session is no longer sampled out (i.e. storage is cleared not false)
+            expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
+            expect(sessionRecording.status).toBe('active')
+        })
+
+        describe('legacy boolean true in persistence', () => {
+            it.each([
+                ['0% sample rate', '0.00', 'disabled'],
+                ['100% sample rate', '1.00', 'sampled'],
+            ] as const)(
+                'clears legacy true and makes fresh sampling decision with %s',
+                (_name, sampleRate, expectedStatus) => {
+                    // simulate legacy SDK having stored boolean true
+                    fixture.client.kv.set({
+                        [SESSION_RECORDING_IS_SAMPLED]: true,
+                    })
+                    expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe(true)
+
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate } })
+                    )
+
+                    // legacy true should be treated as unknown and a fresh decision made
+                    expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
+                    expect(sessionRecording.status).toBe(expectedStatus)
+                }
+            )
+
+            it('legacy true with 0% sample rate does not record even if session has not changed', () => {
+                // simulate legacy SDK having stored boolean true
+                fixture.client.kv.set({
+                    [SESSION_RECORDING_IS_SAMPLED]: true,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+
+                // should be disabled despite legacy true, because 0% sample rate
+                expect(sessionRecording.status).toBe('disabled')
+                expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe('!' + sessionId)
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['a legacy untagged false', false],
+                ["a different session's sampled-out decision", '!some-previous-session-id'],
+                ["a different session's sampled-in decision", 'some-previous-session-id'],
+            ])('re-decides when %s is stored', (_name, storedValue) => {
+                // a decision that cannot be tied to the current session must not be
+                // inherited (e.g. page load after session expiry, or legacy SDK formats)
+                fixture.client.kv.set({
+                    [SESSION_RECORDING_IS_SAMPLED]: storedValue,
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '1.00' } })
+                )
+
+                // at 100% the fresh decision for this session is sampled in,
+                // proving the stale value was not reused
+                expect(sessionRecording.status).toBe('sampled')
+                expect(fixture.client.kv.get(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
+            })
+        })
+    })
+
+    describe('recording', () => {
+        it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            assignableWindow.__PosthogExtensions__.rrweb.wasMaxDepthReached.mockReturnValue(true)
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $snapshot_max_depth_exceeded: true,
+            })
+        })
+
+        it('reports the slowest full snapshot cost in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const rrweb = assignableWindow.__PosthogExtensions__.rrweb
+            const cost = (durationMs: number) => ({
+                durationMs,
+                stylesheetMs: durationMs / 2,
+                nodeCount: 1234,
+                cssRuleCount: 42_000,
+                nonDeferrableCssRuleCount: 30_000,
+                deferredStylesheetCount: 3,
+            })
+
+            rrweb.getLastSnapshotCost.mockReturnValue(cost(3918.4))
+            _emit(createFullSnapshot())
+            // a later, cheaper snapshot must not displace the expensive one - the worst
+            // snapshot is the freeze a user would actually have noticed
+            rrweb.getLastSnapshotCost.mockReturnValue(cost(12))
+            _emit(createFullSnapshot())
+
+            rrweb.getMutationCost.mockReturnValue({ slowestBatchMs: 240.6 })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_slowest_full_snapshot_ms: 3918,
+                $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: 1959,
+                $sdk_debug_replay_slowest_full_snapshot_nodes: 1234,
+                $sdk_debug_replay_slowest_full_snapshot_css_rules: 42_000,
+                $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable: 30_000,
+                $sdk_debug_replay_slowest_mutation_batch_ms: 241,
+            })
+        })
+
+        it('reports cumulative deferred stylesheet counters and durations in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // cumulative across the session, so a fast first snapshot's deferrals are
+            // not hidden by a slower snapshot that deferred nothing
+            assignableWindow.__PosthogExtensions__.rrweb.getDeferredStylesheetStats.mockReturnValue({
+                deferredCount: 5,
+                failedCount: 1,
+                abandonedCount: 2,
+                totalMs: 123.4,
+                slowestSliceMs: 45.6,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_deferred_stylesheets: 5,
+                $sdk_debug_replay_deferred_stylesheets_failed: 1,
+                $sdk_debug_replay_deferred_stylesheets_abandoned: 2,
+                $sdk_debug_replay_deferred_stylesheet_ms: 123,
+                $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: 46,
+            })
+        })
+
+        it('reports discarded duration samples in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // samples thrown away because their window straddled a tab suspension or
+            // exceeded the plausibility cap (see rrweb-snapshot snapshot-cost.ts)
+            assignableWindow.__PosthogExtensions__.rrweb.getDiscardedDurationSamples.mockReturnValue(3)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_discarded_duration_samples: 3,
+            })
+        })
+
+        it('reports observers that failed to start in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // the recorder swallows these errors and keeps every other health signal
+            // green, so this property is the only sign the frame records less than it should
+            assignableWindow.__PosthogExtensions__.rrweb.getObserverInitFailures.mockReturnValue([
+                'input',
+                'plugin:rrweb/console@1',
+            ])
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_observer_init_failures: ['input', 'plugin:rrweb/console@1'],
+            })
+        })
+
+        it('picks up the snapshot cost on a microtask when the emit-time read is stale', async () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const rrweb = assignableWindow.__PosthogExtensions__.rrweb
+            // rrweb emits the FullSnapshot partway through takeFullSnapshot, before its
+            // cost window closes, so the synchronous read can see no cost at all
+            rrweb.getLastSnapshotCost.mockReturnValue(null)
+            _emit(createFullSnapshot())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+
+            const cost = {
+                durationMs: 100,
+                stylesheetMs: 10,
+                nodeCount: 5,
+                cssRuleCount: 7,
+                nonDeferrableCssRuleCount: 2,
+                deferredStylesheetCount: 0,
+            }
+            rrweb.getLastSnapshotCost.mockReturnValue(cost)
+            await Promise.resolve()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toEqual(cost)
+        })
+
+        it('resets snapshot cost tracking on session change', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot'] = {
+                durationMs: 3918,
+                stylesheetMs: 3000,
+                nodeCount: 1,
+                cssRuleCount: 1,
+                nonDeferrableCssRuleCount: 0,
+                deferredStylesheetCount: 0,
+            }
+
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
+        })
+
+        it('accumulates throttler-dropped attribute mutations onto the debug property', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+            const onDropped = lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!
+
+            onDropped(3)
+            onDropped(2)
+
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
+        })
+
+        it('resets the throttled mutation drop count on session change', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+            // Drive the count through the throttler's own callback, so the reset is proven against
+            // the path that really increments it rather than against a hand-set field.
+            lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!(5)
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            // the count is cumulative across the session, so the new session starts at zero
+            expect(
+                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
+                    '$sdk_debug_replay_throttled_mutations_dropped'
+                ]
+            ).toEqual(0)
+        })
+
+        it('resets $snapshot_max_depth_exceeded on session change', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
+
+            // simulate session id change callback
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetMaxDepthState).toHaveBeenCalled()
+        })
+
+        it('flushes buffer if the size of the buffer hits the limit', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
+
+            // Another big event means the old data will be flushed
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // The new event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 })
+        })
+
+        it('maintains the buffer if the recording is buffering', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['waiting_for_an_event_means_we_are_buffering'],
+                    },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalled()
+
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755017 }) // the size of the big data event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(1) // full snapshot and a big event
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({ size: 755101 })
+
+            // Another big event means the old data will be flushed
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            // but the recording is still buffering
+            expect(sessionRecording.status).toBe('buffering')
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(4) // + the new event
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toMatchObject({
+                size: 755017 + 755101,
+            }) // the size of the big data event
+        })
+
+        it('session recording can be turned on and off', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(sessionRecording.started).toEqual(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).not.toEqual(undefined)
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording.started).toEqual(false)
+        })
+
+        it('completes teardown when the rrweb stop closure throws', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.started).toEqual(true)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb'] = () => {
+                throw new TypeError('h is not a function')
+            }
+
+            expect(() => sessionRecording.stopRecording()).not.toThrow()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording.started).toEqual(false)
+        })
+
+        it('can emit when there are circular references', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const someObject = { emit: 1 }
+            // the same object can be there multiple times
+            const circularObject: Record<string, any> = { emit: someObject, again: someObject }
+            // but a circular reference will be replaced
+            circularObject.circularReference = circularObject
+            _emit(createFullSnapshot(circularObject))
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                data: [
+                    {
+                        again: {
+                            emit: 1,
+                        },
+                        circularReference: {
+                            again: {
+                                emit: 1,
+                            },
+                            // the circular reference is captured to the buffer,
+                            // but it didn't explode when estimating size
+                            circularReference: expect.any(Object),
+                            emit: {
+                                emit: 1,
+                            },
+                        },
+                        data: {},
+                        emit: {
+                            emit: 1,
+                        },
+                        type: 2,
+                    },
+                ],
+                sizes: [149],
+                sessionId: sessionId,
+                size: 149,
+                windowId: 'windowId',
+            })
+        })
+    })
+    describe('snapshot cost telemetry', () => {
+        describe('when snapshot cost tracking throws', () => {
+            let logSpy: vi.SpyInstance
+            let warnSpy: vi.SpyInstance
+            let errorSpy: vi.SpyInstance
+
+            beforeEach(() => {
+                // the logger only emits to the console when debug mode is enabled
+                assignableWindow.POSTHOG_DEBUG = true
+                logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+                warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+                errorSpy = vi.spyOn(window!.console, 'error').mockImplementation(() => {})
+            })
+
+            afterEach(() => {
+                logSpy.mockRestore()
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = undefined
+            })
+
+            // the logger prepends a prefix arg, so the human-readable message is the second call arg
+            const costTrackingErrors = () =>
+                errorSpy.mock.calls.filter(
+                    (call) => typeof call[1] === 'string' && call[1].includes('could not track full snapshot cost')
+                )
+
+            it('logs the error once per recorder and keeps recording', () => {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                releaseInteractionHold()
+                ;(assignableWindow.__PosthogExtensions__.rrweb.getLastSnapshotCost as vi.Mock).mockImplementation(
+                    () => {
+                        throw new Error('telemetry bug')
+                    }
+                )
+
+                _emit(createFullSnapshot())
+                _emit(createFullSnapshot())
+
+                // visible, but only once, so the FullSnapshot hot path cannot spam
+                expect(costTrackingErrors()).toHaveLength(1)
+                // recording survives the telemetry failure
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
+            })
+        })
+    })
+
+    describe('when capturing one snapshot chunk throws', () => {
+        let logSpy: vi.SpyInstance
+        let warnSpy: vi.SpyInstance
+
+        beforeEach(() => {
+            assignableWindow.POSTHOG_DEBUG = true
+            logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+            warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
+        })
+
+        it('warns and ships the chunks after it', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'first' } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'second' } }))
+
+            const lazy = sessionRecording['_lazyLoadedSessionRecording']
+            // over the split limit, so the flush ships one chunk per buffered event
+            lazy['_buffer'].size = SEVEN_MEGABYTES
+
+            let snapshotCaptures = 0
+            ;(fixture.recorderHost.captureSnapshot as Mock).mockImplementation((eventName: string) => {
+                if (eventName === '/s/' && ++snapshotCaptures === 1) {
+                    throw new RangeError('invalid field value')
+                }
+            })
+
+            expect(() => lazy['_flushBuffer']()).not.toThrow()
+            expect(snapshotCaptures).toEqual(2)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'could not capture snapshot chunk - skipping it',
+                expect.any(RangeError)
+            )
+        })
+    })
+    describe('startIfEnabledOrStop', () => {
+        beforeEach(() => {
+            // need to cast as any to mock private methods
+            vi.spyOn(sessionRecording as any, '_lazyLoadAndStart')
+            vi.spyOn(sessionRecording, 'stopRecording')
+            vi.spyOn(sessionRecording, 'tryAddCustomEvent')
+        })
+
+        it('call _lazyLoadAndStart if its enabled', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect((sessionRecording as any)._lazyLoadAndStart).toHaveBeenCalled()
+        })
+
+        it('clears the flush buffer timer on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set a flush buffer timer
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer'] = setTimeout(() => {}, 1000)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).not.toBeUndefined()
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_flushBufferTimer']).toBeUndefined()
+        })
+
+        it('calls mutation throttler stop on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Create a mutation throttler with a spy
+            const mutationThrottler = sessionRecording['_lazyLoadedSessionRecording']['_mutationThrottler']
+            if (mutationThrottler) {
+                const stopSpy = vi.spyOn(mutationThrottler, 'stop')
+
+                sessionRecording.stopRecording()
+
+                expect(stopSpy).toHaveBeenCalled()
+            }
+        })
+
+        it('clears queued rrweb events on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Add some queued events
+            sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents'] = [
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+                { rrwebMethod: () => {}, attempt: 1, enqueuedAt: Date.now() },
+            ]
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(2)
+
+            sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toHaveLength(0)
+        })
+
+        it('clears force idle session id listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // Set up a force idle listener
+            const mockListener = vi.fn()
+            sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener'] = { dispose: mockListener }
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_forceIdleSessionIdListener']).toBeUndefined()
+        })
+
+        it('clears persist flags session listener on stop', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            // The listener is created in onRemoteConfig via _persistRemoteConfig
+            const mockListener = vi.fn()
+            sessionRecording['_persistFlagsOnSessionListener'] = { dispose: mockListener }
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeDefined()
+
+            sessionRecording.stopRecording()
+
+            expect(mockListener).toHaveBeenCalled()
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
+        })
+
+        it('sets and clears the window and document event listeners', () => {
+            const windowAddEventListener = vi.spyOn(window, 'addEventListener')
+            const documentAddEventListener = vi.spyOn(document, 'addEventListener')
+            const documentRemoveEventListener = vi.spyOn(document, 'removeEventListener')
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
+            // beforeunload, pagehide, offline, online
+            expect(windowAddEventListener).toHaveBeenCalledTimes(4)
+            expect(documentAddEventListener).toHaveBeenCalledWith(
+                'visibilitychange',
+                expect.any(Function),
+                expect.any(Object)
+            )
+
+            sessionRecording.stopRecording()
+            expect(documentRemoveEventListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+        })
+
+        it('stops an active recorder when disposed', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const lazyRecorderStop = vi.spyOn(sessionRecording['_lazyLoadedSessionRecording']!, 'stop')
+
+            sessionRecording.dispose()
+
+            expect(lazyRecorderStop).toHaveBeenCalledTimes(1)
+        })
+
+        it('discards an active recorder when disposed without flushing buffered events', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']!
+            const lazyRecorderStop = vi.spyOn(lazyRecorder, 'stop')
+            const lazyRecorderDiscard = vi.spyOn(lazyRecorder, 'discard')
+
+            sessionRecording.dispose({ discardBufferedEvents: true })
+
+            expect(lazyRecorderDiscard).toHaveBeenCalledWith({ discardProducerEvents: true })
+            expect(lazyRecorderStop).not.toHaveBeenCalled()
+        })
+
+        it('call stopRecording if its not enabled', () => {
+            options.disabled = true
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.stopRecording).toHaveBeenCalled()
+        })
+    })
+
+    describe('after remote cofig', () => {
+        beforeEach(() => {
+            vi.mocked(fixture.recorderHost.emitConfigEvent).mockImplementation((emit) => {
+                emit('$posthog_config', {})
+            })
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+        })
+
+        describe('idle timeouts', () => {
+            let startingTimestamp = -1
+
+            function emitInactiveEvent(activityTimestamp: number, expectIdle: boolean | 'unknown' = false) {
+                const snapshotEvent = {
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 0,
+                        adds: [],
+                        attributes: [],
+                        removes: [],
+                        texts: [],
+                    },
+                    timestamp: activityTimestamp,
+                }
+                _emit(snapshotEvent)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(expectIdle)
+                return snapshotEvent
+            }
+
+            function emitActiveEvent(activityTimestamp: number, expectedMatchingActivityTimestamp: boolean = true) {
+                const snapshotEvent = {
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 1,
+                    },
+                    timestamp: activityTimestamp,
+                }
+                _emit(snapshotEvent)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                if (expectedMatchingActivityTimestamp) {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp']).toEqual(
+                        activityTimestamp
+                    )
+                }
+                return snapshotEvent
+            }
+
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                expect(sessionRecording.status).toEqual('active')
+
+                startingTimestamp = sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp']
+                expect(startingTimestamp).toBeGreaterThan(0)
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(0)
+
+                // the buffer starts out empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [],
+                    sizes: [],
+                    sessionId: sessionId,
+                    size: 0,
+                    windowId: 'windowId',
+                })
+
+                // options will have been emitted
+                expect(_addCustomEvent).toHaveBeenCalled()
+                _addCustomEvent.mockClear()
+            })
+
+            afterEach(() => {
+                vi.useRealTimers()
+            })
+
+            it('starts neither idle nor active', () => {
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+            })
+
+            it('does not emit events until after first active event', () => {
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                const a = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                const b = emitInactiveEvent(startingTimestamp + 110, 'unknown')
+                const c = emitInactiveEvent(startingTimestamp + 120, 'unknown')
+
+                _emit(createFullSnapshot({}), 'unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+
+                const d = emitActiveEvent(startingTimestamp + 200)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                // but all events are buffered
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [a, b, c, createFullSnapshot({}), d],
+                    sizes: expect.any(Array),
+                    sessionId: sessionId,
+                    size: 442,
+                    windowId: expect.any(String),
+                })
+                // the first interaction releases the fresh-start hold; the normal flush
+                // cadence then ships everything buffered before it, so the recording is
+                // playable from the session's start
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                    '/s/',
+                    expect.objectContaining({
+                        $session_id: sessionId,
+                        $snapshot_data: [a, b, c, createFullSnapshot({}), d],
+                    })
+                )
+            })
+
+            it('does not emit plugin events when idle', () => {
+                const emptyBuffer = {
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                }
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual(emptyBuffer)
+
+                sessionRecording.onRRwebEmit(createPluginSnapshot({}) as eventWithTime)
+
+                // a plugin event doesn't count as returning from idle
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+            })
+
+            it('active incremental events return from idle', () => {
+                const emptyBuffer = {
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                }
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual(emptyBuffer)
+
+                sessionRecording.onRRwebEmit(createIncrementalSnapshot({}) as eventWithTime)
+
+                // an incremental event counts as returning from idle
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(false)
+                // buffer contains event allowed when idle
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [createIncrementalSnapshot({})],
+                    sizes: [30],
+                    sessionId: sessionId,
+                    size: 30,
+                    windowId: 'windowId',
+                })
+            })
+
+            it('does not emit buffered custom events while idle even when over buffer max size', () => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                // ensure buffer isn't empty
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // fake having a large buffer
+                // in reality we would need a very long idle period emitting custom events to reach 1MB of buffer data
+                // particularly since we flush the buffer on entering idle
+                sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // we're still idle
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toBe(true)
+                // return from idle
+
+                // we did not capture
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+            })
+
+            it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [],
+                    sizes: [],
+                    sessionId: sessionId,
+                    size: 0,
+                    windowId: 'windowId',
+                })
+            })
+
+            it('does not emit meta snapshot events when idle - so we must make sure not to take them while idle!', () => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [],
+                    sizes: [],
+                    sessionId: sessionId,
+                    size: 0,
+                    windowId: 'windowId',
+                })
+            })
+
+            it('does not emit style snapshot events when idle - so we must make sure not to take them while idle!', () => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    data: [],
+                    sizes: [],
+                    sessionId: sessionId,
+                    size: 0,
+                    windowId: 'windowId',
+                })
+            })
+
+            it.each(['$session_ending', '$session_starting'])('allows %s events when idle', (eventTag: string) => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = startingTimestamp + 100
+                // buffer is empty
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
+                    ...EMPTY_BUFFER,
+                    sessionId: sessionId,
+                    windowId: 'windowId',
+                })
+
+                const event = createCustomSnapshot(
+                    { timestamp: startingTimestamp + 5000 },
+                    { lastActivityTimestamp: startingTimestamp + 100 },
+                    eventTag
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                expect(bufferedEvent.data.tag).toBe(eventTag)
+            })
+
+            it('corrects timestamp for $session_ending events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_ending'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it,
+                // so a late-detected idle period doesn't artificially extend the old session
+                expect(bufferedEvent.timestamp).toBe(lastActivityTime)
+            })
+
+            it('does not backdate $session_starting events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_starting'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // $session_starting ships to the NEW session: stamping it with the old session's
+                // last activity would drag the new recording's start back by the whole idle gap
+                expect(bufferedEvent.timestamp).toBe(eventRecordedTime)
+            })
+
+            it('takes a full snapshot on return from idle when mutations were dropped while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+                // flush so the buffer only holds what the idle cycle produces
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // a non-interactive mutation past the threshold declares idle and is dropped
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM keeps mutating while idle; rrweb observes it but the recorder drops it
+                _emit({
+                    ...createIncrementalMutationEvent(),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                })
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+
+                // user returns: the player's mirror is stale, so we must re-sync it
+                const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the full snapshot is buffered before the wake event, so the replayed
+                // stream never applies post-idle incrementals to a pre-idle tree
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                    createFullSnapshot(),
+                    wakeEvent,
+                ])
+            })
+
+            it('does not take an immediate full snapshot on return from idle when no mutations were dropped', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // a plugin event past the threshold declares idle without any dropped mutation
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM did not change while idle, so the mirror is still in sync on wake
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['a mutation', createIncrementalMutationEvent(), true],
+                ['a stylesheet rule change', createIncrementalStyleSheetEvent({ adds: [] }), true],
+                // a periodic full snapshot can itself cross the idle threshold and be dropped
+                ['a full snapshot', createFullSnapshot(), true],
+                ['a canvas mutation', createIncrementalSnapshot({ data: { source: 9 } }), false],
+                ['a plugin event', createPluginSnapshot({}), false],
+            ] as [string, eventWithTime, boolean][])(
+                'when %s crosses the idle threshold and is dropped, wake heals: %s',
+                (_name: string, droppedEvent: eventWithTime, heals: boolean) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+
+                    emitActiveEvent(startingTimestamp + 100)
+
+                    // the event itself declares idle in _updateWindowAndSessionIds, then the
+                    // idle gate drops it - the timer-driven full snapshot sequence hits this
+                    _emit({
+                        ...droppedEvent,
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                    } as eventWithTime)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                    takeFullSnapshot.mockClear()
+
+                    emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                    expect(takeFullSnapshot).toHaveBeenCalledTimes(heals ? 1 : 0)
+                }
+            )
+
+            it('retries the healing snapshot on the next wake when taking it fails', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle with a dropped mutation
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the wake heal fails, so no full snapshot event is emitted
+                takeFullSnapshot.mockImplementationOnce(() => {
+                    throw new Error('rrweb not ready')
+                })
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the drop signal survives the failed take
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                // idle again with no new drops, then wake: the heal is retried
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 3000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                emitActiveEvent(startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 4000)
+
+                expect(takeFullSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toEqual(0)
+            })
+
+            it.each([
+                // a trigger-pending buffer ships on activation, so it needs the heal
+                ['a recording trigger is pending', true, 1],
+                // sampled-out buffering discards the buffer, so the heal is pure cost
+                ['no trigger is pending', false, 0],
+            ] as [string, boolean, number][])(
+                'buffering wake heal when %s: %i snapshot(s)',
+                (_name: string, hasPendingTriggers: boolean, expectedSnapshots: number) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+                    const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                    emitActiveEvent(startingTimestamp + 100)
+                    lazyRecording['_flushBuffer']()
+
+                    // idle with a dropped mutation
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                    takeFullSnapshot.mockClear()
+
+                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                    const pendingSpy = vi
+                        .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
+                        .mockReturnValue(hasPendingTriggers)
+                    try {
+                        const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                        expect(takeFullSnapshot).toHaveBeenCalledTimes(expectedSnapshots)
+                        if (expectedSnapshots > 0) {
+                            // the heal lands in the buffer before the wake event, so when
+                            // trigger activation flushes, the shipped stream starts in sync
+                            const bufferedTypes = lazyRecording['_buffer'].data.map((e: any) => e.type)
+                            expect(bufferedTypes.indexOf(2)).toBeGreaterThan(-1)
+                            expect(bufferedTypes.indexOf(2)).toBeLessThan(
+                                lazyRecording['_buffer'].data.indexOf(wakeEvent)
+                            )
+                        }
+                    } finally {
+                        pendingSpy.mockRestore()
+                        delete (lazyRecording as any).status
+                    }
+                }
+            )
+
+            it('heals on wake when the mutation throttler swallowed an event while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle via a plugin event, so nothing is counted yet
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(lazyRecording['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                // a rate-limited attribute mutation is swallowed before the idle gate;
+                // while idle no later update can restore the attribute, so it must count
+                lazyRecording['_mutationThrottler'] = { throttleMutations: () => undefined } as any
+                try {
+                    _emit({
+                        ...createIncrementalMutationEvent(),
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                    })
+                } finally {
+                    lazyRecording['_mutationThrottler'] = undefined
+                }
+                expect(lazyRecording['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('drops a held buffer at the size cap and recovers with a fresh full snapshot on release', () => {
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // fake having a large buffer, as the idle === true counterpart test does
+                sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // a tab nobody touched must not ship a billable recording, and its held
+                // buffer must not grow unbounded — the data is dropped instead
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+
+                // an unload after the overflow has nothing useful to ship
+                sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+
+                // an interaction release takes a fresh full snapshot so the recording resumes playable
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                takeFullSnapshot.mockClear()
+                emitActiveEvent(startingTimestamp + 200)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('holds the buffer of a background tab that never sees interaction', () => {
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+
+                const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
+
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                // nothing ships on the timer — nobody has interacted with this tab, so
+                // shipping would bill a recording nobody asked for; data stays buffered
+                expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+
+                // first interaction releases the hold; the normal cadence ships the whole buffer
+                const interaction = emitActiveEvent(startingTimestamp + 200)
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                    '/s/',
+                    expect.objectContaining({
+                        $session_id: sessionId,
+                        $snapshot_data: [snapshot, interaction],
+                    })
+                )
+            })
+
+            // start() is also called re-entrantly on a live recorder (e.g. opt-in calls
+            // _startCapturing twice) with no stop() in between. There is no stale cleanup
+            // to invalidate then — the compression queue holds the CURRENT session's events
+            // (rrweb's FullSnapshot among them) and resetting it would drop them, leaving
+            // a replay with a meta event but no full snapshot.
+            it('re-entrant start() preserves the live compression queue', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+
+                lazyRecorder['_queuedCompressionEvents'] = 2
+                const liveQueue = Promise.resolve()
+                lazyRecorder['_compressionQueue'] = liveQueue
+                const generationBefore = lazyRecorder['_compressionQueueGeneration']
+
+                lazyRecorder.start()
+
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(2)
+                expect(lazyRecorder['_compressionQueue']).toBe(liveQueue)
+                expect(lazyRecorder['_compressionQueueGeneration']).toEqual(generationBefore)
+            })
+
+            describe('holding rotation-born sessions until interaction', () => {
+                it("transitions from 'unknown' to idle after the threshold with no interaction", () => {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', expect.anything())
+                })
+
+                it('an override while stopped survives the restart instead of being swallowed by the fresh-start hold', () => {
+                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    lazyRecorder.stop()
+
+                    // startSessionRecording({ sampling: true }) applies the override before
+                    // set_config restarts the recorder
+                    lazyRecorder.overrideSampling()
+                    lazyRecorder.start()
+
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                    const snapshot = emitInactiveEvent(startingTimestamp + 200, 'unknown')
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                        '/s/',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) })
+                    )
+                })
+
+                it('ships a fresh interaction-less epoch on clean unload (passive visits are captured)', () => {
+                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                    ;(fixture.recorderHost.captureSnapshot as Mock).mockClear()
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                        '/s/',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) })
+                    )
+                })
+
+                // an explicit override is intent to record, so it releases the fresh-start hold —
+                // including overrideTrigger('url'), unlike an organic URL trigger match
+                it.each([
+                    ['overrideSampling', (r: any) => r.overrideSampling()],
+                    ['overrideLinkedFlag', (r: any) => r.overrideLinkedFlag()],
+                    ["overrideTrigger('url')", (r: any) => r.overrideTrigger('url')],
+                ])('%s releases the fresh-start hold and ships', (_name, release) => {
+                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+
+                    release(sessionRecording['_lazyLoadedSessionRecording'])
+
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                        '/s/',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) })
+                    )
+                })
+
+                it('does not hold a windowId-only restart (no session rotation)', () => {
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    ;(fixture.recorderHost.captureSnapshot as Mock).mockClear()
+
+                    lazyRecorder['_windowId'] = 'stale-window-id'
+                    emitInactiveEvent(startingTimestamp + 100, 'unknown')
+
+                    const snapshot = emitInactiveEvent(startingTimestamp + 200, 'unknown')
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                        '/s/',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) })
+                    )
+                })
+                describe('reporting the hold', () => {
+                    const holdReason = () =>
+                        sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+                            .$sdk_debug_replay_flush_hold_reason
+
+                    it('names a fresh-start hold on captured events while the status still reads active', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+                        expect(sessionRecording.status).toEqual('active')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+                    })
+
+                    it('logs a new held epoch after an explicit stop and restart in the same session', () => {
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                        lazyRecorder.stop()
+                        logSpy.mockClear()
+                        lazyRecorder.start()
+
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_recording_started')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
+                    // the sdkDebugProperties getter keeps running after stop()/discard() (the
+                    // recorder is torn down but not dropped), so the hold reason has to clear or a
+                    // stopped recorder keeps blaming user inactivity on every later captured event
+                    it('stops naming the hold once the recorder is stopped (opt-out)', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].stop()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+
+                    it('stops naming the hold immediately while queued compression drains', async () => {
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        lazyRecorder['_queuedCompressionEvents'] = 1
+                        let resolveDrain: () => void = () => {}
+                        const compressionQueue = new Promise<void>((resolve) => {
+                            resolveDrain = resolve
+                        })
+                        lazyRecorder['_compressionQueue'] = compressionQueue
+
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isStoppingAfterCompression']).toBe(true)
+                        const reasonImmediatelyAfterStop = holdReason()
+                        resolveDrain()
+                        await compressionQueue
+                        await Promise.resolve()
+                        await Promise.resolve()
+
+                        expect(reasonImmediatelyAfterStop).toBeUndefined()
+                    })
+
+                    it('stops naming the hold once the recorder is discarded', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+                })
+            })
+
+            it('re-syncs a stale session id from the session manager while _isIdle is unknown', () => {
+                // If the recorder's session id ever diverges from the session manager while no
+                // user interaction has confirmed activity, the next event must re-sync and
+                // restart rather than shipping events under the stale id.
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                const realSessionId = lazyRecorder['_sessionId']
+                lazyRecorder['_sessionId'] = 'stale-session-id'
+
+                emitInactiveEvent(startingTimestamp + 100, 'unknown')
+
+                expect(lazyRecorder['_sessionId']).toEqual(realSessionId)
+                expect(recordMock).toHaveBeenCalledTimes(2)
+            })
+        })
+    })
+    describe('session linking', () => {
+        beforeEach(() => {
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            vi.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+        })
+
+        it('routes $session_starting and $session_ending events to correct session IDs', () => {
+            const currentSessionId = sessionId
+            const currentWindowId = 'windowId'
+            const newSessionId = 'new-session-id'
+            const newWindowId = 'new-window-id'
+
+            // Spy on snapshot capture to verify session IDs
+            const captureSpy = vi.spyOn(fixture.recorderHost, 'captureSnapshot')
+            captureSpy.mockClear()
+
+            releaseInteractionHold()
+
+            // Create a $session_ending event with payload containing session IDs
+            const sessionEndingEvent = createCustomSnapshot(
+                {},
+                {
+                    currentSessionId: currentSessionId,
+                    currentWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_ending'
+            )
+
+            // Emit the $session_ending event
+            _emit(sessionEndingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_ending is routed to currentSessionId (old session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $session_id: currentSessionId,
+                    $window_id: currentWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_ending' }),
+                        }),
+                    ]),
+                })
+            )
+
+            captureSpy.mockClear()
+
+            // Now simulate session ID change on the recorder instance
+            // This would normally happen via stop/start in _onSessionIdCallback
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = newWindowId
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer'] = {
+                size: 0,
+                data: [],
+                sizes: [],
+                sessionId: newSessionId,
+                windowId: newWindowId,
+            }
+
+            // Create a $session_starting event with payload containing session IDs
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: currentSessionId,
+                    previousWindowId: currentWindowId,
+                    nextSessionId: newSessionId,
+                    nextWindowId: newWindowId,
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            // Emit the $session_starting event
+            _emit(sessionStartingEvent)
+
+            // Flush to capture
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            // Verify $session_starting is routed to nextSessionId (new session)
+            expect(captureSpy).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $session_id: newSessionId,
+                    $window_id: newWindowId,
+                    $snapshot_data: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: EventType.Custom,
+                            data: expect.objectContaining({ tag: '$session_starting' }),
+                        }),
+                    ]),
+                })
+            )
+        })
+
+        it('uses targetSessionId from event payload to correctly route lifecycle events', () => {
+            const oldSessionId = sessionId
+            const newSessionId = 'new-session-after-change'
+
+            // Ensure recorder is not idle
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
+
+            // Emit an event to the old session
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+
+            // Now simulate the recorder instance having transitioned to the new session
+            // (This happens in _onSessionIdCallback after stop/start)
+            sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] = newSessionId
+            sessionRecording['_lazyLoadedSessionRecording']['_windowId'] = 'new-window-id'
+
+            // Emit a $session_starting event for the NEW session
+            // Even though the buffer still has the old sessionId, this event should be routed to the new session
+            const sessionStartingEvent = createCustomSnapshot(
+                {},
+                {
+                    previousSessionId: oldSessionId,
+                    previousWindowId: 'windowId',
+                    nextSessionId: newSessionId,
+                    nextWindowId: 'new-window-id',
+                    lastActivityTimestamp: Date.now(),
+                },
+                '$session_starting'
+            )
+
+            _emit(sessionStartingEvent)
+
+            // The buffer should now have been flushed because buffer.sessionId (old) !== targetSessionId (new)
+            // and a new buffer should be created with the new session ID
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toBe(newSessionId)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].windowId).toBe('new-window-id')
+
+            // The buffer should only have the new event, not the old one
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0].data.tag).toBe(
+                '$session_starting'
+            )
+        })
+    })
+
+    describe('before remote config', () => {
+        it('is disabled without persisted config', () => {
+            expect(sessionRecording.status).toBe('disabled')
+        })
+    })
+    describe('after remote cofig', () => {
+        beforeEach(() => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+        })
+
+        describe('when pageview capture is disabled', () => {
+            beforeEach(() => {
+                vi.spyOn(sessionRecording, 'tryAddCustomEvent')
+                options.capturePageview = false
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                vi.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+            })
+
+            it('does not capture pageview on meta event', () => {
+                _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            })
+
+            it('captures pageview as expected on non-meta event', () => {
+                fakeNavigateTo('https://test.com')
+
+                _emit(createIncrementalSnapshot({ type: 3 }))
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                    '$url_changed',
+                    {
+                        href: 'https://test.com/',
+                    }
+                )
+                ;(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any).mockClear()
+
+                _emit(createIncrementalSnapshot({ type: 3 }))
+                // the window href has not changed, so we don't capture another pageview
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
+
+                fakeNavigateTo('https://test.com/other')
+                _emit(createIncrementalSnapshot({ type: 3 }))
+
+                // the window href has changed, so we capture another pageview
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).toHaveBeenCalledWith(
+                    '$url_changed',
+                    {
+                        href: 'https://test.com/other',
+                    }
+                )
+            })
+        })
+
+        describe('when pageview capture is enabled', () => {
+            beforeEach(() => {
+                options.capturePageview = true
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                vi.spyOn(sessionRecording['_lazyLoadedSessionRecording'], '_tryAddCustomEvent')
+            })
+
+            it('does not capture pageview on rrweb events', () => {
+                _emit(createIncrementalSnapshot({ type: 3 }))
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            })
         })
     })
 })

@@ -15,7 +15,7 @@ import {
     LinkedFlagMatching,
     PAUSED,
 } from '../../src/replay/external/triggerMatching'
-import { SessionRecordingTriggerGroup } from '@posthog/types'
+import type { SessionRecordingTriggerGroup } from '../../src/replay/types'
 import { matchTriggerPropertyFilters } from '../../src/utils/property-utils'
 
 const client = createTriggerClient()

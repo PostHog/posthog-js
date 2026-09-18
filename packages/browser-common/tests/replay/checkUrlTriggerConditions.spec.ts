@@ -2,7 +2,7 @@ import { createTriggerClient } from './helpers/trigger-client'
 import type { ReplayTriggerClient } from '../../src/replay/host'
 import * as fc from 'fast-check'
 import { URLTriggerMatching, TRIGGER_ACTIVATED, TRIGGER_PENDING } from '../../src/replay/external/triggerMatching'
-import { SessionRecordingUrlTrigger } from '@posthog/types'
+import type { SessionRecordingUrlTrigger } from '../../src/replay/types'
 import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../src/replay/constants'
 
 describe('checkUrlTriggerConditions - activation loop detection', () => {
