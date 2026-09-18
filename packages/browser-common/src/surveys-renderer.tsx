@@ -53,6 +53,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearAllInMemoryInProgressSurveyState,
     clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
@@ -282,6 +283,10 @@ export class SurveyManager {
         const dispose = startAutomaticDisplay(this)
         if (this._disposed) dispose()
         else this._automaticDisplayDispose = dispose
+    }
+
+    public clearInMemoryInProgressSurveyState(): void {
+        clearAllInMemoryInProgressSurveyState()
     }
 
     public dispose(): void {
