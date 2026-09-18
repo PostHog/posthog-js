@@ -1,3 +1,4 @@
+import { defineErrorName } from './named-error'
 import type { CaptureSummary } from './types'
 
 export const EMPTY_CAPTURE_SUMMARY: CaptureSummary = Object.freeze({
@@ -9,7 +10,7 @@ export const EMPTY_CAPTURE_SUMMARY: CaptureSummary = Object.freeze({
 
 export const captureFailure = (cause: unknown, summary: CaptureSummary = EMPTY_CAPTURE_SUMMARY): CaptureSummary => {
     const error = new Error('Immediate capture failed', { cause })
-    error.name = 'PostHogCaptureError'
+    defineErrorName(error, 'PostHogCaptureError')
     try {
         if (cause instanceof Error) {
             error.message = String(cause.message)
