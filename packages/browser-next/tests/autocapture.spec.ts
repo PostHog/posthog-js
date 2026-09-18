@@ -29,7 +29,7 @@ const clients: PostHog[] = []
 const create = async (options: Partial<PostHogOptions> = {}) => {
     const client = await createPostHog({
         ...base,
-        ...(options.remoteConfigLoader ? {} : { remoteConfig: config }),
+        ...(options.fetch ? {} : { remoteConfig: config }),
         ...options,
     })
     clients.push(client)
@@ -77,9 +77,9 @@ describe('autocapture', () => {
         expect(core.getExtension('autocapture')).toBeUndefined()
     })
     it('does not capture before remote config or when opted out remotely', async () => {
-        let resolve!: (value: typeof config) => void
+        let resolve!: (value: Response) => void
         const client = await create({
-            remoteConfigLoader: () =>
+            fetch: () =>
                 new Promise((r) => {
                     resolve = r
                 }),
@@ -88,7 +88,7 @@ describe('autocapture', () => {
         client.onEvent(captured)
         click()
         expect(captured).not.toHaveBeenCalled()
-        resolve({ ...config, autocapture_opt_out: true })
+        resolve(new Response(JSON.stringify({ ...config, autocapture_opt_out: true })))
         await vi.advanceTimersByTimeAsync(1)
         click()
         expect(captured).not.toHaveBeenCalled()
@@ -99,7 +99,7 @@ describe('autocapture', () => {
         await first.dispose()
         const second = await create({
             storage,
-            remoteConfigLoader: async () => {
+            fetch: async () => {
                 throw new Error('offline')
             },
         })
@@ -113,7 +113,7 @@ describe('autocapture', () => {
         const client = await create(
             outcome === 'failed'
                 ? {
-                      remoteConfigLoader: async () => {
+                      fetch: async () => {
                           throw new Error('offline')
                       },
                   }
