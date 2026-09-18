@@ -1,5 +1,6 @@
 import { loadRemoteConfig } from './remote-config'
 import type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
+import type { FlagsExtension } from './flags-internal'
 import type { LogsExtension } from './logs-internal'
 import type { CaptureLogOptions } from './logs-options'
 import {
@@ -123,6 +124,7 @@ class PostHogBrowserClient implements PostHog {
     readonly onIdentify: BrowserClient['onIdentify']
     readonly onGroup: BrowserClient['onGroup']
     readonly onReset: BrowserClient['onReset']
+    readonly onSession: Client['onSession']
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
@@ -258,6 +260,7 @@ class PostHogBrowserClient implements PostHog {
         this.onGroup = this._groupPublisher.listener
         this.onReset = this._resetPublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
+        this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
         this._registry = new ExtensionRegistry(
             (extensionName) => this._createExtensionClient(extensionName),
             this.logger
@@ -299,6 +302,19 @@ class PostHogBrowserClient implements PostHog {
     }
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
+        try {
+            if (options.delivery === 'unload') {
+                const authority = this._immediateAuthority
+                const message = this._admitCapture(event, properties, options, false, true)
+                if (message) {
+                    this._captureSink?.deliverUnload(message, () => this._immediateAuthority === authority)
+                }
+                return
+            }
+        } catch (error) {
+            this.logger.error('Unload capture failed', error)
+            return
+        }
         this._capture(event, properties, options)
     }
 
@@ -1039,7 +1055,7 @@ class PostHogBrowserClient implements PostHog {
             },
             capture: (event, properties, options) => host.capture(event, properties, options),
             registerDynamicEventProperties: (producer) => host.registerDynamicEventProperties(producer),
-            getExtension: (name) => host.getExtension(name),
+            getExtension: (name) => host._registry.getShared(name),
             get projectToken() {
                 return host.projectToken
             },
@@ -1052,6 +1068,7 @@ class PostHogBrowserClient implements PostHog {
             onIdentify: host.onIdentify,
             onGroup: host.onGroup,
             onReset: host.onReset,
+            onSession: host.onSession,
             kv,
             logger,
         }
@@ -1096,10 +1113,14 @@ export const createPostHogCore = async (
     }
     for (const extension of extensions) {
         try {
+            const shared =
+                extension.name === 'featureFlags'
+                    ? (extension as FlagsExtension)._shared
+                    : undefined
             if (extension.name === 'logs') {
                 ;(extension as LogsExtension).initialize?.(() => client._logsLastActivity())
             }
-            await client._registry.install(extension)
+            await client._registry.install(extension, shared || extension)
         } catch (error) {
             client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
         }

@@ -63,6 +63,7 @@ const REMOTE_CONFIG_EVENT = 'extensionsRemoteConfig'
 /** One shared extension client and lifecycle host per browser-v1 PostHog instance. */
 export class BrowserClientAdapter implements Client, Disposable {
     readonly kv: KeyValueStore
+    readonly onSession: Listener<string>
     readonly onEvent: Listener<CapturedEventInfo>
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
@@ -78,6 +79,20 @@ export class BrowserClientAdapter implements Client, Disposable {
         this._logger = logger
         this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
+        this.onSession = (handler) => {
+            if (this._disposed) {
+                return createDisposable(() => {})
+            }
+            return createDisposable(
+                this.instance.onSessionId((sessionId) => {
+                    try {
+                        handler(sessionId)
+                    } catch (error) {
+                        this._logger.error('Browser extension session listener failed', error)
+                    }
+                })
+            )
+        }
         this.onEvent = (handler) => {
             const unsubscribe = this.instance.on('eventCaptured', (event) => {
                 try {
@@ -187,6 +202,7 @@ export class BrowserClientAdapter implements Client, Disposable {
             uuid: options.uuid,
             $set: options.set as Properties | undefined,
             $set_once: options.setOnce as Properties | undefined,
+            ...(options.delivery === 'unload' ? { transport: 'sendBeacon' as const, send_instantly: true } : {}),
         }
         this.instance.capture(event as EventName, properties, captureOptions)
     }

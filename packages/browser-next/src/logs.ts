@@ -3,7 +3,7 @@ import { PostHogLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
 import type { ConsoleLogsHost } from '@posthog/browser-common/console-logs'
-import type { FlagsExtension } from './flags-internal'
+import type { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
@@ -30,7 +30,7 @@ export const logs = (options: LogsOptions = {}): Extension => {
             } catch {
                 /* Unavailable location is omitted. */
             }
-            const keys = value.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
+            const keys = value.getExtension<PostHogFeatureFlags>('featureFlags')?.getFlags?.()
             if (keys?.length) context.activeFeatureFlags = keys
             return context
         }

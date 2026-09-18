@@ -102,6 +102,60 @@ function testExtension(
 }
 
 describe('BrowserClientAdapter', () => {
+    it('maps unload delivery to an immediate Beacon capture', () => {
+        const instance = createMockPostHog()
+        const client = new BrowserClientAdapter(instance)
+        client.capture('survey abandoned', { survey_id: 'test' }, { delivery: 'unload' })
+        expect(instance.capture).toHaveBeenCalledWith(
+            'survey abandoned',
+            { survey_id: 'test' },
+            expect.objectContaining({ transport: 'sendBeacon', send_instantly: true })
+        )
+        client.dispose()
+    })
+
+    it('delegates session notifications without reading or creating a session', () => {
+        const instance = createMockPostHog()
+        const unsubscribe = vi.fn()
+        let notify!: (sessionId: string) => void
+        instance.onSessionId = vi.fn((listener) => {
+            notify = listener
+            listener('existing-session', 'window')
+            return unsubscribe
+        })
+        const client = new BrowserClientAdapter(instance)
+        const listener = vi.fn()
+        const subscription = client.onSession(listener)
+        expect(listener).toHaveBeenCalledWith('existing-session')
+        notify('next-session')
+        expect(listener).toHaveBeenLastCalledWith('next-session')
+        expect(instance.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+        subscription.dispose()
+        subscription.dispose()
+        expect(unsubscribe).toHaveBeenCalledTimes(1)
+        client.dispose()
+        client.onSession(listener)
+        expect(instance.onSessionId).toHaveBeenCalledTimes(1)
+    })
+
+    it('isolates a failing session listener', () => {
+        const instance = createMockPostHog()
+        instance.onSessionId = vi.fn((listener) => {
+            listener('existing-session', 'window')
+            return vi.fn()
+        })
+        const client = new BrowserClientAdapter(instance)
+        const log = vi.spyOn(logger, 'error').mockImplementation(() => {})
+        expect(() =>
+            client.onSession(() => {
+                throw new Error('listener failed')
+            })
+        ).not.toThrow()
+        expect(log).toHaveBeenCalledWith('Browser extension session listener failed', expect.any(Error))
+        client.dispose()
+        log.mockRestore()
+    })
+
     it('shares one Client with core analytics behavior across extensions', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)

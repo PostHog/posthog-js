@@ -36,6 +36,8 @@ export interface CapturedEventInfo {
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
 export interface CaptureOptions {
+    /** Send immediately without batching, using best-effort unload-safe delivery. */
+    delivery?: 'unload'
     /** Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. */
     timestamp?: Date
     /** Override the event UUID used for de-duplication. */
@@ -124,6 +126,9 @@ export interface Client {
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     /** Returns the extension registered under a stable name, or `undefined` when it is not installed. */
     getExtension<T extends Extension = Extension>(name: string): T | undefined
+
+    /** Observes session IDs through the host's session notifications, without creating a session. May replay an existing session on subscription. */
+    readonly onSession: Listener<string>
 
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
