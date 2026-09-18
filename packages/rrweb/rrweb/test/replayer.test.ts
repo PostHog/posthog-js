@@ -1730,18 +1730,26 @@ describe('replayer', function () {
         (async () => {
           const { Replayer } = rrweb;
           const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
-          replayer.pause(2600);
-          // wait for a mutation chunk to move the rebuild onto the virtual dom
-          await new Promise((resolve, reject) => {
-            const startedAt = Date.now();
-            const poll = () => {
-              if (replayer.usingVirtualDom) return resolve();
-              if (Date.now() - startedAt > 2000)
-                return reject(new Error('virtual dom never engaged'));
-              setTimeout(poll, 1);
-            };
-            poll();
-          });
+          // Browser clock precision can let the entire seek finish between polls,
+          // even with a tiny budget. Force each event to exhaust its chunk budget.
+          const originalNow = performance.now;
+          let tick = originalNow.call(performance);
+          performance.now = () => ++tick;
+          try {
+            replayer.pause(2600);
+            await new Promise((resolve, reject) => {
+              const startedAt = Date.now();
+              const poll = () => {
+                if (replayer.usingVirtualDom) return resolve();
+                if (Date.now() - startedAt > 2000)
+                  return reject(new Error('virtual dom never engaged'));
+                setTimeout(poll, 1);
+              };
+              poll();
+            });
+          } finally {
+            performance.now = originalNow;
+          }
           const baseline = Date.now();
           replayer.startLive(baseline);
           // cancelling the rebuild must commit and drain the virtual dom —
