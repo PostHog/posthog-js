@@ -157,6 +157,7 @@
         "_core",
         "_coreLogger",
         "_counter",
+        "_createEventReceiver",
         "_createHost",
         "_crossTabFeatureFlagHandlers",
         "_crossTabFeatureFlagIdentityMismatch",
