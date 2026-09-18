@@ -29,6 +29,19 @@ for (const remote of [false, true]) {
     })
 }
 
+test('pagehide hands admitted logs to Beacon while shutdown Fetch is pending', async ({ page }) => {
+    await page.goto('/')
+    const result = await page.evaluate(() => window.logsHarness.pagehideDuringShutdown())
+    expect(result.fetches).toBe(1)
+    expect(result.aborted).toBe(true)
+    const payload = JSON.parse(result.beacon) as OtlpLogsPayload
+    expect(
+        payload.resourceLogs.flatMap((resource) =>
+            resource.scopeLogs.flatMap((scope) => scope.logRecords.map((r) => r.body))
+        )
+    ).toEqual([{ stringValue: 'pending navigation' }])
+})
+
 test('cross-tab consent denial purges queued logs before a later grant', async ({ context }) => {
     const requests: unknown[] = []
     await context.route('**/i/v1/logs?token=ph_browser_logs', async (route) => {
