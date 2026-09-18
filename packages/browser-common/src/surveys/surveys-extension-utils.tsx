@@ -459,8 +459,8 @@ export const sendSurveyEvent = ({
             responses,
             submissionId: surveySubmissionId,
             completed: isSurveyCompleted,
-            surveyLanguage,
-            questionSnapshots,
+            ...(surveyLanguage !== undefined && { surveyLanguage }),
+            ...(questionSnapshots !== undefined && { questionSnapshots }),
         }),
         ...properties,
         $set: {
@@ -492,10 +492,14 @@ const _buildSurveyEventProperties = (
     ...buildSurveyResponseEventProperties({
         event,
         survey,
-        responses: inProgressSurvey?.responses,
-        submissionId: inProgressSurvey?.surveySubmissionId,
-        surveyLanguage: inProgressSurvey?.surveyLanguage,
-        questionSnapshots: inProgressSurvey?.questionSnapshots,
+        ...(inProgressSurvey?.responses !== undefined && { responses: inProgressSurvey.responses }),
+        ...(inProgressSurvey?.surveySubmissionId !== undefined && {
+            submissionId: inProgressSurvey.surveySubmissionId,
+        }),
+        ...(inProgressSurvey?.surveyLanguage !== undefined && { surveyLanguage: inProgressSurvey.surveyLanguage }),
+        ...(inProgressSurvey?.questionSnapshots !== undefined && {
+            questionSnapshots: inProgressSurvey.questionSnapshots,
+        }),
     }),
 })
 
@@ -559,9 +563,13 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderC
         // localStorage not available
     }
 
-    posthog.client?.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties('abandoned', survey, inProgressSurvey, posthog), {
-        delivery: 'unload',
-    })
+    posthog.client?.capture(
+        SurveyEventName.ABANDONED,
+        _buildSurveyEventProperties('abandoned', survey, inProgressSurvey, posthog),
+        {
+            delivery: 'unload',
+        }
+    )
 }
 
 const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
