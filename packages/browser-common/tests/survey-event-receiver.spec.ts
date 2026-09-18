@@ -1,7 +1,7 @@
 import './helpers/surveys-setup'
 import type { Mock } from 'vitest'
 import { createSurveyTriggerHost } from './helpers/survey-trigger-host'
-import type { SurveyTriggerHost } from '../src/survey-event-receiver'
+import type { SurveyTriggerFixture as SurveyTriggerHost } from './helpers/survey-trigger-host'
 /// <reference lib="dom" />
 
 import { SurveyType, SurveyQuestionType } from '../src/survey-constants'
@@ -82,7 +82,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('register makes receiver listen for all surveys with events', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             const registry = surveyEventReceiver.getEventToSurveys()
             expect(registry.has('user_subscribed')).toBeTruthy()
@@ -95,7 +95,7 @@ describe('survey-event-receiver', () => {
         it('reuses and disposes its capture hook idempotently', () => {
             const unsubscribe = vi.fn()
             mockAddCaptureHook.mockReturnValue(unsubscribe)
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             surveyEventReceiver.register(surveysWithEvents)
 
@@ -107,7 +107,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('receiver activates survey on event', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
             registeredHook('billing_changed')
@@ -116,7 +116,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('receiver removes survey from list after its shown', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             const firstSurvey = surveysWithEvents[0]
             if (firstSurvey.conditions && firstSurvey.conditions?.events) {
                 firstSurvey.conditions.events.repeatedActivation = true
@@ -140,7 +140,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('receiver activates same survey on multiple event', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
             registeredHook('billing_changed')
@@ -150,7 +150,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('receiver activates multiple surveys on same event', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
             registeredHook('user_subscribed')
@@ -158,7 +158,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('receiver activates multiple surveys on different events', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
             registeredHook('billing_changed')
@@ -214,7 +214,7 @@ describe('survey-event-receiver', () => {
                 product_type: { values: ['premium'], operator: 'exact' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -231,7 +231,7 @@ describe('survey-event-receiver', () => {
                 product_type: { values: ['premium'], operator: 'exact' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -247,7 +247,7 @@ describe('survey-event-receiver', () => {
                 product_type: { values: ['basic'], operator: 'is_not' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -263,7 +263,7 @@ describe('survey-event-receiver', () => {
                 url: { values: ['/app/.*'], operator: 'regex' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -279,7 +279,7 @@ describe('survey-event-receiver', () => {
                 query: { values: ['PRODUCT'], operator: 'icontains' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -296,7 +296,7 @@ describe('survey-event-receiver', () => {
                 amount: { values: ['100'], operator: 'is_not' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -307,7 +307,7 @@ describe('survey-event-receiver', () => {
             expect(surveyEventReceiver.getSurveys()).toContain('multi-filter-test')
 
             // A fresh receiver (e.g. after a reload) starts with no in-memory activations
-            const freshReceiver = new SurveyEventReceiver(instance)
+            const freshReceiver = new SurveyEventReceiver(instance.client, instance)
             freshReceiver.register([survey])
             const freshHook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
 
@@ -321,7 +321,7 @@ describe('survey-event-receiver', () => {
                 product_type: { values: ['premium'], operator: 'exact' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -335,7 +335,7 @@ describe('survey-event-receiver', () => {
         it('activates survey without property filters based on event name only', () => {
             const survey = createSurveyWithPropertyFilters('no-filters-test', 'purchase', {})
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -351,7 +351,7 @@ describe('survey-event-receiver', () => {
                 amount: { values: ['100'], operator: 'gt' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -366,7 +366,7 @@ describe('survey-event-receiver', () => {
                 amount: { values: ['100'], operator: 'lt' },
             })
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -454,7 +454,7 @@ describe('survey-event-receiver', () => {
                 },
             } as unknown as Survey
             autoCaptureSurvey.conditions.actions.values = [createAction(2, '$match_event_name')]
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([autoCaptureSurvey, myPageViewSurvey])
             surveyEventReceiver._getActionMatcher().on('$match_event_name', createCaptureResult('$match_event_name'))
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
@@ -470,7 +470,7 @@ describe('survey-event-receiver', () => {
                 ...autoCaptureSurvey,
                 conditions: { actions: { values: [createAction(2, '$old_action')] } },
             } as unknown as Survey
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             surveyEventReceiver.replace([
                 {
@@ -494,7 +494,7 @@ describe('survey-event-receiver', () => {
                     actions: { values: [createAction(2, '$old_action')] },
                 },
             } as unknown as Survey
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([survey])
             expect(surveyEventReceiver.getEventToSurveys().has('$old_event')).toBe(true)
 
@@ -507,7 +507,7 @@ describe('survey-event-receiver', () => {
 
         it('can match action on current_url exact', () => {
             autoCaptureSurvey.conditions.actions.values = [createAction(2, '$autocapture', 'https://us.posthog.com')]
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver
                 ._getActionMatcher()
@@ -523,14 +523,14 @@ describe('survey-event-receiver', () => {
             autoCaptureSurvey.conditions.actions.values = [
                 createAction(2, '$current_url_regexp', '[a-z][a-z].posthog.*', 'regex'),
             ]
-            let surveyEventReceiver = new SurveyEventReceiver(instance)
+            let surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver
                 ._getActionMatcher()
                 .on('$autocapture', createCaptureResult('$current_url_regexp', 'https://eu.posthog.com'))
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
 
-            surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver
                 ._getActionMatcher()
@@ -544,7 +544,7 @@ describe('survey-event-receiver', () => {
             autoCaptureSurvey.conditions.actions.values = [action]
             const result = createCaptureResult('$autocapture', 'https://eu.posthog.com')
             result.properties.$element_selectors = ['* > #__next .flex > button:nth-child(2)']
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver._getActionMatcher().on('$autocapture', result)
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
@@ -581,7 +581,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('calls cancelPendingSurvey when cancel event fires', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([surveyWithCancelEvent])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -595,7 +595,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('removes cancelled survey from activated surveys', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([surveyWithCancelEvent])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -608,7 +608,7 @@ describe('survey-event-receiver', () => {
         })
 
         it('does not call cancelPendingSurvey for unrelated events', () => {
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([surveyWithCancelEvent])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -637,7 +637,7 @@ describe('survey-event-receiver', () => {
 
             ;(instance.getSurveys as Mock).mockImplementation((callback) => callback([surveyWithCancelPropertyFilter]))
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([surveyWithCancelPropertyFilter])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 
@@ -674,7 +674,7 @@ describe('survey-event-receiver', () => {
 
             ;(instance.getSurveys as Mock).mockImplementation((callback) => callback([surveyWithCancelPropertyFilter]))
 
-            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register([surveyWithCancelPropertyFilter])
             const registeredHook = mockAddCaptureHook.mock.calls[0][0]
 

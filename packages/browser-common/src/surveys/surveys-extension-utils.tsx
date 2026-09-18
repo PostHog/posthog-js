@@ -1,6 +1,10 @@
-import { h } from 'preact'
+import type { PostHogFeatureFlags } from '../feature-flags'
+import { getTargetingUrl } from '../utils/url-targeting-utils'
+import { getSurveyReplayUrl } from '../survey-render-context'
+import { surveyStorage } from '../utils/survey-storage'
 import { type VNode, cloneElement, createContext, type JSX } from 'preact'
-import type { SurveysRuntimeHost, SurveyStorage } from '../surveys-runtime-host'
+import type { SurveyRenderContext } from '../survey-render-context'
+import type { SurveyStorage } from '../utils/survey-storage'
 import type { Survey, SurveyAppearance, SurveyQuestion } from '../types/surveys'
 import {
     SurveyEventName,
@@ -357,11 +361,11 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
     return BLACK_TEXT_COLOR
 }
 
-export function getSurveyStylesheet(posthog?: SurveysRuntimeHost) {
+export function getSurveyStylesheet(posthog?: SurveyRenderContext) {
     const stylesheet = prepareStylesheet(
         document,
         typeof surveyStyles === 'string' ? surveyStyles : '',
-        posthog?.prepareStylesheet
+        posthog?.config.prepareStylesheet
     )
     stylesheet?.setAttribute('data-ph-survey-style', 'true')
     return stylesheet
@@ -369,7 +373,7 @@ export function getSurveyStylesheet(posthog?: SurveysRuntimeHost) {
 
 export const retrieveSurveyShadow = (
     survey: Pick<Survey, 'id' | 'appearance' | 'type'>,
-    posthog?: SurveysRuntimeHost,
+    posthog?: SurveyRenderContext,
     element?: Element
 ) => {
     const widgetClassName = getSurveyContainerClass(survey)
@@ -407,7 +411,7 @@ interface SendSurveyEventArgs {
     survey: Survey
     surveySubmissionId: string
     isSurveyCompleted: boolean
-    posthog?: SurveysRuntimeHost | undefined
+    posthog?: SurveyRenderContext | undefined
     /** Additional properties to include in the survey event */
     properties?: Properties | undefined
     /** The language that was applied to the survey. */
@@ -439,20 +443,20 @@ export const sendSurveyEvent = ({
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
-    if (!posthog.canCapture) {
+    if (!posthog.client?.canCapture) {
         return
     }
-    setSurveySeen(survey, posthog.storage)
+    setSurveySeen(survey, surveyStorage)
     if (isSurveyCompleted) {
         // Capture hooks must observe the completed survey's final eligibility state.
-        clearInProgressSurveyState(survey, posthog.storage)
+        clearInProgressSurveyState(survey, surveyStorage)
     }
-    posthog.capture(SurveyEventName.SENT, {
+    posthog.client?.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
         [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
         [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-        sessionRecordingUrl: posthog.getReplayUrl(),
+        sessionRecordingUrl: getSurveyReplayUrl(posthog),
         ...buildSurveyResponseEventProperties({
             event: 'sent',
             survey,
@@ -473,7 +477,7 @@ export const sendSurveyEvent = ({
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
-        posthog.reloadFlags()
+        posthog.client?.getExtension<PostHogFeatureFlags>('featureFlags')?.reloadFeatureFlags()
     }
 }
 
@@ -481,13 +485,13 @@ const _buildSurveyEventProperties = (
     event: 'dismissed' | 'abandoned',
     survey: Survey,
     inProgressSurvey: InProgressSurveyState | null,
-    posthog: SurveysRuntimeHost
+    posthog: SurveyRenderContext
 ) => ({
     [SurveyEventProperties.SURVEY_NAME]: survey.name,
     [SurveyEventProperties.SURVEY_ID]: survey.id,
     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-    sessionRecordingUrl: posthog.getReplayUrl(),
+    sessionRecordingUrl: getSurveyReplayUrl(posthog),
     ...buildSurveyResponseEventProperties({
         event,
         survey,
@@ -500,7 +504,7 @@ const _buildSurveyEventProperties = (
 
 export const dismissedSurveyEvent = (
     survey: Survey,
-    posthog?: SurveysRuntimeHost,
+    posthog?: SurveyRenderContext,
     readOnly?: boolean,
     surveyLanguage?: string | null
 ) => {
@@ -512,7 +516,7 @@ export const dismissedSurveyEvent = (
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, posthog.storage)
+    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
     // Prefer the language snapshotted when the user last answered (answer-time language),
     // which is legitimately `null` when no translation matched at answer time — that must not
     // fall through to the current display language. Only fall back to the current display
@@ -526,13 +530,13 @@ export const dismissedSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     }
-    clearInProgressSurveyState(survey, posthog.storage)
-    setSurveySeen(survey, posthog.storage)
-    posthog.capture(SurveyEventName.DISMISSED, properties)
+    clearInProgressSurveyState(survey, surveyStorage)
+    setSurveySeen(survey, surveyStorage)
+    posthog.client?.capture(SurveyEventName.DISMISSED, properties)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
-export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveysRuntimeHost) => {
+export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderContext) => {
     if (!posthog) {
         logger.error('[survey abandoned] event not captured, PostHog instance not found.')
         return
@@ -540,7 +544,7 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveysRuntim
 
     const abandonedKey = getSurveyAbandonedKey(survey)
     try {
-        if (posthog.storage.getItem(abandonedKey) === 'true') {
+        if (surveyStorage.getItem(abandonedKey) === 'true') {
             return
         }
     } catch {
@@ -548,19 +552,19 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveysRuntim
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, posthog.storage)
+    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
     if (!inProgressSurvey) {
         return
     }
 
     try {
-        posthog.storage.setItem(abandonedKey, 'true')
+        surveyStorage.setItem(abandonedKey, 'true')
     } catch {
         // localStorage not available
     }
 
-    posthog.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties('abandoned', survey, inProgressSurvey, posthog), {
-        transport: 'sendBeacon',
+    posthog.client?.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties('abandoned', survey, inProgressSurvey, posthog), {
+        delivery: 'unload',
     })
 }
 
@@ -717,12 +721,12 @@ function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>, posthog?: SurveysRuntimeHost): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>, posthog?: SurveyRenderContext): boolean {
     if (!survey.conditions?.url) {
         return true
     }
     // honors the `get_current_url` config hook so apps that rewrite their URL can target surveys correctly
-    const href = posthog?.getTargetingUrl() ?? (typeof window !== 'undefined' ? window.location.href : undefined)
+    const href = getTargetingUrl(posthog) ?? (typeof window !== 'undefined' ? window.location.href : undefined)
     if (!href) {
         // if we dont know the url, assume it is not a match
         return false

@@ -18,10 +18,9 @@ import {
 } from '../src/surveys/surveys-extension-utils'
 import { PostHogSurveys } from '../src/surveys'
 import { TestClient } from './helpers/test-client'
-import { createSurveysRuntimeHost } from './helpers/surveys-runtime-host'
-import type { MockSurveysRuntimeHost } from './helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from './helpers/survey-render-context'
+import type { MockSurveyRenderContext } from './helpers/survey-render-context'
 import type { SurveysConfig } from '../src/surveys-config'
-import { createSurveyTriggerHost } from './helpers/survey-trigger-host'
 import { SurveyQuestionBranchingType, SurveyQuestionType, SurveySchedule, SurveyType } from '../src/survey-constants'
 import type { MultipleSurveyQuestion, RatingSurveyQuestion, Survey, SurveyQuestion } from '../src/types/surveys'
 import type { RemoteConfig } from '../src/types/remote-config'
@@ -34,7 +33,7 @@ import { SURVEY_LOGGER as logger } from '../src/utils/survey-utils'
 describe('surveys', () => {
     let config: SurveysConfig
     let client: TestClient
-    let host: MockSurveysRuntimeHost
+    let host: MockSurveyRenderContext
     let surveys: PostHogSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location.href
@@ -183,22 +182,20 @@ describe('surveys', () => {
         client = new TestClient()
         vi.spyOn(client, 'sendRequest').mockImplementation(async () => ({ statusCode: 200, json: surveysResponse }))
         config = { disableSurveys: false, cookielessMode: false, advancedEnableSurveys: false, requestTimeoutMs: 10000 }
-        host = createSurveysRuntimeHost({
+        host = createSurveyRenderContext({
             hasLoadedFlags: true,
             getFlag: vi.fn((key) => flagsResponse.featureFlags[key]),
             isFlagEnabled: vi.fn((key) => flagsResponse.featureFlags[key]),
             getCachedSurveys: () => client.kv.get(SURVEYS),
             getSurveys: (callback, forceReload) => surveys.getSurveys(callback, forceReload),
         })
-        const createReceiver = () => new SurveyEventReceiver(createSurveyTriggerHost({ kv: client.kv }))
         surveys = new PostHogSurveys({
             get: () => config,
             getExtensions: () => undefined,
-            createEventReceiver: createReceiver,
         })
         surveys.setup(client)
         surveys.loadIfEnabled = vi.fn(() => {
-            surveys._surveyEventReceiver = createReceiver()
+            surveys._surveyEventReceiver = new SurveyEventReceiver(client, surveys)
             host.eventReceiver = surveys._surveyEventReceiver
         })
         ;(surveys as any)._surveyManager = new SurveyManager(host)

@@ -1,4 +1,5 @@
 import type { Mock as VitestMock } from 'vitest'
+import { getSurveyRenderContext } from '../browser-surveys'
 vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@posthog/browser-common/utils/logger')>()),
     createLogger: vi.fn().mockReturnValue({
@@ -10,7 +11,7 @@ vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
 }))
 vi.useFakeTimers()
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
-import { SurveyManager } from '../extensions/surveys'
+import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import { PostHog, defaultConfig } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -19,7 +20,7 @@ import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveyEventName, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '../utils/survey-utils'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
@@ -125,7 +126,7 @@ describe('posthog-surveys', () => {
 
             beforeEach(() => {
                 mockPostHog.get_property.mockReturnValue([survey])
-                surveyManager = new SurveyManager(mockPostHog as PostHog)
+                surveyManager = new SurveyManager(getSurveyRenderContext(mockPostHog as PostHog)!)
                 surveys['_surveyManager'] = surveyManager
                 flagsResponse.featureFlags[survey.targeting_flag_key] = true
                 flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true

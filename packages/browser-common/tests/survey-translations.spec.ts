@@ -1,8 +1,5 @@
 import { detectUserLanguage } from '../src/surveys/survey-translations'
-import type { SurveysRuntimeHost } from '../src/surveys-runtime-host'
-
-const host = (overrides: Partial<SurveysRuntimeHost> = {}): SurveysRuntimeHost =>
-    ({ overrideLanguage: undefined, storedPersonProperties: undefined, ...overrides }) as SurveysRuntimeHost
+import { createSurveyRenderContext as host } from './helpers/survey-render-context'
 
 afterEach(() => vi.unstubAllGlobals())
 

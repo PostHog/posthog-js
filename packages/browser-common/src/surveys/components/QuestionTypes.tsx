@@ -1,4 +1,3 @@
-import { h } from 'preact'
 import { Fragment, type JSX } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type {

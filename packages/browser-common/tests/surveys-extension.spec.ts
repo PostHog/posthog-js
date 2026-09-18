@@ -1,3 +1,4 @@
+import { SurveyEventReceiver } from '../src/survey-event-receiver'
 /* oxlint-disable compat/compat -- Tests run in Node. */
 import './helpers/surveys-setup'
 import type { Mock } from 'vitest'
@@ -19,9 +20,10 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
         dispose: vi.fn(),
     }
     const receiver = {
-        dispose: vi.fn(),
-        register: vi.fn(),
-        replace: vi.fn(),
+        register: vi.spyOn(SurveyEventReceiver.prototype, 'register'),
+        reset: vi.spyOn(SurveyEventReceiver.prototype, 'reset'),
+        dispose: vi.spyOn(SurveyEventReceiver.prototype, 'dispose'),
+        replace: vi.spyOn(SurveyEventReceiver.prototype, 'replace'),
     }
     const extensions: SurveysExtensionHost = {
         generateSurveys: vi.fn(() => manager as any),
@@ -29,7 +31,6 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
     const source: SurveysConfigSource = {
         get: vi.fn(() => ({ ...config })),
         getExtensions: vi.fn(() => extensions),
-        createEventReceiver: vi.fn(() => receiver as any),
     }
     return { config, manager, receiver, extensions, source }
 }
@@ -45,6 +46,9 @@ const createClient = (
     const remoteConfigDispose = vi.fn()
     const client = {
         projectToken: 'test-token',
+        onSession: vi.fn(() => ({ dispose: vi.fn() })),
+        onEvent: vi.fn(() => ({ dispose: vi.fn() })),
+        session: { sessionId: 'session' },
         isOptedOut: false,
         canCapture: true,
         kv: {
@@ -82,7 +86,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         const surveys = new PostHogSurveys(source)
 
         expect(source.getExtensions).not.toHaveBeenCalled()
-        expect(source.createEventReceiver).not.toHaveBeenCalled()
+        expect(surveys._surveyEventReceiver).toBeNull()
         expect(client.onRemoteConfig).not.toHaveBeenCalled()
 
         surveys.setup(client)
@@ -116,7 +120,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         finishLoading()
 
         expect(extensions.generateSurveys).toHaveBeenCalledTimes(1)
-        expect(source.createEventReceiver).toHaveBeenCalledTimes(1)
+        expect(surveys._surveyEventReceiver).toBeInstanceOf(SurveyEventReceiver)
         expect(surveys['_isInitializingSurveys']).toBe(false)
     })
 

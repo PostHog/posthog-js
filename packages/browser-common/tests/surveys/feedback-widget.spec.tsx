@@ -2,7 +2,7 @@
 import '../helpers/surveys-setup'
 import type { JSDOM } from 'jsdom'
 declare const jsdom: JSDOM
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import '@testing-library/jest-dom'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
@@ -11,10 +11,9 @@ import { SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../src/surv
 import type { Survey } from '../../src/types/surveys'
 
 // Mock survey runtime host
-const host = createSurveysRuntimeHost({
+const host = createSurveyRenderContext({
     capture: vi.fn(),
     isFlagEnabled: vi.fn().mockReturnValue(true),
-    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
     canCapture: true,
 })
 
