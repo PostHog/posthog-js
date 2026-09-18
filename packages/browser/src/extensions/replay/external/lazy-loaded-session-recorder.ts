@@ -3093,9 +3093,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             activePlugins: activePlugins.map((p) => p?.name),
         })
 
-        this._tryAddCustomEvent('$posthog_config', {
-            config: this._instance.config,
-        })
+        const config = { ...this._instance.config }
+        if (isObject(config.capture_dead_clicks)) {
+            const { mutation_observer_roots: _mutationObserverRoots, ...captureDeadClicks } = config.capture_dead_clicks
+            config.capture_dead_clicks = captureDeadClicks
+        }
+
+        this._tryAddCustomEvent('$posthog_config', { config })
     }
 
     tryAddCustomEvent(tag: string, payload: any): boolean {

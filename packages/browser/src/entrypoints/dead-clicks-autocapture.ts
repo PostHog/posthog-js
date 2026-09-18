@@ -240,13 +240,18 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (this._observedRoots.has(root)) {
             return
         }
+        try {
+            this._mutationObserver.observe(root, {
+                attributes: true,
+                characterData: true,
+                childList: true,
+                subtree: true,
+            })
+        } catch {
+            logger.warn('ignoring a mutation_observer_roots entry that is not a DOM node')
+            return
+        }
         this._observedRoots.add(root)
-        this._mutationObserver.observe(root, {
-            attributes: true,
-            characterData: true,
-            childList: true,
-            subtree: true,
-        })
         this._observeShadowRoots(root)
     }
 

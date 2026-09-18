@@ -1418,7 +1418,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
             lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
                 // a JavaScript caller is not held to the Node[] type
-                mutation_observer_roots: ['#not-a-node', 42, {}] as unknown as Node[],
+                mutation_observer_roots: ['#not-a-node', 42, {}, { nodeType: 1 }] as unknown as Node[],
             })
 
             expect(() => lazyLoadedDeadClicksAutocapture.start(document)).not.toThrow()
