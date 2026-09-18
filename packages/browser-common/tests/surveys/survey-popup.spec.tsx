@@ -1,8 +1,9 @@
+import { surveyStorage } from '../../src/utils/survey-storage'
 /* oxlint-disable compat/compat -- Tests run in Node. */
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
 import type { Mock } from 'vitest'
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
@@ -24,9 +25,8 @@ vi.mock('../../src/surveys/surveys-extension-utils', async (importOriginal) => (
 vi.mock('../../src/utils/uuidv7')
 
 // Mock survey runtime host needed by event handlers
-const host = createSurveysRuntimeHost({
+const host = createSurveyRenderContext({
     capture: vi.fn(),
-    getReplayUrl: vi.fn().mockReturnValue('http://example.com/replay'),
     canCapture: true,
     reloadFlags: vi.fn(),
 })
@@ -169,7 +169,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, localStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
@@ -189,7 +189,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('Previous answer')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, localStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
@@ -258,7 +258,7 @@ describe('SurveyPopup', () => {
             survey: partialResponsesSurvey,
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
-            posthog: expect.objectContaining({ canCapture: true, storage: localStorage }),
+            posthog: expect.objectContaining({ client: expect.objectContaining({ canCapture: true }) }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -336,7 +336,7 @@ describe('SurveyPopup', () => {
             survey: mockSurvey,
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
-            posthog: expect.objectContaining({ canCapture: true, storage: localStorage }),
+            posthog: expect.objectContaining({ client: expect.objectContaining({ canCapture: true }) }),
             properties: undefined,
             surveyLanguage: undefined,
             questionSnapshots: {
@@ -405,7 +405,7 @@ describe('SurveyPopup', () => {
 
         expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
             mockSurvey,
-            expect.objectContaining({ canCapture: true, storage: localStorage }),
+            expect.objectContaining({ client: expect.objectContaining({ canCapture: true }) }),
             false
         )
     })
@@ -613,7 +613,7 @@ describe('SurveyPopup', () => {
 
             expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(
                 introSurvey,
-                expect.objectContaining({ canCapture: true, storage: localStorage }),
+                expect.objectContaining({ client: expect.objectContaining({ canCapture: true }) }),
                 false
             )
             expect(mockedSendSurveyEvent).not.toHaveBeenCalled()

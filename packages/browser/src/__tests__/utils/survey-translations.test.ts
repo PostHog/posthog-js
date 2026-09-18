@@ -1,6 +1,7 @@
+import { getSurveyRenderContext } from '../../browser-surveys'
 /// <reference lib="dom" />
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { detectUserLanguage } from '../../utils/survey-translations'
+import { detectUserLanguage } from '@posthog/browser-common/surveys/survey-translations'
 import { PostHog } from '../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 import Config from '../../config'
@@ -112,13 +113,14 @@ describe('Survey Translations', () => {
                 mockPostHog.config.override_display_language = configLanguage
                 setBrowserLanguage(browserLanguage)
 
+                mockPostHog.persistence = { get_property: (key: string) => mockPostHog.get_property?.(key) } as any
                 if (hasGetProperty) {
                     ;(mockPostHog.get_property as vi.Mock).mockReturnValue(storedPersonProperties)
                 } else {
                     delete (mockPostHog as Partial<PostHog>).get_property
                 }
 
-                expect(detectUserLanguage(mockPostHog)).toBe(expectedLanguage)
+                expect(detectUserLanguage(getSurveyRenderContext(mockPostHog)!)).toBe(expectedLanguage)
 
                 if (expectsStoredPropertiesLookup) {
                     expect(mockPostHog.get_property).toHaveBeenCalledWith(STORED_PERSON_PROPERTIES_KEY)
@@ -132,6 +134,9 @@ describe('Survey Translations', () => {
             mockPostHog = {
                 config: {},
                 persistence: {
+                    get_property(key: string) {
+                        return this.props[key]
+                    },
                     props: {
                         [STORED_PERSON_PROPERTIES_KEY]: { language: 'it' },
                     },
@@ -141,7 +146,7 @@ describe('Survey Translations', () => {
                 },
             } as unknown as PostHog
 
-            expect(detectUserLanguage(mockPostHog)).toBe('it')
+            expect(detectUserLanguage(getSurveyRenderContext(mockPostHog)!)).toBe('it')
         })
     })
 })

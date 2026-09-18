@@ -11,6 +11,8 @@ export {
     SurveyEventProperties,
     DisplaySurveyType,
 } from './survey-constants'
+import { SurveyEventReceiver } from './survey-event-receiver'
+import type { SurveyRenderContext } from './survey-render-context'
 import type { ApiResponse, Client } from './client'
 import type { DeepReadonly } from './client'
 import type { Disposable } from './disposable'
@@ -116,6 +118,18 @@ export class PostHogSurveys implements Extension {
 
     private get _config() {
         return this._configSource.get()
+    }
+
+    getRenderContext(): SurveyRenderContext | undefined {
+        if (!this._client) return
+        const surveys = this
+        return {
+            client: this._client,
+            get config() {
+                return surveys._config
+            },
+            surveys,
+        }
     }
 
     initialize() {
@@ -257,7 +271,7 @@ export class PostHogSurveys implements Extension {
             return
         }
         this._surveyManager = generateSurveysFn(isSurveysEnabled)
-        this._surveyEventReceiver = this._configSource.createEventReceiver()
+        this._surveyEventReceiver = new SurveyEventReceiver(this._client!, this)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
     }

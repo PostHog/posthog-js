@@ -18,6 +18,13 @@ export interface SurveysConfig {
     cookielessMode: boolean
     advancedEnableSurveys: boolean
     requestTimeoutMs: number
+    prefillFromUrl?: boolean | undefined
+    automaticDisplay?: boolean | undefined
+    featureFlagEvaluation?: boolean | undefined
+    overrideLanguage?: string | null | undefined
+    uiHost?: string | undefined
+    get_current_url?: ((url: string) => string) | undefined
+    prepareStylesheet?: ((stylesheet: HTMLStyleElement) => HTMLStyleElement | null) | undefined
 }
 
 /** Rendering and eligibility operations used by the surveys lifecycle. */
@@ -51,7 +58,6 @@ export interface SurveysExtensionHost {
 export interface SurveysConfigSource {
     get(): Readonly<SurveysConfig>
     getExtensions(): SurveysExtensionHost | undefined
-    createEventReceiver(): SurveysEventReceiver
 }
 
 export const SURVEYS_ACTIVATED = '$surveys_activated'

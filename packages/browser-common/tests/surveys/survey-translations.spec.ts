@@ -6,13 +6,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { detectUserLanguage, applySurveyTranslationForUser } from '../../src/surveys/survey-translations'
 import { SurveyType, SurveyQuestionType } from '../../src/survey-constants'
 import type { Survey } from '../../src/types/surveys'
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
-import type { MockSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
+import type { MockSurveyRenderContext } from '../helpers/survey-render-context'
 import Config from '../../src/config'
 import * as commonGlobals from '../../src/utils/globals'
 
 describe('Survey Translations', () => {
-    let host: MockSurveysRuntimeHost
+    let host: MockSurveyRenderContext
     const originalLanguage = commonGlobals.navigator?.language
     const setBrowserLanguage = (language: string | undefined): void => {
         if (commonGlobals.navigator) {
@@ -25,7 +25,7 @@ describe('Survey Translations', () => {
     }
 
     beforeEach(() => {
-        host = createSurveysRuntimeHost()
+        host = createSurveyRenderContext()
         setBrowserLanguage(undefined)
     })
 

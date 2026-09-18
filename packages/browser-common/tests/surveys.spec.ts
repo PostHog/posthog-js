@@ -1,3 +1,4 @@
+import { SurveyEventReceiver } from '../src/survey-event-receiver'
 /* oxlint-disable compat/compat -- Tests run in Node. */
 import { isBoolean } from '@posthog/core'
 import { PostHogSurveys } from '../src/surveys'
@@ -9,7 +10,6 @@ import {
     type SurveysConfigSource,
     type SurveysExtensionHost,
     type SurveysManager,
-    type SurveysEventReceiver,
 } from '../src/surveys-config'
 import { SurveyType } from '../src/surveys'
 import type { Survey } from '../src'
@@ -50,18 +50,16 @@ const create = (overrides: Partial<SurveysConfig> = {}) => {
         cancelSurvey: vi.fn(),
         dispose: vi.fn(),
     }
-    const receiver: SurveysEventReceiver = {
-        register: vi.fn(),
-        reset: vi.fn(),
-        dispose: vi.fn(),
-        getSurveys: vi.fn(() => []),
-        getActivationTimestamp: vi.fn(),
+    const receiver = {
+        register: vi.spyOn(SurveyEventReceiver.prototype, 'register'),
+        reset: vi.spyOn(SurveyEventReceiver.prototype, 'reset'),
+        dispose: vi.spyOn(SurveyEventReceiver.prototype, 'dispose'),
+        replace: vi.spyOn(SurveyEventReceiver.prototype, 'replace'),
     }
     const extensions: SurveysExtensionHost = { generateSurveys: vi.fn(() => manager) }
     const source: SurveysConfigSource = {
         get: () => config,
         getExtensions: () => extensions,
-        createEventReceiver: vi.fn(() => receiver),
     }
     const client = new TestClient({ requestResponse: { statusCode: 200, json: { surveys: [definition] } } })
     const surveys = new PostHogSurveys(source)
@@ -135,14 +133,14 @@ describe('PostHogSurveys', () => {
     })
 
     it('preserves synchronous loader completion and reacquires the installed renderer', () => {
-        const { client, surveys, extensions, source, manager } = create({ advancedEnableSurveys: true })
+        const { client, surveys, extensions, manager } = create({ advancedEnableSurveys: true })
         extensions.generateSurveys = undefined
         extensions.loadExternalDependency = vi.fn((callback) => {
             extensions.generateSurveys = vi.fn(() => manager)
             callback()
         })
         surveys.setup(client)
-        expect(source.createEventReceiver).toHaveBeenCalledOnce()
+        expect(surveys._surveyEventReceiver).toBeInstanceOf(SurveyEventReceiver)
         expect(extensions.generateSurveys).toHaveBeenCalledWith(true)
         surveys.dispose()
         expect(manager.dispose).toHaveBeenCalledOnce()

@@ -74,8 +74,8 @@
             "survey-event-receiver": [
                 "dist/survey-event-receiver.d.ts"
             ],
-            "surveys-runtime-host": [
-                "dist/surveys-runtime-host.d.ts"
+            "survey-render-context": [
+                "dist/survey-render-context.d.ts"
             ],
             "surveys-renderer": [
                 "dist/surveys-renderer.d.ts"
@@ -83,35 +83,11 @@
             "surveys/surveys-extension-utils": [
                 "dist/surveys/surveys-extension-utils.d.ts"
             ],
-            "surveys/survey-translations": [
-                "dist/surveys/survey-translations.d.ts"
-            ],
-            "surveys/survey-branching": [
-                "dist/surveys/survey-branching.d.ts"
-            ],
-            "surveys/survey-url-prefill": [
-                "dist/surveys/survey-url-prefill.d.ts"
-            ],
             "surveys/icons": [
                 "dist/surveys/icons.d.ts"
             ],
-            "surveys/components/BottomSection": [
-                "dist/surveys/components/BottomSection.d.ts"
-            ],
-            "surveys/components/ConfirmationMessage": [
-                "dist/surveys/components/ConfirmationMessage.d.ts"
-            ],
-            "surveys/components/IntroScreen": [
-                "dist/surveys/components/IntroScreen.d.ts"
-            ],
-            "surveys/components/PostHogLogo": [
-                "dist/surveys/components/PostHogLogo.d.ts"
-            ],
-            "surveys/components/QuestionHeader": [
-                "dist/surveys/components/QuestionHeader.d.ts"
-            ],
-            "surveys/components/QuestionTypes": [
-                "dist/surveys/components/QuestionTypes.d.ts"
+            "surveys/survey-translations": [
+                "dist/surveys/survey-translations.d.ts"
             ]
         }
     },
@@ -206,10 +182,10 @@
             "require": "./dist/survey-event-receiver.js",
             "import": "./dist/survey-event-receiver.mjs"
         },
-        "./surveys-runtime-host": {
-            "types": "./dist/surveys-runtime-host.d.ts",
-            "require": "./dist/surveys-runtime-host.js",
-            "import": "./dist/surveys-runtime-host.mjs"
+        "./survey-render-context": {
+            "types": "./dist/survey-render-context.d.ts",
+            "require": "./dist/survey-render-context.js",
+            "import": "./dist/survey-render-context.mjs"
         },
         "./surveys-renderer": {
             "types": "./dist/surveys-renderer.d.ts",
@@ -221,55 +197,15 @@
             "require": "./dist/surveys/surveys-extension-utils.js",
             "import": "./dist/surveys/surveys-extension-utils.mjs"
         },
-        "./surveys/survey-translations": {
-            "types": "./dist/surveys/survey-translations.d.ts",
-            "require": "./dist/surveys/survey-translations.js",
-            "import": "./dist/surveys/survey-translations.mjs"
-        },
-        "./surveys/survey-branching": {
-            "types": "./dist/surveys/survey-branching.d.ts",
-            "require": "./dist/surveys/survey-branching.js",
-            "import": "./dist/surveys/survey-branching.mjs"
-        },
-        "./surveys/survey-url-prefill": {
-            "types": "./dist/surveys/survey-url-prefill.d.ts",
-            "require": "./dist/surveys/survey-url-prefill.js",
-            "import": "./dist/surveys/survey-url-prefill.mjs"
-        },
         "./surveys/icons": {
             "types": "./dist/surveys/icons.d.ts",
             "require": "./dist/surveys/icons.js",
             "import": "./dist/surveys/icons.mjs"
         },
-        "./surveys/components/BottomSection": {
-            "types": "./dist/surveys/components/BottomSection.d.ts",
-            "require": "./dist/surveys/components/BottomSection.js",
-            "import": "./dist/surveys/components/BottomSection.mjs"
-        },
-        "./surveys/components/ConfirmationMessage": {
-            "types": "./dist/surveys/components/ConfirmationMessage.d.ts",
-            "require": "./dist/surveys/components/ConfirmationMessage.js",
-            "import": "./dist/surveys/components/ConfirmationMessage.mjs"
-        },
-        "./surveys/components/IntroScreen": {
-            "types": "./dist/surveys/components/IntroScreen.d.ts",
-            "require": "./dist/surveys/components/IntroScreen.js",
-            "import": "./dist/surveys/components/IntroScreen.mjs"
-        },
-        "./surveys/components/PostHogLogo": {
-            "types": "./dist/surveys/components/PostHogLogo.d.ts",
-            "require": "./dist/surveys/components/PostHogLogo.js",
-            "import": "./dist/surveys/components/PostHogLogo.mjs"
-        },
-        "./surveys/components/QuestionHeader": {
-            "types": "./dist/surveys/components/QuestionHeader.d.ts",
-            "require": "./dist/surveys/components/QuestionHeader.js",
-            "import": "./dist/surveys/components/QuestionHeader.mjs"
-        },
-        "./surveys/components/QuestionTypes": {
-            "types": "./dist/surveys/components/QuestionTypes.d.ts",
-            "require": "./dist/surveys/components/QuestionTypes.js",
-            "import": "./dist/surveys/components/QuestionTypes.mjs"
+        "./surveys/survey-translations": {
+            "types": "./dist/surveys/survey-translations.d.ts",
+            "require": "./dist/surveys/survey-translations.js",
+            "import": "./dist/surveys/survey-translations.mjs"
         }
     },
     "scripts": {

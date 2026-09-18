@@ -8,8 +8,6 @@ import { useContext, useEffect } from 'preact/hooks'
 import { SurveyContext } from '../surveys-extension-utils'
 import { addEventListener } from '../../utils/general-utils'
 
-// We cast the types here which is dangerous but protected by the top level generateSurveys call
-
 export function ConfirmationMessage({
     header,
     description,

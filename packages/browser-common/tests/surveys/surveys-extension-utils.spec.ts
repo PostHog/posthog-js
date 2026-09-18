@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
-import { createSurveysRuntimeHost } from '../helpers/surveys-runtime-host'
+import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import {
     addSurveyCSSVariablesToElement,
@@ -338,7 +338,7 @@ describe('getFontFamily', () => {
 })
 
 describe('doesSurveyUrlMatch', () => {
-    const host = createSurveysRuntimeHost()
+    const host = createSurveyRenderContext()
     const mockTargetingUrl = (href: string | undefined) => {
         host.getTargetingUrl = () => href ?? ''
     }
@@ -641,7 +641,7 @@ describe('sendSurveyEvent', () => {
         )
         const before = { ...localStorage }
         const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
-        const host = createSurveysRuntimeHost({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: false })
+        const host = createSurveyRenderContext({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: false })
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -664,7 +664,7 @@ describe('sendSurveyEvent', () => {
         const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
             throw new Error('quota')
         })
-        const host = createSurveysRuntimeHost({ capture: vi.fn(), reloadFlags: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: vi.fn(), reloadFlags: vi.fn(), canCapture: true })
         try {
             expect(() =>
                 sendSurveyEvent({
@@ -686,7 +686,7 @@ describe('sendSurveyEvent', () => {
 
     it('stays silent while capturing is on', () => {
         const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
-        const host = createSurveysRuntimeHost({ capture: vi.fn(), reloadFlags: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: vi.fn(), reloadFlags: vi.fn(), canCapture: true })
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -702,7 +702,7 @@ describe('sendSurveyEvent', () => {
 
     it('includes custom properties in captured event', () => {
         const mockCapture = vi.fn()
-        const host = createSurveysRuntimeHost({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: true })
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -733,7 +733,7 @@ describe('sendSurveyEvent', () => {
 
     it('works without custom properties', () => {
         const mockCapture = vi.fn()
-        const host = createSurveysRuntimeHost({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: true })
+        const host = createSurveyRenderContext({ capture: mockCapture, reloadFlags: vi.fn(), canCapture: true })
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -752,12 +752,12 @@ describe('sendSurveyEvent', () => {
     it.each([false, true])(
         'emits completion=%s and only clears progress and reloads flags on completion',
         (completed) => {
-            const host = createSurveysRuntimeHost({
+            const host = createSurveyRenderContext({
                 capture: vi.fn(),
                 reloadFlags: vi.fn(),
                 canCapture: true,
-                getReplayUrl: () => 'https://us.posthog.com/replay/session-1',
             })
+            Object.assign(host.config, { uiHost: 'https://us.posthog.com' })
             const progress = {
                 surveySubmissionId: 'submission-123',
                 lastQuestionIndex: 0,
@@ -765,7 +765,7 @@ describe('sendSurveyEvent', () => {
                 surveyLanguage: 'fr',
                 questionSnapshots: { q1: 'Votre avis ?' },
             }
-            setInProgressSurveyState(baseSurvey, progress, host.storage)
+            setInProgressSurveyState(baseSurvey, progress)
 
             sendSurveyEvent({
                 ...progress,
@@ -784,10 +784,10 @@ describe('sendSurveyEvent', () => {
                 $survey_language: 'fr',
                 $survey_response_q1: 'Great!',
                 $survey_questions: [{ id: 'q1', question: 'Votre avis ?', response: 'Great!' }],
-                sessionRecordingUrl: 'https://us.posthog.com/replay/session-1',
+                sessionRecordingUrl: `https://us.posthog.com/project/${host.client!.projectToken}/replay/${host.client!.session.sessionId}`,
                 $set: { '$survey_responded/test-survey-id': true },
             })
-            expect(getInProgressSurveyState(baseSurvey, host.storage)).toEqual(completed ? null : progress)
+            expect(getInProgressSurveyState(baseSurvey)).toEqual(completed ? null : progress)
             expect(host.reloadFlags).toHaveBeenCalledTimes(completed ? 1 : 0)
         }
     )
