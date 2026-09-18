@@ -391,6 +391,31 @@ export const getCookiePersistedPropertiesFromMetadata = (
 export const getCookiePropertiesFingerprint = (name: string, cookieValue: string): string =>
     cookieValue + '|' + (cookieStore._get(getCookiePersistedPropertiesMetadataName(name)) || '')
 
+// `_parse` runs on every persistence read, and the conflict does not change
+// between reads, so one warning per persistence key is enough.
+const warnedCookieIdentityKeys = new Set<string>()
+
+/**
+ * localStorage wins this conflict, so a distinct ID that something other than
+ * this SDK wrote into the cookie is dropped without a trace. Redirect
+ * middleware that mints an ID, writes the cookie and captures the exposure
+ * server-side is the common case, and it leaves server events on one person
+ * and browser events on another.
+ */
+const warnDiscardedCookieIdentity = (name: string): void => {
+    if (warnedCookieIdentityKeys.has(name)) {
+        return
+    }
+    warnedCookieIdentityKeys.add(name)
+    logger.warn(
+        'Ignored the distinct_id in the persistence cookie, because localStorage holds a different one. ' +
+            'Do not write the PostHog cookie yourself. To set the identity from your server, ' +
+            'pass it as bootstrap.distinctID or identity_distinct_id. ' +
+            'To make the cookie win instead, enable the cookieWinsOnConflict config option.',
+        name
+    )
+}
+
 /**
  * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
  *
@@ -505,6 +530,14 @@ export const createLocalPlusCookieStore = (
                     }
                     value = extend(localStorageData, safeCookieProperties)
                 } else {
+                    const cookieDistinctId = cookieProperties[DISTINCT_ID]
+                    if (
+                        !isUndefined(cookieDistinctId) &&
+                        !isUndefined(localStorageData[DISTINCT_ID]) &&
+                        cookieDistinctId !== localStorageData[DISTINCT_ID]
+                    ) {
+                        warnDiscardedCookieIdentity(name)
+                    }
                     value = extend(cookieProperties, localStorageData)
                 }
                 localStore._set(name, value)
