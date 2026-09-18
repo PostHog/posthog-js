@@ -34,6 +34,28 @@ afterEach(() => {
 })
 
 describe('shared logs', () => {
+    it('awaits both programmatic and console delivery in flush', async () => {
+        const callbacks: Array<(response: { statusCode: number }) => void> = []
+        const { logs, send } = create()
+        send.mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    callbacks.push(resolve)
+                })
+        )
+        logs.captureLog({ body: 'programmatic' })
+        logs.captureConsoleLog({ body: 'console' })
+        const finished = vi.fn()
+        const pending = logs.flush().then(finished)
+        expect(callbacks).toHaveLength(2)
+        callbacks[0]!({ statusCode: 200 })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(finished).not.toHaveBeenCalled()
+        callbacks[1]!({ statusCode: 200 })
+        await pending
+        expect(finished).toHaveBeenCalledOnce()
+    })
+
     it('keeps programmatic and console resources separate for explicit transport flushes', () => {
         const { logs, send } = create()
         logs.captureLog({ body: 'programmatic' })

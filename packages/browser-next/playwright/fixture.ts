@@ -1,3 +1,5 @@
+import { logs } from '../src/logs'
+import type { PostHog } from '../src/types'
 import { flags } from '../src/flags'
 import { analytics } from '../src/analytics'
 import { createPostHog, FeatureFlagsExtension, type CaptureSummary, type SessionContext } from '../src/core'
@@ -32,6 +34,17 @@ interface ConsentHarness {
 
 declare global {
     interface Window {
+        logsHarness: {
+            initialize(remote: boolean): Promise<void>
+            capture(body: string): void
+            console(body: string): void
+            flush(): Promise<void>
+            optOut(): void
+            optIn(): void
+            shutdown(): Promise<void>
+            restored(): boolean
+            pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number; aborted: boolean }>
+        }
         consentHarness: ConsentHarness
     }
 }
@@ -184,5 +197,85 @@ window.consentHarness = {
     },
     sessionChanges() {
         return sessionChanges.slice()
+    },
+}
+
+/* oxlint-disable no-console -- Exercise native console instrumentation. */
+let logsClient: PostHog | undefined
+const originalLog = console.log
+window.logsHarness = {
+    async initialize(remote) {
+        logsClient = await createPostHog({
+            projectToken: 'ph_browser_logs',
+            apiHost: window.location.origin,
+            capturePageview: false,
+            navigator: false,
+            extensions: [logs({ captureConsoleLogs: !remote, flushIntervalMs: 60_000 })],
+            remoteConfig: {
+                supportedCompression: [],
+                toolbarParams: {},
+                toolbarVersion: 'toolbar',
+                isAuthenticated: false,
+                siteApps: [],
+                logs: { captureConsoleLogs: remote },
+            },
+        })
+    },
+    capture(body) {
+        logsClient?.captureLog({ body })
+    },
+    console(body) {
+        console.log(body)
+    },
+    async flush() {
+        await logsClient?.flush()
+    },
+    optOut() {
+        logsClient?.optOut()
+    },
+    optIn() {
+        logsClient?.optIn()
+    },
+    async shutdown() {
+        await logsClient?.shutdown()
+    },
+    restored() {
+        return console.log === originalLog
+    },
+    async pagehideDuringShutdown() {
+        let beacon: Blob | undefined
+        let signal: AbortSignal | undefined
+        let fetches = 0
+        const client = await createPostHog({
+            projectToken: 'ph_browser_logs_shutdown',
+            storage: false,
+            capturePageview: false,
+            disableBotDetection: true,
+            navigator: {
+                sendBeacon: (_url, body) => {
+                    beacon = body as Blob
+                    return true
+                },
+            },
+            fetch: (_url, init) => {
+                fetches++
+                signal = init?.signal ?? undefined
+                return new Promise<Response>(() => {})
+            },
+            extensions: [logs({ flushIntervalMs: 0 })],
+            remoteConfig: {
+                supportedCompression: [],
+                toolbarParams: {},
+                toolbarVersion: 'toolbar',
+                isAuthenticated: false,
+                siteApps: [],
+            },
+        })
+        client.captureLog({ body: 'pending navigation' })
+        const closing = client.shutdown(10)
+        window.dispatchEvent(new Event('pagehide'))
+        const body = await beacon?.text()
+        await closing
+        return { beacon: body ?? '', fetches, aborted: signal?.aborted ?? false }
     },
 }

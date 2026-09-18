@@ -1,3 +1,4 @@
+import { snapshotLogsOptions } from './logs-options'
 import type { PostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
 import { isAnalyticsExtension } from './analytics-internal'
@@ -35,7 +36,21 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             flagsError = error
         }
     }
+    let logsError: unknown
+    if (!extensions.some((extension) => extension.name === 'logs')) {
+        try {
+            const configuration = options?.logs
+            if (configuration !== false) {
+                const snapshot = snapshotLogsOptions(configuration)
+                const { logs } = await import('./logs')
+                extensions.push(logs(snapshot))
+            }
+        } catch (error) {
+            logsError = error
+        }
+    }
     const client = await createPostHogCore(options, extensions)
+    if (logsError) client.logger.error('Automatic logs loading failed', logsError)
     if (flagsError) client.logger.error('Automatic flags loading failed', flagsError)
     if (loadingError) {
         client.logger.error('Automatic analytics loading failed', loadingError)
@@ -78,3 +93,5 @@ export type {
     FeatureFlagResult,
     FeatureFlagsReloadResult,
 } from './flags-options'
+
+export type { LogsOptions, LogsConfiguration, CaptureLogOptions } from './logs-options'

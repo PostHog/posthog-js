@@ -36,6 +36,8 @@ let createPostHog
 let createCorePostHog
 let analytics
 let flags
+let logs
+let commonJsLogs
 let commonJsFlags
 try {
     const require = createRequire(import.meta.url)
@@ -46,6 +48,8 @@ try {
     await import('@posthog/browser/core')
     ;({ flags } = await import('@posthog/browser/flags'))
     ;({ flags: commonJsFlags } = require('@posthog/browser/flags'))
+    ;({ logs } = await import('@posthog/browser/logs'))
+    ;({ logs: commonJsLogs } = require('@posthog/browser/logs'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -156,3 +160,35 @@ for (const createFlags of [flags, commonJsFlags]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM flags entrypoints and mixed-module lifecycle passed\n')
+
+for (const createLogs of [logs, commonJsLogs]) {
+    const requests = []
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        capturePageview: false,
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+        extensions: [createLogs()],
+        fetch: async (url, init) => {
+            requests.push({ url, body: JSON.parse(init.body) })
+            return new Response('{}')
+        },
+    })
+    client.captureLog({ body: 'mixed logs' })
+    await client.shutdown()
+    if (
+        requests.length !== 1 ||
+        !String(requests[0].url).includes('/i/v1/logs?token=ph_test') ||
+        requests[0].body.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue !== 'mixed logs'
+    ) {
+        throw new Error('Mixed-module logs did not flush its OTLP record on shutdown')
+    }
+}
+process.stdout.write('Pure CommonJS/ESM logs entrypoints and mixed-module logs lifecycle passed\n')
