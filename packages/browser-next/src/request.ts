@@ -1,4 +1,4 @@
-import type { ApiResponse, RequestTarget, SendRequestInit } from '@posthog/browser-common'
+import type { ApiResponse, SendRequestInit } from '@posthog/browser-common'
 
 import type { BrowserFetch, BrowserNavigator } from './types'
 
@@ -27,7 +27,7 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
 }
 
 export type RequestRuntime = [
-    hosts: Record<RequestTarget, string>,
+    hosts: { api: string; flags: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,
@@ -37,7 +37,8 @@ export const sendRequest = async (
     runtime: RequestRuntime,
     path: string,
     init: SendRequestInit = {},
-    canSend: () => boolean = () => true
+    canSend: () => boolean = () => true,
+    signal?: AbortSignal
 ): Promise<ApiResponse> => {
     let url: URL
     let body: string | undefined
@@ -49,7 +50,7 @@ export const sendRequest = async (
             return createFailedResponse(new Error('Request paths must be relative to a configured PostHog host'))
         }
 
-        const baseUrl = new URL(`${runtime[0][init.target ?? 'api']}/`)
+        const baseUrl = new URL(`${runtime[0][init.target === 'flags' ? 'flags' : 'api']}/`)
         url = new URL(path, baseUrl)
         if (url.origin !== baseUrl.origin) {
             return createFailedResponse(new Error('Request path resolved outside the configured PostHog host'))
@@ -97,7 +98,8 @@ export const sendRequest = async (
         return createFailedResponse(new Error('Fetch is not available'))
     }
 
-    const controller = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+    const controller =
+        !signal && typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
     const timeout =
         controller && init.timeoutMs ? globalThis.setTimeout(() => controller.abort(), init.timeoutMs) : undefined
 
@@ -110,8 +112,9 @@ export const sendRequest = async (
         if (init.transport === 'sendBeacon') {
             requestInit.keepalive = true
         }
-        if (controller) {
-            requestInit.signal = controller.signal
+        const requestSignal = signal ?? controller?.signal
+        if (requestSignal) {
+            requestInit.signal = requestSignal
         }
         if (!canSend()) {
             return createFailedResponse(new Error('PostHog requests are disabled'))

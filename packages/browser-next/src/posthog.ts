@@ -1,3 +1,4 @@
+import { loadRemoteConfig } from './remote-config'
 import {
     type ApiResponse,
     type CaptureOptions,
@@ -130,7 +131,6 @@ class PostHogBrowserClient implements PostHog {
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
     private readonly _capturePageview: boolean
-    private readonly _remoteConfigLoader: (() => Promise<RemoteConfig | undefined>) | undefined
     private readonly _remoteConfigTimeoutMs: number
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
@@ -210,14 +210,12 @@ class PostHogBrowserClient implements PostHog {
             {
                 api: apiHost,
                 flags: normalizeHost(options.flagsHost ?? apiHost),
-                assets: normalizeHost(options.assetsHost ?? apiHost),
             },
             projectToken,
             browserFetch,
             browserNavigator,
         ]
         this._remoteConfig = options.remoteConfig
-        this._remoteConfigLoader = options.remoteConfigLoader
         this._remoteConfigTimeoutMs =
             options.remoteConfigTimeoutMs === undefined || !Number.isFinite(options.remoteConfigTimeoutMs)
                 ? 10_000
@@ -585,14 +583,14 @@ class PostHogBrowserClient implements PostHog {
         if (this._closing || this._disposed) {
             return undefined
         }
-        const loader = this._remoteConfigLoader
-        if (this._remoteConfig !== undefined || !loader) {
+        if (this._remoteConfig !== undefined) {
             return this._remoteConfig
         }
 
         if (!this._remoteConfigPromise) {
             let timeout: ReturnType<typeof setTimeout> | undefined
             let invalidated = false
+            let controller: AbortController | undefined
             let cancelWait: (() => void) | undefined
             const timeoutResult = new Promise<undefined>((resolve) => {
                 cancelWait = () => {
@@ -619,7 +617,13 @@ class PostHogBrowserClient implements PostHog {
                         invalidated = true
                         return undefined
                     }
-                    return loader()
+                    controller =
+                        typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+                    return loadRemoteConfig(
+                        this._requestRuntime,
+                        controller?.signal,
+                        () => !this._closing && !this._disposed && !this._blocked
+                    )
                 }),
                 timeoutResult,
             ])
@@ -646,6 +650,11 @@ class PostHogBrowserClient implements PostHog {
                     return undefined
                 })
                 .finally(() => {
+                    try {
+                        controller?.abort()
+                    } catch {
+                        // Settlement remains authoritative when cancellation is unavailable.
+                    }
                     if (timeout !== undefined) {
                         try {
                             globalThis.clearTimeout(timeout)
@@ -958,6 +967,7 @@ export const createPostHogCore = async (
     const analytics = configured.find(isAnalyticsExtension) ?? createAnalyticsExtension()
     const extensions = configured.filter((extension) => extension !== analytics)
     const client = PostHogBrowserClient.create(options ?? { projectToken: '' }, analytics)
+    void client.getRemoteConfig()
     let analyticsReady = false
     try {
         await client._registry.install(analytics)
