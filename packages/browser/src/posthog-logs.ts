@@ -25,6 +25,8 @@ export class PostHogLogs extends SharedLogs {
                 )
             },
         })
+        // Reset the breaker before application reconnect handlers can capture new logs.
+        this._listenForReconnect()
     }
 
     protected override get _isRequestReady(): boolean {
