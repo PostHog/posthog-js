@@ -506,6 +506,45 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         resolve(nil)
     }
 
+    @objc(persistFatalException:withResolver:withRejecter:)
+    func persistFatalException(
+        report: String, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        do {
+            try PendingFatalExceptionStore.shared.persist(report: report)
+            resolve(nil)
+        } catch {
+            hedgeLog("persistFatalException failed: \(error)")
+            resolve(nil)
+        }
+    }
+
+    @objc(getPendingFatalExceptions:withRejecter:)
+    func getPendingFatalExceptions(
+        resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        do {
+            let entries = try PendingFatalExceptionStore.shared.readAll()
+            resolve(entries)
+        } catch {
+            hedgeLog("getPendingFatalExceptions failed: \(error)")
+            resolve([])
+        }
+    }
+
+    @objc(removePendingFatalException:withResolver:withRejecter:)
+    func removePendingFatalException(
+        id: String, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        do {
+            try PendingFatalExceptionStore.shared.remove(id: id)
+            resolve(nil)
+        } catch {
+            hedgeLog("removePendingFatalException failed: \(error)")
+            resolve(nil)
+        }
+    }
+
     @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)
     func registerPushNotificationToken(
         deviceToken: String, appId: String?, resolve: RCTPromiseResolveBlock,
@@ -564,5 +603,114 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             completion(token)
         }
         resolve(nil)
+    }
+}
+
+// Bounded on-disk journal of fatal JS exception snapshots awaiting recovery on the next launch.
+// Each entry is one atomic JSON file (id-correlated, idempotent on retry) capped at
+// `maxPending`; eviction drops the oldest by modification date.
+final class PendingFatalExceptionStore {
+    static let shared = PendingFatalExceptionStore()
+
+    private static let maxPending = 5
+    private let queue = DispatchQueue(label: "com.posthog-js-native.pending-fatal")
+
+    // Lives under Application Support (not Documents/Caches) and is excluded from iCloud
+    // and iTunes/Files backups, so the journal — which holds distinct_id, super properties
+    // and exception text — never leaves the device. posthog-ios keeps its own storage in the
+    // same Application Support directory.
+    private func directoryURL() throws -> URL {
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let dir = support.appendingPathComponent("posthog-pending-fatal", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var dirWithValues = dir
+        try? dirWithValues.setResourceValues(values)
+        return dir
+    }
+
+    func persist(report: String) throws {
+        try queue.sync {
+            let dir = try directoryURL()
+            let id = Self.extractId(from: report) ?? UUID().uuidString.lowercased()
+            let destURL = dir.appendingPathComponent("\(id).json")
+            let tmp = destURL.appendingPathExtension("tmp")
+            try? FileManager.default.removeItem(at: tmp)
+            guard let data = report.data(using: .utf8) else { return }
+            try data.write(to: tmp, options: .atomic)
+            try FileManager.default.moveItem(at: tmp, to: destURL)
+            try evictOldest(in: dir)
+        }
+    }
+
+    func readAll() throws -> [[String: Any]] {
+        try queue.sync {
+            let dir = try directoryURL()
+            let urls = try FileManager.default.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            var results: [[String: Any]] = []
+            for url in urls where url.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: url),
+                      let text = String(data: data, encoding: .utf8),
+                      let id = Self.extractId(from: text)
+                else {
+                    try? FileManager.default.removeItem(at: url)
+                    continue
+                }
+                results.append(["id": id, "report": text])
+            }
+            return results
+        }
+    }
+
+    func remove(id: String) throws {
+        try queue.sync {
+            let dir = try directoryURL()
+            let url = dir.appendingPathComponent("\(id).json")
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("tmp"))
+        }
+    }
+
+    private static func extractId(from report: String) -> String? {
+        guard let range = report.range(of: "\"id\"\\s*:\\s*\"", options: .regularExpression) else {
+            return nil
+        }
+        let start = range.upperBound
+        guard let endRange = report[start...].range(of: "\"") else {
+            return nil
+        }
+        return String(report[start ..< endRange.lowerBound])
+    }
+
+    private func evictOldest(in dir: URL) throws {
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        let finals = urls.filter { $0.pathExtension == "json" }
+        guard finals.count > Self.maxPending else { return }
+        let sorted = finals.sorted { lhs, rhs in
+            let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+            let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date.distantPast
+            return l < r
+        }
+        for i in 0 ..< (sorted.count - Self.maxPending) {
+            try? FileManager.default.removeItem(at: sorted[i])
+        }
     }
 }

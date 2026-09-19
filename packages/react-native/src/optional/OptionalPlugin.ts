@@ -9,6 +9,11 @@ import type { PostHogPushIdentityProvider } from '../types'
  * `posthog-react-native-session-replay` (same surface minus the newer methods)
  * when only the legacy package is installed. Optional methods are absent on
  * older plugins, so callers check availability at runtime.
+ *
+ * All fatal-journal methods (persistFatalException, getPendingFatalExceptions,
+ * removePendingFatalException) are part of `PostHogReactNativePlugin` since the
+ * version that added the journal. Older plugins expose none of them, so callers
+ * check existence before use.
  */
 export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin & {
   setup?: (sessionId: string, sdkOptions: { [key: string]: any }, pluginConfig: { [key: string]: any }) => Promise<void>
@@ -21,6 +26,9 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   capturePushNotificationOpened?: (properties: { [key: string]: any }) => Promise<void>
   setPushIdentityProvider?: (provider: PostHogPushIdentityProvider) => void
   reset?: (distinctId: string, anonymousId: string) => Promise<void>
+  persistFatalException?: (report: string) => Promise<void>
+  getPendingFatalExceptions?: () => Promise<Array<{ id: string; report: string }>>
+  removePendingFatalException?: (id: string) => Promise<void>
 }
 
 export type OptionalPluginLoaders = {

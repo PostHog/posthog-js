@@ -298,6 +298,10 @@ export enum PostHogPersistedProperty {
   RemoteConfig = 'remote_config',
   FlagsEndpointWasHit = 'flags_endpoint_was_hit', // only used by posthog-react-native
   DeviceId = 'device_id', // only used by posthog-react-native
+  // Bounded FIFO set of native fatal-report journal ids that have already been ingested on a
+  // previous launch. Used to deduplicate recovery if a crash happens between the JS-side persist
+  // and the native-side remove. only used by posthog-react-native.
+  FatalJournalIngested = 'fatal_journal_ingested',
 }
 
 export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
