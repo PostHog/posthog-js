@@ -311,6 +311,10 @@ export class PostHog extends PostHogCore {
 // the final authority on user data even when we reapply attribution after it runs.
   private _fatalJournalOverride?: { [key: string]: JsonType }
   private _fatalJournalDistinctIdOverride?: string
+  // Cached SHA-256 hash of the API key. The key is immutable after construction, so
+  // this promise is created once and reused — minimizes the consent/identity race
+  // window in the fatal handler by making the hash await a microtask.
+  private _cachedApiKeyHashPromise?: Promise<string>
   // Latest init-time drain promise. Held only so tests and shutdown can wait for it
   // to finish — the drain reads `OptionalReactNativePlugin` at call time, so a slow
   // crypto-backed apiKey hash can resolve after the test has moved on if we don't
@@ -418,7 +422,16 @@ export class PostHog extends PostHogCore {
           this._logger.warn(`Fatal journal entry ${journalId} marker write failed; entry stays on disk for recovery.`)
         }
       },
-      hashApiKey: () => hashApiKey(this.apiKey || ''),
+      // Cache the hash promise so the fatal handler's await is a microtask, not a real
+      // crypto round-trip. The API key is immutable after construction, so the hash
+      // never changes. This minimizes the consent/identity race window flagged by
+      // hpouillot in review.
+      hashApiKey: () => {
+        if (!this._cachedApiKeyHashPromise) {
+          this._cachedApiKeyHashPromise = hashApiKey(this.apiKey || '')
+        }
+        return this._cachedApiKeyHashPromise
+      },
     })
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null

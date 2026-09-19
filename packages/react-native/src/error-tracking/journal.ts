@@ -34,7 +34,11 @@ export const FATAL_JOURNAL_ATTRIBUTION_KEYS = [
   '$expo_runtime_version',
   '$expo_channel',
   '$expo_is_embedded_launch',
-  '$exception_steps',
+  // NOTE: '$exception_steps' is intentionally NOT in this list. addExceptionStep()
+  // accepts arbitrary customer properties, so the steps are user data. The entry
+  // carries a separate bounded `exceptionSteps` field that goes through before_send
+  // on recovery like any other property — the customer's hook stays the final
+  // authority on whether they survive.
 ] as const
 
 export interface FatalJournalEntry {

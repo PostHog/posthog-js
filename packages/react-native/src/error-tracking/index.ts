@@ -279,7 +279,7 @@ export class ErrorTracking {
   }
 
   private autocaptureUncaughtErrors() {
-    const onUncaughtException = (error: unknown, isFatal: boolean) => {
+    const onUncaughtException = async (error: unknown, isFatal: boolean) => {
       // Gate on remote config — if remotely disabled, don't capture
       if (!this._autocaptureEnabled) {
         return
@@ -303,7 +303,24 @@ export class ErrorTracking {
       }
 
       let captured: { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties } | null = null
+      // Tracks whether the JS event was actually enqueued. When capture throws and we
+      // fall back to a minimal `captured`, no JS event exists — the dedup marker must
+      // NOT be written, or the next launch would skip recovering the native entry.
+      let jsCaptureSucceeded = false
       if (isFatal) {
+        // Wait for storage preload BEFORE capturing so consent/identity reads reflect
+        // persisted state, not in-memory defaults. A previously opted-out user with a
+        // slow AsyncStorage preload must not have their fatal crash captured because
+        // we read the default value of optedOut.
+        try {
+          await this.fatalJournalHooks?.waitForStorageReady?.()
+        } catch {
+          // Storage init failed — proceed with capture anyway. The journal write path
+          // re-checks consent independently, so an opted-out user still won't land on
+          // disk. But the JS event may capture with default consent/identity, which is
+          // the same behavior as before this journal existed.
+        }
+
         const eventUuid = uuidv7()
         const timestampDate = new Date()
         const instance = this.instance as unknown as {
@@ -328,13 +345,16 @@ export class ErrorTracking {
               uuid: eventUuid,
               timestamp: timestampDate,
             })
+            jsCaptureSucceeded = captured !== null
           } catch (e) {
             this.logger.error('captureExceptionInternal threw; falling back to minimal captured for journal.', e)
             captured = { eventUuid, timestamp: timestampDate.toISOString(), additionalProperties }
+            jsCaptureSucceeded = false
           }
         } else {
           this.instance.captureException(error, additionalProperties, hint)
           captured = { eventUuid, timestamp: timestampDate.toISOString(), additionalProperties }
+          jsCaptureSucceeded = true
         }
       } else {
         this.instance.captureException(error, additionalProperties, hint)
@@ -360,7 +380,11 @@ export class ErrorTracking {
           // the next launch would re-enqueue the same event. On failure the native
           // entry stays on disk and the next launch either re-recovers or short-
           // circuits via the marker — either way no duplicate is shipped.
-          if (persistedOk && journalId && this.fatalJournalHooks?.markIngestedOnCapturePath) {
+          // Only mark when the JS event actually made it into the queue. When capture
+          // threw (jsCaptureSucceeded === false), no JS event exists — writing the
+          // marker would tell the next launch "already sent" and the crash would be
+          // lost despite the native entry being on disk.
+          if (persistedOk && journalId && jsCaptureSucceeded && this.fatalJournalHooks?.markIngestedOnCapturePath) {
             try {
               await this.fatalJournalHooks.markIngestedOnCapturePath(journalId)
             } catch (e) {
@@ -409,9 +433,17 @@ export class ErrorTracking {
     // Honor the user's privacy choice: the journal lives on disk and would survive a
     // crash, so an opted-out user must not have their fatal crash leave any trace, even
     // transiently. The JS event was already dropped by capture() above.
-    if ((this.instance as unknown as { optedOut?: boolean }).optedOut === true) {
+    // Snapshot consent AND identity atomically here — before the async hashApiKey()
+    // call below. optOut(), identify(), or reset() can run during that await, so
+    // we capture the current state now and re-check consent after.
+    const optedOutSnapshot = (this.instance as unknown as { optedOut?: boolean }).optedOut === true
+    if (optedOutSnapshot) {
       return undefined
     }
+    const sessionIdSnapshot = this.instance.getSessionId() || ''
+    const distinctIdSnapshot = this.instance.getDistinctId() || ''
+    const deviceIdSnapshot =
+      (this.instance as unknown as { getDeviceId?: () => string }).getDeviceId?.() || ''
     const journalId = uuidv7()
     const exceptionList = this._exceptionListFromError(error, hint)
     const steps = this._exceptionStepsBuffer.getAttachable() as unknown as Array<{
@@ -422,6 +454,12 @@ export class ErrorTracking {
       // Without an apiKey hash we can't scope the entry to a client on recovery — drop
       // the write entirely rather than leak cross-project data on a future relaunch.
       this.logger.warn('Skipping fatal journal write: apiKeyHash unavailable.')
+      return undefined
+    }
+    // Re-check consent after the async hash — optOut() may have run during the await.
+    // An entry written with a pre-opt-out snapshot would still be dropped on recovery
+    // (the entry's optedOut flag), but we can avoid the disk write entirely here.
+    if ((this.instance as unknown as { optedOut?: boolean }).optedOut === true) {
       return undefined
     }
     // Attribution is the merge of commonProperties and the caller's captured properties
@@ -438,15 +476,14 @@ export class ErrorTracking {
       id: journalId,
       eventUuid: captured.eventUuid,
       timestamp: captured.timestamp,
-      sessionId: this.instance.getSessionId() || '',
-      distinctId: this.instance.getDistinctId() || '',
-      deviceId:
-        (this.instance as unknown as { getDeviceId?: () => string }).getDeviceId?.() || '',
+      sessionId: sessionIdSnapshot,
+      distinctId: distinctIdSnapshot,
+      deviceId: deviceIdSnapshot,
       attribution,
       exceptionList: exceptionList as unknown as PostHogEventProperties['$exception_list'],
       exceptionLevel: 'fatal',
       exceptionSteps: steps as unknown as PostHogEventProperties['$exception_steps'],
-      optedOut: (this.instance as unknown as { optedOut?: boolean }).optedOut === true,
+      optedOut: optedOutSnapshot,
       apiKeyHash,
     })
     await bridge(serializeFatalJournalEntry(entry))

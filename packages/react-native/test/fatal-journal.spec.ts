@@ -886,7 +886,7 @@ describe('native fatal-report journal recovery', () => {
     ;(posthog as any).captureExceptionInternal = () => {
       throw new Error('capture exploded')
     }
-    expect(() => handler(new Error('capture-throws'), true)).not.toThrow()
+    await handler(new Error('capture-throws'), true)
     // Wait long enough for the libuv-backed crypto.subtle.digest used by hashApiKey.
     await vi.advanceTimersByTimeAsync(100)
     expect(mockPlugin.persistFatalException).toHaveBeenCalledTimes(1)
@@ -1172,5 +1172,198 @@ describe('native fatal-report journal recovery', () => {
     // User properties never made it into the journal in the first place — before_send
     // has nothing to scrub here, but the assertion documents the boundary.
     expect(queue[0].message.properties.$user_email).toBeUndefined()
+  })
+
+  it('before_send can strip $exception_steps from recovered events (hpouillot P1 regression)', async () => {
+    // $exception_steps is user data (addExceptionStep accepts arbitrary properties).
+    // It must NOT be in the attribution allowlist, so before_send's removal is final.
+    // The bounded dedicated field on the entry goes through before_send like any
+    // other property.
+    const journalId = '0192f1c2-7777-7abc-9def-0123456789ab'
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: 'event-uuid-steps-scrub',
+      timestamp: new Date().toISOString(),
+      sessionId: 's',
+      distinctId: 'u',
+      deviceId: 'd',
+      attribution: {
+        $app_version: '1.0.0',
+      },
+      exceptionList: [{ type: 'Error', value: 'steps-recovery' }],
+      exceptionLevel: 'fatal',
+      exceptionSteps: [
+        { $message: 'user clicked button', sensitive_token: 'abc123' },
+        { $message: 'user submitted form', password: 'hunter2' },
+      ],
+      optedOut: false,
+      apiKeyHash: TEST_API_KEY_HASH,
+    })
+    mockPlugin.getPendingFatalExceptions.mockImplementation(() =>
+      Promise.resolve([{ id: journalId, report: serializeFatalJournalEntry(entry) }])
+    )
+
+    const beforeSend = vi.fn((event: any) => {
+      // Customer scrubs exception steps because they contain sensitive user data.
+      delete event.properties.$exception_steps
+      return event
+    })
+
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: {
+        getItem: () => null,
+        setItem: (key, value) => {
+          stored.set(key, value)
+        },
+      },
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      before_send: beforeSend,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    await posthog.ready()
+    await (posthog as any)._fatalJournalDrainPromise
+    for (let i = 0; i < 20; i++) {
+      await vi.advanceTimersByTimeAsync(10)
+    }
+
+    expect(beforeSend).toHaveBeenCalled()
+    const recoveredQueue = JSON.parse(stored.get('.posthog-rn.json') || '{}')
+    const queue = (recoveredQueue.content && recoveredQueue.content.queue) || []
+    expect(queue.length).toBe(1)
+    // before_send removed $exception_steps — it must NOT be reapplied by the
+    // attribution override because it's not in FATAL_JOURNAL_ATTRIBUTION_KEYS.
+    expect(queue[0].message.properties.$exception_steps).toBeUndefined()
+    // But attribution keys that ARE in the allowlist survive.
+    expect(queue[0].message.properties.$app_version).toBe('1.0.0')
+  })
+
+  it('does not mark ingested when captureExceptionInternal throws (native-only fallback)', async () => {
+    // When capture throws, no JS event is enqueued. Writing the dedup marker would
+    // tell the next launch "already sent" and the crash would be lost despite the
+    // native entry being on disk. The marker must NOT be written.
+    posthog = createClient()
+    await posthog.ready()
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    // Force captureExceptionInternal to throw — the handler falls back to a minimal
+    // captured so persistFatalReportToNative still runs, but no JS event exists.
+    const original = (posthog as any).captureExceptionInternal
+    ;(posthog as any).captureExceptionInternal = () => {
+      throw new Error('capture exploded')
+    }
+
+    let persistedReport: string | undefined
+    mockPlugin.persistFatalException.mockImplementation((report: string) => {
+      persistedReport = report
+      return Promise.resolve()
+    })
+
+    await handler(new Error('capture-throws-no-marker'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    // The native journal write happened (so the crash isn't lost).
+    expect(mockPlugin.persistFatalException).toHaveBeenCalledTimes(1)
+    // But the dedup marker must NOT be set — no JS event was enqueued.
+    const storedData = stored.get('.posthog-rn.json') || ''
+    expect(storedData).not.toContain('fatal_journal_ingested')
+    // restore so afterEach teardown doesn't observe a polluted state
+    ;(posthog as any).captureExceptionInternal = original
+  })
+
+  it('waits for storage preload before capturing the fatal JS event (hpouillot P1 regression)', async () => {
+    // The fatal handler must gate the JS capture on storage readiness, not just the
+    // journal write. Otherwise a previously opted-out user with a slow preload would
+    // have their crash captured because capture() reads the default in-memory optedOut.
+    let resolvePreload!: () => void
+    const pendingPreload = new Promise<void>((resolve) => {
+      resolvePreload = resolve
+    })
+    const customStorage = {
+      getItem: (key: string) => {
+        if (key === '.posthog-rn.json') {
+          return pendingPreload.then(() =>
+            JSON.stringify({ version: 'v1', content: { opted_out: true } })
+          ) as any
+        }
+        return null as any
+      },
+      setItem: (key: string, value: string) => {
+        stored.set(key, value)
+      },
+    }
+    posthog = new PostHog(TEST_API_KEY, {
+      customStorage: customStorage as any,
+      flushInterval: 0,
+      flushAt: 100,
+      fetchRetryCount: 0,
+      remoteConfig: false,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { uncaughtExceptions: true, nativeCrashes: true } },
+    } as any)
+    // Don't await posthog.ready() — the preload is pending. Fire the fatal handler
+    // while storage is still loading.
+    const readyPromise = posthog.ready()
+    handler(new Error('slow-preload-capture-gate'), true)
+    await vi.advanceTimersByTimeAsync(0)
+    // The JS capture should not have fired yet — it's waiting for storage preload.
+    // The native journal write should also not have fired.
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    // Resolve the preload so the SDK finishes initialization for teardown.
+    resolvePreload()
+    await readyPromise
+    // After preload, the opted-out state is loaded. The event should NOT be captured
+    // (the user was opted out), and the journal should NOT be written.
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+  })
+
+  it('re-checks consent after hash await — opt-out during hashing prevents journal write', async () => {
+    // hpouillot P1: optOut() can run during the hashApiKey() await. The code must
+    // re-check consent after the await and skip the native write if it changed.
+    posthog = createClient()
+    await posthog.ready()
+    await (posthog as any)._eventsStorage.waitForPersist()
+
+    // Intercept the hashApiKey hook to introduce a delay, then opt out during it.
+    const errorTracking = (posthog as any)._errorTracking
+    const originalHashHook = errorTracking.fatalJournalHooks?.hashApiKey
+    let resolveHash!: (value: string) => void
+    errorTracking.fatalJournalHooks = {
+      ...errorTracking.fatalJournalHooks,
+      hashApiKey: () =>
+        new Promise<string>((resolve) => {
+          resolveHash = resolve
+        }),
+    }
+
+    // Fire the fatal handler. It will reach the hashApiKey await and pause.
+    const handlerPromise = handler(new Error('opt-out-during-hash'), true)
+    await vi.advanceTimersByTimeAsync(10)
+
+    // While the hash is pending, opt the user out.
+    await posthog.optOut()
+
+    // Now resolve the hash — the code should re-check optedOut and skip the write.
+    resolveHash('abcd1234')
+    await handlerPromise
+    await vi.advanceTimersByTimeAsync(100)
+
+    // The user opted out during the hash — the journal write must NOT have happened.
+    expect(mockPlugin.persistFatalException).not.toHaveBeenCalled()
+    // restore the original hook for teardown
+    errorTracking.fatalJournalHooks = {
+      ...errorTracking.fatalJournalHooks,
+      hashApiKey: originalHashHook,
+    }
   })
 })
