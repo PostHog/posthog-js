@@ -60,27 +60,55 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
-    // if we are only observing timings then we could have a single observer for all types, with buffer true,
-    // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
-    // will deal with those.
-    // so we have a block which captures requests from before fetch/xhr is wrapped
-    // these are marked `isInitial` so playback can display them differently if needed
-    // they will never have method/status/headers/body because they are pre-wrapping that provides that
+// a partial navigation entry is readable before load and the observer delivers it again once complete.
+// readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd` is final
+function isCompletedNavigationTiming(win: IWindow, entry: PerformanceEntry): entry is PerformanceNavigationTiming {
+    return isNavigationTiming(entry) && win.document?.readyState === 'complete' && entry.loadEventEnd > 0
+}
+
+// an `entryTypes` observation never delivers an entry that completed before it started
+function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
+    if (win.document?.readyState !== 'complete') {
+        return []
+    }
+    return win.performance
+        .getEntriesByType('navigation')
+        .filter((entry): entry is PerformanceNavigationTiming => isCompletedNavigationTiming(win, entry))
+}
+
+// if we are only observing timings then we could have a single observer for all types, with buffer true,
+// but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
+// will deal with those.
+// so we have a block which captures requests from before fetch/xhr is wrapped
+// these are marked `isInitial` so playback can display them differently if needed
+// they will never have method/status/headers/body because they are pre-wrapping that provides that
+// resource entries stay behind `recordInitialRequests`, the navigation entry is the document load
+// timing the waterfall is built from, so it is read whenever navigation is observed at all
+function initialEntries(win: IWindow, options: Required<NetworkRecordOptions>): ObservedPerformanceEntry[] {
     if (options.recordInitialRequests) {
-        const initialPerformanceEntries = win.performance
+        return win.performance
             .getEntries()
             .filter(
                 (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
+                    isCompletedNavigationTiming(win, entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
+    }
+    return options.performanceEntryTypeToObserve.includes('navigation') ? completedNavigationEntries(win) : []
+}
+
+function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
+    // the customer's `maskRequestFn` runs synchronously in here. rrweb tears down every observer it has
+    // registered when a plugin throws, so a throw would cost the whole recording, not just this batch
+    try {
         cb({
-            requests: initialPerformanceEntries.flatMap((entry) =>
+            requests: initialEntries(win, options).flatMap((entry) =>
                 prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
             ),
             isInitial: true,
         })
+    } catch (e) {
+        logger.error('Failed to capture initial performance entries for network capture', e)
     }
     const observer = new win.PerformanceObserver((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here

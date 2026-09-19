@@ -31,6 +31,7 @@ import {
     SURVEY_CAPTURING_DISABLED,
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
+import { recordSurveyAnswer } from '@posthog/core/surveys'
 import { Properties } from '../types'
 import { FeatureFlagsExtension } from '../extension-tokens'
 import type { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -51,6 +52,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearAllInMemoryInProgressSurveyState,
     clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
@@ -277,6 +279,14 @@ export class SurveyManager {
             this._surveyPopupProps = null
             this._displayOptions = undefined
         }
+    }
+
+    /**
+     * Called by the core on reset(). It cannot clear the map itself: survey-utils compiles into
+     * both the core and this extension, so a core-side clear reaches only its own unused copy.
+     */
+    public clearInMemoryInProgressSurveyState(): void {
+        clearAllInMemoryInProgressSurveyState()
     }
 
     public setAutomaticDisplayDispose(dispose: () => void): void {
@@ -1834,18 +1844,13 @@ export function Questions({
             return
         }
 
-        const responseKey = getSurveyResponseKey(questionId)
-
-        const newResponses = { ...questionsResponses, [responseKey]: res }
+        const { responses: newResponses, questionSnapshots: newSnapshots } = recordSurveyAnswer(
+            { responses: questionsResponses, questionSnapshots },
+            questionId,
+            res,
+            surveyQuestions[displayQuestionIndex]
+        )
         setQuestionsResponses(newResponses)
-
-        // Snapshot the question text as it appeared to the user right now, so that
-        // $survey_questions[].question in sent/dismissed events reflects the language
-        // the user saw when they answered, not the language active at event-fire time.
-        const currentQuestion = surveyQuestions[displayQuestionIndex]
-        const newSnapshots = currentQuestion?.id
-            ? { ...questionSnapshots, [currentQuestion.id]: currentQuestion.question }
-            : questionSnapshots
         setQuestionSnapshots(newSnapshots)
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)

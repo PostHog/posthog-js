@@ -87,6 +87,21 @@ describe('posthog core', () => {
     })
 
     describe('capture()', () => {
+        it.each([true, false, undefined])('maps send_instantly: %p to preferSyncCompression', (sendInstantly) => {
+            const requests: unknown[] = []
+            const posthog = posthogWith(defaultConfig, {
+                _send_retriable_request: (request) => {
+                    requests.push(request)
+                },
+            })
+
+            posthog.capture(eventName, {}, { send_instantly: sendInstantly })
+
+            expect(requests).toEqual([
+                expect.objectContaining({ compression: 'best-available', preferSyncCompression: sendInstantly }),
+            ])
+        })
+
         it('adds a UUID to each message', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
             expect(captureData).toHaveProperty('uuid')

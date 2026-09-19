@@ -221,7 +221,7 @@ class V7Generator {
 declare const UUIDV7_DENY_WEAK_RNG: boolean
 
 /** Stores `crypto.getRandomValues()` available in the environment. */
-let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buffer) => {
+let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {

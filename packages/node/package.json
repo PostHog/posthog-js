@@ -11,6 +11,7 @@
     "directory": "packages/node"
   },
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json",
     "clean": "rimraf dist coverage",
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
@@ -52,7 +53,8 @@
     "@types/node": "^20.0.0",
     "rxjs": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   },
   "peerDependencies": {
     "rxjs": "^7.0.0"

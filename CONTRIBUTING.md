@@ -8,7 +8,7 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 
 - Development Node Version: `24.x` (see `.nvmrc` and `package.json`)
 - Package Manager: `pnpm@11.7.0` (see `package.json`)
-- TypeScript Catalog Version: `5.8.2` (see `pnpm-workspace.yaml`; individual packages may use other compilers)
+- TypeScript Catalogs: `catalog:native` pins `7.0.2`; the default `catalog:` retains `5.8.2` for legacy tooling (see `pnpm-workspace.yaml`)
 - Main Branch: `main`
 
 ## Tooling
@@ -107,6 +107,9 @@ Run these from the repository root:
 # Build all packages (respects dependency order)
 pnpm build
 
+# Check source types across all SDKs and rrweb (builds dependencies first)
+pnpm check-types
+
 # Watch mode for development
 pnpm dev
 
@@ -147,27 +150,58 @@ pnpm clean
 pnpm clean:dep
 ```
 
+### Semantic type checks
+
+Every workspace package under `packages/` exposes `check-types`. Run `pnpm check-types` for all SDKs and rrweb, or `pnpm turbo run check-types --filter=posthog-node` for one SDK. Turbo builds workspace dependencies first, using the existing build graph once. Browser-next additionally builds itself because its check includes consumer fixtures. Direct package commands assume dependency outputs already exist.
+
+The contract checks production TypeScript using the existing compiler and compiler options. Rslib packages use their build TSConfig; browser, Convex and the native plugin reuse their existing `typecheck` command. Next retains its existing `tsgo` compiler. React, React Native and the lightweight web SDK use their package TSConfig. AI uses a source-only check config. Existing broader test/fixture coverage remains in the packages that already checked it. Version-generating packages run their existing `prebuild` preparation before checking. Nuxt runs `nuxt prepare` and checks module source against the generated framework configuration.
+
+Builds already perform different kinds of checking: browser, React Native and Convex compile with TypeScript, Next compiles with tsgo, the native plugin uses Bob's TypeScript target, Rslib generates declarations, and AI/React/web use tsdown declaration generation. These build paths remain unchanged. The explicit command provides consistent whole-source coverage independent of which bundler emits declarations; do not add a second Turbo invocation inside package scripts or prepend redundant checks to SDK builds. rrweb retains its mandatory pre-build semantic gate described below.
+
+The Library checks unit job runs `pnpm check-types` for every package. `pnpm test:build-graph` discovers SDK and rrweb manifests to enforce coverage and dependency ordering, and injects a semantic error into a temporary workspace to verify that the root command fails even when builds succeed. New SDK packages must provide a semantic `check-types` leaf task. Do not weaken compiler options or replace semantic checking with transpilation/declaration-only validation.
+
 ### rrweb declaration builds
 
 All 16 rrweb workspace packages use `build: pnpm check-types && vite build && pnpm build:declarations`, with `check-types: tsc --noEmit`. This explicit semantic-check step must succeed before JavaScript or declaration generation starts. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
 
 The shared `packages/rrweb/rolldown.dts.config.mts` explicitly uses Oxc for all 16 packages, each of which enables `isolatedDeclarations` in its TSConfig. Exported declarations must have sufficient type annotations for isolated generation. Keep semantic checking enabled: Oxc does not replace TypeScript's type checker.
 
-Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses the same package Rolldown configs through `vite.declarations.ts`. Vite owns runtime and declaration rebuilds together, including type-only source dependencies; it emits the same self-contained declarations, CommonJS copies, secondary entrypoints, and canvas WebRTC shim as production. An incremental TypeScript program reports semantic errors on startup and source edits without stopping development; production `check-types` still blocks invalid builds. The checker shares Vite's watched files and creates no additional watcher or process. It checks the full TSConfig project on each rebuild; a newly created, unimported file is picked up on the next watched edit or restart.
+
+Each rrweb `pnpm dev` first builds its dependencies through Turbo, then starts a single Vite watcher. Running `vite build --watch` directly assumes dependencies are already built. The alternate `pnpm dev --config vite.config.entries.js` in `packages/rrweb/rrweb` uses `rolldown.dts.entries.config.mts` for the record/replay entries. Restart development after editing build configuration. Declarations are generated in memory and emitted by Vite, so no second process races Vite's output cleanup.
 
 ```sh
 pnpm turbo run build --filter='./packages/rrweb/**'
 pnpm turbo run check-types --filter='./packages/rrweb/**'
 pnpm test:rrweb-declarations
+pnpm test:rrweb-dev-watch
 pnpm test:rrweb-package-exports
 pnpm test:rrweb-consumers
 ```
+
+The watch suite builds its prerequisites and temporarily edits and restores rrweb sources to check startup, declaration parity, semantic diagnostics, rebuilds, and shutdown. Run it without other builds or watchers in the same worktree.
 
 The installed-consumer tests build and pack their prerequisites. `test:rrweb-package-exports` checks JavaScript/CSS export targets and native Node ESM/CommonJS behavior. `test:rrweb-consumers` checks strict declarations with TypeScript 4.7, 5.8, and 6, including coexistence with consumer Node 22/24 typings. Both need registry access; the strict type checks retain their tarballs, installs, and compiler logs in a reported temporary directory.
 
 The canvas WebRTC plugin ships its SimplePeer declaration shim and legacy-compatible Node typings for TypeScript 4.7 consumers. Its Vite development tools are provided by the private `tooling/rrweb-build` workspace so their modern typing peers remain separate from the published dependency. This type-only dependency does not change the workspace's Node 24 runtime requirement.
 
 The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
+
+### Native TypeScript declarations
+
+SDK builds use stable `typescript@7.0.2` for native compiler commands and compatible declaration backends, rather than `@typescript/native-preview`. Rslib selects the native backend from the installed TypeScript version. rrweb retains its Oxc declaration bundler and uses native TypeScript for semantic checks.
+
+The JavaScript compiler remains only where existing tooling requires it:
+
+- The root compiler supports documentation resolvers and programmatic compiler regression tests.
+- `posthog-js` retains its ES5 emitter and compiler API. `@posthog/nuxt` retains the compiler API required by Nuxt's module builder.
+- `@posthog/react` uses `typescript-legacy` only for its ES5 compatibility transform; declarations use native TypeScript.
+- `@posthog/types` uses `typescript-legacy` for API introspection tests and the declaration-build baseline.
+- `@posthog/mcp` uses `typescript-legacy` only for its NestJS integration harnesses, where `ts-node` needs the compiler API and decorator metadata emitter.
+- `@posthog/browser` uses `typescript-legacy` for its full development type check because the pinned Playwright declarations contain syntax removed in TypeScript 7. Its production declaration build uses native TypeScript without test-only ambient types.
+- Rollup utilities keep the JavaScript compiler for their exported TypeScript plugin, but compile themselves with the explicit `@typescript/native` alias. Their built-output test checks that the exported plugins still initialize.
+
+`pnpm turbo run test:unit --filter=@posthog/types` includes a production-build regression check comparing all legacy and native compiler outputs, including declarations and source maps, and verifying that both builds fail on a deliberate semantic error. The test copies sources into a temporary fixture, explicitly links and verifies each compiler version, and leaves production outputs untouched. Compiler backend changes must preserve this compatibility check; isolated compiler speed alone does not establish production-build or consumer compatibility.
 
 ### Dead code audit (Knip)
 
@@ -199,6 +233,7 @@ Common package scripts are listed below. Availability and build output directori
 - `lint` - Lint all files for this package
 - `lint:fix` - Fix linting issues
 - `build` - Transpile, minify and/or bundle source code (usually into `dist/` or `lib/`)
+- `check-types` - Check source types without emitting SDK JavaScript or declarations (all SDK and rrweb packages)
 - `dev` - Build and watch for changes
 - `test:unit` - Run unit tests; some packages still include built-output assertions
 - `test:built` - Run dedicated built-output assertions (if available)
@@ -238,6 +273,7 @@ Run these commands from the repository root before opening a PR:
 
 ```sh
 pnpm build
+pnpm check-types
 pnpm lint
 pnpm lint:playground
 pnpm test:unit

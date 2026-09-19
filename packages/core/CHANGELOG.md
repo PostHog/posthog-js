@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.55.0
+
+### Minor Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support partial survey responses and persistent resume in React Native, moving surveys toward feature parity across SDKs.
+  (2026-09-18)
+
+## 1.54.5
+
+### Patch Changes
+
+- [#5012](https://github.com/PostHog/posthog-js/pull/5012) [`5c12a4c`](https://github.com/PostHog/posthog-js/commit/5c12a4c98f0131b9be53c2e105937f2e05ba3bde) Thanks [@yoarajota](https://github.com/yoarajota)! - Coerce survey and product tour property filter values to strings before matching, so a numeric filter value from the `/surveys` response no longer throws in `icontains`/`not_icontains`
+  (2026-09-18)
+
+## 1.54.4
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+
+## 1.54.3
+
+### Patch Changes
+
+- [#5005](https://github.com/PostHog/posthog-js/pull/5005) [`6545d3f`](https://github.com/PostHog/posthog-js/commit/6545d3f059131774678643eb638e35564575e25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix declaration source mappings for DOMExceptionCoercer.
+  (2026-09-17)
+
 ## 1.54.2
 
 ### Patch Changes

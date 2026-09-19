@@ -1,5 +1,12 @@
 # @posthog/react
 
+## 1.11.1
+
+### Patch Changes
+
+- [#5003](https://github.com/PostHog/posthog-js/pull/5003) [`18b77a5`](https://github.com/PostHog/posthog-js/commit/18b77a5a0a56f6cc02b1be20910385213e085e1c) Thanks [@posthog](https://github.com/apps/posthog)! - Set the React error boundary's component-stack error name with `Object.defineProperty`, so the boundary still reports the original error on pages where a browser extension has made `Error.prototype.name` non-writable.
+  (2026-09-18)
+
 ## 1.11.0
 
 ### Minor Changes

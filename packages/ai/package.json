@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.12.1",
+  "version": "8.13.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -12,6 +12,7 @@
   "types": "dist/index.d.ts",
   "license": "MIT",
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.check.json",
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
@@ -48,7 +49,7 @@
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:native"
   },
   "keywords": [
     "posthog",

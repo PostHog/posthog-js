@@ -717,9 +717,7 @@ export class Autocapture implements Extension {
                 props['$copy_type'] = clipType
             }
 
-            void this._client
-                ?.capture(eventName, props)
-                .catch((error) => logger.error('Failed to capture event', error))
+            this._client?.capture(eventName, props)
             return true
         }
     }

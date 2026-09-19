@@ -20,6 +20,7 @@
     "analytics"
   ],
   "scripts": {
+    "check-types": "pnpm prebuild && pnpm typecheck",
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
     "setup:codegen": "test -f .env.local || npx convex dev --once --configure new --dev-deployment local --project posthog-convex-component --typecheck disable || true",
@@ -71,7 +72,7 @@
     "convex": "1.39.1",
     "convex-test": "0.0.41",
     "globals": "^17.7.0",
-    "typescript": "catalog:",
+    "typescript": "catalog:native",
     "vite": "7.3.1",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"

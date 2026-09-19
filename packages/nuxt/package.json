@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.7.90",
+  "version": "1.7.91",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -26,6 +26,7 @@
     "dist"
   ],
   "scripts": {
+    "check-types": "nuxt prepare && tsc --noEmit --project tsconfig.check.json",
     "prepare": "nuxt prepare",
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
@@ -46,6 +47,9 @@
     "@nuxt/devtools": "^3.3.1",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.1.2",
-    "eslint-plugin-regexp": "2.10.0"
+    "eslint-plugin-regexp": "2.10.0",
+    "typescript": "catalog:",
+    "nitro": "3.0.260610-beta",
+    "nitropack": "2.13.4"
   }
 }

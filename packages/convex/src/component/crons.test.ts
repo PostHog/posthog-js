@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest'
+import { describe, expect, test, beforeEach, afterEach, vi, type MockInstance } from 'vitest'
 import type { Crons } from 'convex/server'
 import { DEFAULT_INTERVAL_SECONDS, envFlagIsTrue, readPollingIntervalSeconds } from './lib.js'
 
@@ -37,7 +37,7 @@ describe('cron registration', () => {
 })
 
 describe('readPollingIntervalSeconds', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>
+  let warnSpy: MockInstance<Parameters<typeof console.warn>, ReturnType<typeof console.warn>>
 
   beforeEach(() => {
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
