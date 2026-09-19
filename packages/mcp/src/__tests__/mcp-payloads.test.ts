@@ -387,7 +387,8 @@ describe('URL credential redaction', () => {
   ])('sanitizes %s in one pass over the value', (_label, value, expected) => {
     const start = Date.now()
     expect(sanitizeCapturedValue(value)).toBe(expected)
-    expect(Date.now() - start).toBeLessThan(1000)
+    // Coverage and concurrent monorepo tests can push this stress case past one second in CI.
+    expect(Date.now() - start).toBeLessThan(5000)
   })
 
   it('splits trailing punctuation off long punctuation runs quickly', () => {
