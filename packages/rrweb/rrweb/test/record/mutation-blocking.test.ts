@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
+import type { eventWithTime } from '@posthog/rrweb-types';
 import MutationBuffer from '../../src/record/mutation';
+import record from '../../src/record';
+import { mutationBuffers } from '../../src/record/observer';
 
 type BlockingProbe = {
   blockClass: string | RegExp;
@@ -170,4 +173,45 @@ describe('mutation emission blocking', () => {
       expect(blockClass.lastIndex).toBe(4);
     },
   );
+});
+
+describe('mutation emission blocking in the buffered payload', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+  let stop: (() => void) | undefined;
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    document.body.innerHTML = '';
+  });
+
+  // The queue is built while the node is still recordable, so only the
+  // emission-time check can keep its descendants out of the payload.
+  it('drops descendants of a node blocked after it was queued', async () => {
+    const events: eventWithTime[] = [];
+    stop = record({ emit: (event) => events.push(event) });
+    await settle();
+    const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
+    buffer.lock();
+
+    const host = document.createElement('div');
+    const child = document.createElement('span');
+    child.id = 'child-of-blocked';
+    host.append(child);
+    document.body.append(host);
+    await settle();
+
+    host.classList.add('rr-block');
+    buffer.unlock();
+    await settle();
+
+    const adds = events
+      .filter((event) => event.type === 3 && event.data.source === 0)
+      .flatMap((event) => (event.data as { adds: { node: unknown }[] }).adds)
+      .map((add) => add.node as { type: number; attributes?: { id?: string } });
+    expect(adds.length).toBeGreaterThan(0);
+    expect(adds.some((node) => node.attributes?.id === 'child-of-blocked')).toBe(
+      false,
+    );
+  });
 });
