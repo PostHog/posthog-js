@@ -56,7 +56,7 @@ delete and rebuild `dist`, which the replay scenarios import.
 
 ## What is committed
 
-The twelve JSON fixtures were recorded from Anthropic using artificial prompts,
+The thirteen JSON fixtures were recorded from Anthropic using artificial prompts,
 `claude-haiku-4-5-20251001`, and provider SDK `0.124.0`. Each retains its recording
 timestamp and provenance. They cover:
 
@@ -65,11 +65,15 @@ timestamp and provenance. They cover:
 - Mixed TTL writes, a full hit, and a partial hit with writes to both TTLs.
 - A prompt below the caching minimum, which creates no cache entry.
 - A response stopped by `max_tokens`.
+- A forced client tool call with fragmented JSON arguments.
 
-Expected analytics values live separately in `anthropic-stream.test.ts`; they
+Expected analytics values live separately in `anthropic-stream.test.ts` and `anthropic-tools.test.ts`; they
 were checked against provider usage, not generated from the wrapper under test.
-Each scenario verifies exactly one generation, text, stop reason, input/output
+The twelve text/cache scenarios verify exactly one generation, text, stop reason, input/output
 tokens, aggregate cache counters, and the raw TTL breakdown.
+The live tool scenario checks one generation, usage, stop reason, tool ID, name,
+parsed arguments and request tool definitions. A separate synthetic case checks mixed text and two tool calls
+with distinct IDs and arguments. No tool is actually executed.
 
 `cassette.test.ts` also records real SDK requests against a local synthetic
 upstream, stops that upstream, and replays the saved file through the real SDK.
@@ -92,10 +96,12 @@ This is a separate, explicit operation, never part of CI. With
 pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record anthropic-stream
 # Refresh all eleven cache and max_tokens scenarios, in order:
 pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record anthropic-cache
+# Record one forced get_weather call using artificial Paris/celsius arguments:
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record anthropic-tools
 ```
 
 The greeting command sends the fixed artificial prompt `Say hello.` to
-`https://api.anthropic.com`. Both commands incur provider charges. The greeting writes
+`https://api.anthropic.com`. All recording commands incur provider charges. The greeting writes
 `fixtures/anthropic-stream.live.json`, not the checked-in recording.
 Live files are gitignored to prevent accidental staging.
 It then replays that file through the Anthropic SDK with a fake key and compares
@@ -120,6 +126,13 @@ individually as `anthropic-<scenario>.live.json`; a later failure leaves earlier
 live files in place but does not change committed fixtures. Start the command
 again to get a new prefix and a complete sequence. Replaying a fixture does not
 populate the live cache.
+
+The tool command writes `fixtures/anthropic-tools.live.json`. Before saving, it
+requires one `get_weather` call with exactly `{ "city": "Paris", "unit": "celsius" }`
+and the `tool_use` stop reason. It rejects a response that misses this contract
+rather than retrying. The recorder checks reconstructed JSON arguments, including
+escaped strings and values overwritten by duplicate keys, for credentials.
+This still requires human review; it is not a general data-loss-prevention tool.
 
 ## Updating fixtures
 
@@ -146,8 +159,8 @@ promote the file. A response failure means the upstream did not return successfu
 SSE; transport failures include timeouts and disconnections. The live CLI prints
 only a generic failure message because SDK exceptions can contain raw responses.
 
-The twelve committed fixtures total 440,180 bytes (about 430 KiB). An offline run
-on Node 24 took about five seconds on a developer machine, excluding dependency
+The thirteen committed fixtures total 444,391 bytes (about 434 KiB). An offline run
+on Node 24 took about four seconds on a developer machine, excluding dependency
 installation, Docker image download, and SDK builds. This is a local measurement,
 not a CI performance guarantee. No new dependency or published SDK code is added.
 
@@ -157,13 +170,22 @@ usage, and exactly one generation. This proves delivery before completion, not
 provider latency. Recorder tests still use synthetic upstream responses; CLI
 tests exercise the complete cache sequence with recorded responses and fake
 credentials, not a live cache. Live refresh remains an explicit manual check.
+The tool incremental test similarly withholds completion until the caller receives
+the first nonempty argument fragment, then checks both tools and their analytics.
+Malformed tool streams and split or escaped credentials have separate synthetic
+recorder tests that verify an existing file is not replaced on failure.
 
 ## Boundaries
 
-The first pilot supports sequential successful text-only Anthropic SSE message requests:
+The harness supports sequential successful Anthropic SSE message requests with text
+and client `tool_use` blocks:
 up to 16 interactions, 1 MiB per request, 8 MiB of accumulated response bytes,
 16 MiB per serialized cassette, and a 15-second request deadline. It preserves
 SSE content and order, not original packet boundaries, timing, or latency. It
-rejects unsupported content-block types and does not claim coverage of every stream API, tools, retries, errors, other
+rejects unsupported content-block types and does not claim coverage of every stream API,
+server tools, tool execution or tool-result conversations, retries, errors, other
 providers, LangChain, Bedrock, or installed package tarballs. Those need explicit
 scenarios rather than expanding this fixture's meaning.
+Tool arguments must complete as a JSON object. Fine-grained streams stopped with
+partial JSON are not successful tool fixtures. The zero-argument recorder test
+exercises the unwrapped Anthropic SDK, not the built PostHog wrapper.
