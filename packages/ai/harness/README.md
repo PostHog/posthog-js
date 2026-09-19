@@ -146,7 +146,7 @@ promote the file. A response failure means the upstream did not return successfu
 SSE; transport failures include timeouts and disconnections. The live CLI prints
 only a generic failure message because SDK exceptions can contain raw responses.
 
-The twelve committed fixtures total 440,261 bytes (about 430 KiB). An offline run
+The twelve committed fixtures total 440,180 bytes (about 430 KiB). An offline run
 on Node 24 took about five seconds on a developer machine, excluding dependency
 installation, Docker image download, and SDK builds. This is a local measurement,
 not a CI performance guarantee. No new dependency or published SDK code is added.
