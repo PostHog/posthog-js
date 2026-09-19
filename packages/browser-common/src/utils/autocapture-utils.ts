@@ -75,12 +75,24 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * @returns {string} the element's direct text content
  */
 export function getSafeText(el: Element): string {
+    return joinSafeTextNodes(el, '')
+}
+
+/*
+ * Get the direct text content of an element, joining its text nodes with the given separator.
+ * `getSafeText` joins them with nothing, which keeps `$el_text` as it has always been captured,
+ * so a separator is only for readers that need the words of a label kept apart.
+ * @param {Element} el - element to get the text of
+ * @param {string} separator - placed after each text node
+ * @returns {string} the element's direct text content
+ */
+function joinSafeTextNodes(el: Element, separator: string): string {
     let elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += makeSafeText(child.textContent) ?? ''
+                elText += `${makeSafeText(child.textContent) ?? ''}${separator}`
             }
         })
     }
@@ -171,23 +183,67 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 export const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
-const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+// carousels, pagers and scrollers are built to be clicked repeatedly, in words or in arrow glyphs
+const DEFAULT_CONTENT_IGNORELIST = [
+    'next',
+    'previous',
+    'prev',
+    'carousel',
+    'slide',
+    'scroll',
+    'arrow',
+    '>',
+    '<',
+    '→',
+    '←',
+    '›',
+    '‹',
+    '»',
+    '«',
+    '▶',
+    '◀',
+    '❯',
+    '❮',
+]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
-const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+// the cap guards against over-long user lists. it clears our own longest default list with room
+// to spare, so copying the defaults and adding a few keywords of your own still works
+const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
 
 interface ElementWithText {
     safeText: string
     ariaLabel: string
 }
 
+const INTERACTIVE_TAGS = ['button', 'a', 'input', 'select', 'textarea', 'label']
+const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
+
+const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
+
+// our own word keywords match whole words, so "arrow" doesn't suppress "narrow results",
+// "slide" doesn't suppress "open slideshow" and "prev" doesn't suppress "preview"
+const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = {}
+each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
+    if (isWordKeyword(keyword)) {
+        DEFAULT_WORD_KEYWORD_REGEXES[keyword] = new RegExp(`\\b${keyword}\\b`)
+    }
+})
+
 // symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
-const matchesContentKeyword = (text: string, keyword: string): boolean =>
-    /[a-z0-9]/i.test(keyword) ? text.includes(keyword) : text === keyword
+// a shipped word keyword matches whole words wherever it appears, including inside a list the user
+// built themselves; any other word keyword the user adds keeps matching as a substring
+const matchesContentKeyword = (text: string, keyword: string): boolean => {
+    if (!isWordKeyword(keyword)) {
+        return text === keyword
+    }
+    const wholeWordRegex = DEFAULT_WORD_KEYWORD_REGEXES[keyword]
+    return wholeWordRegex ? wholeWordRegex.test(text) : text.includes(keyword)
+}
 
 function shouldIgnoreByContent(
     contentIgnorelist: boolean | string[] | undefined,
-    elementsWithText: ElementWithText[]
+    { safeText, ariaLabel }: ElementWithText
 ): boolean {
     if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
         return false
@@ -208,11 +264,87 @@ function shouldIgnoreByContent(
         return false
     }
 
-    return elementsWithText.some(({ safeText, ariaLabel }) => {
-        return keywords.some(
-            (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
-        )
-    })
+    return keywords.some(
+        (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
+    )
+}
+
+const isInteractiveElement = (el: Element): boolean =>
+    INTERACTIVE_TAGS.some((tag) => isTag(el, tag)) ||
+    includes(INTERACTIVE_ROLES, (el.getAttribute('role') || '').toLowerCase())
+
+// keywords describe the control that was clicked, so we read the label of the nearest interactive
+// ancestor: a region labelled "Featured carousel" must not suppress the "Buy now" button inside it,
+// and a label held in a child span must still be read when the click lands on the button itself
+function clickedControlText(el: Element, targetElementList: Element[]): ElementWithText {
+    let control = el
+    let foundTagOrRoleControl = false
+    for (const candidate of targetElementList) {
+        if (isInteractiveElement(candidate)) {
+            control = candidate
+            foundTagOrRoleControl = true
+            break
+        }
+    }
+
+    // a non-semantic control is often just a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses
+    if (!foundTagOrRoleControl && window) {
+        for (const candidate of targetElementList) {
+            try {
+                if (window.getComputedStyle(candidate).getPropertyValue('cursor') === 'pointer') {
+                    control = candidate
+                    break
+                }
+            } catch {}
+        }
+    }
+
+    // an icon-only control often carries its label on the icon inside it, e.g.
+    // <button><svg aria-label="Next slide"/></button>, so we read aria-label from the click target
+    // up to the control and stop there, so a wrapping region's aria-label is never used to match.
+    // the same walk collects the text of every element on the way, e.g. <a><strong>Next</strong></a>
+    let ariaLabel = ''
+    const pathToControl: Element[] = []
+    for (const candidate of targetElementList) {
+        pathToControl.push(candidate)
+        ariaLabel = candidate.getAttribute('aria-label')?.toLowerCase().trim() || ariaLabel
+        if (candidate === control) {
+            break
+        }
+    }
+
+    const safeText = controlLabelText(pathToControl, control).toLowerCase()
+
+    // a control's own label (text or its own aria-label) wins over a descendant icon's aria-label
+    if (safeText && !control.getAttribute('aria-label')) {
+        ariaLabel = ''
+    }
+
+    return {
+        safeText,
+        ariaLabel,
+    }
+}
+
+// an inline icon or an interpolated value splits a label across text nodes, and getSafeText joins
+// those with nothing, so <button>Next <svg/> page</button> would read as "nextpage" and no whole-word
+// keyword could match it. we keep the words apart for matching; $el_text keeps using getSafeText
+function controlLabelText(pathToControl: Element[], control: Element): string {
+    // joinNestedSpanText(control) already reads spans reached from the control through spans only,
+    // so those are skipped on the path to avoid counting their text twice
+    let spanChain = true
+    const pathText = pathToControl
+        .slice()
+        .reverse()
+        .map((candidate) => {
+            if (candidate === control) {
+                return joinSafeTextNodes(candidate, ' ')
+            }
+            spanChain = spanChain && isTag(candidate, 'span')
+            return spanChain ? '' : joinSafeTextNodes(candidate, ' ')
+        })
+    const text = [...pathText, joinNestedSpanText(control, ' ')].join(' ').replace(/\s+/g, ' ').trim()
+    return shouldCaptureValue(text) ? text : ''
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
@@ -271,7 +403,10 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true
+        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true.
+        // That is the value every project below the 2025-11-30 defaults resolves to, so turning the
+        // filter on here would change which events those projects capture. Opt in with
+        // { content_ignorelist: true } or a newer `defaults` date
         contentIgnorelist = undefined
         ignoreTextSelection = false
     } else {
@@ -288,14 +423,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element).toLowerCase(),
-        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
-    }))
 
-    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
+    if (contentIgnorelist && shouldIgnoreByContent(contentIgnorelist, clickedControlText(el, targetElementList))) {
         return false
     }
 
@@ -671,16 +801,20 @@ export function getDirectAndNestedSpanText(target: Element): string {
  * @returns {string} text content of span tags
  */
 export function getNestedSpanText(target: Element): string {
+    return joinNestedSpanText(target, '')
+}
+
+function joinNestedSpanText(target: Element, separator: string): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
         each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
-                    const spanText = getSafeText(child)
+                    const spanText = joinSafeTextNodes(child, separator)
                     text = `${text} ${spanText}`.trim()
 
                     if (child.childNodes && child.childNodes.length) {
-                        text = `${text} ${getNestedSpanText(child)}`.trim()
+                        text = `${text} ${joinNestedSpanText(child, separator)}`.trim()
                     }
                 } catch (e) {
                     logger.error('[AutoCapture]', e)
