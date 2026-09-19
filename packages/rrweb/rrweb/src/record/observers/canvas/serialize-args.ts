@@ -1,6 +1,31 @@
 import { encode } from 'base64-arraybuffer';
 import type { IWindow, CanvasArg, DataURLOptions } from '@posthog/rrweb-types';
 
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// a tainted canvas fails on every draw it is passed to, so warn once. The prefix
+// matches the other canvas capture warnings, which canvas-manager.ts emits: that
+// module cannot lend its helper here, because it imports this one through 2d.ts.
+let taintedCanvasWarned = false;
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time rather than blaming taint and going quiet
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      '[replay] canvas capture: this canvas draws blank because its pixels cannot be read.',
+      error,
+    );
+    return;
+  }
+  if (taintedCanvasWarned) return;
+  taintedCanvasWarned = true;
+  console.warn(
+    '[replay] canvas capture: this canvas draws blank because its pixels cannot be read. A cross-origin image or video drawn into it taints it.',
+    error,
+  );
+}
+
 // TODO: unify with `replay/webgl.ts`
 type CanvasVarMap = Map<string, unknown[]>;
 const canvasVarMap: Map<RenderingContext, CanvasVarMap> = new Map();
@@ -98,7 +123,16 @@ export function serializeArg(
   } else if (value instanceof HTMLCanvasElement) {
     const name = 'HTMLImageElement';
     // TODO: move `toDataURL` to web worker if possible
-    const src = value.toDataURL(dataURLOptions.type, dataURLOptions.quality);
+    let src: string;
+    try {
+      src = value.toDataURL(dataURLOptions.type, dataURLOptions.quality);
+    } catch (error) {
+      // On the WebGL path this runs inside the page's own canvas call, so an
+      // escaping throw breaks the page and not just the recording. Replay needs
+      // a loadable image here, otherwise `drawImage` throws on a broken one.
+      warnCanvasUnreadable(error);
+      src = TRANSPARENT_PIXEL;
+    }
     return {
       rr_type: name,
       src,

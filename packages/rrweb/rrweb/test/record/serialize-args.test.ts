@@ -320,6 +320,46 @@ describe('serializeArg with dataURLOptions', () => {
     ]);
   });
 
+  it('should not throw when a tainted canvas refuses toDataURL', () => {
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const result = serializeArg(canvas, window, context, defaultDataURLOptions);
+
+    // replay must still get a loadable image, otherwise `drawImage` throws
+    expect(result).toMatchObject({
+      rr_type: 'HTMLImageElement',
+      src: expect.stringMatching(/^data:image\/gif;base64,/) as string,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // a tainted canvas fails on every draw, so only the first one warns
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+    serializeArg(canvas, window, context, defaultDataURLOptions);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    warn.mockRestore();
+  });
+
   it('should serialize ImageData with nested canvas in complex structure', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = (t?: string, q?: number) => `data:${t};base64,test`;
