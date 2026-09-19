@@ -36,13 +36,29 @@ const cassetteSchema = z.strictObject({
 type Interaction = z.infer<typeof interactionSchema>
 type Provenance = z.infer<typeof provenanceSchema>
 
+class CassetteFailure extends Error {
+  readonly category: 'secret' | 'request' | 'mismatch' | 'stream' | 'response'
+  constructor(category: CassetteFailure['category']) {
+    super(`Cassette ${category} failure`)
+    this.category = category
+  }
+}
+
+async function classified<T>(category: 'request' | 'stream', operation: () => T | Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    throw error instanceof CassetteFailure ? error : new CassetteFailure(category)
+  }
+}
+
 function assertSafe(value: unknown, secrets: Set<string>): void {
   if (typeof value === 'string') {
     if (
       [...secrets].some((secret) => secret && value.includes(secret)) ||
       /\b(?:sk-ant-|sk-proj-|Bearer\s+\S+)/i.test(value)
     ) {
-      throw new Error('Secret detected in cassette; recording rejected')
+      throw new CassetteFailure('secret')
     }
   } else if (Array.isArray(value)) {
     for (const item of value) assertSafe(item, secrets)
@@ -53,7 +69,7 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
           key
         )
       ) {
-        throw new Error('Sensitive field detected in cassette; recording rejected')
+        throw new CassetteFailure('secret')
       }
       assertSafe(item, secrets)
     }
@@ -170,7 +186,9 @@ async function serve(
   let closed = false
   let finishing = false
   let finished: Promise<void> | undefined
+  let requests = 0
   const server = createServer((request, response) => {
+    const interaction = ++requests
     if (closed || finishing) {
       failure ??= new Error('Request received after cassette finish')
       response.writeHead(500).end('Cassette closed')
@@ -189,9 +207,10 @@ async function serve(
     }
     response.on('close', disconnected)
     const task = handle(request, response, controller.signal)
-      .catch(() => {
+      .catch((error: unknown) => {
         // Do not echo provider errors or request bodies: either can contain credentials.
-        failure ??= new Error('Cassette request failed (mismatch, incomplete stream, secret, or transport failure)')
+        const category = error instanceof CassetteFailure ? error.category : 'transport'
+        failure ??= new Error(`Cassette interaction ${interaction}: ${category} failure`)
         if (!response.headersSent) response.writeHead(500).end('Cassette request failed', () => request.destroy())
         else response.destroy()
       })
@@ -251,10 +270,9 @@ export async function startReplay({ path }: { path: string }) {
   let index = 0
   return serve(
     async (incoming, response, signal) => {
-      const request = await readRequest(incoming)
+      const request = await classified('request', () => readRequest(incoming))
       const interaction = cassette.interactions[index]
-      if (!interaction || !isDeepStrictEqual(request, interaction.request))
-        throw new Error('Unexpected cassette request')
+      if (!interaction || !isDeepStrictEqual(request, interaction.request)) throw new CassetteFailure('mismatch')
       index++
       response.writeHead(interaction.response.status, interaction.response.headers)
       for (const chunk of interaction.response.body.chunks) await writeChunk(response, chunk, signal)
@@ -306,7 +324,7 @@ export async function startRecorder(options: {
             }
           }
         }
-        const request = await readRequest(incoming)
+        const request = await classified('request', () => readRequest(incoming))
         assertSafe(request, secrets)
         const headers = new Headers(request.headers)
         for (const key of credentialHeaders) {
@@ -326,7 +344,7 @@ export async function startRecorder(options: {
           !result.body
         ) {
           await result.body?.cancel()
-          throw new Error('Expected successful SSE response')
+          throw new CassetteFailure('response')
         }
         for (const key of credentialHeaders) {
           const secret = result.headers.get(key)
@@ -345,7 +363,7 @@ export async function startRecorder(options: {
         const tail = decoder.decode()
         text += tail
         if (tail) await writeChunk(response, tail, signal)
-        const chunks = streamChunks(text, secrets)
+        const chunks = await classified('stream', () => streamChunks(text, secrets))
         interactions.push({
           request,
           response: {

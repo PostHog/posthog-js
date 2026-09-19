@@ -83,17 +83,19 @@ including the model, prompt, and options, rather than object property order.
 Missing files, mismatches, additional requests, and unused responses fail the
 test. Replay never falls back to the internet or rewrites files.
 
-## Record a live response
+## Record live responses
 
 This is a separate, explicit operation, never part of CI. With
 `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` already set in your environment:
 
 ```sh
 pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record anthropic-stream
+# Refresh all eleven cache and max_tokens scenarios, in order:
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record anthropic-cache
 ```
 
-The command sends only the fixed artificial prompt `Say hello.` to
-`https://api.anthropic.com`. It can incur provider charges. It writes
+The greeting command sends the fixed artificial prompt `Say hello.` to
+`https://api.anthropic.com`. Both commands incur provider charges. The greeting writes
 `fixtures/anthropic-stream.live.json`, not the checked-in recording.
 Live files are gitignored to prevent accidental staging.
 It then replays that file through the Anthropic SDK with a fake key and compares
@@ -103,12 +105,21 @@ Before adopting a live file, review its entire contents, use its exact request/m
 in a regression scenario, and write independent expected analytics values.
 Copy the reviewed recording to a named fixture without the `.live.json` suffix
 and commit it alongside that scenario and its assertions.
-Recording does not automatically update test expectations. This CLI records the
-greeting only. The cache fixtures use longer artificial prompts and explicit
-cache controls; their complete requests are stored in each fixture. To refresh
-them, use `startRecorder` with those requests: first write the cache, then capture
-the hit or extension before expiry. Verify the returned usage actually exhibits
-the intended cache state. Replaying a fixture does not populate the live cache.
+Recording does not automatically update test expectations. The cache command uses
+the artificial requests in the committed fixtures, with the selected model and a
+fresh shared prefix. It sends eleven sequential requests: 5-minute write, hit,
+extension; 1-hour write, hit, extension; mixed write, hit, extension; below-minimum
+prompt; and `max_tokens`. The mixed extension reuses the earlier 1-hour prefix.
+Do not pause between calls: hits must happen before the cache expires.
+
+Before saving each file, the command checks the expected presence of cache reads
+and writes for each TTL, the aggregate write count, and the stop reason. It fails
+if the chosen model or provider response does not produce the intended state.
+It does not retry until it gets a convenient result. Successful files are written
+individually as `anthropic-<scenario>.live.json`; a later failure leaves earlier
+live files in place but does not change committed fixtures. Start the command
+again to get a new prefix and a complete sequence. Replaying a fixture does not
+populate the live cache.
 
 ## Updating fixtures
 
@@ -123,6 +134,29 @@ the recording and leaves the previous file intact. Files are written atomically
 only after SSE framing and message completion validation. Credential headers are omitted; known
 secrets and suspicious fields are rejected, not silently replaced. This is not
 general PII sanitization: use artificial prompts and review every recorded file.
+
+## Diagnosis and maintenance cost
+
+Replay/recorder request failures report a one-based interaction number and a safe
+category: `request`, `mismatch`, `stream`, `secret`, `response`, or `transport`.
+They never include a request body, credentials, or the provider's raw error.
+For a mismatch, compare the scenario's request with the committed request. For a
+stream failure, inspect framing and completion. For a secret failure, do not
+promote the file. A response failure means the upstream did not return successful
+SSE; transport failures include timeouts and disconnections. The live CLI prints
+only a generic failure message because SDK exceptions can contain raw responses.
+
+The twelve committed fixtures total 440,180 bytes (about 430 KiB). An offline run
+on Node 24 took about five seconds on a developer machine, excluding dependency
+installation, Docker image download, and SDK builds. This is a local measurement,
+not a CI performance guarantee. No new dependency or published SDK code is added.
+
+The controlled incremental test withholds the end of a recorded response until
+the built wrapper delivers its first text delta. It then checks final text,
+usage, and exactly one generation. This proves delivery before completion, not
+provider latency. Recorder tests still use synthetic upstream responses; CLI
+tests exercise the complete cache sequence with recorded responses and fake
+credentials, not a live cache. Live refresh remains an explicit manual check.
 
 ## Boundaries
 
