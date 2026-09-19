@@ -188,6 +188,29 @@ describe('RetryQueue', () => {
         expect(mockTransport).toHaveBeenCalledTimes(4)
     })
 
+    it('keeps the queue retriable when the realm has no timers', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'setTimeout')!
+        Object.defineProperty(globalThis, 'setTimeout', { value: undefined, configurable: true, writable: true })
+
+        try {
+            expect(() => enqueueRequests()).not.toThrow()
+
+            // No poller exists, so the queue must not claim it is polling
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+            expect(retryQueue.length).toEqual(4)
+        } finally {
+            Object.defineProperty(globalThis, 'setTimeout', descriptor)
+        }
+
+        // Timers are back, so the next failed request starts polling again
+        mockTransport.mockImplementation(({ callback }) => callback?.({ statusCode: 502 }))
+        retryQueue.retriableRequest({ url: '/e', data: { event: 'later', timestamp: now } })
+
+        expect(retryQueue['_isPolling']).toBe(true)
+        expect(retryQueue['_poller']).toBeDefined()
+    })
+
     it('does not enqueue a request after 10 retries', () => {
         retryQueue.retriableRequest({
             url: '/e',

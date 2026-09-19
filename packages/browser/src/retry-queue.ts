@@ -2,7 +2,7 @@ import { RetriableRequestWithOptions } from './types'
 
 import { isPositiveNumber, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { window } from '@posthog/browser-common/utils/globals'
+import { clearTimeout, navigator, setTimeout, TimeoutID, window } from '@posthog/browser-common/utils/globals'
 import type { PostHog } from './posthog-core'
 import { sendRequest } from './request-dispatch'
 import { extendURLParams } from './request'
@@ -40,7 +40,7 @@ interface RetryQueueElement {
 
 export class RetryQueue {
     private _isPolling: boolean = false
-    private _poller: number | undefined
+    private _poller: TimeoutID | undefined
     private _pollIntervalMs: number = 3000
     private _queue: RetryQueueElement[] = []
     private _areWeOnline: boolean
@@ -127,7 +127,7 @@ export class RetryQueue {
         this._queue.push({ retryAt, requestOptions })
 
         let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
-        if (!navigator.onLine) {
+        if (navigator && !navigator.onLine) {
             logMessage += ' (Browser is offline)'
         }
         logger.warn(logMessage)
@@ -139,11 +139,11 @@ export class RetryQueue {
     }
 
     private _poll(): void {
-        this._poller && clearTimeout(this._poller)
+        clearTimeout(this._poller)
+        this._poller = undefined
 
         if (this._queue.length === 0) {
             this._isPolling = false
-            this._poller = undefined
             return
         }
 
@@ -152,7 +152,13 @@ export class RetryQueue {
                 this._flush()
             }
             this._poll()
-        }, this._pollIntervalMs) as any as number
+        }, this._pollIntervalMs)
+
+        // A realm without timers gives us no poller. Drop the polling claim, so a later enqueue
+        // can start the poller again instead of the queue waiting for a poller that never runs.
+        if (isUndefined(this._poller)) {
+            this._isPolling = false
+        }
     }
 
     private _flush(): void {
