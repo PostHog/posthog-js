@@ -329,6 +329,22 @@ function record<T = eventWithTime>(
   // per-recorder, unlike its module-level siblings, so a stale recorder's stop
   // handler can't touch a newer recorder's pending deferred inlining
   let deferredStylesheetInlining: DeferredStylesheetInlining | undefined;
+  // also per-recorder: a deferred start emits before it inits, and that emit can
+  // synchronously stop this recorder and start a replacement. Removing the listener
+  // mid-dispatch doesn't abort the callback that is already running, so the stale
+  // init() would take a full snapshot through the replacement's module-level
+  // takeFullSnapshot (resetting the shared mirror mid-stream) and push a second
+  // observer set onto handlers this stop already drained - one no stop handler can
+  // remove. Every callback boundary in init() therefore re-checks this flag.
+  let stopped = false;
+  // init() is meant to run once, but the deferred-start listeners stay registered
+  // until the stop drains them, and page code can dispatch its own DOMContentLoaded
+  // after the browser's (a common way to bootstrap late-injected scripts). A second
+  // run would take another full snapshot and stack a second observer set on the
+  // first: the stylesheet observer restores the exact function it captured, so the
+  // forward-order drain reinstalls the older patch and leaves CSSStyleSheet.prototype
+  // wrapped for the life of the page.
+  let initialized = false;
   const {
     emit,
     checkoutEveryNms,
@@ -689,6 +705,9 @@ function record<T = eventWithTime>(
         },
         isCheckout,
       );
+      // the Meta emit can stop this recorder and start a replacement; the rest
+      // of the snapshot would then run against the replacement's shared state
+      if (stopped) return;
 
       // Any deferred inlining from the previous snapshot targets mirror ids that this
       // snapshot is about to replace, so drop it rather than emitting stale mutations.
@@ -758,6 +777,11 @@ function record<T = eventWithTime>(
         // leave links queued for the next one
         deferredStylesheetLinks = takeDeferredStylesheetLinks();
       }
+      // the serialize pass runs the user's mask callbacks, and one of those can
+      // stop this recorder and start a replacement; the tree it just built is
+      // keyed to a mirror the replacement has already reset, so emitting it now
+      // would land a second, conflicting full snapshot in the replacement's stream
+      if (stopped) return;
 
       if (!node) {
         return console.warn('Failed to snapshot the document');
@@ -773,6 +797,9 @@ function record<T = eventWithTime>(
         },
         isCheckout,
       );
+      // same for the FullSnapshot emit: the stop already drained the buffers
+      // and reset the mirror this tail would otherwise unlock and emit against
+      if (stopped) return;
       mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
       canvasManager.onFullSnapshot();
 
@@ -1074,8 +1101,23 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
+      if (stopped || initialized) return;
+      // set before the snapshot, so a repeat dispatch from inside its own emit
+      // bails out too instead of nesting a second init in this one
+      initialized = true;
       takeFullSnapshot();
+      // the snapshot emits, and that emit can stop this recorder too
+      if (stopped) return;
       const cleanup = observe(document);
+      // observe() starts the plugins, and a plugin observer can emit while it sets
+      // up - the network plugin replays the performance entries the page already
+      // has - so the stop can land here too. It drained `handlers` before this
+      // cleanup existed, so pushing it there would leave every observer observe()
+      // just started with no reachable stop path; release them directly instead.
+      if (stopped) {
+        if (typeof cleanup === 'function') callAllSafely([cleanup]);
+        return;
+      }
       if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
@@ -1110,6 +1152,9 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
+      // set before any teardown, so a deferred-start callback that is mid-dispatch
+      // bails out instead of resuming into init() once this returns
+      stopped = true;
       // finish the deferred CSS while the emit path is still wired up, so the
       // sheets this recording deferred don't silently vanish with it
       try {
@@ -1142,6 +1187,7 @@ declare namespace record {
   var addCustomEvent: <T>(tag: string, payload: T) => void;
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
+  var isRecording: () => boolean;
   var mirror: Mirror;
 }
 
@@ -1168,6 +1214,11 @@ record.takeFullSnapshot = ((isCheckout?: boolean) => {
   }
   takeFullSnapshot(isCheckout);
 }) satisfies typeof record.takeFullSnapshot;
+
+// record() returns its stop handler synchronously, but init() can be deferred
+// until DOMContentLoaded or load. Until init() runs nothing is observed, so a
+// caller that only holds the stop handler cannot tell recording from pending.
+record.isRecording = (() => recording) satisfies typeof record.isRecording;
 
 record.mirror = mirror;
 

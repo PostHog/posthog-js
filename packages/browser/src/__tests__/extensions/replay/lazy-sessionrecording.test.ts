@@ -3815,6 +3815,7 @@ describe('Lazy SessionRecording', () => {
                 inlineStylesheet: true,
                 inlineStylesheetBudgetRules: 10_000,
                 recordCrossOriginIframes: false,
+                recordAfter: 'DOMContentLoaded',
             })
         })
 
@@ -7091,6 +7092,40 @@ describe('Lazy SessionRecording', () => {
             const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
             expect(debug.$sdk_debug_rrweb_attached).toBe(true)
             expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+        })
+
+        it('starts recording at DOMContentLoaded, so a page that never fires load still records', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ recordAfter: 'DOMContentLoaded' })
+            )
+        })
+
+        it('ignores a user-supplied recordAfter, it is not a session_recording option', () => {
+            posthog.config.session_recording = { ...posthog.config.session_recording, recordAfter: 'load' } as any
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ recordAfter: 'DOMContentLoaded' })
+            )
+        })
+
+        it('reports attached: false while rrweb holds a stop handler but has not begun observing', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const record = assignableWindow.__PosthogExtensions__.rrweb.record
+            record.isRecording = vi.fn(() => false)
+
+            const debug = sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+            expect(debug.$sdk_debug_rrweb_start_attempted).toBe(true)
+            expect(debug.$sdk_debug_rrweb_attached).toBe(false)
+
+            record.isRecording.mockReturnValue(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties.$sdk_debug_rrweb_attached).toBe(
+                true
+            )
         })
 
         it('reports start_attempted: true but attached: false when rrweb.record returns undefined', () => {
