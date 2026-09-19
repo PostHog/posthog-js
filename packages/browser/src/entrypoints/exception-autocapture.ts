@@ -46,19 +46,33 @@ const restore = (owner: any, key: string, original: unknown): void => {
     }, undefined)
 }
 
-// `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
+const hasStack = (error: unknown): boolean =>
+    safely(() => {
+        const stack = (error as Error).stack
+        return isString(stack) && stack.length > 0
+    }, false)
+
+// `window.onerror` exposes the location positionally, so preserve it whenever the input cannot
+// carry it. Safari reports an extension content script error as an Error with no stack at all, and
+// without the location that exception has no frame that says which script threw.
 const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
-    if (error != null) {
-        return error
+    const input = error ?? event
+    const canReportLocation =
+        isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined' && (error != null || isString(event))
+    if (!canReportLocation || (error != null && hasStack(error))) {
+        return input
     }
-    if (isString(event) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
-        try {
-            return new ErrorEvent('error', { message: event, filename: source, lineno, colno })
-        } catch {
-            return event
-        }
-    }
-    return event
+    return safely<unknown>(
+        () =>
+            new ErrorEvent('error', {
+                message: isString(event) ? event : '',
+                filename: source,
+                lineno,
+                colno,
+                error: error ?? undefined,
+            }),
+        input
+    )
 }
 
 const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {

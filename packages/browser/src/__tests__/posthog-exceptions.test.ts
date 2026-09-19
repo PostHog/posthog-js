@@ -319,39 +319,17 @@ describe('PostHogExceptions', () => {
                 )
             })
 
-            it.each([
-                ['ReferenceError', "Can't find variable: handleNoResponse"],
-                ['Error', 'No response from target server after 30 seconds'],
-            ])('captures masked application errors that only mention a messaging signature: %s / %s', (type, value) => {
-                const error = new Error(value)
-                error.name = type
-                error.stack = 'applicationEval@webkit-masked-url://hidden/:1:1'
+            it('does not capture masked-only exceptions whose value names no extension', () => {
+                // Every extension writes its own messages, so the value cannot say where the code
+                // came from. A stack with no frame the app loaded is the signal instead.
+                const error = new Error('application failure')
+                error.stack = 'handleConvertResponse@webkit-masked-url://hidden/:27:33'
                 const properties = exceptions.buildProperties(error)
                 expect(properties.$exception_list[0]).toMatchObject({
-                    type,
-                    value,
-                    stacktrace: { frames: [{ filename: 'webkit-masked-url://hidden/' }] },
+                    stacktrace: { frames: [{ filename: 'webkit-masked-url://hidden/', in_app: false }] },
                 })
                 exceptions.sendExceptionEvent(properties)
-                expect(captureMock).toBeCalledWith('$exception', properties, expect.anything())
-            })
-
-            it('captures ambiguous masked-only application exceptions', () => {
-                // Safari also masks blob, eval'd, and injected application code, so the masked URL
-                // is not sufficient evidence that the exception came from a browser extension.
-                const frame = {
-                    filename: 'webkit-masked-url://hidden/',
-                    function: 'applicationEval',
-                    platform: 'javascript:web',
-                    in_app: false,
-                }
-                const exception = {
-                    type: 'Error',
-                    value: 'application failure',
-                    stacktrace: { frames: [frame], type: 'raw' },
-                }
-                exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+                expect(captureMock).not.toBeCalledWith('$exception', properties, expect.anything())
             })
 
             it('does not capture Safari extension exceptions with only masked frames marked in_app', () => {
