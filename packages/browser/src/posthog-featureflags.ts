@@ -67,6 +67,26 @@ const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // refreshes after this many consecutive failures until connectivity changes.
 const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
 
+// Gateway statuses worth a second attempt. `@posthog/core` also retries every
+// transport-level failure, but the browser cannot copy that wholesale: a status-0
+// response here is usually an ad blocker, an extension or CORS, which is precisely why
+// MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES exists. Retrying those would just add a
+// second doomed request for the users who are already worst served.
+//
+// The exception is a timeout, which the browser can tell apart by its AbortError and
+// which is genuinely transient, so that one case is retried alongside 502/504.
+const RETRYABLE_FLAGS_HTTP_STATUSES = [502, 504]
+// Shorter than core's 3s `fetchRetryDelay`: `/flags` gates what the page renders, so the
+// budget here is a user waiting on UI rather than a server batching a flush. With the
+// default single retry the worst case stays bounded at timeout + this + timeout.
+const FLAGS_RETRY_DELAY_MS = 500
+
+const isFlagsTimeout = (response: ApiResponse): boolean =>
+    response.statusCode === 0 && response.error instanceof Error && response.error.name === 'AbortError'
+
+const isRetryableFlagsResponse = (response: ApiResponse): boolean =>
+    RETRYABLE_FLAGS_HTTP_STATUSES.includes(response.statusCode) || isFlagsTimeout(response)
+
 /** Longest interval the automatic refresh backs off to while the page has no user interaction. */
 const MAX_IDLE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 // Input-origin events only: a `scroll` event also fires for scrollTo/scrollTop/scrollIntoView,
@@ -1064,21 +1084,48 @@ export class PostHogFeatureFlags implements Extension {
             requestAdditionalReload()
         }
 
-        try {
-            void client
-                .sendRequest(path, {
-                    target: 'flags',
-                    method: 'POST',
-                    body: data,
-                    compression: this._config.compression,
-                    sentAt: 'body',
-                    timeoutMs: this._config.requestTimeoutMs,
-                })
-                .then(handleResponse)
-                .catch(handleError)
-        } catch (error) {
-            handleError(error)
+        // A transport failure resolves with `statusCode: 0` rather than rejecting, so the
+        // retry decision lives on the success path; the catch only covers a throw from
+        // `sendRequest` itself, which carries no status to classify and stays terminal.
+        //
+        // Retries are deliberately invisible to the rest of the class: `_requestInFlight`
+        // stays true and neither `handleResponse` nor `handleError` runs until the last
+        // attempt, so one logical reload still counts once towards the status-zero
+        // circuit breaker and fires its callbacks once.
+        let attemptsLeft = this._config.requestMaxRetries
+
+        const shouldRetry = (): boolean => attemptsLeft > 0 && requestGeneration === this._requestGeneration
+
+        const attempt = (): void => {
+            const retryLater = (): void => {
+                attemptsLeft--
+                setTimeout(attempt, FLAGS_RETRY_DELAY_MS)
+            }
+
+            try {
+                void client
+                    .sendRequest(path, {
+                        target: 'flags',
+                        method: 'POST',
+                        body: data,
+                        compression: this._config.compression,
+                        sentAt: 'body',
+                        timeoutMs: this._config.requestTimeoutMs,
+                    })
+                    .then((response) => {
+                        if (isRetryableFlagsResponse(response) && shouldRetry()) {
+                            retryLater()
+                            return
+                        }
+                        handleResponse(response)
+                    })
+                    .catch(handleError)
+            } catch (error) {
+                handleError(error)
+            }
         }
+
+        attempt()
     }
 
     private _hasStatusZeroCircuitBreakerTripped(): boolean {
