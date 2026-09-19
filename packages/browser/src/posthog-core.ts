@@ -1,5 +1,5 @@
 import Config from './config'
-import { ConsentManager, ConsentStatus } from './consent'
+import { ConsentManager, ConsentStatus, isAwaitingConsent } from './consent'
 import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
@@ -95,7 +95,7 @@ import {
 } from '@posthog/browser-common/utils/general-utils'
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
-import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import { getEventProperties, maskUrl } from '@posthog/browser-common/utils/event-utils'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
@@ -501,6 +501,7 @@ export class PostHog implements PostHogInterface {
 
     _initialPageviewCaptured: boolean
     _visibilityStateListener: (() => void) | null
+    private _pendingConsentPageview?: { properties: Properties; timestamp: Date }
     _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
@@ -1346,9 +1347,7 @@ export class PostHog implements PostHogInterface {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn() || this._inCookielessMode()) {
-                    this._captureInitialPageview()
-                }
+                this._captureInitialPageview()
             }, 1)
         }
 
@@ -4764,7 +4763,7 @@ export class PostHog implements PostHogInterface {
         }
 
         if (this.config.capture_pageview) {
-            this._captureInitialPageview()
+            this._flushPendingConsentPageviews()
         }
     }
 
@@ -4800,6 +4799,8 @@ export class PostHog implements PostHogInterface {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
         }
+
+        this._discardPendingConsentPageviews()
 
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
@@ -4970,16 +4971,74 @@ export class PostHog implements PostHogInterface {
         }
 
         // Extra check here to guarantee we only ever trigger a single `$pageview` event
-        if (!this._initialPageviewCaptured) {
-            this._initialPageviewCaptured = true
-            this.capture(EVENT_PAGEVIEW, { title: document.title }, { send_instantly: true })
-
-            // After we've captured the initial pageview, we can remove the listener
-            if (this._visibilityStateListener) {
-                document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
-                this._visibilityStateListener = null
-            }
+        if (this._initialPageviewCaptured) {
+            return
         }
+
+        if (isAwaitingConsent(this)) {
+            // capture() drops the event before it is built while consent is pending, so hold the
+            // pageview and send it once the user opts in. Recording it now keeps its load-time
+            // timestamp and URL, which a consent banner can only otherwise report much later.
+            this._pendingConsentPageview = {
+                properties: {
+                    title: document.title,
+                    $current_url: maskUrl(
+                        location?.href,
+                        this.config.mask_personal_data_properties,
+                        this.config.custom_personal_data_properties,
+                        this.config.disable_capture_url_hashes
+                    ),
+                    $pathname: location?.pathname,
+                },
+                timestamp: new Date(),
+            }
+        } else if (this.is_capturing()) {
+            this.capture(EVENT_PAGEVIEW, { title: document.title }, { send_instantly: true })
+        } else {
+            // The user rejected capturing. Leave the pageview unclaimed so that opting in later
+            // still sends one.
+            return
+        }
+
+        this._initialPageviewCaptured = true
+
+        // After we've captured the initial pageview, we can remove the listener
+        if (this._visibilityStateListener) {
+            document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
+            this._visibilityStateListener = null
+        }
+    }
+
+    /**
+     * Sends the pageviews held while consent was pending, oldest first, each with the timestamp and
+     * the URL it was seen at.
+     */
+    private _flushPendingConsentPageviews(): void {
+        const pending = this._pendingConsentPageview
+        this._pendingConsentPageview = undefined
+
+        if (pending) {
+            this.capture(EVENT_PAGEVIEW, pending.properties, {
+                timestamp: pending.timestamp,
+                send_instantly: true,
+            })
+        }
+
+        this.historyAutocapture?.flushPendingPageviews()
+
+        // Nothing was held if the page was still hidden at load, or if the user had rejected
+        // capturing before, so the initial pageview may still be owed.
+        this._captureInitialPageview()
+    }
+
+    /** Drops the pageviews held while consent was pending, for when the user rejects it. */
+    private _discardPendingConsentPageviews(): void {
+        if (this._pendingConsentPageview) {
+            this._pendingConsentPageview = undefined
+            this._initialPageviewCaptured = false
+        }
+
+        this.historyAutocapture?.discardPendingPageviews()
     }
 
     /**
