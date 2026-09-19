@@ -326,5 +326,17 @@ describe('RequestQueue', () => {
                 'sendBeacon'
             )
         })
+
+        it('clears queue and cancels scheduled flush on clear()', () => {
+            queue.enqueue({
+                data: { event: 'foo', timestamp: EPOCH },
+                url: '/e',
+            })
+            queue.enable()
+            queue.clear()
+
+            vi.runAllTimers()
+            expect(sendRequest).toHaveBeenCalledTimes(0)
+        })
     })
 })

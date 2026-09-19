@@ -4805,6 +4805,8 @@ export class PostHog implements PostHogInterface {
         this._sync_opt_out_with_persistence()
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
+            this._requestQueue?.clear()
+            this._retryQueue?.clear()
             // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
             this.register({
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -4823,6 +4825,9 @@ export class PostHog implements PostHogInterface {
             // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
             // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
             this._start_queue_if_opted_in()
+        } else {
+            this._requestQueue?.clear()
+            this._retryQueue?.clear()
         }
     }
 

@@ -366,5 +366,33 @@ describe('RetryQueue', () => {
             expect(retryQueue['_poller']).toBeUndefined()
             expect(retryQueue.length).toEqual(0)
         })
+
+        it('cleans up resources on clear without dispatching beacons', () => {
+            enqueueRequests()
+
+            expect(retryQueue['_isPolling']).toBe(true)
+            expect(retryQueue['_poller']).toBeDefined()
+
+            retryQueue.clear()
+
+            expect(retryQueue['_isPolling']).toBe(false)
+            expect(retryQueue['_poller']).toBeUndefined()
+            expect(retryQueue.length).toEqual(0)
+            expect(mockTransport).toHaveBeenCalledTimes(0)
+        })
+
+        it('does not retry when user has opted out', () => {
+            const optedOutPosthog = {
+                _send_request: mockTransport,
+                has_opted_out_capturing: () => true,
+            }
+            const queue = new RetryQueue(optedOutPosthog as any)
+            queue.retriableRequest({
+                url: '/e',
+                data: { event: 'opted-out-event', timestamp: now },
+            })
+            expect(queue.length).toEqual(0)
+            expect(mockTransport).toHaveBeenCalledTimes(0)
+        })
     })
 })

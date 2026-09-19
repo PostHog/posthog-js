@@ -79,10 +79,23 @@ export class RetryQueue {
         return this._queue.length
     }
 
+    clear(): void {
+        if (this._poller) {
+            clearTimeout(this._poller)
+            this._poller = undefined
+        }
+        this._isPolling = false
+        this._queue = []
+    }
+
     retriableRequest(
         { retriesPerformedSoFar, ...options }: RetriableRequestWithOptions,
         transportOverride?: RetriableRequestWithOptions['transport']
     ): void {
+        if (this._instance.has_opted_out_capturing?.()) {
+            return
+        }
+
         if (isPositiveNumber(retriesPerformedSoFar)) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
@@ -118,6 +131,10 @@ export class RetryQueue {
     }
 
     private _enqueue(requestOptions: RetriableRequestWithOptions, retryAfterMs?: number): void {
+        if (this._instance.has_opted_out_capturing?.()) {
+            return
+        }
+
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
@@ -156,6 +173,11 @@ export class RetryQueue {
     }
 
     private _flush(): void {
+        if (this._instance.has_opted_out_capturing?.()) {
+            this.clear()
+            return
+        }
+
         const now = Date.now()
         const notToFlush: RetryQueueElement[] = []
         const toFlush = this._queue.filter((item) => {

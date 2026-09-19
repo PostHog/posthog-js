@@ -495,4 +495,23 @@ describe('consent storage when no browser storage is available', () => {
             expect(posthog.has_opted_out_capturing()).toBe(true)
         }
     )
+
+    it('clears pending request queue and retry queue when opt_out_capturing is called', async () => {
+        const ph = await new Promise<PostHog>((resolve) =>
+            defaultPostHog().init(
+                'testtoken',
+                {
+                    loaded: (instance) => resolve(instance),
+                },
+                uuidv7()
+            )!
+        )
+        const requestQueueClear = vi.spyOn(ph._requestQueue!, 'clear')
+        const retryQueueClear = vi.spyOn(ph._retryQueue!, 'clear')
+
+        ph.opt_out_capturing()
+
+        expect(requestQueueClear).toHaveBeenCalledTimes(1)
+        expect(retryQueueClear).toHaveBeenCalledTimes(1)
+    })
 })
