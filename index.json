@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/5034": {
+    "key": "PostHog/posthog-js/issue/5034",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5034",
+    "url": "https://github.com/PostHog/posthog-js/issues/5034",
+    "conclusion": "Confirmed browser SDK bug: explicit `cross_subdomain_cookie: false` still triggers cross-subdomain cookie-domain probing during persistence cleanup.",
+    "labels": [
+      "javascript",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-20T11:55:58.241Z"
+  },
   "PostHog/posthog-js/issue/5020": {
     "key": "PostHog/posthog-js/issue/5020",
     "repo": "PostHog/posthog-js",
