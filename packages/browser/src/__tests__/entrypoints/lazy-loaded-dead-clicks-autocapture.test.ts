@@ -1397,6 +1397,24 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
         })
 
+        it('observes a shadow root nested in content added parent first within one batch', () => {
+            const outer = document.createElement('div')
+            document.body.appendChild(outer)
+            attachHost()
+            outer.appendChild(host)
+            const querySelectorAll = vi.spyOn(Element.prototype, 'querySelectorAll')
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [outer] },
+                { target: outer, addedNodes: [host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+            expect(querySelectorAll.mock.instances.filter((context) => context === host)).toHaveLength(0)
+            querySelectorAll.mockRestore()
+            outer.remove()
+        })
+
         it('does not treat a change inside a detached root as a sign of life', () => {
             attachHost()
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined

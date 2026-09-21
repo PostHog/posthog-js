@@ -230,13 +230,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     // Observe every open shadow root this node hosts or contains. Nested roots are covered
-    // because each root observed here is scanned in turn.
-    private _observeShadowRoots(node: Node): void {
+    // because each root observed here is scanned in turn. Every scanned element is added to
+    // `scanned`, when given, so a caller can skip nodes an earlier scan already covered.
+    private _observeShadowRoots(node: Node, scanned?: Set<Node>): void {
         if (isElementNode(node) && node.shadowRoot) {
             this._observeRoot(node.shadowRoot)
         }
         const descendants = (node as Element).querySelectorAll?.('*') ?? []
         for (let i = 0; i < descendants.length; i++) {
+            scanned?.add(descendants[i])
             this._observeRoot(descendants[i].shadowRoot)
         }
     }
@@ -278,6 +280,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onMutation(mutations: MutationRecord[]): void {
+        // every scan in this batch reads the DOM as it is now, so a node an earlier scan visited
+        // needs no scan of its own
+        const scanned = new Set<Node>()
         for (const mutation of mutations) {
             // a root observed directly keeps reporting after its host leaves the page, and a change
             // off the page is no sign of life. only an explicit `false` is skipped, since older
@@ -291,8 +296,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const addedNodes = mutation.addedNodes
             for (let i = 0; i < addedNodes.length; i++) {
                 const node = addedNodes[i]
-                if (isElementNode(node)) {
-                    this._observeShadowRoots(node)
+                if (isElementNode(node) && !scanned.has(node)) {
+                    this._observeShadowRoots(node, scanned)
                 }
             }
         }
