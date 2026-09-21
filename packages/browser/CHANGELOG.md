@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.4
+
+### Patch Changes
+
+- [#5042](https://github.com/PostHog/posthog-js/pull/5042) [`ed9fc04`](https://github.com/PostHog/posthog-js/commit/ed9fc0422a028942101e560dda2d28ef43e381a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `$session_id` being sent as `null` when a sibling tab resets the session before this tab captures its first event (#5036)
+  (2026-09-21)
+
 ## 1.434.3
 
 ### Patch Changes
