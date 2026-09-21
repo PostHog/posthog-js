@@ -43,7 +43,10 @@ describe('console recorder handover', () => {
                         replay: (_client, entries) => replayConsoleBuffer(host, entries),
                     })
             }
-        })({ get: () => undefined, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true })
+        })({ get: () => undefined, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true }, () => ({
+            distinctId: client.distinctId,
+            ...client.session,
+        }))
     })
     afterEach(() => {
         logs.dispose()
