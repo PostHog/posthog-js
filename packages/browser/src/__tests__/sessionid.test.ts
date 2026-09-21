@@ -1310,6 +1310,44 @@ describe('Session ID manager', () => {
                 crossTabAdoption: true,
             })
         })
+
+        it('rotates instead of returning null when a sibling tab reset the session before our first capture (#5036)', () => {
+            // Tab B initialised with the old session cached but has not
+            // captured yet (no in-memory activity). Tab A's idle timer then
+            // persisted [null, null, null]. B's pre-refresh `noSessionId` is
+            // false and the refresh finds no activity to be idle against, so
+            // only the re-sampled session id can drive rotation; otherwise B
+            // returns and persists a null session id.
+            ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
+            persistence.props[SESSION_ID] = [1_000_000, 'sessionA', 1_000_000]
+            const sessionIdManager = sessionIdMgr(persistence)
+
+            const siblingReset = () => {
+                persistence.props[SESSION_ID] = [null, null, null]
+            }
+            ;(persistence.load as vi.Mock).mockImplementation(siblingReset)
+            ;(persistence.refreshKey as vi.Mock).mockImplementation(siblingReset)
+
+            const handler = vi.fn()
+            sessionIdManager.onSessionId(handler)
+            handler.mockClear()
+
+            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+            expect(result.sessionId).toBe('newUUID')
+            expect(result.windowId).toBe('newUUID')
+            expect(handler).toHaveBeenCalledTimes(1)
+            expect(handler).toHaveBeenCalledWith('newUUID', 'newUUID', {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+            expect(persistence.register).toHaveBeenLastCalledWith({
+                [SESSION_ID]: [queryTime, 'newUUID', queryTime],
+            })
+        })
     })
 
     describe('destroy()', () => {
