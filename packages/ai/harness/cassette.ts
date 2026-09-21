@@ -87,6 +87,7 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
       ) {
         throw new CassetteFailure('secret')
       }
+      assertSafe(key, secrets)
       assertSafe(item, secrets)
     }
   }
@@ -103,6 +104,10 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
   let lastType: unknown
   let started = false
   let outputText = ''
+  const toolInputs = new Map<number, string>()
+  const toolIndices = new Set<number>()
+  const toolIds = new Set<string>()
+  const blockIndices: unknown[] = []
   for (const chunk of chunks) {
     const data = chunk
       .split('\n')
@@ -118,25 +123,72 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
       if (started) throw new Error('Duplicate message_start')
       started = true
     } else if (!started && event.type !== 'ping') throw new Error('Missing message_start')
-    if (
-      event.type === 'content_block_start' &&
-      (!('content_block' in event) ||
-        !event.content_block ||
-        typeof event.content_block !== 'object' ||
-        !('type' in event.content_block) ||
-        event.content_block.type !== 'text')
-    ) {
-      throw new Error('Only text content blocks are supported')
+    if (event.type === 'content_block_start') {
+      const block = 'content_block' in event ? event.content_block : undefined
+      if (!block || typeof block !== 'object' || !('type' in block)) throw new Error('Invalid content block')
+      if (block.type === 'tool_use') {
+        if (
+          !('index' in event) ||
+          typeof event.index !== 'number' ||
+          !Number.isSafeInteger(event.index) ||
+          event.index !== blockIndices.length ||
+          blockIndices.some((index, position) => index !== position) ||
+          toolIndices.has(event.index) ||
+          !('id' in block) ||
+          typeof block.id !== 'string' ||
+          !block.id ||
+          toolIds.has(block.id) ||
+          !('name' in block) ||
+          typeof block.name !== 'string' ||
+          !block.name ||
+          !('input' in block) ||
+          !block.input ||
+          typeof block.input !== 'object' ||
+          Array.isArray(block.input) ||
+          Object.keys(block.input).length !== 0
+        )
+          throw new Error('Invalid streamed tool block')
+        toolIndices.add(event.index)
+        toolIds.add(block.id)
+        toolInputs.set(event.index, '')
+      } else if (block.type !== 'text') throw new Error('Only text and client tool blocks are supported')
+      if (toolIndices.size && (!('index' in event) || event.index !== blockIndices.length)) {
+        throw new Error('Invalid content block index')
+      }
+      blockIndices.push('index' in event ? event.index : undefined)
+    }
+    if (event.type === 'content_block_delta') {
+      const delta = 'delta' in event ? event.delta : undefined
+      const index = 'index' in event && typeof event.index === 'number' ? event.index : -1
+      if (!delta || typeof delta !== 'object' || !('type' in delta)) throw new Error('Invalid content delta')
+      if (delta.type === 'input_json_delta') {
+        if (!toolInputs.has(index) || !('partial_json' in delta) || typeof delta.partial_json !== 'string') {
+          throw new Error('Tool delta without an open tool block')
+        }
+        toolInputs.set(index, toolInputs.get(index)! + delta.partial_json)
+      } else if (delta.type !== 'text_delta' || toolIndices.has(index)) {
+        throw new Error('Unsupported content delta')
+      }
     }
     if (
-      event.type === 'content_block_delta' &&
-      (!('delta' in event) ||
-        !event.delta ||
-        typeof event.delta !== 'object' ||
-        !('type' in event.delta) ||
-        event.delta.type !== 'text_delta')
+      event.type === 'content_block_stop' &&
+      'index' in event &&
+      typeof event.index === 'number' &&
+      toolIndices.has(event.index)
     ) {
-      throw new Error('Only text deltas are supported')
+      if (!toolInputs.has(event.index)) throw new Error('Duplicate tool block stop')
+      const input = toolInputs.get(event.index)!
+      assertSafe(input, secrets)
+      const parsed: unknown = JSON.parse(input || '{}')
+      // JSON.parse discards earlier duplicate keys, but their contents remain in the cassette.
+      for (const token of input.matchAll(/("(?:\\.|[^"\\])*")\s*(:)?/g)) {
+        const value: string = JSON.parse(token[1])
+        assertSafe(token[2] ? { [value]: null } : value, secrets)
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('Tool input must be an object')
+      assertSafe(parsed, secrets)
+      toolInputs.delete(event.index)
     }
     if (
       'delta' in event &&
@@ -160,6 +212,7 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
   }
   // Credentials can span logical deltas as well as network chunks.
   assertSafe(outputText, secrets)
+  if (toolInputs.size) throw new Error('Incomplete tool input')
   if (lastType !== 'message_stop') throw new Error('Incomplete Anthropic stream: missing message_stop')
   return chunks
 }

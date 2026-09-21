@@ -1,5 +1,15 @@
 # @posthog/convex
 
+## 2.1.5
+
+### Patch Changes
+
+- [#4800](https://github.com/PostHog/posthog-js/pull/4800) [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect the definitions response's `property_matching_version` during local feature flag evaluation. Version 2 uses explicit boolean/string equality and per-member array matching, while missing or other versions retain service legacy matching (including empty-array truthiness). Preserve the version in Node definition caches and Convex persisted definitions, and propagate it through person, group, cohort and dependency evaluation without mixing snapshots during reloads. Existing numeric ambiguity fallback and SemVer parsing policies are unchanged.
+  (2026-09-21)
+- Updated dependencies [[`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431), [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7)]:
+  - @posthog/core@1.55.1
+  - posthog-node@5.52.5
+
 ## 2.1.4
 
 ### Patch Changes
