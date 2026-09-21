@@ -1,5 +1,9 @@
 # Replay artifact compatibility tests
 
+The `Replay artifact compatibility` CI job builds the pull request and its base revision,
+prepares the released cores below, and runs both suites across all three browser engines.
+The fixture checks fail the job if preparation is incomplete.
+
 Build the candidate browser SDK and a comparison revision in separate checkouts. Set
 `REPLAY_BASELINE_DIST` to the comparison checkout's `packages/browser/dist` directory.
 The shared-extension suite tests independently emitted core/extension combinations;

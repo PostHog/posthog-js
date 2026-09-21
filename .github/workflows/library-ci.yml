@@ -121,6 +121,75 @@ jobs:
           path: packages/browser/playwright-report/
           retention-days: 30
 
+  replay-artifact-compat:
+    name: Replay artifact compatibility
+    needs: affected
+    if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
+    permissions:
+      contents: read
+    runs-on: depot-ubuntu-latest-8
+    container:
+      # Keep this version in sync with packages/browser's @playwright/test dependency.
+      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build candidate
+        run: pnpm exec turbo run build --filter=posthog-js
+
+      - name: Check out comparison revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .replay-baseline
+
+      - name: Build comparison revision
+        working-directory: .replay-baseline
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec turbo run build --filter=posthog-js
+
+      - name: Prepare released cores
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture_dir="$RUNNER_TEMP/replay-released-cores"
+          for version in 1.268.5 1.268.6 1.400.0; do
+            destination="$fixture_dir/$version"
+            mkdir -p "$destination"
+            npm pack --ignore-scripts "posthog-js@$version" --pack-destination "$destination"
+            tar -xzf "$destination/posthog-js-$version.tgz" -C "$destination"
+            test -f "$destination/package/dist/array.js"
+          done
+          baseline_dist="$GITHUB_WORKSPACE/.replay-baseline/packages/browser/dist"
+          test -f "$baseline_dist/array.js"
+          test -f "$baseline_dist/lazy-recorder.js"
+          test -f "$baseline_dist/recorder.js"
+          echo "REPLAY_RELEASED_CORE_DIR=$fixture_dir" >> "$GITHUB_ENV"
+          echo "REPLAY_BASELINE_DIST=$baseline_dist" >> "$GITHUB_ENV"
+
+      - name: Run replay artifact matrix
+        working-directory: packages/browser
+        run: >-
+          pnpm exec playwright test
+          playwright/mocked/session-recording/session-recording-released-core.spec.ts
+          playwright/mocked/session-recording/session-recording-shared-extension.spec.ts
+          --workers=2 --reporter=line
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: replay-artifact-results
+          path: packages/browser/test-results/
+          retention-days: 30
+
   compat:
     name: Backward compatibility tests
     needs: affected
