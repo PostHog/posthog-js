@@ -355,6 +355,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     advanced_enable_surveys: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
+    feature_flag_request_max_retries: 1,
     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
