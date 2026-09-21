@@ -15,26 +15,25 @@ export class PostHogLogs extends SharedLogs {
     override readonly name = LogsExtension
 
     constructor(private readonly _instance: PostHog) {
-        super({
-            get: () => _instance?.config?.logs,
-            captureHintKey: LOGS_CAPTURE_ENABLED_SERVER_SIDE,
-            get remoteConfigWillArrive() {
-                return (
-                    !_instance._shouldDisableFlags?.() ||
-                    !!assignableWindow._POSTHOG_REMOTE_CONFIG?.[_instance.config.token]?.config
-                )
+        super(
+            {
+                get: () => _instance?.config?.logs,
+                captureHintKey: LOGS_CAPTURE_ENABLED_SERVER_SIDE,
+                get remoteConfigWillArrive() {
+                    return (
+                        !_instance._shouldDisableFlags?.() ||
+                        !!assignableWindow._POSTHOG_REMOTE_CONFIG?.[_instance.config.token]?.config
+                    )
+                },
             },
-        })
+            () => getSdkContext(_instance)
+        )
         // Reset the breaker before application reconnect handlers can capture new logs.
         this._listenForReconnect()
     }
 
     protected override get _isRequestReady(): boolean {
         return this._instance.__loaded
-    }
-
-    protected override _getSdkContext(): LogSdkContext {
-        return getSdkContext(this._instance)
     }
 
     protected override _getConsoleLoader(): ConsoleLogsLoader | undefined {

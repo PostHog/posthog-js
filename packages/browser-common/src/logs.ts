@@ -126,21 +126,16 @@ export class PostHogLogs implements Extension {
     private _window: (Window & typeof globalThis) | undefined
     private _listeningForReconnect = false
 
-    constructor(private readonly _configSource: LogsConfigSource) {
+    constructor(
+        private readonly _configSource: LogsConfigSource,
+        /** Reads host SDK metadata at capture time, including while console calls are buffered. */
+        private readonly _getSdkContext: () => LogSdkContext
+    ) {
         this._isLogsEnabled = !!_configSource.get()?.captureConsoleLogs
     }
 
     protected get _isRequestReady(): boolean {
         return true
-    }
-
-    protected _getSdkContext(): LogSdkContext {
-        const client = this._client!
-        const session = client.session
-        return {
-            distinctId: client.distinctId,
-            ...(session.sessionId ? session : {}),
-        }
     }
 
     protected _getConsoleLoader(): ConsoleLogsLoader | undefined {

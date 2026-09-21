@@ -17,11 +17,14 @@ const makeRunning = (kind: Kind): Running => {
         }
         return { start: () => initializeLogs(host), count: () => capture.mock.calls.length }
     }
-    const logs = new PostHogLogs({
-        get: () => undefined,
-        captureHintKey: 'consoleCaptureEnabled',
-        remoteConfigWillArrive: true,
-    })
+    const logs = new PostHogLogs(
+        {
+            get: () => undefined,
+            captureHintKey: 'consoleCaptureEnabled',
+            remoteConfigWillArrive: true,
+        },
+        () => ({})
+    )
     logs.setup(createTestClient())
     extensions.push(logs)
     return {

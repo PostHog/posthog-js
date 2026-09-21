@@ -42,7 +42,10 @@ describe('PostHogLogs', () => {
                 protected override _getConsoleLoader(): ConsoleLogsLoader {
                     return mockLoader
                 }
-            })({ get: () => config, captureHintKey: CAPTURE_HINT_KEY, remoteConfigWillArrive: true })
+            })({ get: () => config, captureHintKey: CAPTURE_HINT_KEY, remoteConfigWillArrive: true }, () => ({
+                distinctId: client.distinctId,
+                ...(client.session.sessionId ? client.session : {}),
+            }))
             clients.set(extension, client)
             return extension
         }
