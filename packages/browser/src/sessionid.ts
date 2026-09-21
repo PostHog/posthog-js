@@ -464,7 +464,11 @@ export class SessionIdManager {
             ;[, sessionId, startTimestamp] = this._getSessionId()
             // The sibling may have reset the session to null (#5036): a
             // stale `noSessionId` here would return and persist a null id.
-            noSessionId = !sessionId || !!pendingBootstrapSession
+            // Only when the refresh cleared the timeout, so an idle rotation
+            // keeps `activityTimeout` as its sole reason.
+            if (!activityTimeout) {
+                noSessionId = !sessionId || !!pendingBootstrapSession
+            }
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             crossTabAdoption = false

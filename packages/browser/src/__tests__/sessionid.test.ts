@@ -1311,16 +1311,63 @@ describe('Session ID manager', () => {
             })
         })
 
-        it('rotates instead of returning null when a sibling tab reset the session before our first capture (#5036)', () => {
-            // Tab B initialised with the old session cached but has not
-            // captured yet (no in-memory activity). Tab A's idle timer then
-            // persisted [null, null, null]. B's pre-refresh `noSessionId` is
-            // false and the refresh finds no activity to be idle against, so
-            // only the re-sampled session id can drive rotation; otherwise B
-            // returns and persists a null session id.
+        it.each([
+            { persistence_save_debounce_ms: 0, refreshPath: 'load' },
+            { persistence_save_debounce_ms: 250, refreshPath: 'refreshKey' },
+        ])(
+            'rotates instead of returning null when a sibling tab reset the session before our first capture (#5036, via $refreshPath)',
+            ({ persistence_save_debounce_ms, refreshPath }) => {
+                // Tab B initialised with the old session cached but has not
+                // captured yet (no in-memory activity). Tab A's idle timer then
+                // persisted [null, null, null]. B's pre-refresh `noSessionId` is
+                // false and the refresh finds no activity to be idle against, so
+                // only the re-sampled session id can drive rotation; otherwise B
+                // returns and persists a null session id.
+                config.persistence_save_debounce_ms = persistence_save_debounce_ms
+                try {
+                    ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
+                    persistence.props[SESSION_ID] = [1_000_000, 'sessionA', 1_000_000]
+                    const sessionIdManager = sessionIdMgr(persistence)
+
+                    const siblingReset = () => {
+                        persistence.props[SESSION_ID] = [null, null, null]
+                    }
+                    ;(persistence.load as vi.Mock).mockImplementation(siblingReset)
+                    ;(persistence.refreshKey as vi.Mock).mockImplementation(siblingReset)
+
+                    const handler = vi.fn()
+                    sessionIdManager.onSessionId(handler)
+                    handler.mockClear()
+
+                    const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+                    const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+
+                    expect(persistence[refreshPath as 'load' | 'refreshKey']).toHaveBeenCalled()
+                    expect(result.sessionId).toBe('newUUID')
+                    expect(result.windowId).toBe('newUUID')
+                    expect(handler).toHaveBeenCalledTimes(1)
+                    expect(handler).toHaveBeenCalledWith('newUUID', 'newUUID', {
+                        noSessionId: true,
+                        activityTimeout: false,
+                        sessionPastMaximumLength: false,
+                        crossTabAdoption: false,
+                    })
+                    expect(persistence.register).toHaveBeenLastCalledWith({
+                        [SESSION_ID]: [queryTime, 'newUUID', queryTime],
+                    })
+                } finally {
+                    delete config.persistence_save_debounce_ms
+                }
+            }
+        )
+
+        it('keeps activityTimeout as the sole reason when this tab is idle and a sibling reset the session', () => {
+            // The recompute above must not relabel a genuine idle rotation as
+            // a reset: the replay recorder skips its session-linking event
+            // when `noSessionId` is set.
             ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
-            persistence.props[SESSION_ID] = [1_000_000, 'sessionA', 1_000_000]
             const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
 
             const siblingReset = () => {
                 persistence.props[SESSION_ID] = [null, null, null]
@@ -1332,20 +1379,17 @@ describe('Session ID manager', () => {
             sessionIdManager.onSessionId(handler)
             handler.mockClear()
 
-            const queryTime = 1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
-            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, queryTime)
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(
+                false,
+                1_000_000 + sessionIdManager.sessionTimeoutMs + 5_000
+            )
 
             expect(result.sessionId).toBe('newUUID')
-            expect(result.windowId).toBe('newUUID')
-            expect(handler).toHaveBeenCalledTimes(1)
             expect(handler).toHaveBeenCalledWith('newUUID', 'newUUID', {
-                noSessionId: true,
-                activityTimeout: false,
+                noSessionId: false,
+                activityTimeout: true,
                 sessionPastMaximumLength: false,
                 crossTabAdoption: false,
-            })
-            expect(persistence.register).toHaveBeenLastCalledWith({
-                [SESSION_ID]: [queryTime, 'newUUID', queryTime],
             })
         })
     })
