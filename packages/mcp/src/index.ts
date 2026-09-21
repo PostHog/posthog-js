@@ -161,6 +161,7 @@ function buildTrackingData(
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
+    toolInputSchemas: new Map(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: {
       ...DEFAULT_OPTIONS,
@@ -230,6 +231,7 @@ export {
 // Host callbacks receive the SDK's `extra`/`ctx` unchanged, and the two SDK
 // majors carry HTTP headers in different places and shapes. This reads either.
 export { getRequestHeaders } from './extensions/request-headers'
+export { getToolInputProperties } from './extensions/tool-input'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'

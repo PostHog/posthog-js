@@ -455,17 +455,21 @@ describe('Low-level Server tracing (e2e)', () => {
     await eventCapture.stop()
   })
 
-  it('captures a single $mcp_tool_call for a successful call', async () => {
+  it.each([false, true])('captures safe input names with a prior listing: %s', async (listed) => {
     const { server, client, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog())
       await connect()
+      if (listed) await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       const result = await client.request(
-        { method: 'tools/call', params: { name: 'echo', arguments: { text: 'hi' } } },
+        {
+          method: 'tools/call',
+          params: { name: 'echo', arguments: { text: 'hi', private_identifier: true, context: 'example' } },
+        },
         CallToolResultSchema
       )
-      await new Promise((r) => setTimeout(r, 50))
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1))
 
       expect((result.content as { text: string }[])[0].text).toBe('echo: hi')
 
@@ -473,6 +477,7 @@ describe('Low-level Server tracing (e2e)', () => {
       expect(toolCalls).toHaveLength(1)
       const props = toolCalls[0].properties
       expect(props.$mcp_tool_name).toBe('echo')
+      expect(props.$mcp_input_keys).toEqual(listed ? ['*', 'text'] : ['*', '*'])
       expect(props.$mcp_resource_name).toBe('echo')
       expect(props.$mcp_is_error).toBe(false)
       expect(props.$mcp_duration_ms).toEqual(expect.any(Number))

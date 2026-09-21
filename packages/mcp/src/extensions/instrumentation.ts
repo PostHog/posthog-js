@@ -48,6 +48,7 @@ import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdT
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
+import { getToolInputProperties } from './tool-input'
 
 /**
  * Single instrumentation core shared by the low-level (`Server`) and high-level
@@ -70,6 +71,7 @@ interface TraceToolCallParams {
   execute: ToolExecutor
   /** Optional schema-derived ownership override for adapters with direct registry access. */
   parameterOwnership?: AnalyticsParameterOwnership
+  inputSchema?: unknown
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
    * tool passes `mcpMissingCapability` and `send_feedback` passes
@@ -120,6 +122,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     execute,
     parameterOwnership,
+    inputSchema,
     eventType,
     explicitContextIntent,
     extraEventProperties,
@@ -162,6 +165,13 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     resolvedEventType,
     canCaptureContextIntent
   )
+  if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
+    const schema = inputSchema ?? data.toolInputSchemas.get(request.params?.name ?? '')
+    preparedEvent.event.properties = {
+      ...preparedEvent.event.properties,
+      ...getToolInputProperties(request.params?.arguments ?? {}, schema),
+    }
+  }
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
   }
@@ -822,6 +832,9 @@ async function getTracedToolsList(
 
     if (data) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+      for (const tool of tools) {
+        if (tool?.name) data.toolInputSchemas.set(tool.name, tool.inputSchema)
+      }
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)

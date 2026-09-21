@@ -74,6 +74,46 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
 5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
+### Tool input field names
+
+Automatic tool-call events include `$mcp_input_keys` on success and failure.
+The SDK reads the original arguments before validation can remove unknown fields.
+It records up to 20 top-level field names, sorted, without their values.
+Only names declared by the server's input schema remain visible.
+Unknown names and names longer than 64 characters become `*`.
+SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
+Non-object arguments do not produce this property.
+
+High-level servers use the registered tool's schema.
+Low-level servers use schemas from prior `tools/list` responses on the same server instance.
+Before a listing, or when a schema cannot be inspected, names become `*`.
+The helper supports top-level JSON Schema properties, Zod object schemas, and Zod raw shapes.
+It does not resolve JSON Schema references or inspect fields inside unions and transforms.
+
+Custom dispatchers use the same helper through the existing `properties` argument:
+
+```ts
+import { getToolInputProperties, PostHogMCP } from '@posthog/mcp'
+
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
+await posthog.register({ $mcp_server_build: 'example-build' })
+
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema)
+posthog.captureToolCall({ toolName, isError: false, properties })
+```
+
+Compute these properties before argument normalization, and include them in both success and error events.
+Pass a schema owned by the server, never one supplied by the caller.
+Custom command formats must extract the actual tool arguments and schema before calling the helper.
+Alternative field names must appear in the supplied schema to remain visible.
+The server can report the alternative names it actually used through the existing event `properties` argument.
+The SDK does not normalize arguments or infer which alternative a server accepted.
+
+The helper adds no request values to the event.
+Existing parameter and response capture remains unchanged.
+Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+No session store or additional network request is required.
+
 ## 4. Session & identity
 
 ### Shared event properties

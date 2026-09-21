@@ -60,6 +60,7 @@ describe('beforeSend option', () => {
       beforeSend: (event) => {
         if (event.properties.$mcp_parameters) {
           event.properties.$mcp_parameters = '[redacted]'
+          delete event.properties.$mcp_input_keys
         }
         return event
       },
@@ -70,6 +71,7 @@ describe('beforeSend option', () => {
 
     const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
     expect(toolCall.properties.$mcp_parameters).toBe('[redacted]')
+    expect(toolCall.properties).not.toHaveProperty('$mcp_input_keys')
   })
 
   it('drops an event when beforeSend returns null', async () => {

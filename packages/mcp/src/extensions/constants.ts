@@ -56,6 +56,7 @@ export const PostHogMCPAnalyticsProperty = {
   FeedbackTool: '$mcp_feedback_tool',
   FeedbackType: '$mcp_feedback_type',
   IsError: '$mcp_is_error',
+  InputKeys: '$mcp_input_keys',
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
