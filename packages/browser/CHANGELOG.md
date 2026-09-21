@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.5
+
+### Patch Changes
+
+- [#5021](https://github.com/PostHog/posthog-js/pull/5021) [`9cd834c`](https://github.com/PostHog/posthog-js/commit/9cd834c429a3562d9e4cc428dd0d9604987487e7) Thanks [@posthog](https://github.com/apps/posthog)! - Stop reporting dead clicks on controls inside open shadow roots (such as web components or micro-frontends) when the click updates content inside the shadow root.
+  (2026-09-21)
+
 ## 1.434.4
 
 ### Patch Changes
