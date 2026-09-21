@@ -374,7 +374,7 @@ export class PostHogFeatureFlags implements Extension {
         this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
             this._clearBootstrapState()
             this._rebuildEventProperties()
-            this._fireFeatureFlagsCallbacks(false)
+            this._fireFeatureFlagsCallbacks()
         })
         this._rebuildEventProperties()
         return this.initialize()
@@ -1319,7 +1319,7 @@ export class PostHogFeatureFlags implements Extension {
                 })
 
                 const flagDetails = this.getFeatureFlagDetails(key)
-                const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
+                const errors: string[] = this.getFeatureFlagErrors()
                 if (!flagExists) {
                     errors.push(
                         this._flagsLoadedFromRemote ? FeatureFlagError.FLAG_MISSING : FeatureFlagError.FLAGS_NOT_LOADED
@@ -1565,7 +1565,7 @@ export class PostHogFeatureFlags implements Extension {
         if (!errorsLoading) {
             this._staleCacheRefreshTriggered = false
         }
-        this._fireFeatureFlagsCallbacks(!!errorsLoading)
+        this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
     /**
@@ -1611,7 +1611,7 @@ export class PostHogFeatureFlags implements Extension {
         // Clear all overrides if false, lets you do something like posthog.featureFlags.overrideFeatureFlags(false)
         if (overrideOptions === false) {
             this._remove([PERSISTENCE_OVERRIDE_FEATURE_FLAGS, PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS])
-            this._fireFeatureFlagsCallbacks(false)
+            this._fireFeatureFlagsCallbacks()
             forceDebugLogger.info('All overrides cleared')
             return
         }
@@ -1619,7 +1619,7 @@ export class PostHogFeatureFlags implements Extension {
         // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
         if (isArray(overrideOptions)) {
             this._set({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: arrayToFlagsRecord(overrideOptions) })
-            this._fireFeatureFlagsCallbacks(false)
+            this._fireFeatureFlagsCallbacks()
             forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
             return
         }
@@ -1655,7 +1655,7 @@ export class PostHogFeatureFlags implements Extension {
             } else if (payloads === false) {
                 this._remove(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
             }
-            this._fireFeatureFlagsCallbacks(false)
+            this._fireFeatureFlagsCallbacks()
             if (flags === false) {
                 forceDebugLogger.info('Flag overrides cleared')
             } else if (flags) {
@@ -1674,7 +1674,7 @@ export class PostHogFeatureFlags implements Extension {
             this._set({
                 [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
             })
-            this._fireFeatureFlagsCallbacks(false)
+            this._fireFeatureFlagsCallbacks()
             forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
             return
         }
@@ -1746,7 +1746,7 @@ export class PostHogFeatureFlags implements Extension {
                 ...enrollmentPersonProp,
             },
         })
-        this._fireFeatureFlagsCallbacks(false)
+        this._fireFeatureFlagsCallbacks()
         try {
             this._client?.capture('$feature_enrollment_update', properties)
         } catch (error) {
@@ -1822,7 +1822,7 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    _fireFeatureFlagsCallbacks(errorsLoading: boolean): void {
+    _fireFeatureFlagsCallbacks(errorsLoading: boolean = false): void {
         this._lastErrorsLoading = errorsLoading
         this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
