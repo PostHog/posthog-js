@@ -1,0 +1,66 @@
+name: Node SDK v2 compliance
+
+on:
+    pull_request:
+        paths:
+            - 'packages/node/**'
+            - 'packages/core/**'
+            - 'packages/types/**'
+            - 'tooling/tsconfig-base/**'
+            - 'compliance/node/v2/**'
+            - '.github/workflows/sdk-compliance-tests-node-v2.yml'
+            # Frozen workspace installation also checks workspace manifests.
+            - '**/package.json'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - '.npmrc'
+            - 'patches/**'
+            - 'turbo.json'
+            - 'LICENSE'
+
+permissions: {}
+
+jobs:
+    compliance:
+        runs-on: ubuntu-24.04
+        # Leave time for bounded startup/cleanup and artifact upload after a timeout.
+        timeout-minutes: 60
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                mode: [v0, v1]
+        defaults:
+            run:
+                shell: bash
+        env:
+            NODE_IMAGE: ${{ vars.SDK_COMPLIANCE_NODE_IMAGE }}
+            HARNESS_IMAGE: ${{ vars.SDK_COMPLIANCE_V2_HARNESS_IMAGE }}
+            CAPTURE_MODE: ${{ matrix.mode }}
+        steps:
+            # Test the PR head, not GitHub's synthetic integration commit.
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  persist-credentials: false
+            - name: Validate image pins and build selected source
+              timeout-minutes: 20
+              run: |
+                  mkdir -p "$RUNNER_TEMP/node-compliance"
+                  bash compliance/node/v2/prepare-ci.sh "$RUNNER_TEMP/node-compliance" \
+                    2>&1 | tee "$RUNNER_TEMP/node-compliance/prepare.log"
+            - name: Run isolated compliance profile
+              timeout-minutes: 35
+              run: |
+                  bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
+                    "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/reports" \
+                    2>&1 | tee "$RUNNER_TEMP/node-compliance/run.log"
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: always()
+              timeout-minutes: 3
+              with:
+                  name: node-v2-${{ matrix.mode }}
+                  path: ${{ runner.temp }}/node-compliance
+                  if-no-files-found: error
+                  retention-days: 14

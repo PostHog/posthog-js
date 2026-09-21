@@ -1,6 +1,6 @@
 # Node compliance adapter (draft v2)
 
-This Node-only HTTP service translates the shared `sdk-compliance-v2-draft2` operations into public `posthog-node` calls. The generic harness owns features, mock services, assertions and reporting. This adapter owns Node argument mappings, process isolation, package builds and its disabled CI caller template.
+This Node-only HTTP service translates the shared `sdk-compliance-v2-draft2` operations into public `posthog-node` calls. The generic harness owns features, mock services, assertions and reporting. This adapter owns Node argument mappings, process isolation, package builds and its SDK-owned CI workflow.
 
 ## Run an installed consumer
 
@@ -52,7 +52,20 @@ bash compliance/node/v2/run-compliance.sh posthog-node-compliance:local \
 
 Pull the harness image before running. Each invocation creates a separate `--internal` Docker network, publishes no host ports, mounts only reports, records the raw harness exit, and fails on missing/malformed reports, startup or cleanup errors. The harness's `check-report` command independently checks the saved results and matching run/profile diagnostics. SDK failures remain failures. Local Docker commands and cleanup are bounded to 30 seconds each, startup probes to 5 seconds, and the full profile to 20 minutes. Override these positive millisecond bounds with `SDK_COMPLIANCE_COMMAND_TIMEOUT_MS`, `SDK_COMPLIANCE_STARTUP_TIMEOUT_MS` and `SDK_COMPLIANCE_RUN_TIMEOUT_MS` when needed. Timed-out commands return 124 and write deadline diagnostics; startup or cleanup timeouts fail the wrapper. Logs and reports belong in CI artifacts or an external local directory.
 
-`sdk-compliance-v2.yml.example` is a disabled SDK-owned PR caller template. Activation requires separately selected immutable Node/harness image digests in repository variables and approval to enable the workflow. The existing v1 caller remains the active fallback. Do not publish or enable this draft as part of local validation.
+## CI activation and validation
+
+[Node SDK v2 compliance](../../../.github/workflows/sdk-compliance-tests-node-v2.yml) is the canonical SDK-owned workflow; there is no separate template to synchronize. It runs both profiles on PRs affecting the adapter, SDKs or build inputs, including its own workflow file. It checks out the actual PR head, uses only `contents: read`, and needs no secrets or registry login. The existing [Node SDK Compliance Tests](../../../.github/workflows/sdk-compliance-tests-node.yml) workflow remains unchanged alongside it.
+
+Before enabling the workflow, a repository maintainer must complete these prerequisites:
+
+1. Release a public, anonymously pullable `ghcr.io/posthog/sdk-test-harness-v2` image supporting `linux/amd64`. Verify its immutable SHA-256 digest, `posthog-test-harness-v2 run --migration-suite`, the draft2 adapter protocol, both Node profiles, and strict `check-report` support.
+2. Select and verify a publicly pullable Node 24 image supporting `linux/amd64` and the Debian-based build tools used by the Dockerfile (for example the official `24-bookworm-slim` variant).
+3. Set repository variable `SDK_COMPLIANCE_NODE_IMAGE` to that Node image's repository (optionally with tag) followed by `@sha256:` and its real 64-character lowercase hexadecimal digest. Set `SDK_COMPLIANCE_V2_HARNESS_IMAGE` to `ghcr.io/posthog/sdk-test-harness-v2@sha256:` followed by the real released digest. Neither variable has a default. Missing or malformed identities fail with an explicit error; unavailable images fail during pull/build. Variables are not credentials and the images must also be accessible to fork PRs.
+4. Validate both profiles in GitHub Actions against the released images. SDK assertion failures remain failing checks; they must be assessed before requiring the workflow for merging. Required branch checks are a separate repository-policy decision.
+
+Each matrix job has a 60-minute limit, with 20 minutes for preparation and 35 minutes for the run step (including bounded startup and cleanup), leaving time for artifact upload even after a step timeout. Preparation bounds the harness pull to 3 minutes, the fresh source build to 15 minutes, and build-identity export to 30 seconds. Bash `pipefail` preserves failures through log capture. Artifacts (`node-v2-v0` / `node-v2-v1`, retained for 14 days) are uploaded even after preparation or run failures: selected source and working-tree status, validated image identities, preparation output/exit, successful build identity, wrapper output, raw harness exit, strict report-check exit, reports, diagnostics, and container/cleanup logs where produced. A build failure cannot produce `build.json`; its build output remains in `prepare.log`.
+
+Local script tests use Docker stand-ins to check prerequisite failures, build failures, exit propagation, and private-network lifecycle. They do not validate image availability, Docker builds, migrated fixtures, or hosted fork behavior. Validate those paths separately with the selected released images.
 
 ## Focused checks
 
@@ -61,7 +74,11 @@ POSTHOG_NODE_CONSUMER=/absolute/path/to/consumer \
   node --test compliance/node/v2/*.test.mjs
 pnpm exec oxlint --report-unused-disable-directives-severity error compliance/node/v2
 pnpm exec oxfmt --check compliance/node/v2 .oxlintrc.json
-bash -n compliance/node/v2/run-compliance.sh
+bash -n compliance/node/v2/prepare-ci.sh compliance/node/v2/run-compliance.sh
+# SC2329: cleanup is invoked indirectly by the EXIT trap.
+shellcheck --exclude=SC2329 compliance/node/v2/{prepare-ci,run-compliance}.sh
+# Docker-free caller checks:
+node --test compliance/node/v2/{prepare-ci,run-compliance}.test.mjs
 ```
 
 Binding tests use public-method spies for exact translations; HTTP tests also exercise real installed packages in both formats/modes. Controlled SDK stand-ins test deadline, cleanup and process failures, not SDK conformance. Caller tests check raw failure exits and private-network lifecycle. Full migrated profiles and current-base comparisons are separate integration gates owned by the harness run.
