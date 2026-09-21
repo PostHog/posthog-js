@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix(replay): keep recording when the frame cannot observe network performance entries
+Session replay network capture no longer fails to start in frames without `PerformanceObserver` or its `supportedEntryTypes`; those frames record without live network timing.

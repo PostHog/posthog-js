@@ -558,6 +558,19 @@ describe('network plugin', () => {
                 stopBroken()
             })
 
+            it('still wraps fetch when the frame has no PerformanceObserver but headers are recorded', () => {
+                const { mockWindow } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+                const originalFetch = mockWindow.fetch
+
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, { recordHeaders: true })
+                expect(mockWindow.fetch).not.toBe(originalFetch)
+
+                cleanup()
+                expect(mockWindow.fetch).toBe(originalFetch)
+            })
+
             it('still captures initial requests when the frame has no PerformanceObserver', () => {
                 const { mockWindow, performanceEntries } = createMockWindow()
                 delete mockWindow.PerformanceObserver
