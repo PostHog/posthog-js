@@ -89,7 +89,8 @@ Register these values during startup, before the server accepts requests.
 The build identifier describes the host server release, independently of the analytics SDK version.
 The server supplies it from its deployment configuration; the SDK does not read Git or environment variables for it.
 
-Registered properties apply to all events from the client, including tool calls and their exception events.
+Registered properties apply to MCP events sent through `posthog.capture()`, including tool calls and their exception events, and to ordinary `capture()` events from the client.
+Do not depend on them for inherited `identify()`, `groupIdentify()`, or `alias()` events, or for minimized `$feature_flag_called` events.
 An event's own properties take precedence over registered properties.
 The underlying client's `before_send` hook receives the merged properties.
 The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties.
