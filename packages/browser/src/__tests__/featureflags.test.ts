@@ -4315,7 +4315,7 @@ describe('updateFlags', () => {
 
         posthog.updateFlags({ 'new-flag': true })
 
-        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: undefined })
+        expect(callback).toHaveBeenCalledWith(['new-flag'], { 'new-flag': true }, { errorsLoading: false })
     })
 
     it('should replace existing flags by default', async () => {
@@ -4791,6 +4791,75 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_error: `${FeatureFlagError.QUOTA_LIMITED},${FeatureFlagError.FLAG_MISSING}`,
             })
         )
+    })
+
+    it('should set $feature_flag_error to flags_not_loaded when no response has arrived yet', async () => {
+        instance.config.bootstrap = { featureFlags: { 'other-flag': true } }
+        featureFlags._hasLoadedFlags = true
+
+        featureFlags.getFeatureFlag('some-flag')
+
+        expect(instance.capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag: 'some-flag',
+                $feature_flag_error: FeatureFlagError.FLAGS_NOT_LOADED,
+                $used_bootstrap_value: true,
+            })
+        )
+    })
+
+    it('should fire the feature flags callbacks when the response is quota limited', async () => {
+        const callback = vi.fn()
+        featureFlags.onFeatureFlags(callback)
+        instance._send_request = vi.fn().mockImplementation(({ callback: responseCallback }) =>
+            responseCallback({
+                statusCode: 200,
+                json: {
+                    flags: {},
+                    quotaLimited: ['feature_flags'],
+                },
+            })
+        )
+
+        featureFlags.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(10)
+
+        expect(callback).toHaveBeenCalledWith(expect.any(Array), expect.any(Object), { errorsLoading: false })
+        expect(featureFlags.hasLoadedFlags).toBe(true)
+    })
+
+    it('should keep the cached flags when the response is quota limited', async () => {
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: { flags: { 'test-flag': { key: 'test-flag', enabled: true } } },
+            })
+        )
+        featureFlags.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(10)
+
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: { flags: {}, quotaLimited: ['feature_flags'] },
+            })
+        )
+        featureFlags.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(10)
+
+        expect(featureFlags.getFlagVariants()).toEqual({ 'test-flag': true })
+        expect(featureFlags.getFeatureFlagErrors()).toEqual([FeatureFlagError.QUOTA_LIMITED])
+    })
+
+    it('should expose the errors of the last request through getFeatureFlagErrors', async () => {
+        expect(featureFlags.getFeatureFlagErrors()).toEqual([])
+
+        instance._send_request = vi.fn().mockImplementation(({ callback }) => callback({ statusCode: 500, json: {} }))
+        featureFlags.reloadFeatureFlags()
+        await vi.advanceTimersByTimeAsync(10)
+
+        expect(featureFlags.getFeatureFlagErrors()).toEqual([FeatureFlagError.apiError(500)])
     })
 
     it('should include persisted errors in $feature_flag_called event after reload', async () => {

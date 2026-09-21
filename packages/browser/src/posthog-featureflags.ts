@@ -120,7 +120,10 @@ type FeatureFlagsState = {
  */
 export const FeatureFlagError = {
     ERRORS_WHILE_COMPUTING: 'errors_while_computing_flags',
+    /** The flags response arrived, but it did not contain the requested key. */
     FLAG_MISSING: 'flag_missing',
+    /** No flags response has arrived yet, so the value comes from bootstrap or from cache. */
+    FLAGS_NOT_LOADED: 'flags_not_loaded',
     QUOTA_LIMITED: 'quota_limited',
     TIMEOUT: 'timeout',
     CONNECTION_ERROR: 'connection_error',
@@ -310,6 +313,7 @@ export class PostHogFeatureFlags implements Extension {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: ReturnType<typeof setTimeout>
     private _flagsLoadedFromRemote: boolean = false
+    private _lastErrorsLoading: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
     private _refreshInterval?: ReturnType<typeof setInterval>
@@ -370,7 +374,7 @@ export class PostHogFeatureFlags implements Extension {
         this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
             this._clearBootstrapState()
             this._rebuildEventProperties()
-            this._fireFeatureFlagsCallbacks()
+            this._fireFeatureFlagsCallbacks(false)
         })
         this._rebuildEventProperties()
         return this.initialize()
@@ -759,6 +763,15 @@ export class PostHogFeatureFlags implements Extension {
         return this._hasLoadedFlags
     }
 
+    /**
+     * Returns the errors reported by the most recent flags request, for example
+     * `timeout`, `api_error_500` or `quota_limited`. The list is empty when the last
+     * request succeeded.
+     */
+    getFeatureFlagErrors(): string[] {
+        return [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
+    }
+
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
     }
@@ -1065,8 +1078,14 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.warn(
                     'You have hit your feature flags quota limit, and will not be able to load feature flags until the quota is reset.  Please visit https://posthog.com/docs/billing/limits-alerts to learn more.'
                 )
-            } else if (!data.disable_flags) {
-                this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
+            }
+            if (!data.disable_flags) {
+                // A quota-limited response carries no evaluated flags. Complete the load with an
+                // empty response so the cached values survive, but `onFeatureFlags` still runs.
+                // Callers read the reason with `getFeatureFlagErrors()`.
+                this._receivedFeatureFlags(isQuotaLimited ? {} : json, errorsLoading, {
+                    partialResponse: isPartialFlagsResponse,
+                })
             }
             requestAdditionalReload()
         }
@@ -1301,8 +1320,10 @@ export class PostHogFeatureFlags implements Extension {
 
                 const flagDetails = this.getFeatureFlagDetails(key)
                 const errors: string[] = [...(this._prop(PERSISTENCE_FEATURE_FLAG_ERRORS) ?? [])]
-                if (isUndefined(flagValue)) {
-                    errors.push(FeatureFlagError.FLAG_MISSING)
+                if (!flagExists) {
+                    errors.push(
+                        this._flagsLoadedFromRemote ? FeatureFlagError.FLAG_MISSING : FeatureFlagError.FLAGS_NOT_LOADED
+                    )
                 }
 
                 const properties: Record<string, any | undefined> = {
@@ -1544,7 +1565,7 @@ export class PostHogFeatureFlags implements Extension {
         if (!errorsLoading) {
             this._staleCacheRefreshTriggered = false
         }
-        this._fireFeatureFlagsCallbacks(errorsLoading)
+        this._fireFeatureFlagsCallbacks(!!errorsLoading)
     }
 
     /**
@@ -1590,7 +1611,7 @@ export class PostHogFeatureFlags implements Extension {
         // Clear all overrides if false, lets you do something like posthog.featureFlags.overrideFeatureFlags(false)
         if (overrideOptions === false) {
             this._remove([PERSISTENCE_OVERRIDE_FEATURE_FLAGS, PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS])
-            this._fireFeatureFlagsCallbacks()
+            this._fireFeatureFlagsCallbacks(false)
             forceDebugLogger.info('All overrides cleared')
             return
         }
@@ -1598,7 +1619,7 @@ export class PostHogFeatureFlags implements Extension {
         // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
         if (isArray(overrideOptions)) {
             this._set({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: arrayToFlagsRecord(overrideOptions) })
-            this._fireFeatureFlagsCallbacks()
+            this._fireFeatureFlagsCallbacks(false)
             forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
             return
         }
@@ -1634,7 +1655,7 @@ export class PostHogFeatureFlags implements Extension {
             } else if (payloads === false) {
                 this._remove(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
             }
-            this._fireFeatureFlagsCallbacks()
+            this._fireFeatureFlagsCallbacks(false)
             if (flags === false) {
                 forceDebugLogger.info('Flag overrides cleared')
             } else if (flags) {
@@ -1653,7 +1674,7 @@ export class PostHogFeatureFlags implements Extension {
             this._set({
                 [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
             })
-            this._fireFeatureFlagsCallbacks()
+            this._fireFeatureFlagsCallbacks(false)
             forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
             return
         }
@@ -1681,7 +1702,7 @@ export class PostHogFeatureFlags implements Extension {
             // Isolate the callback so a user-provided handler that throws surfaces as a logged
             // error rather than propagating out of onFeatureFlags as a posthog-js SDK error.
             try {
-                callback(flags, flagVariants)
+                callback(flags, flagVariants, { errorsLoading: this._lastErrorsLoading })
             } catch (error) {
                 this._logger.error('Error while running feature flags callback', error)
             }
@@ -1725,7 +1746,7 @@ export class PostHogFeatureFlags implements Extension {
                 ...enrollmentPersonProp,
             },
         })
-        this._fireFeatureFlagsCallbacks()
+        this._fireFeatureFlagsCallbacks(false)
         try {
             this._client?.capture('$feature_enrollment_update', properties)
         } catch (error) {
@@ -1801,7 +1822,8 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
+    _fireFeatureFlagsCallbacks(errorsLoading: boolean): void {
+        this._lastErrorsLoading = errorsLoading
         this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
         this.featureFlagEventHandlers.forEach((handler) => {
@@ -1924,6 +1946,7 @@ export class PostHogFeatureFlags implements Extension {
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false
+        this._lastErrorsLoading = false
         this.$anon_distinct_id = undefined
         this._clearDebouncer()
         this._override_warning = false

@@ -160,13 +160,15 @@ describe('loaded() with flags', () => {
 
         it.each([
             {
-                name: 'does not process feature flags when quota limited',
+                // The quota-limited response carries no usable flags, but the load must still
+                // complete so `onFeatureFlags` runs instead of waiting forever.
+                name: 'completes the load without the flags of a quota limited response',
                 response: {
                     quotaLimited: ['feature_flags'],
                     featureFlags: { 'test-flag': true },
                 },
-                expectedCall: false,
-                expectedArgs: undefined,
+                expectedCall: true,
+                expectedArgs: {},
             },
             {
                 name: 'processes feature flags when not quota limited',
