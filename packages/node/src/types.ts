@@ -157,6 +157,13 @@ export type FeatureFlagCondition = {
 
 export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
 
+/**
+ * Where a feature flag is meant to be evaluated. Set per flag in PostHog and carried on
+ * every locally cached flag definition. `all` means the flag suits both client-side and
+ * server-side evaluation, so it matches either runtime.
+ */
+export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
+
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
@@ -415,6 +422,11 @@ export type PostHogFeatureFlag = {
    * fallback so local-evaluation context filtering still works against those servers.
    */
   evaluation_tags?: string[]
+  /**
+   * Where the flag is meant to be evaluated. Absent or null on a flag that does not set a
+   * runtime, and on servers older than the field; both mean `all`, the default PostHog applies.
+   */
+  evaluation_runtime?: FeatureFlagEvaluationRuntime | null
 }
 
 /**

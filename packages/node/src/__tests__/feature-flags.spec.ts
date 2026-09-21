@@ -2970,6 +2970,69 @@ describe('local evaluation', () => {
   })
 })
 
+describe('evaluation runtime', () => {
+  let posthog: PostHog
+
+  const flags = {
+    flags: [
+      { id: 1, key: 'shared-copy', active: true, evaluation_runtime: 'all' },
+      { id: 2, key: 'web-banner', active: true, evaluation_runtime: 'client' },
+      { id: 3, key: 'batch-job', active: true, evaluation_runtime: 'server' },
+      { id: 4, key: 'unset-flag', active: true, evaluation_runtime: null },
+      { id: 5, key: 'legacy-flag', active: true },
+    ],
+  }
+
+  beforeEach(async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+    await posthog.reloadFeatureFlags()
+  })
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  it.each([
+    ['shared-copy', 'all'],
+    ['web-banner', 'client'],
+    ['batch-job', 'server'],
+    // A definition without a runtime reports the default PostHog applies.
+    ['unset-flag', 'all'],
+    ['legacy-flag', 'all'],
+  ])('reports the runtime of %s as %s', (key, expected) => {
+    expect(posthog.getFeatureFlagEvaluationRuntime(key)).toEqual(expected)
+  })
+
+  it('reports undefined for a flag it has no definition for', () => {
+    expect(posthog.getFeatureFlagEvaluationRuntime('no-such-flag')).toBeUndefined()
+  })
+
+  it.each([
+    ['client', ['shared-copy', 'web-banner', 'unset-flag', 'legacy-flag']],
+    ['server', ['shared-copy', 'batch-job', 'unset-flag', 'legacy-flag']],
+    ['all', ['shared-copy', 'web-banner', 'batch-job', 'unset-flag', 'legacy-flag']],
+  ] as const)('lists the keys the %s runtime can evaluate', (runtime, expected) => {
+    expect(posthog.getFeatureFlagKeysByEvaluationRuntime(runtime)).toEqual(expected)
+  })
+
+  it('reports nothing when local evaluation is not configured', async () => {
+    const remoteOnly = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(remoteOnly.getFeatureFlagEvaluationRuntime('web-banner')).toBeUndefined()
+    expect(remoteOnly.getFeatureFlagKeysByEvaluationRuntime('client')).toEqual([])
+
+    await remoteOnly.shutdown()
+  })
+})
+
 describe('local evaluation with evaluation contexts', () => {
   let posthog: PostHog
 
