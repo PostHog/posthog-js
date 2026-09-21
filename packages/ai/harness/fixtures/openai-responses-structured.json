@@ -1,0 +1,157 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:15.838Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_output_tokens": 128,
+          "input": "Return the city Paris.",
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "name": "city",
+              "strict": true,
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_9c82adc5c196419db3ac152347e0d71e"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_090db0e1de29ed7c016aaf4088053487d28f6c84b3ac2d35d3",
+            "object": "response",
+            "created_at": 1789870216,
+            "status": "completed",
+            "background": false,
+            "billing": {
+              "payer": "developer"
+            },
+            "completed_at": 1789870216,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 128,
+            "max_tool_calls": null,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "moderation": null,
+            "output": [
+              {
+                "id": "msg_090db0e1de29ed7c016aaf4088533c87d293e041c10db975df",
+                "type": "message",
+                "status": "completed",
+                "content": [
+                  {
+                    "type": "output_text",
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "{\"city\":\"Paris\"}"
+                  }
+                ],
+                "role": "assistant"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": null,
+              "effort": null,
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "json_schema",
+                "description": null,
+                "name": "city",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false
+                },
+                "strict": true
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 34,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 6,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 40
+            },
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ]
+}

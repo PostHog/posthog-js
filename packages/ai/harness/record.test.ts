@@ -33,10 +33,47 @@ it.each(['anthropic-stream', 'anthropic-cache', 'anthropic-tools'])(
   }
 )
 
+it.each(['transport', 'malformed-stream'])(
+  'the OpenAI CLI hides %s failures even with SDK debug logging requested',
+  (kind) => {
+    const intercept = `
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      const target = new URL(typeof url === 'string' || url instanceof URL ? url : url.url);
+      if (target.origin === 'https://api.openai.com') {
+        if (${JSON.stringify(kind)} === 'transport') throw new Error('PRIVATE_PROVIDER_DETAIL fake-recording-key');
+        return new Response('data: {PRIVATE_PROVIDER_DETAIL fake-recording-key}\\n\\n', {headers: {'content-type':'text/event-stream'}});
+      }
+      if (target.hostname !== '127.0.0.1') throw new Error('Unexpected network request');
+      return realFetch(url, init);
+    };
+  `
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        `data:text/javascript,${encodeURIComponent(intercept)}`,
+        fileURLToPath(new URL('./record-openai.mjs', import.meta.url)),
+        'openai-chat-stream',
+      ],
+      {
+        env: { OPENAI_API_KEY: 'fake-recording-key', OPENAI_LOG: 'debug' },
+        encoding: 'utf8',
+        timeout: 5000,
+      }
+    )
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Recording failed.')
+    expect(result.stdout + result.stderr).not.toContain('PRIVATE_PROVIDER_DETAIL')
+    expect(result.stdout + result.stderr).not.toContain('fake-recording-key')
+  }
+)
+
 it.each([false, true])('validates the CLI cache sequence before saving (invalid state: %s)', async (invalid) => {
   const directory = await mkdtemp(join(tmpdir(), 'ai-cache-cli-'))
   try {
-    for (const name of ['record.mjs', 'cassette.ts', 'recording-scenarios.mjs', 'fixtures']) {
+    for (const name of ['record.mjs', 'cassette.ts', 'openai-protocol.ts', 'recording-scenarios.mjs', 'fixtures']) {
       await cp(new URL(name, import.meta.url), join(directory, name), {
         recursive: true,
         filter: (source) => !source.endsWith('.live.json'),
@@ -113,7 +150,7 @@ it.each([false, true])('validates the CLI cache sequence before saving (invalid 
 it.each([false, true])('validates tool arguments before CLI publication (wrong arguments: %s)', async (invalid) => {
   const directory = await mkdtemp(join(tmpdir(), 'ai-tools-cli-'))
   try {
-    for (const name of ['record.mjs', 'cassette.ts', 'recording-scenarios.mjs']) {
+    for (const name of ['record.mjs', 'cassette.ts', 'openai-protocol.ts', 'recording-scenarios.mjs']) {
       await cp(new URL(name, import.meta.url), join(directory, name))
     }
     await mkdir(join(directory, 'fixtures'))
