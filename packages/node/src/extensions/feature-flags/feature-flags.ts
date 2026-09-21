@@ -23,14 +23,10 @@ import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
 
-const EVALUATION_RUNTIMES: readonly FeatureFlagEvaluationRuntime[] = ['all', 'client', 'server']
-
 // A definition with no runtime, or one from a server that does not know the field, reports the
 // default PostHog applies rather than a third "unknown" state callers would have to handle.
 function normalizeEvaluationRuntime(value: unknown): FeatureFlagEvaluationRuntime {
-  return EVALUATION_RUNTIMES.includes(value as FeatureFlagEvaluationRuntime)
-    ? (value as FeatureFlagEvaluationRuntime)
-    : 'all'
+  return value === 'client' || value === 'server' ? value : 'all'
 }
 
 // `all` matches every runtime, so the check is symmetric.
