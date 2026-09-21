@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url'
 import { startRecorder, startReplay } from './cassette.ts'
 import { recordingScenarios, verifyRecording } from './recording-scenarios.mjs'
 
-if (!['anthropic-stream', 'anthropic-cache'].includes(process.argv[2]) || process.argv.length !== 3) {
-  throw new Error('Usage: pnpm cassette:record <anthropic-stream|anthropic-cache>')
+if (
+  !['anthropic-stream', 'anthropic-cache', 'anthropic-tools'].includes(process.argv[2]) ||
+  process.argv.length !== 3
+) {
+  throw new Error('Usage: pnpm cassette:record <anthropic-stream|anthropic-cache|anthropic-tools>')
 }
 const apiKey = process.env.ANTHROPIC_API_KEY
 const model = process.env.ANTHROPIC_MODEL

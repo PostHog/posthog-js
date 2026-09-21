@@ -2097,6 +2097,21 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
 
     /**
+     * How many times to retry a `/flags` request before giving up.
+     *
+     * Only failures that are plausibly transient are retried: HTTP 502 and 504, and a
+     * request that timed out. Every other status is terminal, as is a transport failure
+     * that is not a timeout — in a browser those are usually an ad blocker, an extension
+     * or CORS, which the status-zero circuit breaker already handles, so retrying them
+     * would only add a second doomed request.
+     *
+     * Set to 0 to disable retries.
+     *
+     * @default 1
+     */
+    feature_flag_request_max_retries: number
+
+    /**
      * Sets the maximum age (in milliseconds) for cached feature flag values.
      * When the cache is older than this value:
      * - `getFeatureFlag()` will return `undefined` instead of stale cached values

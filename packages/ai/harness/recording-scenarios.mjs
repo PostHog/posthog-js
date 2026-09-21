@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { isDeepStrictEqual } from 'node:util'
 
 // Cache reads, 5-minute writes, 1-hour writes. Counts can change between recordings.
 const cacheStates = {
@@ -17,6 +18,32 @@ const cacheStates = {
 }
 
 export async function recordingScenarios(group, model) {
+  if (group === 'anthropic-tools') {
+    return [
+      {
+        name: 'anthropic-tools',
+        request: {
+          model,
+          max_tokens: 256,
+          messages: [{ role: 'user', content: 'Get the weather in Paris in celsius.' }],
+          tools: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather for a city.',
+              input_schema: {
+                type: 'object',
+                properties: { city: { type: 'string' }, unit: { type: 'string', enum: ['celsius'] } },
+                required: ['city', 'unit'],
+              },
+            },
+          ],
+          tool_choice: { type: 'tool', name: 'get_weather' },
+          stream: true,
+        },
+        cacheState: [false, false, false],
+      },
+    ]
+  }
   if (group === 'anthropic-stream') {
     return [
       {
@@ -61,8 +88,35 @@ export function verifyRecording(scenario, events) {
       (count, index) => !Number.isSafeInteger(count) || count < 0 || count > 0 !== scenario.cacheState[index]
     ) ||
     usage.cache_creation_input_tokens !== counts[1] + counts[2] ||
-    end.delta?.stop_reason !== (scenario.name === 'anthropic-max-tokens' ? 'max_tokens' : 'end_turn')
+    end.delta?.stop_reason !==
+      (scenario.name === 'anthropic-max-tokens'
+        ? 'max_tokens'
+        : scenario.name === 'anthropic-tools'
+          ? 'tool_use'
+          : 'end_turn')
   ) {
     throw new Error('Requested cache state or stop reason was not observed; recording rejected')
+  }
+  if (scenario.name === 'anthropic-tools') {
+    const tools = events.filter(
+      (event) => event.type === 'content_block_start' && event.content_block?.type === 'tool_use'
+    )
+    const tool = tools[0]
+    const input = events
+      .filter(
+        (event) =>
+          event.type === 'content_block_delta' &&
+          event.index === tool?.index &&
+          event.delta?.type === 'input_json_delta'
+      )
+      .map((event) => event.delta.partial_json)
+      .join('')
+    if (
+      tools.length !== 1 ||
+      tool.content_block.name !== 'get_weather' ||
+      !isDeepStrictEqual(JSON.parse(input || '{}'), { city: 'Paris', unit: 'celsius' })
+    ) {
+      throw new Error('Requested tool call was not observed; recording rejected')
+    }
   }
 }
