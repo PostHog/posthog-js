@@ -76,6 +76,28 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 
 ## 4. Session & identity
 
+### Shared event properties
+
+Use the underlying PostHog client's `register()` method for values that apply to every event from that client.
+`PostHogMCP` inherits this method from `posthog-node`, and `instrument()` sends events through the supplied client.
+
+```ts
+await posthog.register({ $mcp_server_build: 'example-build', environment: 'production' })
+```
+
+Register these values during startup, before the server accepts requests.
+The build identifier describes the host server release, independently of the analytics SDK version.
+The server supplies it from its deployment configuration; the SDK does not read Git or environment variables for it.
+
+Registered properties apply to all events from the client, including tool calls and their exception events.
+An event's own properties take precedence over registered properties.
+The underlying client's `before_send` hook receives the merged properties.
+The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties.
+Use a separate client when servers need different shared properties.
+Keep user and request data on individual events, because a shared client can serve concurrent requests.
+
+### Session resolution
+
 - **Session ID format**: `ses_<uuidv7>` (`src/extensions/ids.ts`). Uses `uuidv7` from `@posthog/core`.
 - **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — four sources, first match wins:
   1. **Conversation handle** (an agent-carried `conversation_id` tool argument, `enableConversationId: true`): hash it (`deriveSessionIdFromConversation`) — the 2026-07-28 anchor. Never persisted to shared state. See ADR-0004.
