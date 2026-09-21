@@ -1,8 +1,12 @@
-# Anthropic HTTP cassette pilot
+# AI HTTP cassette harness
 
 This private harness replays recorded Anthropic streaming responses through the real Anthropic SDK,
 the built `@posthog/ai/anthropic` wrapper, and `posthog-node` HTTP transport.
 It complements the existing unit and live tests; it does not replace them.
+
+Gemini support currently uses explicitly synthetic responses, not live provider recordings.
+Its real SDK and built wrapper run through the same HTTP boundary described below.
+See [Gemini](#gemini) for coverage and the live recording step still needed.
 
 ```text
 Scenario process
@@ -167,3 +171,64 @@ SSE content and order, not original packet boundaries, timing, or latency. It
 rejects unsupported content-block types and does not claim coverage of every stream API, tools, retries, errors, other
 providers, LangChain, Bedrock, or installed package tarballs. Those need explicit
 scenarios rather than expanding this fixture's meaning.
+
+## Gemini
+
+The Gemini tests use `@google/genai` from this package's installed dependencies,
+the built `@posthog/ai/gemini` wrapper, and the real `posthog-node` HTTP client.
+No new dependency or published SDK code is added. These tests run in the existing
+offline container and need no credentials.
+
+The three instrumented methods use these Developer API routes:
+
+| Method                         | Recorded HTTP response                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `models.generateContent`       | JSON from `:generateContent`                                     |
+| `models.generateContentStream` | SSE from `:streamGenerateContent?alt=sse`                        |
+| `models.embedContent`          | JSON from `:batchEmbedContents`, including single-input requests |
+
+Recorder tests send real SDK requests to a local synthetic server, save a temporary
+cassette, stop the upstream, and replay the file. Separate wrapper tests assert freshly
+received analytics against handwritten expectations. They cover text, function calls,
+cache and reasoning usage, stop reasons, privacy, identity, and embeddings.
+Temporary recordings are labeled `synthetic`; there are no committed live Gemini fixtures yet.
+Passing them proves the tested local contracts, not compatibility with a live Gemini account.
+
+Gemini streams have JSON `data:` frames, not an OpenAI `[DONE]` sentinel. Recordings
+require each observed candidate to finish, or an explicit blocked prompt. A final
+usage-only frame is allowed. The recorder rejects incomplete responses, HTTP errors,
+redirects, query API keys, and unsupported routes without replacing an existing file.
+The same size, interaction and deadline limits apply as for Anthropic.
+
+### Record and review Gemini responses
+
+Live recording is a manual, billable operation, never part of CI. Set
+`GEMINI_API_KEY` and `GEMINI_MODEL` in the environment, then choose one scenario:
+
+```sh
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini generate
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini stream
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini tools
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini tools-stream
+# Uses GEMINI_EMBEDDING_MODEL instead of GEMINI_MODEL:
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini embed
+```
+
+The command uses fixed artificial prompts and the official Developer API origin.
+It checks scenario completion, writes an ignored `gemini-<scenario>.live.json`, then
+compares the real SDK result against local replay using a fake key. Tool scenarios
+request a declarative function call; they do not execute tools. Credentials are used
+only for the live request and omitted from the cassette. Known secret values and
+suspicious fields are rejected. This is not a general PII scrubber: inspect the entire
+file before promotion, including prompts, function arguments and thought signatures.
+
+After obtaining a key, record the scenarios, review every saved file, and add separate
+analytics expectations before committing the reviewed fixtures. Then rerun offline
+tests. Do not treat transport equality as proof that the analytics are correct, or
+regenerate expectations just to make a failing test pass.
+
+This first Gemini extension does not cover Vertex AI, Live/WebSocket, media, files,
+cache creation APIs, automatic function execution, or SDK chat helpers. Synthetic
+cache/reasoning metadata checks field mapping, not a real cache hit. Developer API
+embeddings without token statistics remain zero-token events in the current wrapper;
+these tests do not estimate usage or verify backend pricing.

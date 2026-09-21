@@ -33,7 +33,7 @@ it.each(['anthropic-stream', 'anthropic-cache'])('initializes %s and hides untru
 it.each([false, true])('validates the CLI cache sequence before saving (invalid state: %s)', async (invalid) => {
   const directory = await mkdtemp(join(tmpdir(), 'ai-cache-cli-'))
   try {
-    for (const name of ['record.mjs', 'cassette.ts', 'recording-scenarios.mjs', 'fixtures']) {
+    for (const name of ['record.mjs', 'cassette.ts', 'gemini-protocol.ts', 'recording-scenarios.mjs', 'fixtures']) {
       await cp(new URL(name, import.meta.url), join(directory, name), {
         recursive: true,
         filter: (source) => !source.endsWith('.live.json'),
