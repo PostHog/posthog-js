@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:29.681Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data"
+        },
+        "body": {
+          "fields": [
+            ["language", "en"],
+            ["model", "whisper-1"],
+            ["response_format", "vtt"]
+          ],
+          "files": [
+            {
+              "name": "file",
+              "filename": "openai-audio.wav",
+              "type": "audio/wav",
+              "size": 60078,
+              "sha256": "4caafa4ec93a87ca344d0cd44082ef99cbf3c24a1ace90111bc3b1a09806b4b1"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/plain",
+          "x-request-id": "req_0f7ac6a357884c368aa1a09f793bcaf3"
+        },
+        "body": {
+          "kind": "text",
+          "text": "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nThe weather in Paris is sunny.\n\n"
+        }
+      }
+    }
+  ]
+}

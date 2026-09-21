@@ -1,10 +1,10 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.16.3",
+  "version": "0.17.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
-  "description": "PostHog SDK for Model Context Protocol (MCP) servers — tracks tool usage, intent, and identity",
+  "description": "PostHog SDK for Model Context Protocol (MCP) servers \u2014 tracks tool usage, intent, and identity",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PostHog/posthog-js.git",
@@ -68,7 +68,8 @@
     "rekog-mcp-nest-v2": "npm:@rekog/mcp-nest@2.0.0",
     "rxjs": "^7.8.2",
     "ts-node": "^10.9.2",
-    "typescript": "catalog:",
+    "typescript": "catalog:native",
+    "typescript-legacy": "catalog:",
     "zod": "^3.25.0",
     "zod4": "npm:zod@^4.4.3",
     "@vitest/coverage-v8": "catalog:",

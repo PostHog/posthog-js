@@ -35,6 +35,7 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
 } from './storage'
+import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
@@ -633,7 +634,13 @@ export class PostHog extends PostHogCore {
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
     const storage = this._storageForKey(key)
-    value !== null ? storage.setItem(key, value) : storage.removeItem(key)
+    if (key === PostHogPersistedProperty.SurveysInProgress && value === null) {
+      const otherProjects = getOtherProjectSurveyProgress(this)
+      otherProjects.length ? storage.setItem(key, otherProjects) : storage.removeItem(key)
+      this._events.emit('surveysReset', undefined)
+    } else {
+      value !== null ? storage.setItem(key, value) : storage.removeItem(key)
+    }
     if (key === PostHogPersistedProperty.PersonProperties) {
       // Notify surveys after the in-memory write, including unsets and resets,
       // without waiting for a feature flag reload.
@@ -1082,8 +1089,15 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
-    const result = super.optOut()
-    void this._eventsStorage.waitForPersist()
+    const coreOptOut = super.optOut()
+    const clearProgress = (): Promise<void> => {
+      this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
+      return this._eventsStorage.waitForPersist()
+    }
+    const result = Promise.all([
+      coreOptOut,
+      this._isInitialized ? clearProgress() : this._initPromise.then(clearProgress),
+    ]).then(() => undefined)
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
     // native subscription handler keeps its own persisted record and retry loop. unregister is
     // deliberately allowed while opted out.
@@ -2260,8 +2274,8 @@ export class PostHog extends PostHogCore {
 
     const surveys = response.surveys
 
-    // If surveys is not an array, it means there are no surveys (its a boolean)
-    if (Array.isArray(surveys) && surveys.length > 0) {
+    // Keep an authoritative empty list distinct from an unavailable survey cache.
+    if (Array.isArray(surveys)) {
       this._cacheSurveys(surveys as Survey[], 'remote config')
     } else {
       this._cacheSurveys(null, 'remote config')

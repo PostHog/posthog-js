@@ -1,0 +1,138 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:13:32.753Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-5-mini-2025-08-07",
+          "store": false,
+          "max_output_tokens": 1024,
+          "input": "Among integers from 1 through 1000, count those divisible by 7 but not by 5, and find their sum. Reply only as count,sum without spaces.",
+          "reasoning": {
+            "effort": "medium"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_f05c1f087b884092ab1deb97e26cd260"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_03928dec55aa57f9016aaf414d1f6087d2af58ef77a7b19330",
+            "object": "response",
+            "created_at": 1789870413,
+            "status": "completed",
+            "background": false,
+            "billing": {
+              "payer": "developer"
+            },
+            "completed_at": 1789870422,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 1024,
+            "max_tool_calls": null,
+            "model": "gpt-5-mini-2025-08-07",
+            "moderation": null,
+            "output": [
+              {
+                "id": "rs_03928dec55aa57f9016aaf414d799487d29d3d9ef42c9046e5",
+                "type": "reasoning",
+                "content": [],
+                "encrypted_content": "gAAAAABqr0FWHOKzl0G9H-ZoA1ODj8t2AvW0ZyuW2KW29bZAmoPgHl4WoUM-52lak5oDbheP7XM6TZupjd-7REOdV9w-GIyW33l-gPmuk4PSyRzKjWtaiJ_wMbhd5yRf1KqbsoK0F3Faq4JNaRl7olLjLwsW0JsuTQ2sNhnCdyDWnR5W8e0-Htv8XjoHRwLkz2_8dYQDlojDi0c5XfL9O_CBJlbb_AaauYpzlEy99CCKIAUiQRlBlwBU3m4dDyINW-S8tRghK_UYX3ZsKoih1bw-_NOH_tjEqNCjNkleOMWcN4rCYc5y7BZt0SYzgeUyenUKcdjG8ZLMFwoCiP3kizD2Mz6kohtQX2JuYF0n9cJv5-pvdAgJXVoqYCF5mQ07A3ptGLQWZEeL54-ZvMc6driLETPadr8XT8MweSY6l4VZ3ly6O2YkUTgtiFZPdOlPiY3iCHFJ_z0SOKRdI7_6LeCB7qLN0k3FiM3hPXBlee0T85uq1RIsTchDkJmjO3LB2sVK2DOlliYsuwV8jA0zHP67fKM7o3nf1SDJnNObJVhpSBZrHQkgsMBGBG5RDOjuQPqWuN5zi1Hre0kVPlHiHq1-GUdQ5U5Lde5s_sUqb7dIA3_ddr9Rp5hRopOQCy5b0s1c4aZRbySkhll7-DXOUvXPX4vQ5Ed8WqTgicGvLceXW3fDXjpce7YJnK_IKxASBCpcm2AFAoTU1yu4FpuXDoG4ekKlu_76KOYBc3e4gf6zLevyZBUXYIfedPOSdnbdTfe7yWblrDNrmmk_Z3Y_C2riFoYlM-CXZOizSptXCcw7MiZ9j53hO5Qgz2KoTACiwa35SfmVwoolpGohmRzsX0L2h-vMnTw7hNzMLbgtkUYShrLhdCz3ynxt8ZXjCIBpm9dgYdqYuHvQyZzkx0haC5jNrtk_fDpfs0HMlY4ucfjiq1mS0cDlB8_WRKncFzQsVtjevceA0FHKv_lKkDXaxUuC6WGYXN2v-1nq3nbvpMztNQNe4H5CHECtxFSorVqAKogKK04nqLyRvzlatqyG7FMhC3CWLZphxtyedPfUlRuhHnq8udqhmE36Xc9M0aGsMt_lJuxv5a5BYAi37qjTbfVg2WTsv_hMkDq2v2Xhr1a9gqav1kltOtKE2zhkEjT2roV0a7Xno1BUVHvEy4SxPzkR95qeZydVDOKc2VuFgXLiZa9sEYzCPqlWOc5e0s1s_-nJkCM-puaRpzggQZq7gsLkg8wOnv--pwK6Vy5tv-34oR6V5Hwk524UspBw6WoFXbhBf1AU0HWrdZT8JLZxDR8r3pjubIn4ysf_nq6TqUJ-oHyVaiJCj3AVnhEmknDUWaCYAoRQ2zqXs0Q6kpPmQwNWVk6IfAvy8z3F44kNKJ84RxJleaOvxg1Wz5V6LakJea66XdpSBLTSUpSuEOqG53P6bg_MPAUCeFM62QLDwT4tnj-FeQ8vsDQc7aZtoxTLHUMSemLFbHFmhcc1jUwHm96mQVC4pl4PCbFZupd6zzRkWeWySFhIME0JsH2o29lNGtyMlYhmtBwo81dWaY1Tr_yEZM5YbsHYo9qjf60AwZbC9_k-Xp7laK3btOB8rhWcanRfYl5ZZsCcvFlMNVm63csupfZhg-P_Nhn4JQIZBAmNKsQt4jI1_dk7P08Kp4BYmZ_azGFSxCLsjJSDkkzjmM87jn2SFVbwStG2sfrDdP0pIrpyDypdNFl5WoMoR3OaZX81bCJI9N8GPqKfD36nbr4RB7UEb3WCxBNm4MA-YtcWtVkPrssbJNENXjX2dgtSNur6HMIOs449GFFmWVlk5ihpANaNB7i827S7ucrKIFNL0C9FVJaPdQJDYWWUxaioEwFimKQUcwSab_8dhxg58UobYMYc4H0O5AxxYBVg9oIYzqBV_elA46nU9zUqyG9teptiTdKjmaD7OIMYHvdoIJQ3kAs0ntGOhL0IXpr3PMhgu-dlSeqFK4PC8TVKufQKNT-cOk-mNcvAyAL_tiecvYr6a2mpqZxrGeVNKzyUStG1DEWchzCNsZP5CqqAqXIsUMlZD9iPInGmBDReIFTjwMyosHn7IhpAm9jWDsjyAa08PhSM_-_Wng0fzPkG48B3JfAzBk32Gx4IqMIe7CpRq926AMyZL2CZInenSKiAqVoRxFWStbeh1f9ayzJy1fbHF-xmZ0iNg8NYBfkVECBY5z2-h1ihw399oelOVTk4yuxzEeFY_wMKF3mm-w0sC49TBHUxVUG5FyK6yZliyFOGlVTlKQrJ6BQXlaqMGjUUHGniiIvIlb_UJVxqkPh4b9OMcOA1pRCWnuvFajYc8XD3BC5FJdqUIDTFN8RUFrdp-SyywkZMqkHta7OvarbaxKKPXnPSjnoMbqOiMjQSOStDWkAJ14QTEgVt5WVDf0gcv_8UcT1VI78y517EXLSUd3fJsFdcUedymj8u680jqPtuct54oU-pxpOTsYC0qtUKsgT0YZEVymw5ON37b0ZYGluWNggTqhr7-SPgfG9SHnK2mFZ6NU0jAdwsVPUcH4rNMHjFe-kxKjvYryDbqepTws4K5C_s2YBzTHapHbe8DJz_JS5O07dr0qTkkbfAv_ywgmDY2jP_lGruQ_9ChCLZ1c0CKKDtIPutBrT0Q_huXgUu2CZVJ79mkp3BrlZ4V7BPCtmSHWKphtzXb598fHkhgDzCzgbwJDcx98YIDCs_l-vOLlsKay785gTBIjT5jalF2-cL54kM90NotuCY4mTch8HYa7vazYQE_YcCOIV3S75iZnjPdmKiamQGgNHcX6OVCULVle3cGNgxDEmDF4qjt56hLq_SGeMkr6hzKvT_-d_T7e7g8TjymeXpmQTgXcV_JUUTbblTwiVqiKSCdA9_84NAB5SxnrSv_UF-zjx2V4-ing6uio_xpLBt0ecyZ5chRcSHF9UttGSwGNB7_V9rUya4sDdoYic3c0wawMPo4KYCw5GoIDDzwgioSwWwGVXHfAzCj5pp-qOPusRVhhjkM4GvDzrZx9l5uVDj0w7nLf90bDgspS-MTEvcmKIpOUUGbCq2G2d0dw0Zb-N1IYUDofL1kS0EUT23wrPuiDiwK3M29zhJphebFd9H22g1FSgYVTYLyErIGDcXGf2PKLtU7HK121Qr52rSM8OyWp4bewzohjpvi3Xp2zS6fCjjjuzc22Msz3wnohUhekfq399SW__SnPc6yvezyTG8F72-XQ3jrMA1d5-d1nY6FIze7nsl5ExkRTgT7Q-icx4cp8pQ9lNhdk9KVYq6rPCWytzWtnIVpGfxOj6i4m1F5fwL1lM5JBnmKMGi1LVkgUO3nCkqc0MmSzwzaRXKsLt5HVQ4NRrTCvFgLWZSuCwCwc3skSev5kGU3xs0WSF6wYaXlkhKeDPeBCmu4W3H0ohY6brov1CGNBkdkTC73ESradt8rZR-Lqkq3RGpF5IgmKEkEujxqrnitEGZSwRq6OgaQn5AsMjx980MoFjokey1MbgBwy94iAVZg1q9GGL4vESHVApjwlzJ3MzmwlZg9EFFm6Dat6J8HVqpdFiBB8eM__tkxnhLSIfreu1sgNUialhwX_JYc2-cZFUFofvTbccDWFb_opWS5oi85SaOFo7pXA==",
+                "summary": []
+              },
+              {
+                "id": "msg_03928dec55aa57f9016aaf4156147487d2a9bc920398a13d6f",
+                "type": "message",
+                "status": "completed",
+                "content": [
+                  {
+                    "type": "output_text",
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "114,56861"
+                  }
+                ],
+                "role": "assistant"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "medium",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 41,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 648,
+              "output_tokens_details": {
+                "reasoning_tokens": 576
+              },
+              "total_tokens": 689
+            },
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ]
+}

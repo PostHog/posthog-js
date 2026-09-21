@@ -24,7 +24,7 @@
         "package.json"
     ],
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-plugin-console-record^...' && vite build --watch",
         "test": "pnpm test:rrweb",
         "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
@@ -42,9 +42,8 @@
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
         "@posthog/rrweb-utils": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "catalog:native",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
         "puppeteer": "^23.11.1"
     },

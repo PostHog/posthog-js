@@ -89,7 +89,7 @@ describe('network metrics', () => {
                     xhr.respond(200)
                 }
 
-                expect(recorded()[0][2].attributes.path).toBe('/original/page/orders')
+                expect(recorded()[0][2].attributes['url.template']).toBe('/original/page/orders')
             } finally {
                 window.history.replaceState(null, '', originalUrl)
             }
@@ -134,10 +134,12 @@ describe('network metrics', () => {
                     {
                         unit: 'ms',
                         attributes: {
-                            method,
-                            host: args[0] === '/things' ? 'localhost' : 'api.example.com',
-                            path: '/things',
-                            status_class: '2xx',
+                            'http.request.method': method,
+                            'server.address': args[0] === '/things' ? 'localhost' : 'api.example.com',
+                            'server.port': args[0] === '/things' ? 80 : 443,
+                            'url.scheme': args[0] === '/things' ? 'http' : 'https',
+                            'url.template': '/things',
+                            'http.response.status_code': 200,
                         },
                     },
                 ],
@@ -172,33 +174,85 @@ describe('network metrics', () => {
 
             await window.fetch(url)
 
-            expect(recorded()[0][2].attributes.path).toBe(path)
+            expect(recorded()[0][2].attributes['url.template']).toBe(path)
         })
 
         it.each([
-            [200, '2xx'],
-            [302, '3xx'],
-            [404, '4xx'],
-            [503, '5xx'],
-            [0, 'missing'],
-        ])('maps status %s to status class %s', async (status, statusClass) => {
+            ['https://api.example.com/things', 'https', 443],
+            ['http://api.example.com/things', 'http', 80],
+            ['https://api.example.com:8443/things', 'https', 8443],
+            ['http://localhost:3000/things', 'http', 3000],
+        ])('records the scheme and port of %s', async (url, scheme, port) => {
+            start()
+
+            await window.fetch(url)
+
+            expect(recorded()[0][2].attributes).toMatchObject({ 'url.scheme': scheme, 'server.port': port })
+        })
+
+        it.each([
+            [200, { 'http.response.status_code': 200 }],
+            [302, { 'http.response.status_code': 302 }],
+            [404, { 'http.response.status_code': 404, 'error.type': '404' }],
+            [503, { 'http.response.status_code': 503, 'error.type': '503' }],
+            [0, {}],
+        ])('records status %s as %o', async (status, expected) => {
             fetchMock.mockResolvedValue({ status })
             start()
 
             await window.fetch('https://api.example.com/things')
 
-            expect(recorded()[0][2].attributes.status_class).toBe(statusClass)
+            const attributes = recorded()[0][2].attributes
+            expect(attributes).toMatchObject(expected)
+            expect('http.response.status_code' in attributes).toBe(status !== 0)
+            expect('error.type' in attributes).toBe('error.type' in expected)
         })
 
-        it('records a rejected fetch as a missing status and leaves the rejection for the caller', async () => {
-            const failure = new TypeError('Failed to fetch')
-            fetchMock.mockRejectedValue(failure)
+        it('does not record an error type for a fulfilled opaque response', async () => {
+            fetchMock.mockResolvedValue({ status: 0 })
             start()
 
-            await expect(window.fetch('https://api.example.com/things')).rejects.toBe(failure)
+            await window.fetch('https://api.example.com/things')
 
-            expect(recorded()[0][2].attributes.status_class).toBe('missing')
+            expect(recorded()[0][2].attributes).not.toHaveProperty('error.type')
         })
+
+        it('bounds unknown methods and preserves the original method', async () => {
+            start()
+
+            await window.fetch('https://api.example.com/things', { method: 'PURGE' })
+
+            expect(recorded()[0][2].attributes).toMatchObject({
+                'http.request.method': '_OTHER',
+                'http.request.method_original': 'PURGE',
+            })
+        })
+
+        it('strips brackets from an IPv6 server address', async () => {
+            start()
+
+            await window.fetch('https://[2001:db8::1]/things')
+
+            expect(recorded()[0][2].attributes['server.address']).toBe('2001:db8::1')
+        })
+
+        it.each([
+            ['a TypeError', new TypeError('Failed to fetch'), 'TypeError'],
+            ['an AbortError', new DOMException('Aborted', 'AbortError'), 'AbortError'],
+            ['a non-error value', 'offline', '_OTHER'],
+        ])(
+            'records a fetch rejected with %s as the error type and leaves the rejection for the caller',
+            async (_, failure, errorType) => {
+                fetchMock.mockRejectedValue(failure)
+                start()
+
+                await expect(window.fetch('https://api.example.com/things')).rejects.toBe(failure)
+
+                const attributes = recorded()[0][2].attributes
+                expect(attributes['error.type']).toBe(errorType)
+                expect('http.response.status_code' in attributes).toBe(false)
+            }
+        )
 
         it('records a request to a PostHog host when the page itself makes it', async () => {
             start()
@@ -258,10 +312,10 @@ describe('network metrics', () => {
 
     describe('XMLHttpRequest', () => {
         it.each([
-            ['get', 200, 'GET', '2xx'],
-            ['POST', 500, 'POST', '5xx'],
-            ['delete', 0, 'DELETE', 'missing'],
-        ])('records %s with status %s', (method, status, expectedMethod, statusClass) => {
+            ['get', 200, 'GET', { 'http.response.status_code': 200 }],
+            ['POST', 500, 'POST', { 'http.response.status_code': 500, 'error.type': '500' }],
+            ['delete', 0, 'DELETE', { 'error.type': '_OTHER' }],
+        ])('records %s with status %s', (method, status, expectedMethod, outcome) => {
             start()
 
             sendXHR(method, 'https://api.example.com/things/42', status)
@@ -273,10 +327,12 @@ describe('network metrics', () => {
                     {
                         unit: 'ms',
                         attributes: {
-                            method: expectedMethod,
-                            host: 'api.example.com',
-                            path: '/things/:id',
-                            status_class: statusClass,
+                            'http.request.method': expectedMethod,
+                            'server.address': 'api.example.com',
+                            'server.port': 443,
+                            'url.scheme': 'https',
+                            'url.template': '/things/:id',
+                            ...outcome,
                         },
                     },
                 ],
@@ -315,14 +371,14 @@ describe('network metrics', () => {
             xhr.respond(200)
 
             expect(recorded()).toHaveLength(1)
-            expect(recorded()[0][2].attributes.path).toBe('/things/:id')
+            expect(recorded()[0][2].attributes['url.template']).toBe('/things/:id')
 
             xhr.open('GET', 'https://api.example.com/things/2')
             xhr.send()
             xhr.respond(201)
 
             expect(recorded()).toHaveLength(2)
-            expect(recorded()[1][2].attributes.path).toBe('/things/:id')
+            expect(recorded()[1][2].attributes['url.template']).toBe('/things/:id')
         })
 
         it('handles send() with no prior open()', () => {
@@ -394,7 +450,7 @@ describe('network metrics', () => {
 
         it('merges attributes from the attributes function over the defaults', async () => {
             fetchMock.mockResolvedValue({ status: 404 })
-            const attributes = vi.fn(() => ({ route: '/tasks/$taskId', path: '/api/things/{id}' }))
+            const attributes = vi.fn(() => ({ route: '/tasks/$taskId', 'url.template': '/api/things/{id}' }))
             start({ attributes })
 
             await window.fetch('https://api.example.com/things/1')
@@ -404,10 +460,13 @@ describe('network metrics', () => {
                 { status: 404, durationMs: expect.any(Number) }
             )
             expect(recorded()[0][2].attributes).toEqual({
-                method: 'GET',
-                host: 'api.example.com',
-                path: '/api/things/{id}',
-                status_class: '4xx',
+                'http.request.method': 'GET',
+                'server.address': 'api.example.com',
+                'server.port': 443,
+                'url.scheme': 'https',
+                'url.template': '/api/things/{id}',
+                'http.response.status_code': 404,
+                'error.type': '404',
                 route: '/tasks/$taskId',
             })
         })

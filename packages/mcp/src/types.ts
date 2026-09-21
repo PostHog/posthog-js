@@ -122,7 +122,7 @@ export interface MCPAnalyticsOptions {
    */
   missingCapabilityToolName?: string
   /**
-   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * Enable session correlation for the MCP **2026-07-28** revision, which removed
    * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
    * server instance per HTTP request. With none of those left to anchor on, the only
    * thing that can carry a session across calls is the agent itself.
@@ -132,7 +132,7 @@ export interface MCPAnalyticsOptions {
    * that handle — so calls correlate across reconnects, restarts, and per-request
    * instances.
    *
-   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * On by default, and fully inert when disabled: no parameter is injected, no schema is
    * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
    * before (the request's own session id, else this instance's).
    */
@@ -148,7 +148,7 @@ export interface MCPAnalyticsOptions {
   /**
    * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
    * takes precedence, with an injected `llm_model` parameter as the fallback.
-   * Off by default.
+   * On by default; set to `false` to disable capture.
    *
    * MCP does not standardize model identity. Some clients expose it through
    * vendor metadata; other harnesses inject it into the agent's system prompt

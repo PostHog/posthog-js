@@ -8,7 +8,7 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 
 - Development Node Version: `24.x` (see `.nvmrc` and `package.json`)
 - Package Manager: `pnpm@11.7.0` (see `package.json`)
-- TypeScript Catalog Version: `5.8.2` (see `pnpm-workspace.yaml`; individual packages may use other compilers)
+- TypeScript Catalogs: `catalog:native` pins `7.0.2`; the default `catalog:` retains `5.8.2` for legacy tooling (see `pnpm-workspace.yaml`)
 - Main Branch: `main`
 
 ## Tooling
@@ -166,21 +166,42 @@ All 16 rrweb workspace packages use `build: pnpm check-types && vite build && pn
 
 The shared `packages/rrweb/rolldown.dts.config.mts` explicitly uses Oxc for all 16 packages, each of which enables `isolatedDeclarations` in its TSConfig. Exported declarations must have sufficient type annotations for isolated generation. Keep semantic checking enabled: Oxc does not replace TypeScript's type checker.
 
-Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses the same package Rolldown configs through `vite.declarations.ts`. Vite owns runtime and declaration rebuilds together, including type-only source dependencies; it emits the same self-contained declarations, CommonJS copies, secondary entrypoints, and canvas WebRTC shim as production. An incremental TypeScript program reports semantic errors on startup and source edits without stopping development; production `check-types` still blocks invalid builds. The checker shares Vite's watched files and creates no additional watcher or process. It checks the full TSConfig project on each rebuild; a newly created, unimported file is picked up on the next watched edit or restart.
+
+Each rrweb `pnpm dev` first builds its dependencies through Turbo, then starts a single Vite watcher. Running `vite build --watch` directly assumes dependencies are already built. The alternate `pnpm dev --config vite.config.entries.js` in `packages/rrweb/rrweb` uses `rolldown.dts.entries.config.mts` for the record/replay entries. Restart development after editing build configuration. Declarations are generated in memory and emitted by Vite, so no second process races Vite's output cleanup.
 
 ```sh
 pnpm turbo run build --filter='./packages/rrweb/**'
 pnpm turbo run check-types --filter='./packages/rrweb/**'
 pnpm test:rrweb-declarations
+pnpm test:rrweb-dev-watch
 pnpm test:rrweb-package-exports
 pnpm test:rrweb-consumers
 ```
+
+The watch suite builds its prerequisites and temporarily edits and restores rrweb sources to check startup, declaration parity, semantic diagnostics, rebuilds, and shutdown. Run it without other builds or watchers in the same worktree.
 
 The installed-consumer tests build and pack their prerequisites. `test:rrweb-package-exports` checks JavaScript/CSS export targets and native Node ESM/CommonJS behavior. `test:rrweb-consumers` checks strict declarations with TypeScript 4.7, 5.8, and 6, including coexistence with consumer Node 22/24 typings. Both need registry access; the strict type checks retain their tarballs, installs, and compiler logs in a reported temporary directory.
 
 The canvas WebRTC plugin ships its SimplePeer declaration shim and legacy-compatible Node typings for TypeScript 4.7 consumers. Its Vite development tools are provided by the private `tooling/rrweb-build` workspace so their modern typing peers remain separate from the published dependency. This type-only dependency does not change the workspace's Node 24 runtime requirement.
 
 The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
+
+### Native TypeScript declarations
+
+SDK builds use stable `typescript@7.0.2` for native compiler commands and compatible declaration backends, rather than `@typescript/native-preview`. Rslib selects the native backend from the installed TypeScript version. rrweb retains its Oxc declaration bundler and uses native TypeScript for semantic checks.
+
+The JavaScript compiler remains only where existing tooling requires it:
+
+- The root compiler supports documentation resolvers and programmatic compiler regression tests.
+- `posthog-js` retains its ES5 emitter and compiler API. `@posthog/nuxt` retains the compiler API required by Nuxt's module builder.
+- `@posthog/react` uses `typescript-legacy` only for its ES5 compatibility transform; declarations use native TypeScript.
+- `@posthog/types` uses `typescript-legacy` for API introspection tests and the declaration-build baseline.
+- `@posthog/mcp` uses `typescript-legacy` only for its NestJS integration harnesses, where `ts-node` needs the compiler API and decorator metadata emitter.
+- `@posthog/browser` uses `typescript-legacy` for its full development type check because the pinned Playwright declarations contain syntax removed in TypeScript 7. Its production declaration build uses native TypeScript without test-only ambient types.
+- Rollup utilities keep the JavaScript compiler for their exported TypeScript plugin, but compile themselves with the explicit `@typescript/native` alias. Their built-output test checks that the exported plugins still initialize.
+
+`pnpm turbo run test:unit --filter=@posthog/types` includes a production-build regression check comparing all legacy and native compiler outputs, including declarations and source maps, and verifying that both builds fail on a deliberate semantic error. The test copies sources into a temporary fixture, explicitly links and verifies each compiler version, and leaves production outputs untouched. Compiler backend changes must preserve this compatibility check; isolated compiler speed alone does not establish production-build or consumer compatibility.
 
 ### Dead code audit (Knip)
 
@@ -310,11 +331,12 @@ Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) 
 
 Public API is hard to change once it ships, so agree on it before writing the implementation. Our [SDK guidelines](https://posthog.com/handbook/engineering/sdks/guidelines) explain how we design it.
 
-- If you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case first. At this stage, context is more useful to us than code.
-- Wait for a maintainer to agree on the API shape on the issue before implementing it.
+This section is for external contributors. PostHog Client Libraries maintainers agree on API shape in the PR itself, so they don't need a separate issue.
+
+- **Before you start:** if you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case. Wait for a maintainer to agree on the API shape there before you implement it. Context is more useful to us than code at this stage.
+- **Already have a PR open?** Don't stop or rewrite it. Call out the public API change at the top of the PR description, and link or open an issue so we can discuss the shape there.
 - Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
 - If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
-- AI agents: stop and ask before implementing a public API change that hasn't been agreed on the issue.
 
 `pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
 

@@ -1,5 +1,26 @@
 # @posthog/types
 
+## 1.412.4
+
+### Patch Changes
+
+- [#5008](https://github.com/PostHog/posthog-js/pull/5008) [`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c) Thanks [@nachogarcia](https://github.com/nachogarcia)! - Retry `/flags` in the browser SDK on HTTP 502/504 and on request timeouts, bounded by the new `feature_flag_request_max_retries` config (default 1, set 0 to disable). Plain transport failures are deliberately left to the existing status-zero circuit breaker.
+  (2026-09-21)
+
+## 1.412.3
+
+### Patch Changes
+
+- [#5018](https://github.com/PostHog/posthog-js/pull/5018) [`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop dropping long spans that end: `maxSpanAgeMs` now evicts spans only once `maxLiveSpans` is reached, so a span that runs past the age limit and then ends is exported, and its children are no longer orphaned.
+  (2026-09-21)
+
+## 1.412.2
+
+### Patch Changes
+
+- [#5014](https://github.com/PostHog/posthog-js/pull/5014) [`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00) Thanks [@pauldambra](https://github.com/pauldambra)! - Rename the `metrics.network` default attributes to the OTel HTTP client semantic conventions: `http.request.method`, `server.address`, `server.port`, `url.scheme`, `url.template`, `http.response.status_code` and `error.type` replace `method`, `host`, `path` and `status_class`.
+  (2026-09-17)
+
 ## 1.412.1
 
 ### Patch Changes

@@ -3,15 +3,14 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "dist",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "isolatedModules": true,
     "composite": false,
     "declaration": true,
     "declarationMap": true,
     "target": "ES2022",
-    // DOM should be removed here
     "lib": ["ES2022", "DOM"],
     "paths": {
       "@/*": ["./src/*"]

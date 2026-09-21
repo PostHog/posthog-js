@@ -1,5 +1,19 @@
 # posthog-ai
 
+## 8.13.1
+
+### Patch Changes
+
+- [#5039](https://github.com/PostHog/posthog-js/pull/5039) [`15914bd`](https://github.com/PostHog/posthog-js/commit/15914bdc04f1b57fb0b992fd1f853dc6c35c3982) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.126.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.125.0`, in `peerDependencies`) (2026-09-21)
+
+## 8.13.0
+
+### Minor Changes
+
+- [#5000](https://github.com/PostHog/posthog-js/pull/5000) [`1dfde0e`](https://github.com/PostHog/posthog-js/commit/1dfde0ee8c6edf3380f7326990ffb8010f5d5fae) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll()` now works without a label. It fetches the latest version of every prompt in one request and warms the cache for plain `prompts.get(name)` calls. Previously the label was required by the method's type, and the server treats any label value as a filter, so there was no way to batch-fetch unlabeled prompts.
+  (2026-09-17)
+
 ## 8.12.1
 
 ### Patch Changes

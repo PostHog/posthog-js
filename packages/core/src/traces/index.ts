@@ -237,9 +237,12 @@ export class PostHogTraces {
 
     const parent = this._resolveParent(explicitParent, options)
 
-    // Swept before the bound is read, so a process that has leaked its way to
-    // the bound recovers on the first `startSpan` after the leaks age out.
-    this._evictAgedSpans()
+    // Swept only at the bound, so a long span that does end is still exported,
+    // while a process that has leaked its way to the bound recovers on the
+    // first `startSpan` after the leaks age out.
+    if (this._liveSpans.size >= this._config.maxLiveSpans) {
+      this._evictAgedSpans()
+    }
     if (this._liveSpans.size >= this._config.maxLiveSpans) {
       this._recordDrop(
         1,

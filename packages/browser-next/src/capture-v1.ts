@@ -2,6 +2,7 @@ import type { ApiResponse } from '@posthog/browser-common'
 
 import { MAX_ANALYTICS_BATCH_EVENTS, type AnalyticsMessage } from './analytics-internal'
 import { createId } from './id'
+import { defineErrorName } from './named-error'
 import type { RequestRuntime } from './request'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
@@ -577,7 +578,7 @@ const attemptOnce = async (
         timer = globalThis.setTimeout(() => {
             timedOut = true
             const error = new Error(`Capture V1 request timed out ${timeoutPhase} after ${attemptTimeoutMs}ms`)
-            error.name = 'AbortError'
+            defineErrorName(error, 'AbortError')
             // Reject first so this error wins if an abort-aware Fetch rejects synchronously.
             reject(error)
             try {

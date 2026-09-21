@@ -1,5 +1,75 @@
 # posthog-js
 
+## 1.434.4
+
+### Patch Changes
+
+- [#5042](https://github.com/PostHog/posthog-js/pull/5042) [`ed9fc04`](https://github.com/PostHog/posthog-js/commit/ed9fc0422a028942101e560dda2d28ef43e381a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `$session_id` being sent as `null` when a sibling tab resets the session before this tab captures its first event (#5036)
+  (2026-09-21)
+
+## 1.434.3
+
+### Patch Changes
+
+- [#5008](https://github.com/PostHog/posthog-js/pull/5008) [`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c) Thanks [@nachogarcia](https://github.com/nachogarcia)! - Retry `/flags` in the browser SDK on HTTP 502/504 and on request timeouts, bounded by the new `feature_flag_request_max_retries` config (default 1, set 0 to disable). Plain transport failures are deliberately left to the existing status-zero circuit breaker.
+  (2026-09-21)
+- Updated dependencies [[`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c)]:
+  - @posthog/types@1.412.4
+
+## 1.434.2
+
+### Patch Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey answer snapshots and response event properties with React Native for consistent partial response reporting.
+  (2026-09-18)
+- Updated dependencies [[`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9)]:
+  - @posthog/core@1.55.0
+
+## 1.434.1
+
+### Patch Changes
+
+- [#4980](https://github.com/PostHog/posthog-js/pull/4980) [`7e07338`](https://github.com/PostHog/posthog-js/commit/7e0733809584c9d02aa0b50067c3f4c7fc6b8c1a) Thanks [@posthog](https://github.com/apps/posthog)! - Capture the document navigation timing in the replay network waterfall when recording starts after the page has loaded, and stop recording a partial duplicate of that entry when recording starts while the page is still loading
+  (2026-09-18)
+
+## 1.434.0
+
+### Minor Changes
+
+- [#5014](https://github.com/PostHog/posthog-js/pull/5014) [`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00) Thanks [@pauldambra](https://github.com/pauldambra)! - Rename the `metrics.network` default attributes to the OTel HTTP client semantic conventions: `http.request.method`, `server.address`, `server.port`, `url.scheme`, `url.template`, `http.response.status_code` and `error.type` replace `method`, `host`, `path` and `status_class`.
+  (2026-09-17)
+
+### Patch Changes
+
+- Updated dependencies [[`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00)]:
+  - @posthog/types@1.412.2
+
+## 1.433.10
+
+### Patch Changes
+
+- [#4960](https://github.com/PostHog/posthog-js/pull/4960) [`c8e53fa`](https://github.com/PostHog/posthog-js/commit/c8e53faa796b9dfb255286656155036e3cecad31) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console warning when session replay stops capturing canvas frames (browser without `OffscreenCanvas`, a CSP that blocks `blob:` workers, or a failing `canvasCapture.maskRegionsFn`), and stop changing WebGL and WebGPU canvas settings when canvas capture fails to start
+  (2026-09-17)
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+- Updated dependencies [[`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0)]:
+  - @posthog/core@1.54.4
+
+## 1.433.9
+
+### Patch Changes
+
+- [#5007](https://github.com/PostHog/posthog-js/pull/5007) [`c3043f4`](https://github.com/PostHog/posthog-js/commit/c3043f45c088cbd80398648c8ae75bcce3e075f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a session diagnostic when stale replay configuration cannot be refreshed, without changing recording behavior.
+  (2026-09-17)
+
+## 1.433.8
+
+### Patch Changes
+
+- [#4709](https://github.com/PostHog/posthog-js/pull/4709) [`c1d1faf`](https://github.com/PostHog/posthog-js/commit/c1d1faf3b4ef2bda304e20fc8ed139bff40a9e7d) Thanks [@posthog](https://github.com/apps/posthog)! - Prefer synchronous compression for events captured with `send_instantly`, including the initial `$pageview`, to avoid delaying request dispatch on asynchronous compression.
+  (2026-09-17)
+
 ## 1.433.7
 
 ### Patch Changes

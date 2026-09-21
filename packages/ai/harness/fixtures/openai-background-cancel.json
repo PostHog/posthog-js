@@ -1,0 +1,185 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:36.640Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-5-mini-2025-08-07",
+          "input": "List the first one hundred prime numbers and explain how to check each one.",
+          "reasoning": {
+            "effort": "low"
+          },
+          "max_output_tokens": 1024,
+          "background": true,
+          "store": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_b12c1d28901e483e997fa618bff34f66"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_0bb4b7d9b031c9b3006aaf409ccf5087d2adf21682c3bc43b3",
+            "object": "response",
+            "created_at": 1789870236,
+            "status": "queued",
+            "background": true,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 1024,
+            "max_tool_calls": null,
+            "model": "gpt-5-mini-2025-08-07",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses/resp_0bb4b7d9b031c9b3006aaf409ccf5087d2adf21682c3bc43b3/cancel",
+        "headers": {},
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_abad8e409e1b40af8778779c1ac2c4a6"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_0bb4b7d9b031c9b3006aaf409ccf5087d2adf21682c3bc43b3",
+            "object": "response",
+            "created_at": 1789870236,
+            "status": "cancelled",
+            "background": true,
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 1024,
+            "max_tool_calls": null,
+            "model": "gpt-5-mini-2025-08-07",
+            "moderation": null,
+            "output": [],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": "current_turn",
+              "effort": "low",
+              "mode": "standard",
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "auto",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": null,
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ]
+}

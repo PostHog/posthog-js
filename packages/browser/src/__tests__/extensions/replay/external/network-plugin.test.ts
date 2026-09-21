@@ -35,6 +35,7 @@ function createMockWindow() {
             now: () => Date.now(),
             getEntries: () => performanceEntries,
             getEntriesByName: (name: string) => performanceEntries.filter((e: any) => e.name === name),
+            getEntriesByType: (type: string) => performanceEntries.filter((e: any) => e.entryType === type),
             clearResourceTimings: () => {
                 performanceEntries.length = 0
             },
@@ -82,11 +83,32 @@ function createMockWindow() {
             }
         } as any,
         fetch: async () => new Response(),
+        document: { readyState: 'complete' },
     } as any
 
     mockWindow.PerformanceObserver.supportedEntryTypes = ['navigation', 'resource']
 
     return { mockWindow, performanceEntries, observerCallbacks }
+}
+
+function createNavigationTimingEntry(name: string, loadEventEnd: number = 400) {
+    return {
+        name,
+        entryType: 'navigation',
+        initiatorType: 'navigation',
+        startTime: 0,
+        responseEnd: 120,
+        loadEventEnd,
+        toJSON() {
+            return {
+                name: this.name,
+                entryType: this.entryType,
+                initiatorType: this.initiatorType,
+                startTime: this.startTime,
+                duration: 500,
+            }
+        },
+    }
 }
 
 function createResourceTimingEntry(name: string, serverTimingName: string, serverTimingDuration: number) {
@@ -560,6 +582,136 @@ describe('network plugin', () => {
                     })
                 )
                 cleanup()
+            })
+        })
+
+        describe('completed navigation timing', () => {
+            let cleanup: () => void = () => {}
+
+            afterEach(() => cleanup())
+
+            it('captures the navigation entry when recording starts after the document loaded', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})
+
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' })],
+                })
+            })
+
+            it('captures the navigation entry without the initial resource entries', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+                performanceEntries.push(createResourceTimingEntry('https://example.com/app.js', 'proxy', 5) as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it.each([false, true])(
+                'leaves the navigation entry to the observer while the document still loads, recordInitialRequests=%s',
+                (recordInitialRequests) => {
+                    const { mockWindow, performanceEntries } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    mockWindow.document.readyState = 'loading'
+                    performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                    const callback = vi.fn()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests })
+
+                    expect(callback).not.toHaveBeenCalled()
+                }
+            )
+
+            it.each([false, true])(
+                'leaves the navigation entry to the observer while the load event has not finished, recordInitialRequests=%s',
+                (recordInitialRequests) => {
+                    const { mockWindow, performanceEntries } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    // readiness turns `complete` before the load event fires, so the entry is not final yet
+                    performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
+
+                    const callback = vi.fn()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests })
+
+                    expect(callback).not.toHaveBeenCalled()
+                }
+            )
+
+            it('captures the navigation entry once when initial requests are recorded', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it('leaves a mid-load navigation entry to the observer rather than dropping it', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.document.readyState = 'loading'
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
+                expect(callback).not.toHaveBeenCalled()
+
+                observerCallbacks[0]({
+                    getEntries: () => [createNavigationTimingEntry('https://example.com/app')],
+                } as PerformanceObserverEntryList)
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it('keeps observing when the mask function throws on the initial entries', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                const start = () =>
+                    (cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                        maskRequestFn: () => {
+                            throw new Error('mask fn threw')
+                        },
+                    }))
+
+                expect(start).not.toThrow()
+                expect(callback).not.toHaveBeenCalled()
+                expect(observerCallbacks).toHaveLength(1)
+            })
+
+            it('skips the navigation entry when navigation timings are not observed', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    performanceEntryTypeToObserve: ['resource'],
+                })
+
+                expect(callback).not.toHaveBeenCalled()
             })
         })
 

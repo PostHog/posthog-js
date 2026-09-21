@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.74.0",
+  "version": "4.75.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -39,10 +39,11 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src test",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src test --fix",
     "test:unit": "vitest run",
+    "test:built": "node --test scripts/check-sourcemaps.mjs",
     "test": "pnpm test:unit",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
-    "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
+    "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js' --source-maps",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.cjs"
   },
@@ -86,7 +87,7 @@
     "react-native-safe-area-context": "^4.10.1",
     "react-native-svg": "^15.0.0",
     "jsdom": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:native",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   },
