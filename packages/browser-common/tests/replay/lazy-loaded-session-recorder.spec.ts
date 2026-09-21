@@ -4,6 +4,7 @@ import { LazyLoadedSessionRecording } from '../../src/replay/external/lazy-loade
 import { buildNetworkRequestOptions } from '../../src/replay/external/config'
 import type { ReplayOptions, ReplayRecorderClient, ReplayRecorderHost } from '../../src/replay/host'
 import type { rrwebRecord } from '../../src/replay/rrweb'
+import type { ReplayRuntime } from '../../src/replay/runtime'
 import { replayWindow } from '../../src/replay/globals'
 import { EventType, IncrementalSource } from '../../src/replay/rrweb-types'
 import { SESSION_RECORDING_REMOTE_CONFIG } from '../../src/replay/constants'
@@ -25,7 +26,7 @@ afterEach(() => {
 })
 
 describe('shared lazy recorder with a neutral Client', () => {
-    it('starts rrweb, delivers a playable tail with original attribution, and releases producers', () => {
+    it.each(['legacy', 'injected', 'injected-with-global'])('%s runtime records and disposes independently', (mode) => {
         vi.useFakeTimers()
         const base = new TestClient()
         base.kv.set(SESSION_RECORDING_REMOTE_CONFIG, {
@@ -44,7 +45,26 @@ describe('shared lazy recorder with a neutral Client', () => {
                 mirror: { getNode: vi.fn() },
             }
         )
-        replayWindow!.__PosthogExtensions__ = { rrweb: { record: record as unknown as rrwebRecord, version: 'test' } }
+        const consolePlugin = { name: 'test-console', options: {} }
+        const getRecordConsolePlugin = vi.fn(() => consolePlugin)
+        const getDiscardedDurationSamples = vi.fn(() => 7)
+        const runtime: ReplayRuntime = {
+            rrweb: {
+                record: record as unknown as rrwebRecord,
+                version: 'test',
+                getDiscardedDurationSamples,
+            },
+            rrwebPlugins: { getRecordConsolePlugin },
+        }
+        const unrelatedRecord = vi.fn()
+        if (mode === 'legacy') {
+            replayWindow!.__PosthogExtensions__ = runtime
+        } else if (mode === 'injected-with-global') {
+            replayWindow!.__PosthogExtensions__ = {
+                rrweb: { record: unrelatedRecord as unknown as rrwebRecord, version: 'other' },
+            }
+        }
+        const originalGlobal = replayWindow!.__PosthogExtensions__
         const diagnosticConfig = { hostSetting: 'preserved-by-host' }
         const host: ReplayRecorderHost = {
             sessionActive: true,
@@ -80,10 +100,17 @@ describe('shared lazy recorder with a neutral Client', () => {
             logger: base.logger,
             replay: host,
         }
-        const recorder = new LazyLoadedSessionRecording(client, options)
+        const recorder = new LazyLoadedSessionRecording(
+            client,
+            () => ({ ...options(), consoleLogRecordingEnabled: true }),
+            undefined,
+            mode === 'legacy' ? undefined : runtime
+        )
         try {
             recorder.start()
             expect(record).toHaveBeenCalledOnce()
+            expect(getRecordConsolePlugin).toHaveBeenCalledOnce()
+            expect(record).toHaveBeenCalledWith(expect.objectContaining({ plugins: [consolePlugin] }))
             expect(host.emitConfigEvent).toHaveBeenCalledOnce()
             expect(record.addCustomEvent).toHaveBeenCalledWith('$posthog_config', { config: diagnosticConfig })
             const timestamp = Date.now()
@@ -115,10 +142,14 @@ describe('shared lazy recorder with a neutral Client', () => {
                 })
             )
             expect(host.recordFirstSnapshot).toHaveBeenCalledWith(timestamp + 1)
+            expect(recorder.sdkDebugProperties.$sdk_debug_replay_discarded_duration_samples).toBe(7)
+            expect(unrelatedRecord).not.toHaveBeenCalled()
+            expect(replayWindow!.__PosthogExtensions__).toBe(originalGlobal)
         } finally {
             recorder.stop()
         }
         expect(stop).toHaveBeenCalledOnce()
+        expect(vi.getTimerCount()).toBe(0)
     })
 
     it('reads replaced recording options from an already installed network mask callback', () => {
