@@ -1,7 +1,10 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
+import type { SessionIdChangedCallback } from '@posthog/types'
 
 import { createId } from './id'
 import type { NewSessionReason, StorageLike } from './types'
+
+export const SESSION_IDLE_TIMEOUT_MS = 1_800_000
 
 type ConsentState = 'implicit' | 'granted' | 'denied'
 
@@ -31,6 +34,7 @@ interface PreparedSession {
     readonly session: PersistedSession
     readonly reason: NewSessionReason | undefined
     readonly rotated: boolean
+    readonly changeReason: NonNullable<Parameters<SessionIdChangedCallback>[2]>
     readonly lastActivityWriteTimestamp: number
     readonly windowStorage: StorageLike | undefined
     readonly windowStorageResolved: boolean
@@ -424,7 +428,7 @@ export class BrowserState {
         return true
     }
 
-    prepareSessionForEvent(now = Date.now()): PreparedSession {
+    prepareSession(now = Date.now(), updateActivity = true): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
         const [sharedRead, external] = this._readPersistedState()
         let session = this._state.session
@@ -439,7 +443,11 @@ export class BrowserState {
         }
 
         const pendingReason = this._pendingSessionReason
-        const idle = session ? Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000 : false
+        // Passive recorder events retain idle sessions, but still observe the maximum age.
+        const idle =
+            updateActivity && session
+                ? Math.abs(safeNow - session.lastActivityTimestamp) > SESSION_IDLE_TIMEOUT_MS
+                : false
         const maximum = session ? Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000 : false
         const rotated = !!(pendingReason || !session || idle || maximum)
         const reason = adoptedAfterReset
@@ -447,7 +455,12 @@ export class BrowserState {
             : (pendingReason ?? (idle ? 'idleTimeout' : maximum ? 'maxLength' : undefined))
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external))
-            : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
+            : {
+                  ...session!,
+                  lastActivityTimestamp: updateActivity
+                      ? Math.max(safeNow, session!.lastActivityTimestamp)
+                      : session!.lastActivityTimestamp,
+              }
         const window = this._prepareWindow(rotated)
         return {
             context: {
@@ -458,6 +471,12 @@ export class BrowserState {
             session: preparedSession,
             reason,
             rotated,
+            changeReason: {
+                noSessionId: !session || !!pendingReason,
+                activityTimeout: idle,
+                sessionPastMaximumLength: maximum,
+                crossTabAdoption: !rotated && session?.sessionId !== this._state.session?.sessionId,
+            },
             lastActivityWriteTimestamp,
             windowStorage: window.storage,
             windowStorageResolved: window.storageResolved,

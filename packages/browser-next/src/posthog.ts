@@ -4,6 +4,8 @@ import type { FlagsExtension } from './flags-internal'
 import type { SurveysExtension, SurveysHost } from './surveys-internal'
 import type { SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
 import type { LogsExtension } from './logs-internal'
+import type { ReplayExtension, ReplaySessionHost } from './replay-internal'
+import type { SessionIdChangedCallback } from '@posthog/types'
 import type { CaptureLogOptions } from './logs-options'
 import {
     type ApiResponse,
@@ -34,7 +36,7 @@ import { createId } from './id'
 import { createLogger } from './logger'
 import { ClientRateLimiter } from './rate-limiter'
 import { sendRequest, type RequestRuntime } from './request'
-import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
+import { BrowserState, getDefaultSessionStorage, getDefaultStorage, SESSION_IDLE_TIMEOUT_MS } from './state'
 import type {
     BrowserFetch,
     CaptureSummary,
@@ -132,6 +134,7 @@ class PostHogBrowserClient implements PostHog {
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
+    private readonly _replaySessionPublisher: Publisher<Parameters<SessionIdChangedCallback>>
     private readonly _identifyPublisher: Publisher<IdentifyInfo>
     private readonly _groupPublisher: Publisher<GroupInfo>
     private readonly _resetPublisher: Publisher<void>
@@ -191,6 +194,9 @@ class PostHogBrowserClient implements PostHog {
         this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
         this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
+        this._replaySessionPublisher = new Publisher((error) =>
+            this.logger.error('A replay session listener failed', error)
+        )
 
         const browserNavigator: BrowserNavigator | undefined =
             options.navigator === false ? undefined : (options.navigator ?? getDefaultNavigator())
@@ -442,7 +448,7 @@ class PostHogBrowserClient implements PostHog {
             return undefined
         }
 
-        const preparedSession = this._state.prepareSessionForEvent()
+        const preparedSession = this._state.prepareSession()
         const session = preparedSession.context
         const distinctId = this._state.distinctId
         const deviceId = this._state.deviceId
@@ -490,20 +496,64 @@ class PostHogBrowserClient implements PostHog {
             }
             return undefined
         }
-        if (!this._state.sessionAdmitted(preparedSession)) {
+        if (!this._sessionAdmitted(preparedSession)) {
             if (!immediate) {
                 capture?.discardQueued(message)
             }
             return undefined
-        }
-        if (preparedSession.reason) {
-            this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         }
         this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
         if (!immediate) {
             capture?.admitted()
         }
         return message
+    }
+
+    private _sessionAdmitted(prepared: ReturnType<BrowserState['prepareSession']>): boolean {
+        const previous = this._state.session
+        if (!this._state.sessionAdmitted(prepared)) return false
+        if (prepared.reason) {
+            this._newSessionPublisher.publish({ ...prepared.context, reason: prepared.reason })
+        }
+        const { sessionId, windowId } = prepared.context
+        if (sessionId !== previous.sessionId || windowId !== previous.windowId) {
+            this._replaySessionPublisher.publish([sessionId, windowId, prepared.changeReason])
+        }
+        return true
+    }
+
+    _createReplaySessionHost(extension: Extension): ReplaySessionHost {
+        const client = this
+        const active = () =>
+            !client._closing && !client._disposed && client._registry.get('sessionRecording') === extension
+        return {
+            get sessionActive() {
+                return active()
+            },
+            sessionTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+            checkSession(options) {
+                try {
+                    if (active() && client.canCapture) {
+                        const prepared = client._state.prepareSession(options?.timestamp, options?.updateActivity)
+                        if (active() && client.canCapture && client._sessionAdmitted(prepared)) {
+                            return client._state.session
+                        }
+                    }
+                } catch (error) {
+                    client.logger.error('Replay session check failed', error)
+                }
+                return { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
+            },
+            onSessionChange(callback) {
+                return client._replaySessionPublisher.listener(([sessionId, windowId, reason]) => {
+                    const current = client._state.session
+                    // A prior listener may synchronously reset, rotate, or shut down this owner.
+                    if (active() && current.sessionId === sessionId && current.windowId === windowId) {
+                        callback(sessionId, windowId, reason && { ...reason })
+                    }
+                })
+            },
+        }
     }
 
     async identify(
@@ -901,6 +951,7 @@ class PostHogBrowserClient implements PostHog {
             this._groupPublisher.dispose()
             this._resetPublisher.dispose()
             this._newSessionPublisher.dispose()
+            this._replaySessionPublisher.dispose()
             this._dynamicEventProperties.splice(0)
             await Promise.race([cleanup, timeout])
             if (timedOut) {
@@ -1168,6 +1219,9 @@ export const createPostHogCore = async (
             const shared = extension.name === 'featureFlags' ? (extension as FlagsExtension)._shared : undefined
             if (extension.name === 'surveys') {
                 ;(extension as SurveysExtension).initialize?.(client._surveysHost)
+            }
+            if (extension.name === 'sessionRecording') {
+                ;(extension as ReplayExtension).initialize?.(client._createReplaySessionHost(extension))
             }
             if (extension.name === 'logs') {
                 ;(extension as LogsExtension).initialize?.(() => client._logsLastActivity())
