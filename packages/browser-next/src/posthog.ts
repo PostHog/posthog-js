@@ -536,7 +536,8 @@ class PostHogBrowserClient implements PostHog {
                     if (active() && client.canCapture) {
                         const prepared = client._state.prepareSession(options?.timestamp, options?.updateActivity)
                         if (active() && client.canCapture && client._sessionAdmitted(prepared)) {
-                            return client._state.session
+                            // Admission listeners can synchronously revoke the recorder's authority.
+                            if (active() && client.canCapture) return client._state.session
                         }
                     }
                 } catch (error) {

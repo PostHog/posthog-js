@@ -246,6 +246,15 @@ describe('browser-next replay session host', () => {
         expect(changes).toHaveBeenCalledTimes(1)
     })
 
+    it.each(['shutdown', 'denial'])('returns no session after a listener triggers %s', async (stop) => {
+        const { client, host } = await create()
+        host.onSessionChange(() => {
+            if (stop === 'shutdown') void client.shutdown()
+            else client.optOut()
+        })
+        expect(host.checkSession()).toEqual(EMPTY_SESSION)
+    })
+
     it('isolates listener errors, removes subscriptions, and tolerates reentrant checks', async () => {
         const { client, host } = await create()
         host.onSessionChange(() => {
