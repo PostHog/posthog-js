@@ -573,25 +573,6 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        it('omits mutation observer roots from the replay config event without changing runtime config', () => {
-            const host = document.createElement('div')
-            document.body.appendChild(host)
-            const root = host.attachShadow({ mode: 'closed' })
-            config.capture_dead_clicks = {
-                mutation_observer_roots: [root],
-            }
-
-            sessionRecording.stopRecording()
-            _addCustomEvent.mockClear()
-            sessionRecording['_lazyLoadedSessionRecording'].start()
-
-            const configEvent = _addCustomEvent.mock.calls.find(([tag]) => tag === '$posthog_config')
-            expect(configEvent).toBeDefined()
-            expect(configEvent![1].config.capture_dead_clicks).not.toHaveProperty('mutation_observer_roots')
-            expect(config.capture_dead_clicks).toEqual({ mutation_observer_roots: [root] })
-            host.remove()
-        })
-
         describe('isRecordingEnabled', () => {
             it('is enabled if both the server and client config says enabled', () => {
                 expect(sessionRecording['_isRecordingEnabled']).toBeTruthy()

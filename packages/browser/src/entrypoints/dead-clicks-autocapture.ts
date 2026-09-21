@@ -13,9 +13,6 @@ import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { getNativeMutationObserverImplementation } from '@posthog/browser-common/utils/prototype-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { createLogger } from '@posthog/browser-common/utils/logger'
-
-const logger = createLogger('[Dead Clicks]')
 
 function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -60,12 +57,6 @@ function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
 
 function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
-}
-
-// a JavaScript caller can put anything in the public mutation_observer_roots option. we duck-type
-// instead of using `instanceof Node`, so that a node from another realm still counts as a node
-function isNode(candidate: unknown): candidate is Node {
-    return isNumber((candidate as Node | undefined)?.nodeType)
 }
 
 // a liveness transition only counts if it fired within the suppression window on one side of the
@@ -163,7 +154,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         capture_dead_swipes: true,
         swipe_threshold_px: 30,
         max_dead_swipes_per_page_load: 10,
-        mutation_observer_roots: [],
         __onCapture: defaultOnCapture,
     })
 
@@ -185,7 +175,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             swipe_threshold_px: providedConfig?.swipe_threshold_px ?? defaultConfig.swipe_threshold_px,
             max_dead_swipes_per_page_load:
                 providedConfig?.max_dead_swipes_per_page_load ?? defaultConfig.max_dead_swipes_per_page_load,
-            mutation_observer_roots: providedConfig?.mutation_observer_roots ?? defaultConfig.mutation_observer_roots,
             css_selector_ignorelist: providedConfig?.css_selector_ignorelist,
             __onCapture: defaultConfig.__onCapture,
         }
@@ -217,11 +206,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this._onMutation(mutations)
             })
-            // concat rather than spread, so a caller that provided something other than an array
-            // of roots becomes one entry for `_observeRoot` to reject instead of an iteration error
-            for (const target of [observerTarget].concat(this._config.mutation_observer_roots)) {
-                this._observeRoot(target)
-            }
+            this._observeRoot(observerTarget)
         }
     }
 
@@ -231,26 +216,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (!root || !this._mutationObserver) {
             return
         }
-        // a root from mutation_observer_roots is whatever the caller provided. both WeakSet.add
-        // and observe throw on a value that is not a node, and that throw escapes posthog.init
-        if (!isNode(root)) {
-            logger.warn('ignoring a mutation_observer_roots entry that is not a DOM node', root)
-            return
-        }
         if (this._observedRoots.has(root)) {
             return
         }
-        try {
-            this._mutationObserver.observe(root, {
-                attributes: true,
-                characterData: true,
-                childList: true,
-                subtree: true,
-            })
-        } catch {
-            logger.warn('ignoring a mutation_observer_roots entry that is not a DOM node')
-            return
-        }
+        this._mutationObserver.observe(root, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true,
+        })
         this._observedRoots.add(root)
         this._observeShadowRoots(root)
     }
@@ -305,17 +279,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _onMutation(mutations: MutationRecord[]): void {
         for (const mutation of mutations) {
-            // a root we observe directly keeps reporting after its host leaves the page, but a
-            // change off the page is no sign of life for a click on it. observing the document
-            // alone never reported those, so this keeps the liveness signal to the live page.
-            // only an explicit `false` counts, so an environment without `isConnected` is unchanged
+            // a root observed directly keeps reporting after its host leaves the page, and a change
+            // off the page is no sign of life. only an explicit `false` is skipped, since older
+            // browsers lack `isConnected`
             if (mutation.target?.isConnected === false) {
                 continue
             }
-            // we don't actually care about the content of the mutations, right now
             this._lastMutation = Date.now()
-            // except that added content can bring a shadow root of its own, which the observer
-            // that reported the addition cannot see into
+            // added content can bring a shadow root of its own, which the observer that reported
+            // the addition cannot see into
             const addedNodes = mutation.addedNodes
             for (let i = 0; i < addedNodes.length; i++) {
                 const node = addedNodes[i]

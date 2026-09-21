@@ -1397,46 +1397,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
         })
 
-        it('observes roots given in mutation_observer_roots, e.g. a closed shadow root', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-            host = document.createElement('div')
-            document.body.appendChild(host)
-            const closedRoot = host.attachShadow({ mode: 'closed' })
-
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                mutation_observer_roots: [closedRoot],
-            })
-            lazyLoadedDeadClicksAutocapture.start(document)
-
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(closedRoot)).toBe(true)
-        })
-
-        it('ignores mutation_observer_roots entries that are not nodes', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-            attachHost()
-
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                // a JavaScript caller is not held to the Node[] type
-                mutation_observer_roots: ['#not-a-node', 42, {}, { nodeType: 1 }] as unknown as Node[],
-            })
-
-            expect(() => lazyLoadedDeadClicksAutocapture.start(document)).not.toThrow()
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
-        })
-
-        it('ignores a mutation_observer_roots value that is not an array', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                mutation_observer_roots: document.querySelectorAll('body') as unknown as Node[],
-            })
-
-            expect(() => lazyLoadedDeadClicksAutocapture.start(document)).not.toThrow()
-            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(document)).toBe(true)
-        })
-
         it('does not treat a change inside a detached root as a sign of life', () => {
             attachHost()
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined

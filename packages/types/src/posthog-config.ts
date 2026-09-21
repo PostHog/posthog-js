@@ -431,19 +431,6 @@ export type DeadClicksAutoCaptureConfig = {
     max_dead_swipes_per_page_load?: number
 
     /**
-     * Extra DOM roots to watch for changes, so a click that only changes content inside one of
-     * them is not reported as a dead click.
-     *
-     * A mutation observer does not see through a shadow boundary, so every shadow root needs its
-     * own observer. Open shadow roots are found for you: when detection starts, when new content
-     * brings one, and when a gesture happens inside one. Use this option for a root the SDK cannot
-     * reach, for example a closed shadow root that your own code holds.
-     *
-     * @default []
-     */
-    mutation_observer_roots?: Node[]
-
-    /**
      * List of CSS selectors to ignore dead clicks on
      * e.g. ['.my-download-link']
      * we consider the tree of elements from the root to the target element of the click event
