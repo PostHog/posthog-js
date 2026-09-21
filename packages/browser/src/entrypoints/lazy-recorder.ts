@@ -6,7 +6,7 @@
 // so you don't have the problem that clients get new code and a cached recorder.js
 
 import { assignableWindow } from '../utils/globals'
-import { LazyLoadedSessionRecording } from '../extensions/replay/external/browser-lazy-loaded-session-recorder'
+import { LazyLoadedSessionRecording } from '../extensions/replay/external/lazy-loaded-session-recorder'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>

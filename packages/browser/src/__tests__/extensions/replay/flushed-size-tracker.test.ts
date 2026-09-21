@@ -1,6 +1,6 @@
 import { BrowserClientKeyValueStore } from '../../../extensions/browser-client-kv'
 import { createReplayFlushedSizeWriter } from '../../../extensions/replay/replay-host'
-import { FlushedSizeTracker } from '../../../extensions/replay/external/flushed-size-tracker'
+import { FlushedSizeTracker } from '@posthog/browser-common/replay/external/flushed-size-tracker'
 import { PostHog } from '../../../posthog-core'
 import { vi } from 'vitest'
 import { PostHogPersistence } from '../../../posthog-persistence'

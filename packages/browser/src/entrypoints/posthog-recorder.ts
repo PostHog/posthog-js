@@ -11,8 +11,8 @@ import {
 } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
 import { assignableWindow } from '../utils/globals'
-import { getRecordNetworkPlugin } from '../extensions/replay/external/network-plugin'
-import { LazyLoadedSessionRecording } from '../extensions/replay/external/browser-lazy-loaded-session-recorder'
+import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/external/network-plugin'
+import { LazyLoadedSessionRecording } from '../extensions/replay/external/lazy-loaded-session-recorder'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }

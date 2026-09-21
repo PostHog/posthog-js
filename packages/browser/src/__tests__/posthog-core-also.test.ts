@@ -19,7 +19,7 @@ import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/browser-session-recording'
+import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
 // `var` so the hoisted vi.mock factory below can assign to it without TDZ.

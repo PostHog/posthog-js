@@ -11,11 +11,11 @@ const ruleTester = new RuleTester({
 ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
     valid: [
         {
-            code: "import { getRecordNetworkPlugin } from '../../packages/browser/src/extensions/replay/external/network-plugin'",
+            code: "import { getRecordNetworkPlugin } from '../../packages/browser-common/src/replay/external/network-plugin'",
             filename: '/project/packages/browser/src/entrypoints/recorder.ts',
         },
         {
-            code: "import { getRecordNetworkPlugin } from '../../packages/browser/src/extensions/replay/external/network-plugin'",
+            code: "import { getRecordNetworkPlugin } from '../../packages/browser-common/src/replay/external/network-plugin'",
             filename: '/project/packages/browser-common/src/replay/external/recorder.ts',
         },
         {
@@ -60,7 +60,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
     ],
     invalid: [
         {
-            code: "import { getRecordNetworkPlugin } from '../../packages/browser/src/extensions/replay/external/network-plugin'",
+            code: "import { getRecordNetworkPlugin } from '../../packages/browser-common/src/replay/external/network-plugin'",
             filename: '/project/packages/browser/src/posthog-core.ts',
             errors: [
                 {
@@ -70,7 +70,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
             ],
         },
         {
-            code: "import('../../packages/browser/src/extensions/replay/external/network-plugin')",
+            code: "import('../../packages/browser-common/src/replay/external/network-plugin')",
             filename: '/project/packages/browser/src/posthog-core.ts',
             errors: [
                 {

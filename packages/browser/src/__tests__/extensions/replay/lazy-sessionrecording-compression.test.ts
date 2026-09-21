@@ -47,7 +47,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         { createMockConfig, createMockPostHog },
         { SESSION_RECORDING_REMOTE_CONFIG, SESSION_RECORDING_IS_SAMPLED },
     ] = await Promise.all([
-        import('../../../extensions/replay/external/browser-lazy-loaded-session-recorder'),
+        import('../../../extensions/replay/external/lazy-loaded-session-recorder'),
         import('../../../utils/globals'),
         import('../../../posthog-persistence'),
         import('../../../sessionid'),

@@ -253,7 +253,8 @@
     "dependencies": {
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
-        "preact": "^10.29.3"
+        "preact": "^10.29.3",
+        "fflate": "^0.4.8"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
@@ -265,6 +266,8 @@
         "jsdom": "catalog:",
         "lightningcss": "^1.33.0",
         "typescript": "catalog:native",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "@posthog/rrweb-utils": "workspace:*",
+        "fast-check": "^2.17.0"
     }
 }

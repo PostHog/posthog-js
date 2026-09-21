@@ -5,11 +5,11 @@ import '@testing-library/jest-dom'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
-import { FULL_SNAPSHOT_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
+import { FULL_SNAPSHOT_EVENT_TYPE } from '@posthog/browser-common/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse, PostHogConfig, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { SessionRecording } from '../../../extensions/replay/browser-session-recording'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
@@ -17,7 +17,7 @@ import { type fullSnapshotEvent } from '@posthog/browser-common/replay/rrweb-typ
 import Mock = vi.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
-import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/browser-lazy-loaded-session-recorder'
+import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 
 // Type and source defined here designate a non-user-generated recording event

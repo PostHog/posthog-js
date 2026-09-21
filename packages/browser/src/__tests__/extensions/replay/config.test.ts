@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../../posthog-core'
-import { buildNetworkRequestOptions } from '../../../extensions/replay/external/config'
+import { buildNetworkRequestOptions } from '@posthog/browser-common/replay/external/config'
 import { replayOptionsFromConfig } from '../../../extensions/replay/replay-options'
 
 describe('replay network configuration mapping', () => {
