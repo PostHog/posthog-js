@@ -1360,6 +1360,42 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(3)
         })
 
+        it('cancels a delayed retry when disposed during backoff', async () => {
+            respondWith(502, 200)
+            featureFlags._callFlagsEndpoint()
+            await vi.advanceTimersByTimeAsync(0)
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+
+            featureFlags.dispose()
+            await vi.advanceTimersByTimeAsync(1000)
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect((featureFlags as any)._requestInFlight).toBe(false)
+        })
+
+        it.each(['advanced_disable_flags', 'advanced_disable_decide'] as const)(
+            'cancels a delayed retry when %s is enabled during backoff',
+            async (configKey) => {
+                respondWith(502, 200)
+                featureFlags._callFlagsEndpoint()
+                await vi.advanceTimersByTimeAsync(0)
+                expect(instance._send_request).toHaveBeenCalledTimes(1)
+
+                instance.config[configKey] = true
+                featureFlags.reloadFeatureFlags()
+                await vi.advanceTimersByTimeAsync(1000)
+
+                expect(instance._send_request).toHaveBeenCalledTimes(1)
+                expect((featureFlags as any)._requestInFlight).toBe(false)
+
+                instance.config[configKey] = false
+                await reloadAndSettle()
+
+                expect(instance._send_request).toHaveBeenCalledTimes(2)
+                expect(featureFlags.isFeatureEnabled('retried-flag')).toBe(true)
+            }
+        )
+
         it('does not retry when feature_flag_request_max_retries is 0', async () => {
             instance.config.feature_flag_request_max_retries = 0
             respondWith(502, 200)

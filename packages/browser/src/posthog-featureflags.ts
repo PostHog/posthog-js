@@ -1097,6 +1097,12 @@ export class PostHogFeatureFlags implements Extension {
         const shouldRetry = (): boolean => attemptsLeft > 0 && requestGeneration === this._requestGeneration
 
         const attempt = (): void => {
+            if (requestGeneration !== this._requestGeneration || !this._client || this._config.remoteRequestsDisabled) {
+                this._requestInFlight = false
+                requestAdditionalReload()
+                return
+            }
+
             const retryLater = (): void => {
                 attemptsLeft--
                 setTimeout(attempt, FLAGS_RETRY_DELAY_MS)
