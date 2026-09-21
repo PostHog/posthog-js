@@ -441,7 +441,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         let crossTabAdoption = cookieSessionAdoption
-        const noSessionId = !sessionId || !!pendingBootstrapSession
+        let noSessionId = !sessionId || !!pendingBootstrapSession
         const preRefreshSessionId = sessionId
         let activityTimeout =
             !noSessionId && !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
@@ -462,6 +462,14 @@ export class SessionIdManager {
             // we write below. (`_flushPendingActivityTimestamp` re-reads the
             // same way on the unload path, but bails instead of adopting.)
             ;[, sessionId, startTimestamp] = this._getSessionId()
+            // The sibling may have reset the session to null: a stale
+            // `noSessionId` here would return and persist a null id.
+            // https://github.com/PostHog/posthog-js/issues/5036
+            // Only when the refresh cleared the timeout, so an idle rotation
+            // keeps `activityTimeout` as its sole reason.
+            if (!activityTimeout) {
+                noSessionId = !sessionId || !!pendingBootstrapSession
+            }
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             crossTabAdoption = false
