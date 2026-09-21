@@ -20,7 +20,7 @@ export default defineConfig({
     ],
     webServer: {
         command:
-            'pnpm exec esbuild playwright/fixture.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=.playwright/fixture.js && node scripts/serve-browser-tests.mjs',
+            'pnpm exec esbuild playwright/fixture.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=.playwright/fixture.js && pnpm exec esbuild playwright/replay-root-fixture.ts playwright/replay-static-fixture.ts playwright/replay-core-fixture.ts --bundle --splitting --format=esm --platform=browser --target=es2022 --outdir=.playwright/replay --chunk-names=chunks/[name]-[hash] && node scripts/serve-browser-tests.mjs',
         env: { POSTHOG_BROWSER_NEXT_TEST_PORT: String(port) },
         url: `http://127.0.0.1:${port}`,
         reuseExistingServer: !process.env.CI,

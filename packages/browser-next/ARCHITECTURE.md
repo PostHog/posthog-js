@@ -241,6 +241,18 @@ Survey abandonment uses a package-private analytics pre-teardown subscription: t
 
 Survey definitions are fetched separately at `/api/surveys/` with the existing token query, cache TTL, and failure backoff. Flags expose package-private targeting reads without leaking private flag implementations into core. Event targets observe admitted captures. Action matching can register DOM selectors through an optional autocapture capability; that extension must be installed for selector-backed DOM events.
 
+### Session replay
+
+Root initialization dynamically imports replay orchestration unless `replay: false`; an explicit `replay(options)` extension takes precedence. `/replay` statically includes the same shared `SessionRecording` controller. Both paths dynamically import the rrweb runtime and shared `LazyLoadedSessionRecording`, supplying `ReplayRuntime` directly. Sampling and trigger decisions remain inside the shared recorder. Manual core has no automatic replay import. Shared controller browser globals are read at invocation time, preserving static-entry import purity.
+
+A private session host delegates recording activity to the same `BrowserState` transaction and notifications used by analytics. It cannot create sessions after shutdown or consent denial. The optional adapter maps camelCase configuration, shared flags subscriptions, KV, targeting, diagnostic properties, and persistence-permitted pending tab buffers. Reset flushes eligible old-identity data and preserves server recording configuration; ordinary identify retains recording continuity.
+
+Replay owns bounded snapshot storage and a delivery lane, not analytics Capture V1. Its wire is the supported `/s/` `$snapshot` envelope with recorder-owned session/window properties, host-bound token/distinct ID, UUID, and timestamp. Encoding supports negotiated gzip/base64 and ordinary JSON. Snapshot identity is finalized before queueing; delivery retries do not reread it. The recorder's optional unload notification runs after rrweb and shared pagehide drainage; beforeunload is a delivery fallback only where pagehide is unavailable. Consent denial discards producers and queues and prevents pending imports from restarting them.
+
+Closing leaves the ordinary session host inactive. An optional live host permission allows only the recorder's synchronous producer-stop tail to finish using its already-owned recording IDs, without checking/creating/rotating sessions or starting another epoch. Shared sampling, trigger, minimum-duration, and hold checks still govern the final flush. Consent denial permanently revokes this terminal permission, including after a regrant; legacy hosts that omit it retain their existing stop behavior.
+
+KV is an extension dependency. Closing blocks KV writes and new capture immediately, but namespace reads remain available through all extension cleanup. A timed-out shutdown may detach cleanup without revoking those reads prematurely; actual registry cleanup completion ends read access. Readiness recovery during cleanup must not create a new persistence write.
+
 ## 6. Import graph rules
 
 ### 6.1 Use exact runtime imports

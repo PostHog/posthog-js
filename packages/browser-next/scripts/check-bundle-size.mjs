@@ -21,6 +21,10 @@ const logsInput = /(^|\/)(logs|console-logs|logs-config|logs-utils)\.(m?js|ts)$/
 const surveysInput =
     /(^|\/)(surveys(?:-extension|-renderer|-storage)?|survey-event-receiver(?:-base)?|survey-action-matcher)\.(m?js|tsx?)$/
 const preactInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?preact\//
+const replayInput = /(^|\/)(replay(?:-delivery|-runtime)?|session-recording|lazy-loaded-session-recorder)([/.]|$)/
+const rrwebInput =
+    /(^|\/)(packages\/rrweb|\.\.\/rrweb|node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:@posthog\/rrweb[^/]*|rrweb))\//
+const fflateInput = /(^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?fflate\//
 const coreInput = /(^|\/)(packages\/core|\.\.\/core|node_modules\/@posthog\/core)\//
 const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
@@ -62,15 +66,26 @@ const attribution = (result, outputKeys = Object.keys(result.metafile.outputs)) 
     return [...bytes].map(([input, value]) => ({ input, bytes: value })).sort((a, b) => b.bytes - a.bytes)
 }
 
-const report = async (name, result, outputs, outputKeys, forbidAnalytics, allowFlags = false, allowSurveys = false) => {
+const report = async (
+    name,
+    result,
+    outputs,
+    outputKeys,
+    forbidAnalytics,
+    allowFlags = false,
+    allowSurveys = false,
+    allowReplay = false
+) => {
     const measured = sizes(outputs)
     const inputs = [...new Set(outputKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs)))]
     const forbidden = inputs.filter(
         (input) =>
             (forbiddenInputs.some((pattern) => pattern.test(input)) &&
                 !(allowFlags && coreInput.test(input)) &&
-                !(allowSurveys && preactInput.test(input))) ||
-            (forbidAnalytics && analyticsInput.test(input)) ||
+                !(allowSurveys && preactInput.test(input)) &&
+                !(allowReplay && (rrwebInput.test(input) || fflateInput.test(input)))) ||
+            (forbidAnalytics && analyticsInput.test(input) && !(allowReplay && /\/lane\./.test(input))) ||
+            (!allowReplay && replayInput.test(input)) ||
             (!allowFlags &&
                 (flagsInput.test(input) ||
                     logsInput.test(input) ||
@@ -113,7 +128,14 @@ const measureStatic = async (name, fixture, forbidAnalytics, allowFlags = false,
     )
 }
 
-const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automatic = true, allowSurveys = automatic) => {
+const measureLazy = async (
+    name = 'lazy',
+    fixture = 'fixtures/lazy.ts',
+    automatic = true,
+    allowSurveys = automatic,
+    staticReplay = false,
+    allowReplay = automatic
+) => {
     const outputDirectory = 'bundle-output'
     const result = await build({
         ...buildOptions,
@@ -185,10 +207,31 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
     ) {
         throw new Error('The lazy initial bundle must include the automatic analytics factory')
     }
-    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true)
+    const initialInputs = initialKeys.flatMap((key) => Object.keys(result.metafile.outputs[key].inputs))
+    if (
+        initialInputs.some(
+            (input) => rrwebInput.test(input) || /lazy-loaded-session-recorder|replay-runtime/.test(input)
+        )
+    ) {
+        throw new Error('Replay runtime must remain outside initial consumer graphs')
+    }
+    if (
+        staticReplay &&
+        initialInputs.some(
+            (input) =>
+                !coreInput.test(input) &&
+                (flagsInput.test(input) ||
+                    logsInput.test(input) ||
+                    surveysInput.test(input) ||
+                    autocaptureInput.test(input))
+        )
+    ) {
+        throw new Error('Static replay must not retain unrelated products')
+    }
+    await report(`${name} initial`, result, contents(initialKeys), initialKeys, true, staticReplay, false, staticReplay)
     const dynamicKeys = totalKeys.filter((key) => !initial.has(key))
-    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true, allowSurveys)
-    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys)
+    await report(`${name} dynamic`, result, contents(dynamicKeys), dynamicKeys, false, true, allowSurveys, allowReplay)
+    await report(`${name} total`, result, contents(totalKeys), totalKeys, false, true, allowSurveys, allowReplay)
 }
 
 const surveyTypes = await build({
@@ -213,4 +256,9 @@ await measureStatic('static surveys', 'fixtures/static-surveys.ts', true, true, 
 await measureLazy('dynamic surveys', 'fixtures/dynamic-surveys.ts', false, true)
 await measureStatic('static autocapture', 'fixtures/static-autocapture.ts', true, true)
 await measureLazy('dynamic autocapture', 'fixtures/dynamic-autocapture.ts', false)
+await measureLazy('static replay', 'fixtures/static-replay.ts', false, false, true, true)
+await measureLazy('dynamic replay', 'fixtures/dynamic-replay.ts', false, false, false, true)
+const replayTypes = await build({ ...buildOptions, entryPoints: ['fixtures/replay-types.ts'] })
+if (replayTypes.outputFiles.some((file) => file.text.trim()))
+    throw new Error('Replay type imports must not retain runtime code')
 stdout.write(`Budget status: ${COMPLIANT_BASELINE_PENDING}\n`)

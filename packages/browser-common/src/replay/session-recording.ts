@@ -15,7 +15,6 @@ import { type eventWithTime } from './rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '../utils/logger'
-import { document, window } from '../utils/globals'
 import { addEventListener } from '../utils/general-utils'
 import type { LazyLoadedSessionRecordingInterface } from './recorder'
 import type { Client, Disposable, DeepReadonly } from '../index'
@@ -35,12 +34,16 @@ import type { Extension } from '../index'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+const getWindow = (): (Window & typeof globalThis) | undefined => (typeof window === 'undefined' ? undefined : window)
+const getDocument = (): Document | undefined => (typeof document === 'undefined' ? undefined : document)
+
 const hasDocumentEverBeenVisible = (): boolean => {
+    const document = getDocument()
     if (!document?.visibilityState || document.visibilityState === 'visible') {
         return true
     }
 
-    const visibilityEntries = window?.performance?.getEntriesByType?.('visibility-state')
+    const visibilityEntries = getWindow()?.performance?.getEntriesByType?.('visibility-state')
     return !visibilityEntries?.length || visibilityEntries.some((entry) => entry.name === 'visible')
 }
 
@@ -75,7 +78,7 @@ export class SessionRecording implements Extension {
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
-        if (document?.visibilityState === 'visible') {
+        if (getDocument()?.visibilityState === 'visible') {
             this._documentWasEverVisible = true
             this._lazyLoadedSessionRecording?.setDocumentWasEverVisible?.(true)
         }
@@ -100,6 +103,7 @@ export class SessionRecording implements Extension {
         this._client = client
         this._host = client.replay
         // Visibility must be observed before deferred initialization and before the chunk loads.
+        const document = getDocument()
         if (document?.addEventListener) {
             addEventListener(document, 'visibilitychange', this._onVisibilityChange)
         }
@@ -129,7 +133,7 @@ export class SessionRecording implements Extension {
         if (this._sessionRecordingDisposed) return
         this._sessionRecordingDisposed = true
         this._remoteConfigSubscription?.dispose()
-        document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+        getDocument()?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
         if (discardBufferedEvents) {
             this._discardRecording(true)
         } else {
@@ -143,7 +147,7 @@ export class SessionRecording implements Extension {
         )?.enabled
         const enabled_client_side = !this._config.disabled
         const isDisabled = this._config.disabled || !this._host.isAllowed
-        return window && enabled_server_side && enabled_client_side && !isDisabled
+        return getWindow() && enabled_server_side && enabled_client_side && !isDisabled
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {

@@ -339,7 +339,7 @@ export class BrowserState {
         }
     }
 
-    prepare(): boolean {
+    prepare(persist = true): boolean {
         if (!this._stateReadPending) {
             return true
         }
@@ -352,7 +352,7 @@ export class BrowserState {
         if (persisted) {
             this._state = persisted
             this._lastActivityWriteTimestamp = persisted.session?.lastActivityTimestamp ?? 0
-        } else {
+        } else if (persist) {
             this._save(false)
         }
         return true
@@ -557,10 +557,14 @@ export class BrowserState {
         return this._writeConsent('0')
     }
 
-    keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
+    keyValueStore(
+        namespace: string,
+        canRead: () => boolean = () => true,
+        canWrite: () => boolean = canRead
+    ): KeyValueStore {
         const values = (): Record<string, unknown> => (this._state.extensionData[namespace] ??= emptyRecord<unknown>())
         const read = (key: string): unknown => {
-            if (!canAccess()) {
+            if (!canRead()) {
                 return undefined
             }
             const value = values()[key]
@@ -583,26 +587,26 @@ export class BrowserState {
                 return entries as Partial<T>
             }) as KeyValueStore['get'],
             set: ((keyOrValues: string | Record<string, unknown>, value?: unknown): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
+                if (!canWrite()) return
                 const entries = typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues
-                for (const [key, entry] of Object.entries(entries)) {
-                    if (entry === undefined) {
-                        delete namespaceValues[key]
-                    } else {
-                        namespaceValues[key] = cloneJson(entry)
-                    }
+                const copied = Object.entries(entries).map(
+                    ([key, entry]) => [key, entry === undefined ? undefined : cloneJson(entry)] as const
+                )
+                // Application getters can synchronously close the client while values are copied.
+                if (!canWrite()) return
+                const namespaceValues = values()
+                for (const [key, entry] of copied) {
+                    if (entry === undefined) delete namespaceValues[key]
+                    else namespaceValues[key] = entry
                 }
                 this._save()
             }) as KeyValueStore['set'],
             remove: (keyOrKeys: string | readonly string[]): void => {
-                if (!canAccess()) {
-                    return
-                }
+                if (!canWrite()) return
+                const keys = typeof keyOrKeys === 'string' ? [keyOrKeys] : [...keyOrKeys]
+                if (!canWrite()) return
                 const namespaceValues = values()
-                for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
+                for (const key of keys) {
                     delete namespaceValues[key]
                 }
                 this._save()

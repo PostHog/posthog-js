@@ -1,4 +1,5 @@
 import { snapshotAutocaptureOptions } from './autocapture-options'
+import { snapshotReplayOptions } from './replay-options'
 import { snapshotSurveysOptions } from './surveys-options'
 import { snapshotLogsOptions } from './logs-options'
 import type { PostHog, PostHogOptions } from './types'
@@ -82,7 +83,21 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             autocaptureError = error
         }
     }
+    let replayError: unknown
+    if (!extensions.some((extension) => extension.name === 'sessionRecording')) {
+        try {
+            const configuration = options?.replay
+            if (configuration !== false) {
+                const snapshot = snapshotReplayOptions(configuration)
+                const { replay } = await import('./replay')
+                extensions.push(replay(snapshot))
+            }
+        } catch (error) {
+            replayError = error
+        }
+    }
     const client = await createPostHogCore(options, extensions)
+    if (replayError) client.logger.error('Automatic replay loading failed', replayError)
     if (autocaptureError) client.logger.error('Automatic autocapture loading failed', autocaptureError)
     if (surveysError) client.logger.error('Automatic surveys loading failed', surveysError)
     if (logsError) client.logger.error('Automatic logs loading failed', logsError)
@@ -141,3 +156,4 @@ export type {
 } from './surveys-options'
 
 export type { AutocaptureOptions, AutocaptureConfiguration, RageclickOptions } from './autocapture-options'
+export type { ReplayOptions, ReplayConfiguration } from './replay-options'

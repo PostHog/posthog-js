@@ -606,6 +606,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _queuedCompressionEvents: number = 0
     private _compressionQueueGeneration: number = 0
     private _isStoppingAfterCompression: boolean = false
+    private _isFinalStopDrain: boolean = false
 
     private _removePageViewCaptureHook: import('../../index').Disposable | undefined = undefined
 
@@ -1574,7 +1575,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stylesheet mutations through the emit path, and they must reach the
         // buffer (or the compression queue, checked next) before the final
         // flush below, or they are cleared unshipped.
-        this._stopRecordingProducers()
+        this._isFinalStopDrain = !!this._client.replay.canDrainOnStop?.()
+        try {
+            this._stopRecordingProducers()
+        } finally {
+            this._isFinalStopDrain = false
+        }
 
         // a rotation's synchronous start() would invalidate a deferred drain, destroying the old session's tail
         if (this._isRestartingForSessionIdChange) {
@@ -1934,8 +1940,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
-        // late event after sessionManager teardown (e.g. cookieless opt-out) — _sessionManager would throw
-        if (!this._client.replay.sessionActive) {
+        // Terminal drainage is limited to this producer's synchronous stop stack. The recorder
+        // retains its existing IDs; a closed host must never create or rotate a session here.
+        const finalStopDrain = this._isFinalStopDrain && !!this._client.replay.canDrainOnStop?.()
+        if (!this._client.replay.sessionActive && !finalStopDrain) {
             return
         }
 
@@ -1952,17 +1960,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 return
             }
             rawEvent.data.href = href
-        } else {
+        } else if (!finalStopDrain) {
             this._pageViewFallBack()
         }
 
-        // Check if the URL matches any trigger patterns - delegate to strategy
-        this._strategy?.checkUrlTriggers(
-            this.sessionId,
-            () => this._pauseRecording(),
-            () => this._resumeRecording(),
-            (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
-        )
+        // Final drainage retains existing trigger decisions; it cannot start a new recording epoch.
+        if (!finalStopDrain) {
+            this._strategy?.checkUrlTriggers(
+                this.sessionId,
+                () => this._pauseRecording(),
+                () => this._resumeRecording(),
+                (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
+            )
+        }
 
         // always have to check if the URL is blocked really early,
         // or you risk getting stuck in a loop
@@ -1984,7 +1994,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._safeTrackFullSnapshotCost()
             Promise.resolve().then(() => this._safeTrackFullSnapshotCost())
 
-            this._scheduleFullSnapshot()
+            if (!finalStopDrain) this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
 
@@ -2032,7 +2042,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (sessionEndingPayload?.lastActivityTimestamp) {
                 event.timestamp = sessionEndingPayload.lastActivityTimestamp
             }
-        } else if (!sessionIdlePayload?.sessionId) {
+        } else if (!sessionIdlePayload?.sessionId && !finalStopDrain) {
             // sessionIdle markers with a pinned session id skip the session check: they are only
             // emitted from inside _updateWindowAndSessionIds, whose caller runs the check itself
             // right after, and running it here first can adopt a pending rotation before the
@@ -2105,6 +2115,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             event.data.href = href
         }
 
+        if (finalStopDrain && !this._client.replay.canDrainOnStop?.()) return
         if (
             this._queuedCompressionEvents > 0 ||
             (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
@@ -2116,6 +2127,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const { event: eventToSend, size } = compressionEnabled
             ? compressEventSync(event)
             : { event, size: estimateSize(event) }
+        if (finalStopDrain && !this._client.replay.canDrainOnStop?.()) return
         this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
     }
 
@@ -2591,6 +2603,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onBeforeUnload = (): void => {
+        try {
+            this._flushOnBeforeUnload()
+        } finally {
+            if (window && !('onpagehide' in window)) this._notifyRecorderUnload()
+        }
+    }
+
+    private _notifyRecorderUnload(): void {
+        try {
+            this._client.replay.onRecorderUnload?.()
+        } catch (error) {
+            logger.warn('could not hand off replay on unload', error)
+        }
+    }
+
+    private _flushOnBeforeUnload = (): void => {
         // If still buffering (waiting for triggers), discard the buffer
         if (this.status === BUFFERING) {
             this._clearBuffer()
@@ -2620,7 +2648,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // any remaining deferred stylesheet mutations. Repeat the drain+flush so those
     // events ship instead of dying in a buffer nothing will ever flush again.
     private _onPageHide = (): void => {
-        this._onBeforeUnload()
+        try {
+            this._flushOnBeforeUnload()
+        } finally {
+            this._notifyRecorderUnload()
+        }
     }
 
     private _onOffline = (): void => {

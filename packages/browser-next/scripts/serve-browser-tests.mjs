@@ -9,6 +9,18 @@ const html = '<!doctype html><html><body><script src="/fixture.js"></script></bo
 const received = []
 
 const server = createServer((request, response) => {
+    if (/^\/replay\/(?:chunks\/)?[\w-]+\.js$/.test(request.url ?? '')) {
+        response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' })
+        createReadStream(fileURLToPath(new URL(`../.playwright${request.url}`, import.meta.url))).pipe(response)
+        return
+    }
+    if (/^\/replay-(root|static|core)$/.test(request.url ?? '')) {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        response.end(
+            `<!doctype html><html><body><h1>Replay fixture</h1><input id="private" value="initial-secret"><button id="activity">Activity</button><script type="module" src="/replay/${request.url.slice(1)}-fixture.js"></script></body></html>`
+        )
+        return
+    }
     if (request.url === '/fixture.js') {
         response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' })
         createReadStream(fixture).pipe(response)
