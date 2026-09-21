@@ -5172,8 +5172,7 @@
       "id": "SessionStartReason",
       "name": "SessionStartReason",
       "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "\"sampling_overridden\" | \"recording_initialized\" | \"linked_flag_matched\" | \"linked_flag_overridden\" | \"session_id_changed\" | \"url_trigger_matched\" | \"event_trigger_matched\""
+      "path": "lib/src/types.d.ts"
     },
     {
       "id": "ShowTourOptions",

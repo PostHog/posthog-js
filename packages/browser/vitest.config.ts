@@ -78,6 +78,10 @@ export default defineConfig({
                 find: /^@posthog\/browser-common\/utils\/(.*)$/,
                 replacement: `${fromRoot('../browser-common/src/utils')}/$1.ts`,
             },
+            {
+                find: /^@posthog\/browser-common\/replay\/(.*)$/,
+                replacement: `${fromRoot('../browser-common/src/replay')}/$1.ts`,
+            },
             { find: '@posthog/core/surveys', replacement: fromRoot('../core/src/surveys/index.ts') },
             { find: /^@posthog\/core$/, replacement: fromRoot('../core/src/index.ts') },
         ],

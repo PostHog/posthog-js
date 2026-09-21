@@ -13,8 +13,13 @@
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
 
-import type { IWindow, listenerHandler, RecordPlugin } from '../types/rrweb-types'
-import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
+import type { IWindow, listenerHandler, RecordPlugin } from '@posthog/browser-common/replay/rrweb-types'
+import type {
+    CapturedNetworkRequest,
+    Headers,
+    InitiatorType,
+    NetworkRecordOptions,
+} from '@posthog/browser-common/replay/types'
 import {
     isArray,
     isBoolean,
@@ -29,15 +34,15 @@ import {
 import { isDocument } from '@posthog/browser-common/utils/type-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
-import { patch } from '../rrweb-plugins/patch'
-import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
+import { patch } from '../patch'
+import { isHostOnDenyList } from './denylist'
 import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './config'
 
 const logger = createLogger('[Recorder]')
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]
-    isInitial?: boolean
+    isInitial?: boolean | undefined
 }
 
 type networkCallback = (data: NetworkData) => void
@@ -47,13 +52,13 @@ const isNavigationTiming = (entry: PerformanceEntry): entry is PerformanceNaviga
 const isResourceTiming = (entry: PerformanceEntry): entry is PerformanceResourceTiming => entry.entryType === 'resource'
 
 type ObservedPerformanceEntry = (PerformanceNavigationTiming | PerformanceResourceTiming) & {
-    responseStatus?: number
+    responseStatus?: number | undefined
 }
 
 export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): T | undefined {
     const length = array.length
     for (let i = length - 1; i >= 0; i -= 1) {
-        if (predicate(array[i])) {
+        if (predicate(array[i]!)) {
             return array[i]
         }
     }
@@ -230,8 +235,8 @@ async function getRequestPerformanceEntry(
     win: IWindow,
     initiatorType: string,
     url: string,
-    start?: number,
-    end?: number,
+    start?: number | undefined,
+    end?: number | undefined,
     attempt = 0
 ): Promise<PerformanceResourceTiming | null> {
     if (attempt > 10) {
@@ -321,8 +326,8 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 method: string,
                 url: string | URL,
                 async = true,
-                username?: string | null,
-                password?: string | null
+                username?: string | null | undefined,
+                password?: string | null | undefined
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
                 // oxlint-disable-next-line typescript/ban-ts-comment
@@ -474,13 +479,13 @@ function prepareRequest({
     method: string | undefined
     status: number | undefined
     networkRequest: Partial<CapturedNetworkRequest>
-    isInitial?: boolean
-    start?: number
-    end?: number
+    isInitial?: boolean | undefined
+    start?: number | undefined
+    end?: number | undefined
     // if there is no performance observer entry, we still need to know the url
-    url?: string
+    url?: string | undefined
     // if there is no performance observer entry, we can provide the initiatorType
-    initiatorType?: string
+    initiatorType?: string | undefined
 }): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end

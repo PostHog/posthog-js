@@ -6,14 +6,7 @@ import type { ErrorTracking } from '@posthog/core'
 import type { PostHog } from '../posthog-core'
 import type { BufferedConsoleEntry } from '../logs-types'
 import type { SessionIdManager } from '../sessionid'
-import type {
-    DeadClicksAutoCaptureConfig,
-    ExternalIntegrationKind,
-    Properties,
-    RemoteConfig,
-    SiteAppLoader,
-    SessionStartReason,
-} from '../types'
+import type { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, RemoteConfig, SiteAppLoader } from '../types'
 import type {
     ConversationsRemoteConfig,
     GetMessagesResponse,
@@ -25,11 +18,7 @@ import type {
     SendMessageResponse,
     UserProvidedTraits,
 } from '../posthog-conversations-types'
-// only importing types here, so won't affect the bundle
-// oxlint-disable-next-line posthog-js/no-external-replay-imports
-import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
-import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
 
 /*
  * Browser-v1's contract with its lazily loaded bundles and legacy window globals.
@@ -220,23 +209,8 @@ export type PostHogExtensionKind =
     | 'remote-config'
     | ExternalExtensionKind
 
-export interface LazyLoadedSessionRecordingInterface {
-    start: (startReason?: SessionStartReason) => void
-    stop: () => void
-    discard: (options?: { discardProducerEvents?: boolean }) => void
-    sessionId: string
-    status: SessionRecordingStatus
-    onRRwebEmit: (rawEvent: eventWithTime) => void
-    log: (message: string, level: 'log' | 'warn' | 'error') => void
-    sdkDebugProperties: Properties
-    overrideLinkedFlag: () => void
-    overrideSampling: () => void
-    overrideTrigger: (triggerType: TriggerType) => void
-    isStarted: boolean
-    tryAddCustomEvent(tag: string, payload: any): boolean
-    setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
-    flushBeforeIdentityReset?: () => void
-}
+export type { LazyLoadedSessionRecordingInterface } from '@posthog/browser-common/replay/recorder'
+import type { LazyLoadedSessionRecordingInterface } from '@posthog/browser-common/replay/recorder'
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void

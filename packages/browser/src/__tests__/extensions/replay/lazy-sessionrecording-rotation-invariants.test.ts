@@ -19,15 +19,15 @@ import { PostHog } from '../../../posthog-core'
 import { CaptureResult, Property, QueuedRequestWithOptions, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
-import { EventType, type eventWithTime, IncrementalSource } from '../../../extensions/replay/types/rrweb-types'
+import { EventType, type eventWithTime, IncrementalSource } from '@posthog/browser-common/replay/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
-import { SessionRecording } from '../../../extensions/replay/session-recording'
+import { SessionRecording } from '../../../extensions/replay/browser-session-recording'
 import {
     LazyLoadedSessionRecording,
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_IDLE_THRESHOLD_MS,
-} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+} from '../../../extensions/replay/external/browser-lazy-loaded-session-recorder'
 
 vi.mock('../../../remote-config', () => ({
     RemoteConfigLoader: vi.fn().mockImplementation(() => ({ load: vi.fn() })),
@@ -222,7 +222,9 @@ function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
         [SESSION_RECORDING_IS_SAMPLED]: undefined,
     })
 
+    posthog._getBrowserClientAdapter = PostHog.prototype._getBrowserClientAdapter
     const sessionRecording = new SessionRecording(posthog)
+    sessionRecording.setup(posthog._getBrowserClientAdapter())
     sessionRecording.onRemoteConfig({
         ok: true,
         config: { sessionRecording: { endpoint: '/s/' } } as unknown as RemoteConfig,

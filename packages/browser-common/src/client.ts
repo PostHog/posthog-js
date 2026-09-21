@@ -1,3 +1,4 @@
+import type { ReplayHost } from './replay/host'
 import type { Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
@@ -97,6 +98,9 @@ export interface SendRequestInit {
  * event, and remote-config internals.
  */
 export interface Client {
+    /** Optional replay integration, owned by the host SDK loading boundary. */
+    readonly replay?: ReplayHost
+
     /** The id events are currently attributed to. */
     readonly distinctId: string
     /** The anonymous device id carried across identify calls. */

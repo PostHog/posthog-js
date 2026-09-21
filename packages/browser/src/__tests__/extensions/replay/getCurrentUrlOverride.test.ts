@@ -1,3 +1,4 @@
+import { replayTriggerClient } from './replay-trigger-client'
 import { URLTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 import { SessionRecordingUrlTrigger, PostHogConfig } from '../../../types'
@@ -23,7 +24,7 @@ describe('get_current_url override for replay URL targeting', () => {
                 get_current_url: getCurrentUrl,
             } as PostHogConfig,
         })
-        return new URLTriggerMatching(instance)
+        return new URLTriggerMatching(replayTriggerClient(instance))
     }
 
     const configure = (

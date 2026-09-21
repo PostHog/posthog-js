@@ -123,15 +123,15 @@ const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
         '3DModel AboutPage Answer Article AudioObject Blog BlogPosting Book Clip CollectionPage Comment ContactPage Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode FAQPage Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle Photograph PodcastEpisode PodcastSeries ProfilePage QAPage Question Quiz Recipe Review ScholarlyArticle SearchResultsPage SiteNavigationElement SocialMediaPosting SoftwareApplication TVEpisode TVSeries TechArticle VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement WebSite'.split(
             ' '
         ),
-        ENTITY_RULES.CreativeWork,
+        ENTITY_RULES.CreativeWork!,
     ],
     [
         'BroadcastEvent BusinessEvent EducationEvent Festival MusicEvent SportsEvent TheaterEvent'.split(' '),
-        ENTITY_RULES.Event,
+        ENTITY_RULES.Event!,
     ],
-    [ORGANIZATION_TYPES, ENTITY_RULES.Organization],
-    [PLACE_TYPES, ENTITY_RULES.Place],
-    ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product],
+    [ORGANIZATION_TYPES, ENTITY_RULES.Organization!],
+    [PLACE_TYPES, ENTITY_RULES.Place!],
+    ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product!],
 ]
 
 export const JSON_LD_EVENT_TAG = '$json_ld'
@@ -209,7 +209,7 @@ function getEntityTypes(value: unknown): string[] {
 }
 
 type SanitizationContext = {
-    maskUrl?: MaskJsonLdUrl
+    maskUrl?: MaskJsonLdUrl | undefined
     remainingNodes: number
     exceeded: boolean
 }
@@ -236,7 +236,7 @@ function sanitizeEntityValue(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
     context: SanitizationContext,
-    allowedTypes?: readonly string[]
+    allowedTypes?: readonly string[] | undefined
 ): unknown | undefined {
     if (isArray(value)) {
         const items = value
@@ -252,7 +252,7 @@ function sanitizeEntity(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
     context: SanitizationContext,
-    allowedTypes?: readonly string[]
+    allowedTypes?: readonly string[] | undefined
 ): Record<string, unknown> | null {
     if (!isObject(value) || !takeNode(context)) {
         return null
@@ -327,7 +327,7 @@ function sanitizeRoot(
 export function sanitizeJsonLd(
     text: string,
     isCapturedDomId: IsCapturedDomId = NO_CAPTURED_DOM_IDS,
-    maskUrl?: MaskJsonLdUrl
+    maskUrl?: MaskJsonLdUrl | undefined
 ): [unknown, string] | null {
     if (!text || text.length > MAX_JSON_LD_LENGTH) {
         return null
@@ -366,15 +366,15 @@ function isJsonLdScript(node: Node): node is HTMLScriptElement {
 }
 
 type JsonLdPrivacyOptions = {
-    maskUrl?: MaskJsonLdUrl
-    attributeFilter?: string[]
-    blockClass?: string | RegExp
-    blockSelector?: string | null
+    maskUrl?: MaskJsonLdUrl | undefined
+    attributeFilter?: string[] | undefined
+    blockClass?: string | RegExp | undefined
+    blockSelector?: string | null | undefined
     isRecordedElement?: (element: Element) => boolean
-    maskAllElementAttributes?: boolean
-    maskAttributeFn?: ((name: string, value: string, element: Element) => string) | null
-    maskTextClass?: string | RegExp
-    maskTextSelector?: string | null
+    maskAllElementAttributes?: boolean | undefined
+    maskAttributeFn?: ((name: string, value: string, element: Element) => string) | null | undefined
+    maskTextClass?: string | RegExp | undefined
+    maskTextSelector?: string | null | undefined
 }
 
 function matchesPrivacyRule(element: Element, classRule?: string | RegExp, selector?: string | null): boolean {

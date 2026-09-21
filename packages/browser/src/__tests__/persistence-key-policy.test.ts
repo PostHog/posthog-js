@@ -460,7 +460,7 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
             // Policy is checked at each client.kv write; forwarding implementations are checked at their callers.
             if (
                 isForwardedKeyValueStoreKey(expression, node, checker) ||
-                isForwardedFeatureFlagsStateKey(expression, node, checker) ||
+                isForwardedPolicyKey(expression, node, checker) ||
                 (relativeFilePath === 'packages/browser-common/src/logs.ts' &&
                     expression &&
                     ts.isPropertyAccessExpression(expression) &&
@@ -556,6 +556,11 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
                 return
             }
 
+            // Replay buffers overrides before setup; keys are checked at _storeOverride callers and buffer writes.
+            if (isReplayOverrideBuffer(argument)) {
+                return
+            }
+
             if (
                 ts.isParenthesizedExpression(argument) ||
                 ts.isAsExpression(argument) ||
@@ -597,6 +602,34 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
         }
 
         const visit = (node: ts.Node) => {
+            if (
+                ts.isPropertyDeclaration(node) &&
+                ts.isIdentifier(node.name) &&
+                node.name.text === '_pendingOverrides' &&
+                getEnclosingClassName(node) === 'SessionRecording'
+            ) {
+                recordObjectLike(node.initializer, node, 'replay override buffer initialization')
+            }
+            if (
+                ts.isBinaryExpression(node) &&
+                node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                isReplayOverrideBuffer(node.left)
+            ) {
+                recordObjectLike(node.right, node, 'replay override buffer replacement')
+            }
+            if (
+                ts.isBinaryExpression(node) &&
+                node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                (ts.isElementAccessExpression(node.left) || ts.isPropertyAccessExpression(node.left)) &&
+                isReplayOverrideBuffer(node.left.expression)
+            ) {
+                recordResolution(
+                    ts.isElementAccessExpression(node.left) ? node.left.argumentExpression : undefined,
+                    node,
+                    'replay override buffer write',
+                    true
+                )
+            }
             // The shared logs write forwards this SDK-selected key; check the injection instead.
             if (
                 (ts.isPropertyAssignment(node) || ts.isGetAccessorDeclaration(node)) &&
@@ -650,6 +683,14 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
                     getEnclosingClassName(node) === 'PostHogFeatureFlags'
                 ) {
                     recordResolution(node.arguments[0], node, '_remove() in PostHogFeatureFlags', true)
+                }
+
+                if (
+                    methodName === '_storeOverride' &&
+                    ts.isThis(receiver) &&
+                    getEnclosingClassName(node) === 'SessionRecording'
+                ) {
+                    recordResolution(node.arguments[0], node, '_storeOverride() in SessionRecording', true)
                 }
 
                 if (methodName && SESSION_OBJECT_METHODS.has(methodName) && isRegisterForSessionReceiver(receiver)) {
@@ -763,7 +804,13 @@ const isForwardedKeyValueStoreKey = (
     return false
 }
 
-const isForwardedFeatureFlagsStateKey = (
+const isReplayOverrideBuffer = (expression: ts.Expression): boolean =>
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isThis(expression.expression) &&
+    expression.name.text === '_pendingOverrides' &&
+    getEnclosingClassName(expression) === 'SessionRecording'
+
+const isForwardedPolicyKey = (
     expression: ts.Expression | undefined,
     node: ts.Node,
     checker: ts.TypeChecker
@@ -771,8 +818,12 @@ const isForwardedFeatureFlagsStateKey = (
     if (
         !expression ||
         !ts.isIdentifier(expression) ||
-        getEnclosingClassName(node) !== 'PostHogFeatureFlags' ||
-        getEnclosingClassMethodName(node) !== '_remove'
+        !(
+            (getEnclosingClassName(node) === 'PostHogFeatureFlags' &&
+                getEnclosingClassMethodName(node) === '_remove') ||
+            (getEnclosingClassName(node) === 'SessionRecording' &&
+                getEnclosingClassMethodName(node) === '_storeOverride')
+        )
     ) {
         return false
     }
@@ -1093,6 +1144,40 @@ describe('persistence key policy', () => {
         expect([...featureFlagsWrapper.resolvedKeys]).toEqual(
             expect.arrayContaining([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE, constants.HEATMAPS_ENABLED_SERVER_SIDE])
         )
+    })
+
+    it('checks replay override keys before their buffered or immediate persistence writes', () => {
+        const analyze = (key: string, extra = '') =>
+            collectPersistenceKeyIdentifiers([
+                {
+                    filePath: path.join(REPOSITORY_ROOT, 'packages/browser/src/replay-policy-example.ts'),
+                    sourceText: `
+                        const OVERRIDE_KEY = '${constants.SESSION_RECORDING_OVERRIDE_SAMPLING}'
+                        class SessionRecording {
+                            private _pendingOverrides = {}
+                            private _storeOverride(key: string) {
+                                if (this._ready) this._client.kv.set(key, true)
+                                else this._pendingOverrides[key] = true
+                            }
+                            initialize() { this._client.kv.set(this._pendingOverrides) }
+                            overrideSampling() { this._storeOverride(${key}) }
+                            ${extra}
+                        }
+                    `,
+                },
+            ])
+        expect(analyze('OVERRIDE_KEY').issues).toEqual([])
+        expect([...analyze('OVERRIDE_KEY').resolvedKeys]).toContain(constants.SESSION_RECORDING_OVERRIDE_SAMPLING)
+        expect(analyze("'$session_recording_override_sampling'").issues).toEqual([
+            expect.stringContaining('must use constants'),
+        ])
+        expect(analyze('unknownKey').issues).toEqual([expect.stringContaining('must resolve to a persistence key')])
+        expect(analyze('OVERRIDE_KEY', "write() { this._pendingOverrides['$raw_key'] = true }").issues).toEqual([
+            expect.stringContaining('must use constants'),
+        ])
+        expect(analyze('OVERRIDE_KEY', 'write() { this._pendingOverrides = { raw: true } }').issues).toEqual([
+            expect.stringContaining('must use computed constant keys'),
+        ])
     })
 
     it('checks the injected logs persistence key without exempting unrelated dynamic keys', () => {

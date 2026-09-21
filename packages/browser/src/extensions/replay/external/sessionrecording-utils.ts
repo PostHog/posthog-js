@@ -1,4 +1,4 @@
-import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
+import type { eventWithTime, pluginEvent } from '@posthog/browser-common/replay/rrweb-types'
 
 import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
 import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
@@ -127,7 +127,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
         const matches = stringifiedData.matchAll(dataURIRegex)
         const unfilteredStringifiedData = stringifiedData
         for (const match of matches) {
-            if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {
+            if (match[1]!.toLocaleLowerCase().slice(0, 6) === 'image/') {
                 stringifiedData = stringifiedData.replace(match[0], replacementImageURI)
             } else {
                 stringifiedData = stringifiedData.replace(match[0], '')
@@ -168,11 +168,11 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
         for (let i = 0; i < event.data.payload.payload.length; i++) {
             if (
                 event.data.payload.payload[i] && // Value can be null
-                event.data.payload.payload[i].length > MAX_STRING_SIZE
+                event.data.payload.payload[i]!.length > MAX_STRING_SIZE
             ) {
-                updatedPayload.push(event.data.payload.payload[i].slice(0, MAX_STRING_SIZE) + '...[truncated]')
+                updatedPayload.push(event.data.payload.payload[i]!.slice(0, MAX_STRING_SIZE) + '...[truncated]')
             } else {
-                updatedPayload.push(event.data.payload.payload[i])
+                updatedPayload.push(event.data.payload.payload[i]!)
             }
         }
         event.data.payload.payload = updatedPayload

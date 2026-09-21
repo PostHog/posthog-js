@@ -1,4 +1,4 @@
-import { NetworkRecordOptions } from '../../../types'
+import type { NetworkRecordOptions } from '@posthog/browser-common/replay/types'
 
 function hostnameFromURL(url: string | URL | RequestInfo): string | null {
     try {

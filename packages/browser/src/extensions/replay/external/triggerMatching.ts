@@ -6,12 +6,17 @@ import {
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
-} from '../../../constants'
-import { PostHog } from '../../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
+} from '../constants'
+import type { ReplayTriggerClient } from '@posthog/browser-common/replay/host'
+import type { Disposable } from '@posthog/browser-common'
+import type {
+    FlagVariant,
+    RemoteConfig,
+    SessionRecordingPersistedConfig,
+    SessionRecordingUrlTrigger,
+} from '@posthog/browser-common/replay/types'
 import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -48,7 +53,8 @@ export interface RecordingTriggersStatusV2 extends RecordingTriggersStatus {
     get minimumDuration(): number | null
 }
 
-export type TriggerType = 'url' | 'event'
+export type { TriggerType, SessionRecordingStatus } from '@posthog/browser-common/replay/types'
+import type { SessionRecordingStatus, TriggerType } from '@posthog/browser-common/replay/types'
 /*
 triggers can have one of three statuses:
  * - trigger_activated: the trigger met conditions to start recording
@@ -59,7 +65,7 @@ const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] a
 export type TriggerStatus = (typeof triggerStatuses)[number]
 
 function persistedTriggerStatus(
-    instance: PostHog | undefined,
+    client: ReplayTriggerClient | undefined,
     triggerCount: number,
     groupId: string | undefined,
     groupPrefix: string,
@@ -72,7 +78,7 @@ function persistedTriggerStatus(
 
     // V2: Use per-group persistence key if groupId is provided
     const persistenceKey = groupId ? groupPrefix + groupId : fallbackPersistenceKey
-    const currentTriggerSession = instance?.get_property(persistenceKey)
+    const currentTriggerSession = client?.kv.get(persistenceKey)
     return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
 }
 
@@ -82,18 +88,6 @@ function persistedTriggerStatus(
  * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
  */
-const sessionRecordingStatuses = [
-    DISABLED,
-    SAMPLED,
-    ACTIVE,
-    BUFFERING,
-    PAUSED,
-    LAZY_LOADING,
-    AWAITING_CONFIG,
-    MISSING_CONFIG,
-    RRWEB_ERROR,
-] as const
-export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 // while we have both lazy and eager loaded replay we might get either type of config
 type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
@@ -107,7 +101,7 @@ type TriggerMatchingConfig = Pick<
 function sessionRecordingUrlTriggerMatches(
     url: string,
     triggers: SessionRecordingUrlTrigger[],
-    compiledRegexCache?: Map<string, RegExp>
+    compiledRegexCache?: Map<string, RegExp> | undefined
 ) {
     return triggers.some((trigger) => {
         switch (trigger.matching) {
@@ -145,7 +139,7 @@ function andTriggerStatus(statuses: TriggerStatus[]): TriggerStatus {
         case 0:
             return TRIGGER_DISABLED
         case 1:
-            return Array.from(enabledStatuses)[0]
+            return Array.from(enabledStatuses)[0]!
         default:
             return TRIGGER_PENDING
     }
@@ -223,13 +217,13 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
 
     private _lastCheckedUrl: string = ''
-    private _groupId?: string // Optional group ID for V2 per-group persistence
+    private _groupId?: string | undefined // Optional group ID for V2 per-group persistence | undefined
 
     urlBlocked: boolean = false
 
     constructor(
-        private readonly _instance: PostHog,
-        groupId?: string
+        private readonly _client: ReplayTriggerClient,
+        groupId?: string | undefined
     ) {
         this._groupId = groupId
     }
@@ -289,7 +283,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
         return persistedTriggerStatus(
-            this._instance,
+            this._client,
             this._urlTriggers.length,
             this._groupId,
             SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX,
@@ -300,7 +294,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     triggerStatus(sessionId: string): TriggerStatus {
         const result = this.triggerStatusNoSideEffects(sessionId)
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: result,
         })
         return result
@@ -316,7 +310,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 
     isCurrentUrlBlocked(): boolean {
-        const url = getTargetingUrl(this._instance)
+        const url = this._client.replay.targetingUrl
         if (!url) {
             return false
         }
@@ -334,7 +328,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
      * Performance optimization: Only checks when URL changes to avoid redundant regex matching
      */
     checkUrlBlocklist(onPause: () => void, onResume: () => void): void {
-        const url = getTargetingUrl(this._instance)
+        const url = this._client.replay.targetingUrl
         if (!url) {
             return
         }
@@ -367,7 +361,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         onActivate: (triggerType: TriggerType, matchDetail?: string) => void,
         sessionId: string
     ) {
-        const url = getTargetingUrl(this._instance)
+        const url = this._client.replay.targetingUrl
         if (!url) {
             return
         }
@@ -407,12 +401,12 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
-    private _flagListenerCleanup: () => void = () => {}
-    constructor(private readonly _instance: PostHog) {}
+    private _flagListenerCleanup?: Disposable | undefined
+    constructor(private readonly _client: ReplayTriggerClient) {}
 
     triggerStatus(): TriggerStatus {
         const result = this.triggerStatusNoSideEffects()
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
         })
         return result
@@ -444,7 +438,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._flagListenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
+            this._flagListenerCleanup = this._client.replay.onFlags((variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 let linkedFlagMatches = false
                 if (flagIsPresent) {
@@ -480,17 +474,17 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 
     stop(): void {
-        this._flagListenerCleanup()
+        this._flagListenerCleanup?.dispose()
     }
 }
 
 export class EventTriggerMatching implements TriggerStatusMatching {
     _eventTriggers: string[] = []
-    private _groupId?: string // Optional group ID for V2 per-group persistence
+    private _groupId?: string | undefined // Optional group ID for V2 per-group persistence | undefined
 
     constructor(
-        private readonly _instance: PostHog,
-        groupId?: string
+        private readonly _client: ReplayTriggerClient,
+        groupId?: string | undefined
     ) {
         this._groupId = groupId
     }
@@ -515,7 +509,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
     private _eventTriggerStatus(sessionId: string): TriggerStatus {
         const triggerCount = this._eventTriggers.length
         return persistedTriggerStatus(
-            this._instance,
+            this._client,
             triggerCount,
             this._groupId,
             SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
@@ -526,7 +520,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
     triggerStatus(sessionId: string): TriggerStatus {
         const result = this.triggerStatusNoSideEffects(sessionId)
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: result,
         })
         return result
@@ -566,18 +560,18 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
     private _eventTriggerMatching: EventTriggerMatching
     private _linkedFlagMatching: LinkedFlagMatching
     private _combinedMatching: TriggerStatusMatching
-    public readonly group: import('../../../types').SessionRecordingTriggerGroup
+    public readonly group: import('@posthog/browser-common/replay/types').SessionRecordingTriggerGroup
 
     constructor(
-        private readonly _instance: PostHog,
-        group: import('../../../types').SessionRecordingTriggerGroup,
+        private readonly _client: ReplayTriggerClient,
+        group: import('@posthog/browser-common/replay/types').SessionRecordingTriggerGroup,
         onFlagStarted: (flag: string, variant: string | null) => void
     ) {
         this.group = group
         // V2: Pass groupId to child matchers for per-group persistence
-        this._urlTriggerMatching = new URLTriggerMatching(_instance, group.id)
-        this._eventTriggerMatching = new EventTriggerMatching(_instance, group.id)
-        this._linkedFlagMatching = new LinkedFlagMatching(_instance)
+        this._urlTriggerMatching = new URLTriggerMatching(_client, group.id)
+        this._eventTriggerMatching = new EventTriggerMatching(_client, group.id)
+        this._linkedFlagMatching = new LinkedFlagMatching(_client)
 
         // Check if all conditions are empty (no events, urls, or flags)
         const hasEvents = group.conditions.events && group.conditions.events.length > 0
@@ -670,7 +664,7 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
                 ? SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + this.group.id
                 : SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + this.group.id
 
-        this._instance.persistence?.register({
+        this._client.kv.set({
             [persistenceKey]: sessionId,
         })
     }

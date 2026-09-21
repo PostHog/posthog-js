@@ -9,7 +9,7 @@ import {
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { FeatureFlagsExtension } from '../extension-tokens'
-import { SessionRecording } from '../extensions/replay/session-recording'
+import { SessionRecording } from '../extensions/replay/browser-session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
@@ -51,6 +51,53 @@ describe('__extensionClasses enrollment', () => {
         expect(posthog.conversations).toBeUndefined()
         expect(posthog.logs).toBeUndefined()
         expect(posthog.experiments).toBeUndefined()
+    })
+
+    it('enrolls default replay in the shared runtime without legacy config delivery', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const posthog = await createPosthogInstance(undefined, {
+            __extensionClasses: { sessionRecording: SessionRecording },
+            capture_pageview: false,
+        })
+        expect(posthog.getExtension('sessionRecording')).toBe(posthog.sessionRecording)
+        const onRemoteConfig = vi.spyOn(posthog.sessionRecording!, 'onRemoteConfig')
+        const result: RemoteConfigResult = { ok: true, config: { sessionRecording: false } }
+        posthog._onRemoteConfig(result)
+        expect(onRemoteConfig).toHaveBeenCalledOnce()
+        expect(onRemoteConfig).toHaveBeenCalledWith(result)
+        await posthog.shutdown()
+    })
+
+    it('retains the one-argument constructor and legacy lifecycle for custom replay', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const construct = vi.fn()
+        const initialize = vi.fn()
+        const onRemoteConfig = vi.fn()
+        const dispose = vi.fn()
+        class LegacyReplay {
+            constructor(...args: unknown[]) {
+                construct(...args)
+            }
+            initialize = initialize
+            startIfEnabledOrStop() {}
+
+            onRemoteConfig = onRemoteConfig
+            dispose = dispose
+        }
+        const posthog = await createPosthogInstance(undefined, {
+            __extensionClasses: { sessionRecording: LegacyReplay as unknown as typeof SessionRecording },
+            capture_pageview: false,
+        })
+        expect(construct).toHaveBeenCalledWith(posthog)
+        expect(initialize).toHaveBeenCalledOnce()
+        expect(posthog.getExtension('sessionRecording')).toBeUndefined()
+        onRemoteConfig.mockClear()
+        const result: RemoteConfigResult = { ok: true, config: { sessionRecording: false } }
+        posthog._onRemoteConfig(result)
+        expect(onRemoteConfig).toHaveBeenCalledOnce()
+        expect(onRemoteConfig).toHaveBeenCalledWith(result)
+        await posthog.shutdown()
+        expect(dispose).toHaveBeenCalledOnce()
     })
 
     it('initializes no extensions when none are provided and no defaults exist', async () => {

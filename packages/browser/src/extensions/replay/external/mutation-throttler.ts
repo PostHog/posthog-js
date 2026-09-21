@@ -1,10 +1,10 @@
-import type { eventWithTime, mutationCallbackParam } from '../types/rrweb-types'
+import type { eventWithTime, mutationCallbackParam } from '@posthog/browser-common/replay/rrweb-types'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
     estimateCompressedEventSize,
 } from './sessionrecording-utils'
-import type { rrwebRecord } from '../types/rrweb'
+import type { rrwebRecord } from '../rrweb'
 import { BucketedRateLimiter, isNumber } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 
@@ -26,11 +26,11 @@ export class MutationThrottler {
     constructor(
         private readonly _rrweb: rrwebRecord,
         private readonly _options: {
-            bucketSize?: number
-            refillRate?: number
-            bytesBucketSize?: number
-            bytesRefillRate?: number
-            resyncIntervalMs?: number
+            bucketSize?: number | undefined
+            refillRate?: number | undefined
+            bytesBucketSize?: number | undefined
+            bytesRefillRate?: number | undefined
+            resyncIntervalMs?: number | undefined
             onBlockedNode?: (id: number, node: Node | null) => void
             onDroppedAttributeMutations?: (count: number) => void
             onDroppedOversizedMutation?: (bytes: number) => void

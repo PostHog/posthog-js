@@ -136,6 +136,57 @@ describe('ExtensionRuntime', () => {
         expect(dispose).toHaveBeenCalledTimes(1)
     })
 
+    it.each(['resolve', 'reject'] as const)(
+        'removes pending setup without letting a late %s affect its replacement',
+        async (outcome) => {
+            const { runtime, add } = createRuntime()
+            let settle!: () => void
+            const dispose = vi.fn()
+            const original = testExtension(
+                'replay',
+                () =>
+                    new Promise<void>((resolve, reject) => {
+                        settle = () => (outcome === 'resolve' ? resolve() : reject(new Error('late failure')))
+                    }),
+                dispose
+            )
+            const registration = add(original)
+            runtime.remove(original)
+            runtime.remove(original)
+            expect(runtime.getExtension('replay')).toBeUndefined()
+            expect(dispose).toHaveBeenCalledTimes(1)
+
+            const replacement = testExtension('replay')
+            await add(replacement)
+            runtime.remove(original)
+            settle()
+            await registration
+            expect(runtime.getExtension('replay')).toBe(replacement)
+            expect(replacement.dispose).not.toHaveBeenCalled()
+            expect(dispose).toHaveBeenCalledTimes(1)
+
+            runtime.dispose()
+            expect(replacement.dispose).toHaveBeenCalledTimes(1)
+        }
+    )
+
+    it('uses host-specific disposal once and removes registration before cleanup', async () => {
+        const { runtime, add } = createRuntime()
+        const extension = testExtension('replay')
+        await add(extension)
+        const discard = vi.fn(() => {
+            expect(runtime.getExtension('replay')).toBeUndefined()
+            extension.dispose?.()
+        })
+
+        runtime.remove(extension, discard)
+        runtime.remove(extension, discard)
+        runtime.dispose()
+
+        expect(discard).toHaveBeenCalledOnce()
+        expect(extension.dispose).toHaveBeenCalledOnce()
+    })
+
     it('disposes extensions in reverse registration order', async () => {
         const { runtime, add } = createRuntime()
         let patched = 'host'

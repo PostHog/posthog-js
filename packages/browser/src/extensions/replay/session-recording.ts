@@ -1,5 +1,4 @@
 import {
-    COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SDK_DEBUG_REPLAY_STALE_CONFIG,
     RECORDING_REMOTE_CONFIG_TTL_MS,
@@ -10,32 +9,33 @@ import {
     SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER,
     SESSION_RECORDING_OVERRIDE_URL_TRIGGER,
     SESSION_RECORDING_REMOTE_CONFIG,
-} from '../../constants'
-import { PostHog } from '../../posthog-core'
-import { RemoteConfigLoader } from '../../remote-config'
-import {
+} from './constants'
+import type {
     Properties,
     RemoteConfig,
-    RemoteConfigResult,
     SessionRecordingPersistedConfig,
     SessionStartReason,
-} from '../../types'
-import { type eventWithTime } from './types/rrweb-types'
+} from '@posthog/browser-common/replay/types'
+import { type eventWithTime } from '@posthog/browser-common/replay/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '../../utils/globals'
+import type { LazyLoadedSessionRecordingInterface } from '@posthog/browser-common/replay/recorder'
+import type { Client, Disposable, DeepReadonly } from '@posthog/browser-common'
+import type { RemoteConfigResult } from '@posthog/browser-common'
+import type { ReplayOptions, ReplayHost } from '@posthog/browser-common/replay/host'
+import { continueWith } from '@posthog/browser-common/utils/promise-utils'
 import {
     AWAITING_CONFIG,
     DISABLED,
     LAZY_LOADING,
     MISSING_CONFIG,
-    SessionRecordingStatus,
-    TriggerType,
+    type SessionRecordingStatus,
+    type TriggerType,
 } from './external/triggerMatching'
-import type { Extension } from '../types'
+import type { Extension } from '@posthog/browser-common'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -50,19 +50,31 @@ const hasDocumentEverBeenVisible = (): boolean => {
 }
 
 export class SessionRecording implements Extension {
+    readonly name = 'sessionRecording'
+    private _client?: Client
+    private _host!: ReplayHost
+    private _ready = false
+    private _initializeRequested = false
+    private _initializing = false
+    private _remoteConfigSubscription?: Disposable
+    private _loading = false
+    private _startAfterLoad = false
+    private _startRequested = false
+    private _pendingOverrides: Record<string, boolean> = {}
+
     _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _recordingStatus: SessionRecordingStatus = DISABLED
 
     private get _config() {
-        return this._instance.config
+        return this._options()
     }
 
     private get _persistence() {
-        return this._instance.persistence
+        return this._client?.kv
     }
 
-    private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
+    private _persistFlagsOnSessionListener: Disposable | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
@@ -85,29 +97,43 @@ export class SessionRecording implements Extension {
         return this._lazyLoadedSessionRecording?.status ?? this._recordingStatus
     }
 
-    constructor(private readonly _instance: PostHog) {
-        if (!this._instance.sessionManager) {
-            logger.error('started without valid sessionManager')
-            throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
-        }
+    constructor(private readonly _options: () => ReplayOptions) {}
 
-        if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
-            throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
-        }
-
-        // Start before the recorder chunk loads so a visible -> hidden transition during
-        // lazy loading is not mistaken for a document that was never foregrounded.
+    setup(client: Client): void | Promise<void> {
+        if (this._sessionRecordingDisposed) return
+        if (!client.replay) throw new Error(LOGGER_PREFIX + ' started without replay host capabilities')
+        this._client = client
+        this._host = client.replay
+        // Visibility must be observed before deferred initialization and before the chunk loads.
         if (document?.addEventListener) {
             addEventListener(document, 'visibilitychange', this._onVisibilityChange)
         }
+        return continueWith(client.kv.initialize(), () => {
+            if (this._sessionRecordingDisposed) return
+            this._ready = true
+            if (Object.keys(this._pendingOverrides).length) client.kv.set(this._pendingOverrides)
+            this._pendingOverrides = {}
+            if (this._initializeRequested) this.initialize()
+        })
     }
 
-    initialize() {
+    initialize(): void {
+        this._initializeRequested = true
+        if (this._sessionRecordingDisposed || this._initializing || !this._ready || !this._client) return
+        this._initializing = true
+        const subscription = this._client.onRemoteConfig((result) => this.onRemoteConfig(result))
+        if (this._sessionRecordingDisposed) {
+            subscription.dispose()
+            return
+        }
+        this._remoteConfigSubscription = subscription
         this.startIfEnabledOrStop()
     }
 
     dispose({ discardBufferedEvents = false }: { discardBufferedEvents?: boolean } = {}): void {
+        if (this._sessionRecordingDisposed) return
         this._sessionRecordingDisposed = true
+        this._remoteConfigSubscription?.dispose()
         document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
         if (discardBufferedEvents) {
             this._discardRecording(true)
@@ -117,14 +143,16 @@ export class SessionRecording implements Extension {
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
-        const enabled_client_side = !this._config.disable_session_recording
-        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_server_side = !!this._client?.kv.get<SessionRecordingPersistedConfig>(
+            SESSION_RECORDING_REMOTE_CONFIG
+        )?.enabled
+        const enabled_client_side = !this._config.disabled
+        const isDisabled = this._config.disabled || !this._host.isAllowed
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        if (this._sessionRecordingDisposed) {
+        if (this._sessionRecordingDisposed || !this._ready) {
             return
         }
 
@@ -167,61 +195,57 @@ export class SessionRecording implements Extension {
             this._recordingStatus = LAZY_LOADING
         }
 
-        // If the recorder is already loaded, don't load the script. Both halves are needed:
-        // `rrweb.record` is the recorder itself, `initSessionRecording` is the code that drives it.
-        // The `.full` bundles and `posthog-js/dist/posthog-recorder` (or `dist/lazy-recorder`) define both,
-        // so nothing is fetched. Otherwise remotely import the recorder from the cdn.
-        if (
-            !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
-            !assignableWindow.__PosthogExtensions__?.initSessionRecording
-        ) {
-            // Consent and session state can change while the recorder chunk is loading.
-            // Only the recorder that initiated this load may finish starting with its manager.
-            const sessionManager = this._instance.sessionManager
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (
-                        this._sessionRecordingDisposed ||
-                        !this._isRecordingEnabled ||
-                        this._instance.sessionManager !== sessionManager
-                    ) {
-                        this._recordingStatus = DISABLED
-                        return
-                    }
-                    if (err) {
-                        // most often this is an ad blocker matching the `/static/<script>.js` path.
-                        // flag it on the session so a blocked recorder is visible in analytics
-                        // instead of only in the browser console
-                        this._instance.register_for_session({
-                            [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
-                        })
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
-                }
-            )
-        } else {
-            this._onScriptLoaded(startReason)
+        this._startRequested = true
+        if (this._loading) {
+            this._startAfterLoad = true
+            return
         }
+        this._loading = true
+        const loading = this._host.loadRecorder(this._scriptName, (err) => {
+            try {
+                if (
+                    this._sessionRecordingDisposed ||
+                    !this._startRequested ||
+                    !this._isRecordingEnabled ||
+                    !this._host.sessionActive
+                ) {
+                    this._recordingStatus = DISABLED
+                    return
+                }
+                if (err) {
+                    this._host.registerSessionProperties({ [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true })
+                    logger.error('could not load recorder', err)
+                    return
+                }
+                this._onScriptLoaded(startReason)
+            } finally {
+                this._loading = false
+                if (this._startAfterLoad) {
+                    this._startAfterLoad = false
+                    if (this._startRequested) this.startIfEnabledOrStop(startReason)
+                }
+            }
+        })
+        if (loading === false) this._loading = false
     }
 
     stopRecording() {
-        this._persistFlagsOnSessionListener?.()
+        this._startRequested = false
+        this._persistFlagsOnSessionListener?.dispose()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.stop()
     }
 
     private _discardRecording(discardProducerEvents = false) {
-        this._persistFlagsOnSessionListener?.()
+        this._startRequested = false
+        this._persistFlagsOnSessionListener?.dispose()
         this._persistFlagsOnSessionListener = undefined
         this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
     }
 
     private _resetSampling() {
-        this._persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
-        this._persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
+        this._persistence?.remove(SESSION_RECORDING_IS_SAMPLED)
+        this._persistence?.remove(SESSION_RECORDING_SAMPLE_RATE)
     }
 
     private _validateSampleRate(rate: unknown, source: string): number | null {
@@ -236,7 +260,7 @@ export class SessionRecording implements Extension {
         return parsed
     }
 
-    private _persistRemoteConfig(response: RemoteConfig): void {
+    private _persistRemoteConfig(response: DeepReadonly<RemoteConfig>): void {
         if (this._persistence) {
             const persistence = this._persistence
 
@@ -245,7 +269,7 @@ export class SessionRecording implements Extension {
                     response.sessionRecording === false ? undefined : response.sessionRecording
 
                 const localSampleRate = this._validateSampleRate(
-                    this._config.session_recording?.sampleRate,
+                    this._config.recording?.sampleRate,
                     'session_recording.sampleRate'
                 )
                 const remoteSampleRate = this._validateSampleRate(
@@ -259,7 +283,7 @@ export class SessionRecording implements Extension {
 
                 const receivedMinimumDuration = sessionRecordingConfigResponse?.minimumDurationMilliseconds
 
-                persistence.register({
+                persistence.set({
                     [SESSION_RECORDING_REMOTE_CONFIG]: {
                         cache_timestamp: Date.now(),
                         enabled: !!sessionRecordingConfigResponse,
@@ -284,29 +308,28 @@ export class SessionRecording implements Extension {
                         // V2 fields - will be undefined for V1 configs
                         version: sessionRecordingConfigResponse?.version,
                         triggerGroups: sessionRecordingConfigResponse?.triggerGroups,
-                    } satisfies SessionRecordingPersistedConfig,
+                    } satisfies DeepReadonly<SessionRecordingPersistedConfig>,
                 })
             }
 
             persistResponse()
 
             // in case we see multiple flags responses, we should only use the response from the most recent one
-            this._persistFlagsOnSessionListener?.()
+            this._persistFlagsOnSessionListener?.dispose()
             // we 100% know there is a session manager by this point
-            this._persistFlagsOnSessionListener = this._instance.sessionManager?.onSessionId(persistResponse)
+            this._persistFlagsOnSessionListener = this._host.onSessionChange(persistResponse)
         }
     }
 
-    onRemoteConfig(result: RemoteConfigResult) {
+    onRemoteConfig(result: DeepReadonly<RemoteConfigResult>) {
+        if (this._sessionRecordingDisposed || !this._ready) return
         // A failed fetch and a response without a sessionRecording key behave the same:
         // no fresh server config arrived, so fall back to whatever is already persisted.
         const response = result.ok ? result.config : undefined
         if (!response || !('sessionRecording' in response)) {
             if (this._recordingStatus === AWAITING_CONFIG) {
                 this._recordingStatus = MISSING_CONFIG
-                this._instance.register_for_session({
-                    [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
-                })
+                this._host.registerSessionProperties({ [SDK_DEBUG_REPLAY_STALE_CONFIG]: true })
                 logger.warn('config refresh failed, recording will not start until page reload')
             }
             this.startIfEnabledOrStop()
@@ -330,15 +353,17 @@ export class SessionRecording implements Extension {
         }
     }
 
-    private get _scriptName(): PostHogExtensionKind {
-        const remoteConfig: SessionRecordingPersistedConfig | undefined = this._instance?.persistence?.get_property(
-            SESSION_RECORDING_REMOTE_CONFIG
+    private get _scriptName(): string {
+        return (
+            this._client?.kv.get<SessionRecordingPersistedConfig>(SESSION_RECORDING_REMOTE_CONFIG)?.scriptConfig
+                ?.script || 'lazy-recorder'
         )
-        return (remoteConfig?.scriptConfig?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _isRemoteConfigFresh(): boolean {
-        const persistedConfig = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        const persistedConfig = this._client?.kv.get<SessionRecordingPersistedConfig | string>(
+            SESSION_RECORDING_REMOTE_CONFIG
+        )
         if (!persistedConfig) {
             return false
         }
@@ -361,28 +386,23 @@ export class SessionRecording implements Extension {
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
-        if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
+        if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._host.sessionActive) {
             this._recordingStatus = DISABLED
             return
         }
 
-        if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
+        if (!this._lazyLoadedSessionRecording) {
+            this._lazyLoadedSessionRecording = this._host.createRecorder(
+                this._documentWasEverVisible,
+                this._forceAllowLocalhostNetworkCapture
+            )
+        }
+        if (!this._lazyLoadedSessionRecording) {
             logger.warn(
                 'Called on script loaded before session recording is available. This can be caused by adblockers.'
             )
-            this._instance.register_for_session({
-                [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
-            })
+            this._host.registerSessionProperties({ [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true })
             return
-        }
-
-        if (!this._lazyLoadedSessionRecording) {
-            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance,
-                this._documentWasEverVisible
-            )
-            ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
-                this._forceAllowLocalhostNetworkCapture
         }
 
         if (!this._isRemoteConfigFresh()) {
@@ -391,7 +411,7 @@ export class SessionRecording implements Extension {
             }
             this._recordingStatus = AWAITING_CONFIG
             logger.info('persisted remote config is stale, requesting fresh config before starting')
-            new RemoteConfigLoader(this._instance).load()
+            this._host.requestConfigRefresh()
             return
         }
 
@@ -415,11 +435,14 @@ export class SessionRecording implements Extension {
      * It is not usual to call this directly,
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
+    private _storeOverride(key: string): void {
+        if (this._ready) this._client?.kv.set(key, true)
+        else this._pendingOverrides[key] = true
+    }
+
     public overrideLinkedFlag() {
         if (!this._lazyLoadedSessionRecording) {
-            this._persistence?.register({
-                [SESSION_RECORDING_OVERRIDE_LINKED_FLAG]: true,
-            })
+            this._storeOverride(SESSION_RECORDING_OVERRIDE_LINKED_FLAG)
         }
 
         this._lazyLoadedSessionRecording?.overrideLinkedFlag()
@@ -433,9 +456,7 @@ export class SessionRecording implements Extension {
      * */
     public overrideSampling() {
         if (!this._lazyLoadedSessionRecording) {
-            this._persistence?.register({
-                [SESSION_RECORDING_OVERRIDE_SAMPLING]: true,
-            })
+            this._storeOverride(SESSION_RECORDING_OVERRIDE_SAMPLING)
         }
 
         this._lazyLoadedSessionRecording?.overrideSampling()
@@ -449,11 +470,11 @@ export class SessionRecording implements Extension {
      * */
     public overrideTrigger(triggerType: TriggerType) {
         if (!this._lazyLoadedSessionRecording) {
-            this._persistence?.register({
-                [triggerType === 'url'
+            this._storeOverride(
+                triggerType === 'url'
                     ? SESSION_RECORDING_OVERRIDE_URL_TRIGGER
-                    : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: true,
-            })
+                    : SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER
+            )
         }
 
         this._lazyLoadedSessionRecording?.overrideTrigger(triggerType)
