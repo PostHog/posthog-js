@@ -320,24 +320,23 @@ describe('serializeArg with dataURLOptions', () => {
     ]);
   });
 
-  it('should not throw when a tainted canvas refuses toDataURL', () => {
+  it('rethrows when a tainted canvas refuses toDataURL, warning once', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = () => {
       throw new DOMException('tainted canvas', 'SecurityError');
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    const result = serializeArg(canvas, window, context, defaultDataURLOptions);
-
-    // replay must still get a loadable image, otherwise `drawImage` throws
-    expect(result).toMatchObject({
-      rr_type: 'HTMLImageElement',
-      src: expect.stringMatching(/^data:image\/gif;base64,/) as string,
-    });
+    // the caller drops the mutation, so no substitute image reaches replay
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow('tainted canvas');
     expect(warn).toHaveBeenCalledTimes(1);
 
     // a tainted canvas fails on every draw, so only the first one warns
-    serializeArg(canvas, window, context, defaultDataURLOptions);
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow('tainted canvas');
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
@@ -351,8 +350,12 @@ describe('serializeArg with dataURLOptions', () => {
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    serializeArg(canvas, window, context, defaultDataURLOptions);
-    serializeArg(canvas, window, context, defaultDataURLOptions);
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow(TypeError);
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow(TypeError);
 
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);

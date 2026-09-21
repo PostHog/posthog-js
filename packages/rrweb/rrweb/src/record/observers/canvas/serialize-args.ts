@@ -1,19 +1,15 @@
 import { encode } from 'base64-arraybuffer';
 import type { IWindow, CanvasArg, DataURLOptions } from '@posthog/rrweb-types';
 
-const TRANSPARENT_PIXEL =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-
 // a tainted canvas fails on every draw it is passed to, so warn once. The prefix
-// matches the other canvas capture warnings, which canvas-manager.ts emits: that
-// module cannot lend its helper here, because it imports this one through 2d.ts.
+// matches the other canvas capture warnings
 let taintedCanvasWarned = false;
 function warnCanvasUnreadable(error: unknown): void {
   // only a cross-origin taint throws SecurityError. Anything else is unexpected,
   // so log it every time rather than blaming taint and going quiet
   if ((error as { name?: string } | null)?.name !== 'SecurityError') {
     console.warn(
-      '[replay] canvas capture: this canvas draws blank because its pixels cannot be read.',
+      '[replay] canvas capture: skipping a canvas draw because its pixels cannot be read.',
       error,
     );
     return;
@@ -21,7 +17,7 @@ function warnCanvasUnreadable(error: unknown): void {
   if (taintedCanvasWarned) return;
   taintedCanvasWarned = true;
   console.warn(
-    '[replay] canvas capture: this canvas draws blank because its pixels cannot be read. A cross-origin image or video drawn into it taints it.',
+    '[replay] canvas capture: skipping a canvas draw because its pixels cannot be read. A cross-origin image or video drawn into it taints it.',
     error,
   );
 }
@@ -127,11 +123,9 @@ export function serializeArg(
     try {
       src = value.toDataURL(dataURLOptions.type, dataURLOptions.quality);
     } catch (error) {
-      // On the WebGL path this runs inside the page's own canvas call, so an
-      // escaping throw breaks the page and not just the recording. Replay needs
-      // a loadable image here, otherwise `drawImage` throws on a broken one.
+      // the caller drops the whole mutation, so replay keeps the last frame
       warnCanvasUnreadable(error);
-      src = TRANSPARENT_PIXEL;
+      throw error;
     }
     return {
       rr_type: name,
