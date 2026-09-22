@@ -174,15 +174,19 @@ so the page sees no difference.
 Resolved once, when the hook is installed, which covers both load orders: a
 reference captured before zone.js loads is the native one anyway. It also means a
 timer installed after that point, such as a test's fake timers, is not picked up.
-`Zone` is an ordinary global that any page can define, so a lookup that throws
-falls back to the window's own timer instead of taking `hookSetter` - and with it
-the observer that installs the six hooks - down with it.
+`Zone` is an ordinary global that any page can define, so neither resolving the
+timer nor calling it may reach the page: a lookup that throws would take
+`hookSetter` - and with it the observer that installs the six hooks - down with
+it, and a throw from the timer itself would land in the middle of the page's own
+assignment, before it has been forwarded to the original setter. Both are
+contained here; losing one recorded write beats breaking the write.
 see: https://github.com/angular/angular/issues/26948
 */
 function getDeferral(
   win: Window & typeof globalThis,
 ): (callback: () => void) => void {
-  let scheduleTimeout: typeof setTimeout = win.setTimeout;
+  let scheduleTimeout: typeof setTimeout | undefined =
+    typeof win.setTimeout === 'function' ? win.setTimeout : undefined;
   try {
     const unpatchedName = (win as WindowWithZone).Zone?.__symbol__?.(
       'setTimeout',
@@ -196,9 +200,19 @@ function getDeferral(
   } catch {
     // noop
   }
+  if (!scheduleTimeout) {
+    return () => {
+      // noop
+    };
+  }
+  const schedule = scheduleTimeout;
   return (callback: () => void) => {
-    // a bare reference needs `win` as its receiver, or browsers reject the call
-    scheduleTimeout.call(win, callback, 0);
+    try {
+      // a bare reference needs `win` as its receiver, or browsers reject the call
+      schedule.call(win, callback, 0);
+    } catch {
+      // noop
+    }
   };
 }
 

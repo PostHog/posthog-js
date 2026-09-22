@@ -394,6 +394,48 @@ describe('Utilities for other modules', () => {
         expect(hookedSet).toHaveBeenCalledWith('test');
       });
 
+      it('should not let a throwing timer reach the page', async () => {
+        const nativeSet = vi.fn();
+        const throwingSetTimeout = vi.fn(() => {
+          throw new Error('the page owns this global too');
+        });
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = throwingSetTimeout;
+
+        const element = hookValueSetter(vi.fn(), window, nativeSet);
+
+        // the deferral runs inside the page's own assignment and before it is
+        // forwarded, so a throw here would swallow the page's write
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(throwingSetTimeout).toHaveBeenCalledTimes(1);
+        expect(nativeSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should not let a window without a usable timer reach the page', async () => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameWindow = iframe.contentWindow as
+          | (Window & typeof globalThis)
+          | null;
+        if (!frameWindow) throw new Error('the iframe has no window');
+
+        const nativeSet = vi.fn();
+        const hookedSet = vi.fn();
+        frameWindow.setTimeout = undefined as unknown as typeof setTimeout;
+
+        const element = hookValueSetter(hookedSet, frameWindow, nativeSet);
+
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await flushTimers();
+        expect(hookedSet).not.toHaveBeenCalled();
+      });
+
       it('should use the window timer when nothing patched it', async () => {
         const windowSetTimeout = deferringTimer();
         window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
