@@ -729,7 +729,7 @@ export function buildDsymUploadShellScript(includeSource = false, skipOnConflict
 // The phase as SDKs without release-mode support wrote it: the same script with no release-mode
 // block. isPluginGeneratedDsymUploadBuildPhase compares against this exact text, so a change here
 // makes the plugin stop recognizing the phases it wrote before, and stop refreshing them.
-function composeDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean, force = false): string {
+function composeDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean, force: boolean): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -802,10 +802,10 @@ function legacyDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] 
 function buildLegacyReleaseModeDsymUploadShellScript(
   includeSource: boolean,
   skipOnConflict: boolean,
-  releaseMode?: PostHogReleaseMode,
-  force = false
+  releaseMode?: PostHogReleaseMode
 ): string {
-  const lines = composeDsymUploadShellScript(includeSource, skipOnConflict, force).split('\n')
+  // 4.64.0 through 4.66.x predate the force option, so no phase of this era carries POSTHOG_FORCE.
+  const lines = composeDsymUploadShellScript(includeSource, skipOnConflict, false).split('\n')
   const uploadIndex = lines.findIndex((line) => line.startsWith('PODS_SCRIPT='))
   lines.splice(uploadIndex, 0, ...legacyDsymReleaseModeLines(releaseMode))
   return lines.join('\n')
@@ -833,14 +833,12 @@ function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   }
   const stored = decodePbxShellScript(phase.shellScript)
   return [false, true].some((source) =>
-    [false, true].some((skip) =>
-      [false, true].some(
-        (force) =>
-          stored === buildDsymUploadShellScript(source, skip, force) ||
-          [undefined, ...POSTHOG_RELEASE_MODES].some(
-            (mode) => stored === buildLegacyReleaseModeDsymUploadShellScript(source, skip, mode, force)
-          )
-      )
+    [false, true].some(
+      (skip) =>
+        [false, true].some((force) => stored === buildDsymUploadShellScript(source, skip, force)) ||
+        [undefined, ...POSTHOG_RELEASE_MODES].some(
+          (mode) => stored === buildLegacyReleaseModeDsymUploadShellScript(source, skip, mode)
+        )
     )
   )
 }
@@ -1067,12 +1065,11 @@ type PostHogPluginProps = {
    * Appends `--force` to `posthog-cli hermes upload` on iOS and Android. When
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_FORCE=1` in the iOS dSYM upload build
    * phase; posthog-ios's `upload-symbols.sh` forwards it as `--force` to `posthog-cli dsym upload`
-   * on the versions that read it (with posthog-cli >= 0.7.12) and ignores it on older ones, where
-   * dSYM conflicts keep failing the build. `uploadNativeSymbols: { includeSource: true }` already
-   * overwrites dSYMs on its own.
+   * on versions that read the variable and ignores it on older ones, where dSYM conflicts keep
+   * failing the build. `uploadNativeSymbols: { includeSource: true }` already overwrites dSYMs.
    *
-   * Mutually exclusive with `skipOnConflict`: keeping the stored symbol set and overwriting it are
-   * opposites, and posthog-cli rejects the two flags together.
+   * Mutually exclusive with `skipOnConflict`: posthog-cli rejects the two flags together, so
+   * enabling both stops the prebuild.
    *
    * Default: false.
    */
@@ -1148,21 +1145,6 @@ type PostHogPluginProps = {
    * wrote); bare React Native apps that do not run `expo prebuild` need the same override by hand.
    */
   patchMainActivityNewIntent?: boolean
-}
-
-// A symbol set that already exists with different content is either kept or overwritten, never
-// both: posthog-cli declares --skip-on-conflict and --force mutually exclusive. Stop the prebuild
-// rather than writing build files the build then fails on.
-export function resolveConflictProps(
-  skipOnConflict?: boolean,
-  force?: boolean
-): { skipOnConflict: boolean; force: boolean } {
-  if (skipOnConflict === true && force === true) {
-    throw new Error(
-      '[posthog-react-native] skipOnConflict and force cannot both be enabled: posthog-cli accepts only one of --skip-on-conflict and --force'
-    )
-  }
-  return { skipOnConflict: skipOnConflict === true, force: force === true }
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
@@ -1249,9 +1231,15 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 }
 
 const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
+  // posthog-cli declares --skip-on-conflict and --force mutually exclusive. Stop the prebuild
+  // rather than writing build files the build then fails on.
+  if (rawProps.skipOnConflict === true && rawProps.force === true) {
+    throw new Error(
+      '[posthog-react-native] skipOnConflict and force cannot both be enabled: posthog-cli accepts only one of --skip-on-conflict and --force'
+    )
+  }
   const props = {
     ...rawProps,
-    ...resolveConflictProps(rawProps.skipOnConflict, rawProps.force),
     dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
     releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
   }
@@ -1259,7 +1247,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
     config = withAndroidNativeSymbolsPlugin(config)
   }
-  config = withAndroidPlugin(config, props.skipOnConflict, props.force)
+  config = withAndroidPlugin(config, props.skipOnConflict === true, props.force === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
   config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
   config = withMainActivityNewIntent(config, props.patchMainActivityNewIntent !== false)
@@ -1282,7 +1270,6 @@ module.exports.moveDsymUploadBuildPhaseToEnd = moveDsymUploadBuildPhaseToEnd
 module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
 module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
 module.exports.buildAndroidForceGradleLine = buildAndroidForceGradleLine
-module.exports.resolveConflictProps = resolveConflictProps
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
 module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting

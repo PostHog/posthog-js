@@ -3,4 +3,3 @@
 ---
 
 feat: add a `force` option for symbol uploads
-
