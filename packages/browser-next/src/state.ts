@@ -1,7 +1,10 @@
 import type { KeyValueStore, SessionContext } from '@posthog/browser-common'
+import type { SessionIdChangedCallback } from '@posthog/types'
 
 import { createId } from './id'
 import type { NewSessionReason, StorageLike } from './types'
+
+export const SESSION_IDLE_TIMEOUT_MS = 1_800_000
 
 type ConsentState = 'implicit' | 'granted' | 'denied'
 
@@ -31,6 +34,7 @@ interface PreparedSession {
     readonly session: PersistedSession
     readonly reason: NewSessionReason | undefined
     readonly rotated: boolean
+    readonly changeReason: NonNullable<Parameters<SessionIdChangedCallback>[2]>
     readonly lastActivityWriteTimestamp: number
     readonly windowStorage: StorageLike | undefined
     readonly windowStorageResolved: boolean
@@ -335,7 +339,7 @@ export class BrowserState {
         }
     }
 
-    prepare(): boolean {
+    prepare(persist = true): boolean {
         if (!this._stateReadPending) {
             return true
         }
@@ -348,7 +352,7 @@ export class BrowserState {
         if (persisted) {
             this._state = persisted
             this._lastActivityWriteTimestamp = persisted.session?.lastActivityTimestamp ?? 0
-        } else {
+        } else if (persist) {
             this._save(false)
         }
         return true
@@ -424,7 +428,7 @@ export class BrowserState {
         return true
     }
 
-    prepareSessionForEvent(now = Date.now()): PreparedSession {
+    prepareSession(now = Date.now(), updateActivity = true): PreparedSession {
         const safeNow = isTimestamp(now) ? now : 0
         const [sharedRead, external] = this._readPersistedState()
         let session = this._state.session
@@ -439,7 +443,11 @@ export class BrowserState {
         }
 
         const pendingReason = this._pendingSessionReason
-        const idle = session ? Math.abs(safeNow - session.lastActivityTimestamp) > 1_800_000 : false
+        // Passive recorder events retain idle sessions, but still observe the maximum age.
+        const idle =
+            updateActivity && session
+                ? Math.abs(safeNow - session.lastActivityTimestamp) > SESSION_IDLE_TIMEOUT_MS
+                : false
         const maximum = session ? Math.abs(safeNow - session.sessionStartTimestamp) > 86_400_000 : false
         const rotated = !!(pendingReason || !session || idle || maximum)
         const reason = adoptedAfterReset
@@ -447,7 +455,12 @@ export class BrowserState {
             : (pendingReason ?? (idle ? 'idleTimeout' : maximum ? 'maxLength' : undefined))
         const preparedSession = rotated
             ? createSession(safeNow, nextRevision(safeNow, this._state, external))
-            : { ...session!, lastActivityTimestamp: Math.max(safeNow, session!.lastActivityTimestamp) }
+            : {
+                  ...session!,
+                  lastActivityTimestamp: updateActivity
+                      ? Math.max(safeNow, session!.lastActivityTimestamp)
+                      : session!.lastActivityTimestamp,
+              }
         const window = this._prepareWindow(rotated)
         return {
             context: {
@@ -458,6 +471,12 @@ export class BrowserState {
             session: preparedSession,
             reason,
             rotated,
+            changeReason: {
+                noSessionId: !session || !!pendingReason,
+                activityTimeout: idle,
+                sessionPastMaximumLength: maximum,
+                crossTabAdoption: !rotated && session?.sessionId !== this._state.session?.sessionId,
+            },
             lastActivityWriteTimestamp,
             windowStorage: window.storage,
             windowStorageResolved: window.storageResolved,
@@ -538,10 +557,14 @@ export class BrowserState {
         return this._writeConsent('0')
     }
 
-    keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
+    keyValueStore(
+        namespace: string,
+        canRead: () => boolean = () => true,
+        canWrite: () => boolean = canRead
+    ): KeyValueStore {
         const values = (): Record<string, unknown> => (this._state.extensionData[namespace] ??= emptyRecord<unknown>())
         const read = (key: string): unknown => {
-            if (!canAccess()) {
+            if (!canRead()) {
                 return undefined
             }
             const value = values()[key]
@@ -564,26 +587,26 @@ export class BrowserState {
                 return entries as Partial<T>
             }) as KeyValueStore['get'],
             set: ((keyOrValues: string | Record<string, unknown>, value?: unknown): void => {
-                if (!canAccess()) {
-                    return
-                }
-                const namespaceValues = values()
+                if (!canWrite()) return
                 const entries = typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues
-                for (const [key, entry] of Object.entries(entries)) {
-                    if (entry === undefined) {
-                        delete namespaceValues[key]
-                    } else {
-                        namespaceValues[key] = cloneJson(entry)
-                    }
+                const copied = Object.entries(entries).map(
+                    ([key, entry]) => [key, entry === undefined ? undefined : cloneJson(entry)] as const
+                )
+                // Application getters can synchronously close the client while values are copied.
+                if (!canWrite()) return
+                const namespaceValues = values()
+                for (const [key, entry] of copied) {
+                    if (entry === undefined) delete namespaceValues[key]
+                    else namespaceValues[key] = entry
                 }
                 this._save()
             }) as KeyValueStore['set'],
             remove: (keyOrKeys: string | readonly string[]): void => {
-                if (!canAccess()) {
-                    return
-                }
+                if (!canWrite()) return
+                const keys = typeof keyOrKeys === 'string' ? [keyOrKeys] : [...keyOrKeys]
+                if (!canWrite()) return
                 const namespaceValues = values()
-                for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
+                for (const key of keys) {
                     delete namespaceValues[key]
                 }
                 this._save()

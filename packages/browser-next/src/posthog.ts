@@ -4,6 +4,8 @@ import type { FlagsExtension } from './flags-internal'
 import type { SurveysExtension, SurveysHost } from './surveys-internal'
 import type { SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
 import type { LogsExtension } from './logs-internal'
+import type { ReplayExtension, ReplayHostContext, ReplaySessionHost } from './replay-internal'
+import type { SessionIdChangedCallback } from '@posthog/types'
 import type { CaptureLogOptions } from './logs-options'
 import {
     type ApiResponse,
@@ -34,7 +36,7 @@ import { createId } from './id'
 import { createLogger } from './logger'
 import { ClientRateLimiter } from './rate-limiter'
 import { sendRequest, type RequestRuntime } from './request'
-import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
+import { BrowserState, getDefaultSessionStorage, getDefaultStorage, SESSION_IDLE_TIMEOUT_MS } from './state'
 import type {
     BrowserFetch,
     CaptureSummary,
@@ -132,10 +134,12 @@ class PostHogBrowserClient implements PostHog {
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
+    private readonly _replaySessionPublisher: Publisher<Parameters<SessionIdChangedCallback>>
     private readonly _identifyPublisher: Publisher<IdentifyInfo>
     private readonly _groupPublisher: Publisher<GroupInfo>
     private readonly _resetPublisher: Publisher<void>
     readonly _surveysHost: SurveysHost
+    readonly _replayHostContext: ReplayHostContext
     readonly _registry: ExtensionRegistry
     readonly _requestRuntime: RequestRuntime
     _captureSink: CaptureSink | undefined
@@ -154,6 +158,7 @@ class PostHogBrowserClient implements PostHog {
     private readonly _logsRequests = new Set<() => void>()
     private _closing = false
     private _disposed = false
+    private _kvDisposed = false
     private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
     private _pageviewListener: [Document, EventListener] | undefined
@@ -191,6 +196,9 @@ class PostHogBrowserClient implements PostHog {
         this._groupPublisher = new Publisher((error) => this.logger.error('A group listener failed', error))
         this._resetPublisher = new Publisher((error) => this.logger.error('A reset listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
+        this._replaySessionPublisher = new Publisher((error) =>
+            this.logger.error('A replay session listener failed', error)
+        )
 
         const browserNavigator: BrowserNavigator | undefined =
             options.navigator === false ? undefined : (options.navigator ?? getDefaultNavigator())
@@ -224,6 +232,7 @@ class PostHogBrowserClient implements PostHog {
                     this._captureSink?.purge()
                     this._withLogs((logs) => logs.reset())
                 }
+                this._withReplay((replay) => replay.consentChanged?.(consent !== 'denied'))
             }
         )
         this._consentObservation = this._observeConsent(
@@ -240,13 +249,24 @@ class PostHogBrowserClient implements PostHog {
             browserFetch,
             browserNavigator,
         ]
+        this._replayHostContext = {
+            runtime: this._requestRuntime,
+            persistenceKey: options.persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`,
+            get pendingStorage() {
+                return storage ? getDefaultSessionStorage() : undefined
+            },
+            canDeliver: () => this._canDeliver(),
+            refreshRemoteConfig: () => {
+                void this._getRemoteConfig(true)
+            },
+        }
         this._remoteConfig = options.remoteConfig
         this._remoteConfigTimeoutMs =
             options.remoteConfigTimeoutMs === undefined || !Number.isFinite(options.remoteConfigTimeoutMs)
                 ? 10_000
                 : Math.max(0, options.remoteConfigTimeoutMs)
 
-        this.kv = this._state.keyValueStore('core', () => !this._closing && !this._disposed && this._state.prepare())
+        this.kv = this._createKeyValueStore('core')
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
             if (this._closing || this._disposed) {
@@ -442,7 +462,7 @@ class PostHogBrowserClient implements PostHog {
             return undefined
         }
 
-        const preparedSession = this._state.prepareSessionForEvent()
+        const preparedSession = this._state.prepareSession()
         const session = preparedSession.context
         const distinctId = this._state.distinctId
         const deviceId = this._state.deviceId
@@ -490,20 +510,70 @@ class PostHogBrowserClient implements PostHog {
             }
             return undefined
         }
-        if (!this._state.sessionAdmitted(preparedSession)) {
+        if (!this._sessionAdmitted(preparedSession)) {
             if (!immediate) {
                 capture?.discardQueued(message)
             }
             return undefined
-        }
-        if (preparedSession.reason) {
-            this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         }
         this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
         if (!immediate) {
             capture?.admitted()
         }
         return message
+    }
+
+    private _sessionAdmitted(prepared: ReturnType<BrowserState['prepareSession']>): boolean {
+        const previous = this._state.session
+        if (!this._state.sessionAdmitted(prepared)) return false
+        if (prepared.reason) {
+            this._newSessionPublisher.publish({ ...prepared.context, reason: prepared.reason })
+        }
+        const { sessionId, windowId } = prepared.context
+        if (sessionId !== previous.sessionId || windowId !== previous.windowId) {
+            this._replaySessionPublisher.publish([sessionId, windowId, prepared.changeReason])
+        }
+        return true
+    }
+
+    _createReplaySessionHost(extension: Extension): ReplaySessionHost {
+        const client = this
+        const active = () =>
+            !client._closing && !client._disposed && client._registry.get('sessionRecording') === extension
+        return {
+            get sessionActive() {
+                return active()
+            },
+            sessionTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+            canDrainOnStop: () =>
+                client._closing &&
+                !client._disposed &&
+                client._registry.get('sessionRecording') === extension &&
+                client._canDeliver(),
+            checkSession(options) {
+                try {
+                    if (active() && client.canCapture) {
+                        const prepared = client._state.prepareSession(options?.timestamp, options?.updateActivity)
+                        if (active() && client.canCapture && client._sessionAdmitted(prepared)) {
+                            // Admission listeners can synchronously revoke the recorder's authority.
+                            if (active() && client.canCapture) return client._state.session
+                        }
+                    }
+                } catch (error) {
+                    client.logger.error('Replay session check failed', error)
+                }
+                return { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
+            },
+            onSessionChange(callback) {
+                return client._replaySessionPublisher.listener(([sessionId, windowId, reason]) => {
+                    const current = client._state.session
+                    // A prior listener may synchronously reset, rotate, or shut down this owner.
+                    if (active() && current.sessionId === sessionId && current.windowId === windowId) {
+                        callback(sessionId, windowId, reason && { ...reason })
+                    }
+                })
+            },
+        }
     }
 
     async identify(
@@ -571,7 +641,10 @@ class PostHogBrowserClient implements PostHog {
             return
         }
         this._state.prepare()
+        this._withReplay((replay) => replay.beforeReset?.())
+        if (this._closing || this._disposed) return
         this._state.reset()
+        this._withReplay((replay) => replay.afterReset?.())
         this._resetPublisher.publish(undefined)
         this._withSurveys((surveys) => surveys?.reset())
         this._withLogs((logs) => logs.reset())
@@ -642,8 +715,27 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
+    private _withReplay<T>(action: (replay: ReplayExtension) => T): T | undefined {
+        if (this._disposed) return undefined
+        try {
+            const replay = this._registry?.get<ReplayExtension>('sessionRecording')
+            return replay ? action(replay) : undefined
+        } catch (error) {
+            this.logger.error('Replay operation failed', error)
+            return undefined
+        }
+    }
+
+    private async _flushReplay(shutdown = false): Promise<void> {
+        try {
+            await this._withReplay((replay) => replay.flush?.(shutdown))
+        } catch (error) {
+            this.logger.error('Replay flush failed', error)
+        }
+    }
+
     async flush(): Promise<void> {
-        await Promise.all([this._captureSink?.flush(), this._flushLogs()])
+        await Promise.all([this._captureSink?.flush(), this._flushLogs(), this._flushReplay()])
     }
 
     optIn(): void {
@@ -737,12 +829,17 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
+        return this._getRemoteConfig()
+    }
+
+    private async _getRemoteConfig(refresh = false): Promise<RemoteConfig | undefined> {
         if (this._closing || this._disposed) {
             return undefined
         }
-        if (this._remoteConfig !== undefined) {
+        if (!refresh && this._remoteConfig !== undefined) {
             return this._remoteConfig
         }
+        if (refresh && !this._cancelRemoteConfigWait) this._remoteConfigPromise = undefined
 
         if (!this._remoteConfigPromise) {
             let timeout: ReturnType<typeof setTimeout> | undefined
@@ -840,7 +937,15 @@ class PostHogBrowserClient implements PostHog {
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
             this._closing = true
-            const captureFlush = Promise.all([this._captureSink?.flush('shutdown'), this._flushLogs()]).then(() => {})
+            let finish!: () => void
+            this._shutdownPromise = new Promise<void>((resolve) => {
+                finish = resolve
+            })
+            const captureFlush = Promise.all([
+                this._captureSink?.flush('shutdown'),
+                this._flushLogs(),
+                this._flushReplay(true),
+            ]).then(() => {})
             this._removePageviewListener()
             try {
                 this._consentObservation.dispose()
@@ -852,7 +957,7 @@ class PostHogBrowserClient implements PostHog {
             } catch {
                 // Shutdown remains bounded when timer cleanup is hostile.
             }
-            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, captureFlush)
+            void this._shutdown(shutdownTimeoutMs, captureFlush).then(finish, finish)
         }
         return this._shutdownPromise
     }
@@ -895,12 +1000,16 @@ class PostHogBrowserClient implements PostHog {
             const cleanup = this._registry
                 .dispose()
                 .catch((error) => this.logger.error('Failed to dispose extensions', error))
+                .finally(() => {
+                    this._kvDisposed = true
+                })
             this._remoteConfigPublisher.dispose()
             this._eventPublisher.dispose()
             this._identifyPublisher.dispose()
             this._groupPublisher.dispose()
             this._resetPublisher.dispose()
             this._newSessionPublisher.dispose()
+            this._replaySessionPublisher.dispose()
             this._dynamicEventProperties.splice(0)
             await Promise.race([cleanup, timeout])
             if (timedOut) {
@@ -1069,13 +1178,18 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
+    private _createKeyValueStore(namespace: string): Client['kv'] {
+        return this._state.keyValueStore(
+            namespace,
+            () => !this._kvDisposed && this._state.prepare(!this._closing),
+            () => !this._closing && !this._disposed && this._state.prepare()
+        )
+    }
+
     private _createExtensionClient(extensionName: string): BrowserClient {
         const host = this
         const logger = this.logger.createLogger(extensionName)
-        const kv = this._state.keyValueStore(
-            extensionName,
-            () => !this._closing && !this._disposed && this._state.prepare()
-        )
+        const kv = this._createKeyValueStore(extensionName)
 
         return {
             get distinctId() {
@@ -1169,6 +1283,12 @@ export const createPostHogCore = async (
             if (extension.name === 'surveys') {
                 ;(extension as SurveysExtension).initialize?.(client._surveysHost)
             }
+            if (extension.name === 'sessionRecording') {
+                ;(extension as ReplayExtension).initialize?.(
+                    client._createReplaySessionHost(extension),
+                    client._replayHostContext
+                )
+            }
             if (extension.name === 'logs') {
                 ;(extension as LogsExtension).initialize?.(() => client._logsLastActivity())
             }
@@ -1176,6 +1296,11 @@ export const createPostHogCore = async (
         } catch (error) {
             client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
         }
+    }
+    try {
+        client._registry.get<ReplayExtension>('sessionRecording')?.connectFlags?.()
+    } catch (error) {
+        client.logger.error('Replay flag subscription failed', error)
     }
     if (analyticsReady) {
         await analytics.start()

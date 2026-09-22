@@ -49,6 +49,11 @@
             "require": "./dist/surveys.js",
             "import": "./dist/surveys.mjs"
         },
+        "./replay": {
+            "types": "./dist/replay.d.ts",
+            "require": "./dist/replay.js",
+            "import": "./dist/replay.mjs"
+        },
         "./autocapture": {
             "types": "./dist/autocapture.d.ts",
             "require": "./dist/autocapture.js",
@@ -72,10 +77,14 @@
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
-        "@posthog/types": "workspace:^"
+        "@posthog/rrweb-record": "workspace:^",
+        "@posthog/rrweb-plugin-console-record": "workspace:^",
+        "@posthog/types": "workspace:^",
+        "fflate": "^0.4.1"
     },
     "devDependencies": {
         "@playwright/test": "1.52.0",
+        "@posthog/rrweb": "workspace:*",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "esbuild": "^0.25.0",

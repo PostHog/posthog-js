@@ -2059,11 +2059,14 @@ describe('Lazy SessionRecording', () => {
         }
 
         it('ships mutations the recorder emits on pagehide, after beforeunload already flushed the buffer', () => {
+            const handoff = vi.fn(() => (fixture.recorderHost.captureSnapshot as Mock).mock.calls.slice())
+            fixture.recorderHost.onRecorderUnload = handoff
             startWithPagehideEmittingRecorder()
             _emit(createFullSnapshot())
 
             // beforeunload fires first on a real unload and empties the buffer
             window!.dispatchEvent(new Event('beforeunload'))
+            expect(handoff).not.toHaveBeenCalled()
             expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
                 '/s/',
                 expect.objectContaining({ $snapshot_data: expect.arrayContaining([createFullSnapshot()]) })
@@ -2078,9 +2081,28 @@ describe('Lazy SessionRecording', () => {
                 '/s/',
                 expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) })
             )
+            expect(handoff).toHaveBeenCalledOnce()
+            expect(handoff.mock.results[0].value).toContainEqual([
+                '/s/',
+                expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) }),
+            ])
+        })
+
+        it('notifies the host even when trigger buffering discards the current tail, isolating callback failure', () => {
+            const handoff = vi.fn(() => {
+                throw new Error('host failed')
+            })
+            fixture.recorderHost.onRecorderUnload = handoff
+            startWithPagehideEmittingRecorder()
+            const recorder = sessionRecording['_lazyLoadedSessionRecording']
+            vi.spyOn(recorder, 'status', 'get').mockReturnValue('buffering')
+            expect(() => window!.dispatchEvent(new Event('pagehide'))).not.toThrow()
+            expect(handoff).toHaveBeenCalledOnce()
         })
 
         it('stops flushing on pagehide once recording is stopped', () => {
+            const handoff = vi.fn()
+            fixture.recorderHost.onRecorderUnload = handoff
             startWithPagehideEmittingRecorder()
             _emit(createFullSnapshot())
 
@@ -2090,6 +2112,7 @@ describe('Lazy SessionRecording', () => {
             window!.dispatchEvent(new Event('pagehide'))
 
             expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalledWith('/s/', expect.anything())
+            expect(handoff).not.toHaveBeenCalled()
         })
     })
 
@@ -2145,6 +2168,29 @@ describe('Lazy SessionRecording', () => {
                 '/s/',
                 expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) })
             )
+        })
+
+        it('drains final producer work using existing recording IDs without consulting an inactive session owner', () => {
+            startWithStopEmittingRecorder()
+            releaseInteractionHold()
+            _emit(createFullSnapshot())
+            fixture.recorderHost.canDrainOnStop = () => true
+            Object.defineProperty(fixture.recorderHost, 'sessionActive', { value: false })
+            const check = vi.spyOn(fixture.recorderHost, 'checkSession')
+            check.mockClear()
+            sessionRecording.stopRecording()
+            expect(check).not.toHaveBeenCalled()
+            expect(fixture.recorderHost.captureSnapshot).toHaveBeenCalledWith(
+                '/s/',
+                expect.objectContaining({
+                    $session_id: 'sessionId',
+                    $window_id: 'windowId',
+                    $snapshot_data: expect.arrayContaining([deferredCssMutation]),
+                })
+            )
+            ;(fixture.recorderHost.captureSnapshot as Mock).mockClear()
+            _emit(deferredCssMutation)
+            expect(fixture.recorderHost.captureSnapshot).not.toHaveBeenCalled()
         })
 
         it('drops mutations the recorder emits while discarding a held epoch', () => {

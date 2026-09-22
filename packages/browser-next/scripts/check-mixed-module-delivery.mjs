@@ -66,6 +66,8 @@ let surveys
 let autocapture
 let commonJsAutocapture
 let commonJsSurveys
+let replay
+let commonJsReplay
 try {
     const require = createRequire(import.meta.url)
     ;({ createPostHog } = require('@posthog/browser'))
@@ -81,6 +83,8 @@ try {
     ;({ surveys: commonJsSurveys } = require('@posthog/browser/surveys'))
     ;({ autocapture } = await import('@posthog/browser/autocapture'))
     ;({ autocapture: commonJsAutocapture } = require('@posthog/browser/autocapture'))
+    ;({ replay } = await import('@posthog/browser/replay'))
+    ;({ replay: commonJsReplay } = require('@posthog/browser/replay'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -295,3 +299,22 @@ for (const factory of [autocapture, commonJsAutocapture]) {
     await client.dispose()
 }
 process.stdout.write('Pure CommonJS/ESM autocapture entrypoints and SSR lifecycle passed\n')
+
+for (const create of [createCorePostHog, createEsmPostHog]) {
+    for (const factory of [replay, commonJsReplay]) {
+        const extension = factory()
+        const client = await create({
+            projectToken: 'ph_replay_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            capturePageview: false,
+            extensions: [extension],
+        })
+        assert.equal(client.getExtension('sessionRecording'), extension)
+        await client.flush()
+        client.reset()
+        await client.dispose()
+    }
+}
+process.stdout.write('Pure CommonJS/ESM replay entrypoints, mixed-module identity and SSR lifecycle passed\n')

@@ -1317,7 +1317,7 @@ describe('@posthog/browser core', () => {
         posthog.onRemoteConfig(closingRemoteConfigListener)
         posthog.kv.set('while_closing', true)
         posthog.kv.remove('before_dispose')
-        expect(posthog.kv.get('before_dispose')).toBeUndefined()
+        expect(posthog.kv.get('before_dispose')).toBe(true)
         expect(posthog.kv.get('while_closing')).toBeUndefined()
         await disposal
 

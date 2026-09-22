@@ -22,6 +22,8 @@ import type {
     SessionContext,
 } from '@posthog/browser-common'
 
+import type { ReplayConfiguration } from './replay-options'
+
 export interface StorageLike {
     getItem(key: string): string | null
     setItem(key: string, value: string): void
@@ -91,12 +93,17 @@ export interface PostHogOptions {
     surveys?: SurveysConfiguration
     /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
     logs?: LogsConfiguration
+    /** Load replay orchestration automatically; recording runtime waits for remote enablement and consent. */
+    replay?: ReplayConfiguration
     /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
     extensions?: readonly Extension[]
 }
 
 /** Options for the delivery-free `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture'>
+export type CorePostHogOptions = Omit<
+    PostHogOptions,
+    'analytics' | 'flags' | 'logs' | 'surveys' | 'autocapture' | 'replay'
+>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'

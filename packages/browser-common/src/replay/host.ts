@@ -29,6 +29,8 @@ export interface ReplayPendingBufferStore {
 export interface ReplayRecorderHost {
     /** False after the session owner has been removed or replaced. */
     readonly sessionActive: boolean
+    /** Optional permission for synchronous final producer drainage after ordinary session authority closes. */
+    canDrainOnStop?(): boolean
     readonly sessionTimeoutMs: number
     /** Defaults to recording activity, as do recorder construction and explicit start. */
     checkSession(options?: { timestamp?: number; updateActivity?: boolean }): SessionContext
@@ -41,6 +43,8 @@ export interface ReplayRecorderHost {
     registerSessionProperties(properties: Properties): void
     /** Uses recording endpoint, no truncation, recordings batching and the capture pipeline. */
     captureSnapshot(endpoint: string, properties: Properties): void
+    /** Called after the recorder's final pagehide drain, or beforeunload on browsers without pagehide. */
+    onRecorderUnload?(): void
     createPendingBufferStore(): ReplayPendingBufferStore
     /** Pins the persistence writer without changing expiry or synchronizing cookie properties. */
     createFlushedSizeWriter(): (value: { sessionId: string; size: number }) => void

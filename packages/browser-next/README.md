@@ -197,6 +197,35 @@ The manual core entrypoint never loads surveys automatically. Disabled clients r
 
 Definitions, seen/in-progress state, and event activation state use the selected storage in `<effective core persistence key>_surveys`, separate from unrelated core writes. `storage: false` keeps this state in memory; storage errors fall back to memory. Reset clears this client's survey record. This layout does not migrate legacy browser survey state, and simultaneous writes are not atomic. Event targeting works through admitted captures; DOM-action selector targeting uses the installed autocapture extension, including the default dynamic instance. Cached definitions hydrate their triggers without requiring a refresh. Selectors registered before autocapture setup are retained; later successful definition snapshots replace the selector set, while failed refreshes retain it. Both extension orders are supported. Matching retains the shared exact-target semantics, including SVG attribution to its enclosing control. URL-constrained actions use survey targeting context when the event has no URL; this local fallback does not add URL data to the captured event.
 
+## Session replay
+
+Replay orchestration loads dynamically during initialization. The recorder and its console/network plugins load separately, only when remote configuration enables recording and capture consent allows it. Sampling, linked flags, URL/event triggers, masking, minimum duration, and session rotation use the shared recorder.
+
+```ts
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    replay: { maskAllInputs: true, sampleRate: 0.5 },
+})
+```
+
+Use `replay: false` to disable automatic loading. For static orchestration with the same deferred recorder:
+
+```ts
+import { createPostHog } from '@posthog/browser/core'
+import { replay } from '@posthog/browser/replay'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [replay({ maskTextSelector: '.private' })],
+})
+```
+
+An explicit extension takes precedence over the root option. Manual core never loads replay automatically. Recorder options use camelCase, including `fullSnapshotIntervalMs`, `triggerPendingBufferIntervalMs`, `compressEvents`, and `sessionIdleThresholdMs`. Nested options and arrays are copied without replacing masking callbacks. Input masking and URL-fragment redaction default to enabled.
+
+Replay owns its `/s/` snapshot delivery queue, separate from analytics V1. `flush()` and bounded `shutdown()` include that queue. It retains at most 100 snapshot batches and 8 MiB of active-plus-queued serialized data, expiring queued data after one hour. Transport uses the configured Fetch/navigator and server-advertised compression. Pagehide handoff follows the recorder's final drain, using Beacon with keepalive Fetch fallback and a conservative aggregate body budget.
+
+Consent denial discards producers, queued snapshots, and this client's pending tab buffer. Grant can restart recording; late loading never revives a disposed client. Reset preserves server recording configuration while shared session rotation handles the new recording. Replay uses the same session/window owner as analytics. Pending tab data is project-scoped in sessionStorage only when persistence is enabled; `storage: false` keeps recording state in memory.
+
 ## Capture and delivery
 
 `capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
@@ -228,7 +257,7 @@ One initial `$pageview` is admitted through the same queue after configured exte
 
 Consent is stored separately from identity under `__ph_opt_in_out_<project-token>`. Use `consentPersistenceName` to supply a shared key verbatim. The client reads established `1`/`true`/`yes` and `0`/`false`/`no` values, including raw boolean and numeric compatibility values, and writes `1` or `0`. Configured extensions still initialize under prior denial. Identity, key-value persistence, and remote configuration remain available, while analytics capture and request transmission are consent-gated.
 
-Session and window IDs are created on the first successfully admitted capture. Rejected work does not create or advance them. Idle timeout, maximum length, and reset rotate both IDs. Same-origin tabs share the active session while retaining distinct window IDs; ordinary reloads preserve the window ID and copied tab storage receives a new one. Session rotation is activity-driven and starts no core timer.
+Session and window IDs are created on the first successfully admitted capture or eligible recording activity. Rejected work does not create or advance them. Idle timeout, maximum length, and reset rotate both IDs. Same-origin tabs share the active session while retaining distinct window IDs; ordinary reloads preserve the window ID and copied tab storage receives a new one. Session rotation is activity-driven and starts no core timer.
 
 A compact in-memory token bucket admits 10 events per second with a burst of 100 and emits a bypassed aggregate ingestion warning when a runaway loop first reaches the limit. `shutdown(timeoutMs)` stops new work, makes one bounded normal flush attempt, removes timers and lifecycle listeners, and is idempotent. `dispose()` uses the same shutdown path.
 
