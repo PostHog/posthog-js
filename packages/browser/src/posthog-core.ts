@@ -4165,6 +4165,7 @@ export class PostHog implements PostHogInterface {
             }
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
+            this.webVitalsAutocapture?.startIfEnabledOrStop()
             this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
