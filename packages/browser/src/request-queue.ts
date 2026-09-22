@@ -54,6 +54,11 @@ export class RequestQueue {
         })
     }
 
+    discard(): void {
+        this._clearFlushTimeout()
+        this._queue = []
+    }
+
     enable(): void {
         this._isPaused = false
         this._setFlushTimeout()

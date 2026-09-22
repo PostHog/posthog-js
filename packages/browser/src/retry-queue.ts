@@ -94,7 +94,7 @@ export class RetryQueue {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
 
-                    if ((retriesPerformedSoFar ?? 0) < maxRetries) {
+                    if ((retriesPerformedSoFar ?? 0) < maxRetries && this._instance.is_capturing()) {
                         this._enqueue(
                             {
                                 retriesPerformedSoFar,
@@ -173,6 +173,13 @@ export class RetryQueue {
                 this.retriableRequest(requestOptions)
             }
         }
+    }
+
+    discard(): void {
+        clearTimeout(this._poller)
+        this._poller = undefined
+        this._isPolling = false
+        this._queue = []
     }
 
     unload(): void {

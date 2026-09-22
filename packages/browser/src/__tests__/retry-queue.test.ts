@@ -14,6 +14,7 @@ vi.mock('../request-dispatch', async (importOriginal) => ({
 describe('RetryQueue', () => {
     const mockPosthog = {
         _send_request: mockTransport,
+        is_capturing: () => true,
     }
     let retryQueue: RetryQueue
     let now = Date.now()

@@ -4805,6 +4805,12 @@ export class PostHog implements PostHogInterface {
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 
+        if (!this.is_capturing()) {
+            // Events accepted before opting out are dropped rather than sent later.
+            this._requestQueue?.discard()
+            this._retryQueue?.discard()
+        }
+
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
             // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
             this.register({
