@@ -62,7 +62,7 @@ describe('@posthog/browser automatic analytics', () => {
             { uuid: 'stable-uuid', timestamp }
         )
         const originalIdentity = posthog.distinctId
-        const originalSession = posthog.session.sessionId
+        const originalSession = posthog.session!.sessionId
         await posthog.identify('identified-later')
         expect(requests).toHaveLength(0)
         imported.resolve(createAnalyticsDelivery)

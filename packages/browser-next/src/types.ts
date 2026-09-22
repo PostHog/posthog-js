@@ -1,6 +1,6 @@
 import type { FlagsConfiguration } from './flags-options'
 import type { BrowserClient } from './browser-client'
-import type { LogsConfiguration, CaptureLogOptions } from './logs-options'
+import type { LogsConfiguration } from './logs-options'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -116,8 +116,6 @@ export interface CaptureSummary {
 }
 
 export interface PostHog extends BrowserClient, Disposable {
-    /** Capture an OTLP log independently of analytics. */
-    captureLog(options: CaptureLogOptions): void
     readonly onNewSession: Listener<NewSessionInfo>
     /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
     captureImmediate(
