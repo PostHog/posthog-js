@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides package-specific guidance to coding agents working in `packages/browser`. Follow the root [agent instructions](../../AGENTS.md) and this package's [contributor guide](./CONTRIBUTING.md).
 
 ## Development Commands
 

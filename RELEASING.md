@@ -16,6 +16,18 @@ The CLI will ask which packages changed, what version bump they need (major/mino
 
 Keep each changeset description to one short, user-facing line, similar to a PR title. State the fix or feature, not implementation details, test results, or the investigation history. Put longer explanations in the PR description or documentation.
 
+### Reviewing changesets
+
+Review changesets against the complete proposed change, not just the latest commit. For an existing PR, use its target branch; for local work, confirm the intended base. Include committed changes since the merge base, staged and unstaged changes, and relevant untracked files. State the base and any unavailable diff context rather than claiming complete coverage.
+
+- Identify publishable effects and affected published package names from their manifests. A file changing under `packages/` does not by itself require a release: distinguish runtime/API/build-output changes from tests, documentation, and private tooling, and account for shared code that changes a published consumer.
+- Apply the rrweb release ownership rule above: release it through `posthog-js`, never through an rrweb package changeset.
+- Inspect changesets already added or modified by the branch before suggesting another. For follow-up work on the same change, update the relevant existing changeset when needed rather than adding a duplicate. Separate release notes may still be appropriate for distinct publishable changes.
+- Check that package coverage, bump levels, and summaries match the consumer-visible change. Explain the compatibility impact supporting a bump recommendation; do not infer a bump solely from changed paths. If the release level is uncertain, flag it for maintainer confirmation rather than inventing a package-specific versioning policy.
+- Keep summaries in the one-line, user-facing format above. Check for stale descriptions, missing published packages, and unrelated entries. Do not count unrelated changesets already on the base branch as coverage for new work.
+
+A changeset review should report the compared base, publishable effects, existing changeset coverage, recommended corrections, and unresolved questions. This review does not authorize publishing or release recovery.
+
 ### Publishing
 
 Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml). It can also be started through workflow dispatch. The workflow:
