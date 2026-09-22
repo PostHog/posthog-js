@@ -29,7 +29,7 @@ function diagnostics(
         operation: '/get_feature_flag',
         arguments: { key: 'flag', distinct_id: 'user', person_properties: { value: false } },
         expected: false,
-        actual: true,
+        actual: { kind: 'value', value: true },
     }
 ) {
     return {
@@ -265,7 +265,7 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
     assert.match(summary, /Operation: <code>\/get&#95;feature&#95;flag<\/code>/)
     assert.match(summary, /Arguments:<pre>.*"key":"flag".*"value":false/)
     assert.match(summary, /Expected:<pre>false<\/pre>/)
-    assert.match(summary, /Actual:<pre>true<\/pre>/)
+    assert.match(summary, /Actual:<pre>{"kind":"value","value":true}<\/pre>/)
     assert.ok(summary.includes(`https://github.com/PostHog/sdk-specs/blob/${specsCommit}/${source.path}#L1187`))
     assert.doesNotMatch(summary, /-secret|cccccccccccccccc|unknown|wire_requests/)
     assert.match(summary, /node-v2-v0/)
@@ -274,10 +274,13 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
 })
 
 for (const [expected, actual] of [
-    [null, false],
+    [null, { kind: 'value', value: false }],
     [0, { kind: 'undefined' }],
-    ['conclusive value', { kind: 'inconclusive' }],
-    [{ variant: [true, 0] }, 'control'],
+    [0, { kind: 'value', value: { kind: 'undefined' } }],
+    [0, { kind: 'missing' }],
+    [0, { kind: 'value', value: { kind: 'missing' } }],
+    ['conclusive value', { kind: 'value', value: null }],
+    [{ variant: [true, 0] }, { kind: 'value', value: 'control' }],
 ]) {
     test(`preserves expected and actual JSON: ${JSON.stringify([expected, actual])}`, async () => {
         const data = report('v0', 'failed_assertion')
