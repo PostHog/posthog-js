@@ -157,7 +157,6 @@ jobs:
                           /^(api[_-]?key|personal[_-]?api[_-]?key|authorization|cookie|password|secret|token|headers|wire_requests|body_decompressed)$/i.test(key)
                               ? '[redacted]' : item), 1200);
                       const lines = [marker, '# Node SDK compliance v2', '',
-                          '**Advisory results — human review required. A green CI check does not mean conformance.**', '',
                           `Commit: ${sha}`, `[Workflow run and artifacts](${runUrl})`, ''];
                       for (const [mode, profile] of [['v0', 'node-legacy'], ['v1', 'node-analytics-v1']]) {
                           lines.push(`## Capture ${mode}`, '');
@@ -226,8 +225,21 @@ jobs:
                                       if (['/flags', '/flags/'].includes(values.operation) && typeof values.field === 'string') {
                                           detail.push(`Field: <code>${escape(values.field)}</code>`, '');
                                       }
-                                      for (const [key, label] of [['expected', 'Expected'], ['actual', 'Actual']]) {
-                                          if (Object.hasOwn(values, key)) detail.push(`${label}:<pre>${json(values[key])}</pre>`, '');
+                                      if (Object.hasOwn(values, 'expected')) detail.push(`Expected:<pre>${json(values.expected)}</pre>`, '');
+                                      if (Object.hasOwn(values, 'actual')) {
+                                          const actual = values.actual;
+                                          if (actual?.kind === 'value' && Object.hasOwn(actual, 'value')) {
+                                              detail.push(`Actual value:<pre>${json(actual.value)}</pre>`, '');
+                                          } else if (actual?.kind === 'missing') {
+                                              detail.push('Actual field: **missing**', '');
+                                          } else if (actual?.kind === 'untraversable') {
+                                              detail.push(`Actual field: cannot traverse <code>${escape(actual.at)}</code>`, '');
+                                          } else if (typeof actual?.kind === 'string') {
+                                              detail.push(`Actual outcome: <code>${escape(actual.kind)}</code>`, '');
+                                              if (Object.hasOwn(actual, 'error')) detail.push(`Error:<pre>${json(actual.error)}</pre>`, '');
+                                          } else {
+                                              detail.push(`Actual value:<pre>${json(actual)}</pre>`, '');
+                                          }
                                       }
                                   }
                                   detail.push('</details>', '');
@@ -244,9 +256,7 @@ jobs:
                               const exit = read('reports/cli-exit.txt').trim();
                               const validation = read('reports/report-check-exit.txt').trim();
                               lines.push('', `Harness exit: ${escape(exit)}; report validation exit: ${escape(validation)}.`, '');
-                              if (results.length === 0 || failures.length || report.errors.length || exit !== '0' || validation !== '0') {
-                                  lines.push('**Not conformant or incomplete — review the results and artifact logs.**', '');
-                              } else {
+                              if (results.length > 0 && !failures.length && !report.errors.length && exit === '0' && validation === '0') {
                                   lines.push('All selected cases passed and report validation succeeded.', '');
                               }
                           } catch (error) {

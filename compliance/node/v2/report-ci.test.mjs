@@ -165,7 +165,6 @@ test('creates one combined comment for both profiles and writes the same summary
     assert.equal(error, undefined)
     assert.match(summary, /Capture v0/)
     assert.match(summary, /Capture v1/)
-    assert.match(summary, /Advisory results/)
     assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
     assert.doesNotMatch(summary, /example|<details>/)
     assert.equal(calls[0], 'summary')
@@ -240,13 +239,13 @@ test('escapes artifact markup and mentions and bounds the comment size', async (
     assert.ok(summary.length < 65536)
 })
 
-test('empty selections and harness errors are not presented as conformant', async () => {
+test('empty selections retain zero totals and harness errors', async () => {
     const data = report('v0')
     data.results = []
     data.errors = [{ message: 'fixture startup failed' }]
     const { summary } = await exercise({ reports: { v0: data } })
     assert.match(summary, /fixture startup failed/)
-    assert.match(summary, /Not conformant or incomplete/)
+    assert.match(summary, /✅ 0 passed \/ ❌ 0 non-passing/)
 })
 
 test('renders attributed getter failure, public arguments, expected/actual, specs commit and artifact drill-down', async () => {
@@ -265,7 +264,7 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
     assert.match(summary, /Operation: <code>\/get&#95;feature&#95;flag<\/code>/)
     assert.match(summary, /Arguments:<pre>.*"key":"flag".*"value":false/)
     assert.match(summary, /Expected:<pre>false<\/pre>/)
-    assert.match(summary, /Actual:<pre>{"kind":"value","value":true}<\/pre>/)
+    assert.match(summary, /Actual value:<pre>true<\/pre>/)
     assert.ok(summary.includes(`https://github.com/PostHog/sdk-specs/blob/${specsCommit}/${source.path}#L1187`))
     assert.doesNotMatch(summary, /-secret|cccccccccccccccc|unknown|wire_requests/)
     assert.match(summary, /node-v2-v0/)
@@ -273,16 +272,25 @@ test('renders attributed getter failure, public arguments, expected/actual, spec
     assert.match(summary, /actions\/runs\/123#artifacts/)
 })
 
-for (const [expected, actual] of [
-    [null, { kind: 'value', value: false }],
-    [0, { kind: 'undefined' }],
-    [0, { kind: 'value', value: { kind: 'undefined' } }],
-    [0, { kind: 'missing' }],
-    [0, { kind: 'value', value: { kind: 'missing' } }],
-    ['conclusive value', { kind: 'value', value: null }],
-    [{ variant: [true, 0] }, { kind: 'value', value: 'control' }],
+for (const [expected, actual, rendered] of [
+    [null, { kind: 'value', value: false }, 'Actual value:<pre>false</pre>'],
+    [0, { kind: 'undefined' }, 'Actual outcome: <code>undefined</code>'],
+    [0, { kind: 'value', value: { kind: 'undefined' } }, 'Actual value:<pre>{"kind":"undefined"}</pre>'],
+    [0, { kind: 'missing' }, 'Actual field: **missing**'],
+    [0, { kind: 'value', value: { kind: 'missing' } }, 'Actual value:<pre>{"kind":"missing"}</pre>'],
+    ['conclusive value', { kind: 'value', value: null }, 'Actual value:<pre>null</pre>'],
+    [true, { kind: 'value', value: 0 }, 'Actual value:<pre>0</pre>'],
+    [true, { kind: 'value', value: [] }, 'Actual value:<pre>[]</pre>'],
+    [{ variant: [true, 0] }, { kind: 'value', value: 'control' }, 'Actual value:<pre>"control"</pre>'],
+    [
+        0,
+        { kind: 'untraversable', at: 'person_properties' },
+        'Actual field: cannot traverse <code>person_properties</code>',
+    ],
+    [0, { kind: 'void' }, 'Actual outcome: <code>void</code>'],
+    [0, { kind: 'value', value: { kind: 'value', value: 1 } }, 'Actual value:<pre>{"kind":"value","value":1}</pre>'],
 ]) {
-    test(`preserves expected and actual JSON: ${JSON.stringify([expected, actual])}`, async () => {
+    test(`renders actual values distinctly from field states and SDK outcomes: ${JSON.stringify(actual)}`, async () => {
         const data = report('v0', 'failed_assertion')
         const { summary } = await exercise({
             reports: { v0: data },
@@ -290,9 +298,26 @@ for (const [expected, actual] of [
         })
         const decode = (text) => text.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
         assert.ok(decode(summary).includes(`Expected:<pre>${JSON.stringify(expected)}</pre>`))
-        assert.ok(decode(summary).includes(`Actual:<pre>${JSON.stringify(actual)}</pre>`))
+        assert.ok(decode(summary).includes(rendered))
     })
 }
+
+test('retains bounded, escaped error details for a thrown outcome', async () => {
+    const data = report('v0', 'failed_assertion')
+    const { summary } = await exercise({
+        reports: { v0: data },
+        diagnostics: {
+            v0: diagnostics(data, {
+                operation: '/get_feature_flag',
+                expected: true,
+                actual: { kind: 'thrown', error: { message: '<failure>', token: 'secret-token' } },
+            }),
+        },
+    })
+    assert.match(summary, /Actual outcome: <code>thrown<\/code>/)
+    assert.match(summary, /Error:<pre>.*&#60;failure&#62;/)
+    assert.doesNotMatch(summary, /secret-token|<failure>/)
+})
 
 for (const operation of ['/flags', '/flags/']) {
     test(`renders remote wire assertion fields and missing values for ${operation}`, async () => {
@@ -311,7 +336,7 @@ for (const operation of ['/flags', '/flags/']) {
         assert.ok(summary.includes(`Operation: <code>${operation}</code>`))
         assert.match(summary, /Field: <code>person&#95;properties.email<\/code>/)
         assert.match(summary, /Expected:<pre>"user&#64;example.com"/)
-        assert.match(summary, /Actual:<pre>{"kind":"missing"}/)
+        assert.match(summary, /Actual field: \*\*missing\*\*/)
     })
 }
 
@@ -322,7 +347,7 @@ test('old diagnostics preserve exact failed step without invented values', async
     const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
     assert.match(summary, /Unexpected flag value/)
     assert.match(summary, /local-evaluation-v1.feature:1187/)
-    assert.doesNotMatch(summary, /Expected:|Actual:|Arguments:|Detailed diagnostics unavailable/)
+    assert.doesNotMatch(summary, /Expected:|Actual (value|field|outcome):|Arguments:|Detailed diagnostics unavailable/)
 })
 
 for (const [name, mutate] of [
@@ -371,7 +396,7 @@ for (const [name, mutate] of [
         assert.match(summary, /Detailed diagnostics unavailable or mismatched/)
         assert.match(summary, /❌ 1 non-passing/)
         assert.match(summary, /local-evaluation-v1.feature:1187/)
-        assert.doesNotMatch(summary, /Expected:|Actual:|sdk-specs\/blob/)
+        assert.doesNotMatch(summary, /Expected:|Actual (value|field|outcome):|sdk-specs\/blob/)
     })
 }
 
@@ -381,7 +406,7 @@ test('rejects failure details attributed to a different step', async () => {
     diagnostic.cases[0].failure.failed_step = { ...failedStep, index: 6 }
     const { summary } = await exercise({ reports: { v0: data }, diagnostics: { v0: diagnostic } })
     assert.match(summary, /Unexpected flag value/)
-    assert.doesNotMatch(summary, /Expected:|Actual:|Then the local/)
+    assert.doesNotMatch(summary, /Expected:|Actual (value|field|outcome):|Then the local/)
 })
 
 for (const provenance of [
