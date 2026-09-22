@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5055](https://github.com/PostHog/posthog-js/issues/5055) | Confirmed, well-scoped telemetry bug in the OpenAI Agents tracing mapper. | node, team/ai-observability | https://github.com/PostHog/posthog-js/pull/5057 | no | 2026-09-22T04:39:02.682Z |
 | PostHog/posthog-js | [issue 5034](https://github.com/PostHog/posthog-js/issues/5034) | Confirmed browser SDK bug: explicit `cross_subdomain_cookie: false` still triggers cross-subdomain cookie-domain probing during persistence cleanup. | javascript, web, team/client-libraries |  | no | 2026-09-20T11:55:58.241Z |
 | PostHog/posthog-js | [issue 5020](https://github.com/PostHog/posthog-js/issues/5020) | Confirmed browser SDK bug: `opt_out_capturing()` blocks new capture admission but does not discard already queued events or stop retry scheduling after the opt-out boundary. | javascript, web, team/client-libraries |  | no | 2026-09-18T11:25:29.675Z |
 | PostHog/posthog-js | [issue 5011](https://github.com/PostHog/posthog-js/issues/5011) | Plausible browser SDK ingestion bug, but the report does not yet isolate an SDK-side difference from an ingestion-side treatment of the enriched SDK event. | feature/product-analytics, javascript, web, team/client-libraries |  | no | 2026-09-17T14:33:57.417Z |
