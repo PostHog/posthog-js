@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.7
+
+### Patch Changes
+
+- [#5001](https://github.com/PostHog/posthog-js/pull/5001) [`c551218`](https://github.com/PostHog/posthog-js/commit/c5512189b915c6ee2543258455fa3a025a1442d6) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay network capture no longer fails to start in frames without `PerformanceObserver` or its `supportedEntryTypes`; those frames record without live network timing.
+  (2026-09-22)
+
 ## 1.434.6
 
 ### Patch Changes
