@@ -12,6 +12,7 @@ import {
   applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
   buildAndroidDotenvFileGradleValue,
+  buildAndroidForceGradleLine,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
   buildIosDotenvFileBuildSetting,
@@ -152,14 +153,21 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expectValidShellSyntax(wrapped)
   })
 
-  it('exports skipOnConflict before the wrapped command so outer wrappers inherit it', () => {
-    const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
-    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, true)
+  it.each([
+    ['skipOnConflict', true, false, 'export POSTHOG_SKIP_ON_CONFLICT=1\n'],
+    ['force', false, true, 'export POSTHOG_FORCE=1\n'],
+  ])(
+    'exports %s before the wrapped command so outer wrappers inherit it',
+    (_option, skipOnConflict, force, exported) => {
+      const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
+      const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, skipOnConflict, undefined, force)
 
-    expect(wrapped).toContain('export POSTHOG_SKIP_ON_CONFLICT=1\n')
-    expect(wrapped).not.toContain('--posthog-skip-on-conflict')
-    expectValidShellSyntax(wrapped)
-  })
+      expect(wrapped).toContain(exported)
+      expect(wrapped.match(/^export POSTHOG_/gm)).toHaveLength(1)
+      expect(wrapped).not.toContain('--posthog-skip-on-conflict')
+      expectValidShellSyntax(wrapped)
+    }
+  )
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -177,16 +185,17 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
 
-  it('updates skipOnConflict on an already wrapped bundle phase', () => {
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('updates %s on an already wrapped bundle phase', (_option, skipOnConflict, force, variable) => {
     const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
     modifyExistingXcodeBuildScript(script)
-    modifyExistingXcodeBuildScript(script, true)
-    let parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    modifyExistingXcodeBuildScript(script, skipOnConflict, undefined, force)
+    expect(JSON.parse(script.shellScript)).toContain(`export ${variable}=1`)
 
-    modifyExistingXcodeBuildScript(script, false)
-    parsed = JSON.parse(script.shellScript)
-    expect(parsed).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain(variable)
   })
 
   it('adds and removes the release mode export as the prop changes', () => {
@@ -315,14 +324,14 @@ describe('buildDsymUploadShellScript', () => {
     expect(buildDsymUploadShellScript(true)).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
-  it('does not set POSTHOG_SKIP_ON_CONFLICT by default', () => {
-    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
-    expect(buildDsymUploadShellScript(true, false)).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
-  })
-
-  it('exports POSTHOG_SKIP_ON_CONFLICT=1 when skipOnConflict is requested', () => {
-    expect(buildDsymUploadShellScript(false, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
-    expect(buildDsymUploadShellScript(true, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+  it.each([
+    ['POSTHOG_SKIP_ON_CONFLICT', true, false],
+    ['POSTHOG_FORCE', false, true],
+  ])('exports %s=1 only when its option is requested', (variable, skipOnConflict, force) => {
+    expect(buildDsymUploadShellScript()).not.toContain(variable)
+    expect(buildDsymUploadShellScript(true)).not.toContain(variable)
+    expect(buildDsymUploadShellScript(false, skipOnConflict, force)).toContain(`export ${variable}=1`)
+    expect(buildDsymUploadShellScript(true, skipOnConflict, force)).toContain(`export ${variable}=1`)
   })
 })
 
@@ -351,12 +360,28 @@ describe('addDsymUploadBuildPhase', () => {
     expect(opts.shellScript).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
-  it('forwards skipOnConflict into the phase script', () => {
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('forwards %s into the phase script', (_option, skipOnConflict, force, variable) => {
     const xp = mockXcodeProjectForBuildPhase(undefined)
-    addDsymUploadBuildPhase(xp, false, true)
+    addDsymUploadBuildPhase(xp, false, skipOnConflict, force)
     const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
-    expect(opts.shellScript).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
-    expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
+    expect(opts.shellScript).toContain(`export ${variable}=1`)
+    expect(opts.shellScript.match(/^export POSTHOG_/gm)).toHaveLength(1)
+  })
+
+  it('refreshes a phase written by an SDK without the force option', () => {
+    const existing = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript(true, false)),
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true, false, true)
+
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(true, false, true)))
   })
 
   it('is idempotent — does not add a second phase when one already exists', () => {
@@ -692,6 +717,23 @@ describe('buildAndroidSkipOnConflictGradleLine', () => {
     [true, 'project.ext.posthogReactNativeSkipOnConflict = true'],
   ])('serializes skipOnConflict=%s', (skipOnConflict, expected) => {
     expect(buildAndroidSkipOnConflictGradleLine(skipOnConflict)).toBe(expected)
+  })
+})
+
+describe('buildAndroidForceGradleLine', () => {
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeForce = true'],
+  ])('serializes force=%s', (force, expected) => {
+    expect(buildAndroidForceGradleLine(force)).toBe(expected)
+  })
+})
+
+describe('postHogExpoPlugin conflict options', () => {
+  it('stops the prebuild when skipOnConflict and force are both enabled', () => {
+    expect(() => postHogExpoPlugin({ name: 'app', slug: 'app' }, { skipOnConflict: true, force: true })).toThrow(
+      /only one of --skip-on-conflict and --force/
+    )
   })
 })
 
@@ -1237,7 +1279,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     '}',
   ].join('\n')
 
-  const compilePlugin = async (projectContents = projectBuildGradle) => {
+  const compilePlugin = async (projectContents = projectBuildGradle, extraProps: Record<string, unknown> = {}) => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
     const androidRoot = path.join(projectRoot, 'android')
     const appRoot = path.join(androidRoot, 'app')
@@ -1259,6 +1301,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     const config = postHogExpoPlugin(withEarlierAppGradlePlugin, {
       uploadNativeSymbols: true,
       disableSandboxing: false,
+      ...extraProps,
     })
     await compileModsAsync(config, { projectRoot, platforms: ['android'] })
 
@@ -1278,6 +1321,13 @@ describe('postHogExpoPlugin Android native symbols', () => {
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  it('writes the conflict-behavior ext property the gradle upload reads', async () => {
+    const result = await compilePlugin(projectBuildGradle, { force: true })
+
+    expect(result.app).toContain('project.ext.posthogReactNativeForce = true')
+    expect(result.app).not.toContain('posthogReactNativeSkipOnConflict')
   })
 
   it('applies the Android plugin when an earlier config plugin registers appBuildGradle first', async () => {
