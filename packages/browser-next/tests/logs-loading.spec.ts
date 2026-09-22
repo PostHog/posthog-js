@@ -38,9 +38,9 @@ describe('automatic logs module loading', () => {
             finished()
             return client
         })
+        configuration.serviceName = 'mutated'
         await vi.waitFor(() => expect(loaded).toBeDefined())
         expect(finished).not.toHaveBeenCalled()
-        configuration.serviceName = 'mutated'
         const factory = vi.fn(() => ({ name: 'logs', setup }))
         loaded({ logs: factory })
         await vi.waitFor(() => expect(setup).toHaveBeenCalledOnce())

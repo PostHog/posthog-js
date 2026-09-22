@@ -2,12 +2,18 @@ import type { Client } from '@posthog/browser-common'
 import { createPostHog, FeatureFlagsExtension } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { logs } from '../src/logs'
-import type { LogsOptions } from '../src/logs'
+import type { LogsExtension, LogsOptions } from '../src/logs'
 import type { PostHog, PostHogOptions } from '../src/types'
 import type { OtlpLogsPayload } from '@posthog/types'
 import { MemoryStorage } from './helpers'
 
 const clients: PostHog[] = []
+const extensions = new WeakMap<PostHog, LogsExtension>()
+const getLogs = (client: PostHog): LogsExtension => {
+    const extension = extensions.get(client) ?? client.getExtension<LogsExtension>('logs')!
+    extensions.set(client, extension)
+    return extension
+}
 const defaults = {
     projectToken: 'ph_logs',
     storage: false,
@@ -55,6 +61,23 @@ afterEach(async () => {
 })
 
 describe('logs', () => {
+    it('contains caller-property errors and continues capturing through the extension reference', async () => {
+        const fetch = vi.fn(async () => new Response('{}'))
+        const client = await create({ fetch })
+        const logger = getLogs(client)
+        const failure = new Error('unavailable')
+        expect(() =>
+            logger.captureLog({
+                get body(): string {
+                    throw failure
+                },
+            })
+        ).not.toThrow()
+        logger.captureLog({ body: 'next record' })
+        await logger.flush()
+        expect(fetch).toHaveBeenCalledOnce()
+    })
+
     it('does not ingest SDK diagnostics through the browser console', async () => {
         const { output } = browser()
         vi.stubGlobal('console', output)
@@ -69,7 +92,7 @@ describe('logs', () => {
         })
         client.logger.error('SDK diagnostic')
         output.log('application log')
-        await client.flush()
+        await getLogs(client).flush()
         expect(bodies.flatMap(records).map((record) => record.body)).toEqual([{ stringValue: '"application log"' }])
     })
 
@@ -88,7 +111,6 @@ describe('logs', () => {
         clients.push(core)
         expect(disabled.getExtension('logs')).toBeUndefined()
         expect(core.getExtension('logs')).toBeUndefined()
-        disabled.captureLog({ body: 'ignored' })
         await disabled.flush()
         expect(fetch).not.toHaveBeenCalled()
     })
@@ -117,8 +139,8 @@ describe('logs', () => {
             config.resourceAttributes!.region = 'changed'
             const captured = vi.fn()
             client.onEvent(captured)
-            client.captureLog({ body: 'hello', level: 'warn', attributes: { custom: 1 } })
-            await client.flush()
+            getLogs(client).captureLog({ body: 'hello', level: 'warn', attributes: { custom: 1 } })
+            await getLogs(client).flush()
             expect(beforeSend).toHaveBeenCalledOnce()
             expect(captured).not.toHaveBeenCalled()
             expect(fetch).toHaveBeenCalledOnce()
@@ -151,8 +173,8 @@ describe('logs', () => {
                 },
             })
             output.log('hello', { answer: 42 })
-            client.captureLog({ body: 'programmatic' })
-            await client.flush()
+            getLogs(client).captureLog({ body: 'programmatic' })
+            await getLogs(client).flush()
             expect(original).toHaveBeenCalledWith('hello', { answer: 42 })
             expect(bodies).toHaveLength(2)
             expect(bodies.map((body) => body.resourceLogs[0]?.scopeLogs[0]?.scope.name)).toEqual([
@@ -189,23 +211,23 @@ describe('logs', () => {
         const { output } = browser()
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch, logs: { captureConsoleLogs: true } })
-        client.captureLog({ body: 'old' })
+        getLogs(client).captureLog({ body: 'old' })
         output.log('old console')
         client.optOut()
-        client.captureLog({ body: 'denied' })
+        getLogs(client).captureLog({ body: 'denied' })
         output.log('denied console')
         client.optIn()
-        await client.flush()
+        await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
-        client.captureLog({ body: 'before reset' })
+        getLogs(client).captureLog({ body: 'before reset' })
         client.reset()
-        await client.flush()
+        await getLogs(client).flush()
         expect(fetch).not.toHaveBeenCalled()
-        client.captureLog({ body: 'fresh' })
+        getLogs(client).captureLog({ body: 'fresh' })
         await client.shutdown()
         expect(fetch).toHaveBeenCalledOnce()
-        client.captureLog({ body: 'after shutdown' })
-        await client.flush()
+        getLogs(client).captureLog({ body: 'after shutdown' })
+        await getLogs(client).flush()
         expect(fetch).toHaveBeenCalledOnce()
     })
 
@@ -217,8 +239,8 @@ describe('logs', () => {
                 return new Response('{}', { status })
             })
             const client = await create({ fetch })
-            client.captureLog({ body: 'record' })
-            await client.flush()
+            getLogs(client).captureLog({ body: 'record' })
+            await getLogs(client).flush()
             expect(fetch).toHaveBeenCalledOnce()
             const captured = vi.fn()
             client.onEvent(captured)
@@ -233,35 +255,37 @@ describe('logs', () => {
 
     it('stops capture before invoking a caller-supplied transport during shutdown', async () => {
         const fetch = vi.fn(async () => {
-            client.captureLog({ body: 'reentrant' })
+            getLogs(client).captureLog({ body: 'reentrant' })
             return new Response('{}')
         })
         const client = await create({ fetch })
-        client.captureLog({ body: 'before shutdown' })
+        getLogs(client).captureLog({ body: 'before shutdown' })
         await client.shutdown()
         expect(fetch).toHaveBeenCalledOnce()
     })
 
-    it('bounds shutdown, aborts and settles a transport that never responds', async () => {
+    it('bounds shutdown while a stalled request retains its own timeout', async () => {
         let signal: AbortSignal | undefined
         const fetch = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
             signal = init?.signal ?? undefined
             return new Promise<Response>(() => {})
         })
         const client = await create({ fetch })
-        client.captureLog({ body: 'pending' })
+        getLogs(client).captureLog({ body: 'pending' })
         const closing = client.shutdown(10)
-        client.captureLog({ body: 'too late' })
+        getLogs(client).captureLog({ body: 'too late' })
         await vi.advanceTimersByTimeAsync(10)
         await closing
-        expect(signal?.aborted).toBe(true)
+        expect(signal?.aborted).toBe(false)
         expect(fetch).toHaveBeenCalledOnce()
+        await vi.advanceTimersByTimeAsync(90_000)
+        expect(signal?.aborted).toBe(true)
         expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('keeps ordinary requests closed while admitted logs finish shutdown', async () => {
+    it('allows consented requests during shutdown without treating shutdown as a transport gate', async () => {
         let ordinary!: Client
-        const fetch = vi.fn(() => new Promise<Response>(() => {}))
+        const fetch = vi.fn(async (_url: RequestInfo | URL) => new Response('{}'))
         const client = await create({
             fetch,
             extensions: [
@@ -273,13 +297,12 @@ describe('logs', () => {
                 },
             ],
         })
-        client.captureLog({ body: 'before closing' })
+        getLogs(client).captureLog({ body: 'before closing' })
         const closing = client.shutdown(10)
-        expect((await client.sendRequest('/i/v1/logs')).statusCode).toBe(0)
-        expect((await ordinary.sendRequest('/i/v1/logs')).statusCode).toBe(0)
-        expect(fetch).toHaveBeenCalledOnce()
-        await vi.advanceTimersByTimeAsync(10)
+        expect((await client.sendRequest('/ordinary')).statusCode).toBe(200)
+        expect((await ordinary.sendRequest('/ordinary')).statusCode).toBe(200)
         await closing
+        expect(fetch.mock.calls.some(([url]) => String(url).includes('/i/v1/logs'))).toBe(true)
         expect(vi.getTimerCount()).toBe(0)
     })
 
@@ -289,12 +312,28 @@ describe('logs', () => {
             .mockRejectedValueOnce(new Error('network unavailable'))
             .mockResolvedValue(new Response('{}'))
         const client = await create({ fetch })
-        client.captureLog({ body: 'retry' })
-        await client.flush()
-        await client.flush()
+        getLogs(client).captureLog({ body: 'retry' })
+        await getLogs(client).flush()
+        await getLogs(client).flush()
         expect(fetch).toHaveBeenCalledTimes(2)
         await client.shutdown()
         expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('keeps client flush analytics-only and hands off queued logs before disposal', async () => {
+        const sendBeacon = vi.fn(() => true)
+        const fetch = vi.fn(async () => new Response('{}'))
+        const client = await create({ navigator: { sendBeacon }, disableBotDetection: true, fetch })
+        getLogs(client).captureLog({ body: 'before shutdown' })
+        await client.flush()
+        expect(sendBeacon).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+        await client.shutdown()
+        expect(sendBeacon).toHaveBeenCalledOnce()
+        const body = (sendBeacon.mock.calls as unknown as Array<[string, Blob]>)[0]![1]
+        expect(records(JSON.parse(await body.text())).map((record) => record.body)).toEqual([
+            { stringValue: 'before shutdown' },
+        ])
     })
 
     it('uses logs Beacon on pagehide, falls back to keepalive, and removes the listener', async () => {
@@ -302,7 +341,7 @@ describe('logs', () => {
         const sendBeacon = vi.fn(() => false)
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ navigator: { sendBeacon }, disableBotDetection: true, fetch })
-        client.captureLog({ body: 'teardown' })
+        getLogs(client).captureLog({ body: 'teardown' })
         window.dispatchEvent(new Event('pagehide'))
         expect(sendBeacon).toHaveBeenCalledOnce()
         expect((fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1]).toMatchObject({
@@ -327,13 +366,13 @@ describe('logs', () => {
                 fetch,
                 logs: { flushIntervalMs: 0 },
             })
-            client.captureLog({ body: 'pending' })
-            const closing = client.shutdown(10)
+            getLogs(client).captureLog({ body: 'pending' })
+            const pending = getLogs(client).flush()
             expect(fetch).toHaveBeenCalledOnce()
+            const closing = client.shutdown(10)
             try {
                 expect(fetch.mock.calls[0]![1]?.keepalive).not.toBe(true)
-                client.captureLog({ body: 'too late' })
-                expect((await client.sendRequest('/ordinary')).statusCode).toBe(0)
+                getLogs(client).captureLog({ body: 'too late' })
                 window.dispatchEvent(new Event('pagehide'))
                 if (beacon === 'accepted') {
                     expect(sendBeacon).toHaveBeenCalledOnce()
@@ -354,7 +393,8 @@ describe('logs', () => {
                 await vi.advanceTimersByTimeAsync(10)
                 await closing
             }
-            expect(fetch.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true)
+            await vi.advanceTimersByTimeAsync(90_000)
+            await pending
             expect(vi.getTimerCount()).toBe(0)
             for (const [type, listener] of add.mock.calls) {
                 expect(
@@ -374,14 +414,14 @@ describe('logs', () => {
         const sendBeacon = vi.fn(() => true)
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ navigator: { sendBeacon }, disableBotDetection: true, fetch })
-        client.captureLog({ body: 'withdrawn' })
+        getLogs(client).captureLog({ body: 'withdrawn' })
         client.optOut()
         window.dispatchEvent(new Event('pagehide'))
         expect(sendBeacon).not.toHaveBeenCalled()
         expect(fetch).not.toHaveBeenCalled()
         client.optIn()
         window.dispatchEvent(new Event('pagehide'))
-        await client.flush()
+        await getLogs(client).flush()
         expect(sendBeacon).not.toHaveBeenCalled()
         expect(fetch).not.toHaveBeenCalled()
         await client.dispose()
@@ -399,8 +439,8 @@ describe('logs', () => {
                 })
         )
         const client = await create({ fetch })
-        client.captureLog({ body: 'old' })
-        const pending = client.flush()
+        getLogs(client).captureLog({ body: 'old' })
+        const pending = getLogs(client).flush()
         client.optOut()
         client.optIn()
         finish(new Response('{}', { status: 500 }))
@@ -408,8 +448,8 @@ describe('logs', () => {
         fetch.mockImplementation(() => {
             throw new Error('synchronous fetch')
         })
-        client.captureLog({ body: 'new' })
-        await client.flush()
+        getLogs(client).captureLog({ body: 'new' })
+        await getLogs(client).flush()
         expect(fetch).toHaveBeenCalledTimes(2)
         const bodies = fetch.mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as OtlpLogsPayload)
         expect(bodies.map((body) => records(body)[0]?.body)).toEqual([{ stringValue: 'old' }, { stringValue: 'new' }])
@@ -428,7 +468,7 @@ describe('logs', () => {
         expect(client.getExtension('logs')).toBeUndefined()
         expect(output.log).toBe(original)
         expect(remove.mock.calls.some(([type]) => type === 'online')).toBe(true)
-        client.captureLog({ body: 'unavailable' })
+        expect(client.getExtension('logs')).toBeUndefined()
     })
 
     it('reads active flag keys without exposure capture', async () => {
@@ -443,8 +483,8 @@ describe('logs', () => {
         client.getExtension(FeatureFlagsExtension)!.updateFlags({ enabled: true, disabled: false, variant: 'a' })
         const captured = vi.fn()
         client.onEvent(captured)
-        client.captureLog({ body: 'flags' })
-        await client.flush()
+        getLogs(client).captureLog({ body: 'flags' })
+        await getLogs(client).flush()
         expect(captured).not.toHaveBeenCalled()
         expect(records(bodies[0]!)[0]?.attributes).toEqual(
             expect.arrayContaining([
@@ -473,15 +513,15 @@ describe('logs', () => {
                 return new Response('{}')
             },
         })
-        client.captureLog({ body: 'before session' })
-        await client.flush()
-        expect(client.session.sessionId).toBe('')
+        getLogs(client).captureLog({ body: 'before session' })
+        await getLogs(client).flush()
+        expect(client.session).toBeUndefined()
         expect(records(bodies[0]!)[0]?.attributes?.some(({ key }) => key === 'sessionStartTimestamp')).toBe(false)
         client.capture('admitted')
         const session = client.session
         vi.setSystemTime(1_700_000_000_100)
-        client.captureLog({ body: 'with session' })
-        await client.flush()
+        getLogs(client).captureLog({ body: 'with session' })
+        await getLogs(client).flush()
         expect(records(bodies[1]!)[0]?.attributes).toEqual(
             expect.arrayContaining([
                 { key: 'sessionStartTimestamp', value: { stringValue: '1700000000000' } },

@@ -1,4 +1,5 @@
-import type { Client, Extension } from '@posthog/browser-common'
+import type { Disposable } from '@posthog/browser-common'
+import type { BrowserClient } from './browser-client'
 import { PostHogLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
@@ -8,88 +9,108 @@ import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
 export type { LogsOptions, CaptureLogOptions } from './logs-options'
+export type { LogsExtension } from './logs-internal'
+
+interface LogsEnvironment {
+    client: BrowserClient | undefined
+    browserWindow?: Window & typeof globalThis
+    disposed: boolean
+}
+
+class BrowserNextLogs extends PostHogLogs {
+    constructor(
+        config: LogsOptions,
+        private readonly _environment: LogsEnvironment
+    ) {
+        super({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true })
+    }
+
+    protected override _getSdkContext() {
+        const client = this._environment.client!
+        const context = super._getSdkContext()
+        try {
+            const href = this._environment.browserWindow?.location?.href
+            if (href) context.currentUrl = href.split('#')[0]!
+        } catch {
+            /* Unavailable location is omitted. */
+        }
+        const keys = client.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
+        if (keys?.length) context.activeFeatureFlags = keys
+        return context
+    }
+
+    protected override _getConsoleLoader(): ConsoleLogsLoader | undefined {
+        const browserWindow = this._environment.browserWindow
+        const console = browserWindow?.console
+        if (!console) return undefined
+        const consoleHost: ConsoleLogsHost = {
+            console,
+            hostname: browserWindow?.location?.host ?? '',
+            getCapturingLogs: () =>
+                !this._environment.disposed && this._environment.client?.canCapture ? this : undefined,
+        }
+        return (callback) =>
+            callback(undefined, {
+                initialize: () => initializeLogs(consoleHost),
+                replay: (_client, entries) => replayConsoleBuffer(consoleHost, entries),
+            })
+    }
+}
 
 /** Include logs and console capture statically instead of loading the product at initialization. */
-export const logs = (options: LogsOptions = {}): Extension => {
-    const config = snapshotLogsOptions(options)
-    let client: Client | undefined
-    let window: (Window & typeof globalThis) | undefined
-    let lastActivityTimestamp: (() => number | undefined) | undefined
-    let disposed = false
-    const shared = new (class extends PostHogLogs {
-        protected override _getSdkContext() {
-            const value = client!
-            const context = super._getSdkContext()
-            if (context.sessionId) {
-                const lastActivity = lastActivityTimestamp?.()
-                if (lastActivity !== undefined) context.lastActivityTimestamp = lastActivity
-            }
-            try {
-                const href = window?.location?.href
-                if (href) context.currentUrl = href.split('#')[0]!
-            } catch {
-                /* Unavailable location is omitted. */
-            }
-            const keys = value.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
-            if (keys?.length) context.activeFeatureFlags = keys
-            return context
-        }
-
-        protected override _getConsoleLoader(): ConsoleLogsLoader | undefined {
-            const console = window?.console
-            if (!console) return undefined
-            const consoleHost: ConsoleLogsHost = {
-                console,
-                hostname: window?.location?.host ?? '',
-                getCapturingLogs: () => (!disposed && client?.canCapture ? shared : undefined),
-            }
-            return (callback) =>
-                callback(undefined, {
-                    initialize: () => initializeLogs(consoleHost),
-                    replay: (_client, entries) => replayConsoleBuffer(consoleHost, entries),
-                })
-        }
-    })({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true })
+export const logs = (options: LogsOptions = {}): LogsExtension => {
+    const environment: LogsEnvironment = { client: undefined, disposed: false }
+    const subscriptions: Disposable[] = []
+    const shared = new BrowserNextLogs(snapshotLogsOptions(options), environment)
     const pagehide = () => {
-        if (!disposed) shared.flushLogs('sendBeacon')
+        if (!environment.disposed) shared.flushLogs('sendBeacon')
     }
-    const extension: LogsExtension = {
+    return {
         name: 'logs',
-        initialize: (value) => {
-            lastActivityTimestamp = value
-        },
-        setup: async (value) => {
-            client = value
+        setup: async (value: BrowserClient) => {
+            environment.client = value
             try {
-                window = globalThis.window
+                environment.browserWindow = globalThis.window
             } catch {
                 /* Non-browser host. */
             }
+            subscriptions.push(
+                value.onReset(() => shared.reset()),
+                value.onConsentChange(({ current }) => {
+                    if (current === 'denied') shared.reset()
+                })
+            )
             await shared.setup(value)
-            if (disposed) return
+            if (environment.disposed) return
             // oxlint-disable-next-line posthog-js/no-add-event-listener
-            window?.addEventListener('pagehide', pagehide)
+            environment.browserWindow?.addEventListener('pagehide', pagehide)
         },
         captureLog: (record) => {
-            if (!disposed && client?.canCapture) shared.captureLog(record)
+            if (environment.disposed) return
+            try {
+                if (environment.client?.canCapture) shared.captureLog(record)
+            } catch (error) {
+                environment.client?.logger.error('Log capture failed', error)
+            }
         },
         flush: async () => {
-            if (!disposed) await shared.flush()
+            if (!environment.disposed) await shared.flush()
         },
         reset: () => shared.reset(),
         dispose: () => {
-            disposed = true
+            environment.disposed = true
+            subscriptions.splice(0).forEach((subscription) => subscription.dispose())
             try {
-                window?.removeEventListener('pagehide', pagehide)
+                shared.flushLogs('sendBeacon')
+                environment.browserWindow?.removeEventListener('pagehide', pagehide)
             } finally {
                 try {
                     shared.reset()
                 } finally {
                     shared.dispose()
-                    client = undefined
+                    environment.client = undefined
                 }
             }
         },
     }
-    return extension
 }
