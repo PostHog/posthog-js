@@ -528,14 +528,17 @@ export class PostHogTracingProcessor implements TracingProcessor {
       properties.$ai_cache_reporting_exclusive = false
     }
 
-    // Raw Chat Completions usage keeps token details under provider-specific fields.
+    // Chat Completions usage keeps token details under provider-specific fields.
     const promptTokenDetails = (usage as any).prompt_tokens_details
     const completionTokenDetails = (usage as any).completion_tokens_details
     if (completionTokenDetails?.reasoning_tokens) {
       properties.$ai_reasoning_tokens = completionTokenDetails.reasoning_tokens
     }
-    if (promptTokenDetails?.cached_tokens) {
+    if (promptTokenDetails?.cached_tokens != null) {
       properties.$ai_cache_read_input_tokens = promptTokenDetails.cached_tokens
+    }
+    if (promptTokenDetails?.cache_write_tokens != null) {
+      properties.$ai_cache_creation_input_tokens = promptTokenDetails.cache_write_tokens
     }
 
     if (usage.details) {
@@ -543,10 +546,10 @@ export class PostHogTracingProcessor implements TracingProcessor {
       if (details.reasoning_tokens) {
         properties.$ai_reasoning_tokens = details.reasoning_tokens
       }
-      if (details.cache_read_input_tokens) {
+      if (details.cache_read_input_tokens != null) {
         properties.$ai_cache_read_input_tokens = details.cache_read_input_tokens
       }
-      if (details.cache_creation_input_tokens) {
+      if (details.cache_creation_input_tokens != null) {
         properties.$ai_cache_creation_input_tokens = details.cache_creation_input_tokens
       }
     }
@@ -555,10 +558,10 @@ export class PostHogTracingProcessor implements TracingProcessor {
     if ((usage as any).reasoning_tokens) {
       properties.$ai_reasoning_tokens = (usage as any).reasoning_tokens
     }
-    if ((usage as any).cache_read_input_tokens) {
+    if ((usage as any).cache_read_input_tokens != null) {
       properties.$ai_cache_read_input_tokens = (usage as any).cache_read_input_tokens
     }
-    if ((usage as any).cache_creation_input_tokens) {
+    if ((usage as any).cache_creation_input_tokens != null) {
       properties.$ai_cache_creation_input_tokens = (usage as any).cache_creation_input_tokens
     }
 
@@ -585,6 +588,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
     const usage = response?.usage ?? {}
     const inputTokens = usage?.input_tokens ?? 0
     const outputTokens = usage?.output_tokens ?? 0
+    const inputTokenDetails = usage?.input_tokens_details
 
     // Extract model from response
     const model = response?.model as string | undefined
@@ -598,6 +602,15 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
+      // Responses input tokens include cache reads and writes.
+      $ai_cache_reporting_exclusive: false,
+    }
+
+    if (inputTokenDetails?.cached_tokens != null) {
+      properties.$ai_cache_read_input_tokens = inputTokenDetails.cached_tokens
+    }
+    if (inputTokenDetails?.cache_write_tokens != null) {
+      properties.$ai_cache_creation_input_tokens = inputTokenDetails.cache_write_tokens
     }
 
     // Extract output from response

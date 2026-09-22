@@ -320,10 +320,10 @@ describe('PostHogTracingProcessor', () => {
               model: 'resolved-model',
               choices: [{ message: { role: 'assistant', content: 'Hello!' }, finish_reason: 'stop', index: 0 }],
               usage: {
-                prompt_tokens: 12,
-                completion_tokens: 7,
-                total_tokens: 19,
-                prompt_tokens_details: { cached_tokens: 5 },
+                prompt_tokens: 100,
+                completion_tokens: 10,
+                total_tokens: 110,
+                prompt_tokens_details: { cached_tokens: 60, cache_write_tokens: 20 },
                 completion_tokens_details: { reasoning_tokens: 3 },
               },
             },
@@ -336,12 +336,37 @@ describe('PostHogTracingProcessor', () => {
 
       const properties = mockClient.capture.mock.calls[0][0].properties
       expect(properties.$ai_model).toBe('configured-model')
-      expect(properties.$ai_input_tokens).toBe(12)
-      expect(properties.$ai_output_tokens).toBe(7)
-      expect(properties.$ai_total_tokens).toBe(19)
-      expect(properties.$ai_cache_read_input_tokens).toBe(5)
+      expect(properties.$ai_input_tokens).toBe(100)
+      expect(properties.$ai_output_tokens).toBe(10)
+      expect(properties.$ai_total_tokens).toBe(110)
+      expect(properties.$ai_cache_read_input_tokens).toBe(60)
+      expect(properties.$ai_cache_creation_input_tokens).toBe(20)
       expect(properties.$ai_cache_reporting_exclusive).toBe(false)
       expect(properties.$ai_reasoning_tokens).toBe(3)
+    })
+
+    it('preserves explicitly reported zero Chat Completions cache token counts', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          output: [
+            {
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+              },
+            },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const properties = mockClient.capture.mock.calls[0][0].properties
+      expect(properties.$ai_cache_read_input_tokens).toBe(0)
+      expect(properties.$ai_cache_creation_input_tokens).toBe(0)
     })
 
     it('maps OpenAI Agents 0.8 streamed Chat Completions response metadata', async () => {
@@ -381,13 +406,15 @@ describe('PostHogTracingProcessor', () => {
           usage: {
             input_tokens: 4,
             output_tokens: 6,
-            details: { reasoning_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 1 },
+            details: { reasoning_tokens: 2 },
+            prompt_tokens_details: { cached_tokens: 3, cache_write_tokens: 1 },
           },
           output: [
             {
               usage: {
                 prompt_tokens: 40,
                 completion_tokens: 60,
+                prompt_tokens_details: { cached_tokens: 30, cache_write_tokens: 10 },
                 completion_tokens_details: { reasoning_tokens: 20 },
               },
             },
@@ -431,6 +458,8 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_input_tokens).toBe(0)
       expect(call.properties.$ai_output_tokens).toBe(0)
       expect(call.properties.$ai_total_tokens).toBe(0)
+      expect(call.properties).not.toHaveProperty('$ai_cache_read_input_tokens')
+      expect(call.properties).not.toHaveProperty('$ai_cache_creation_input_tokens')
     })
 
     it('handles partial usage data', async () => {
@@ -786,7 +815,11 @@ describe('PostHogTracingProcessor', () => {
             id: 'resp_123',
             model: 'gpt-4o',
             output: [{ type: 'message', content: 'Hello!' }],
-            usage: { input_tokens: 25, output_tokens: 10 },
+            usage: {
+              input_tokens: 100,
+              output_tokens: 10,
+              input_tokens_details: { cached_tokens: 60, cache_write_tokens: 20 },
+            },
           },
         },
       })
@@ -799,9 +832,12 @@ describe('PostHogTracingProcessor', () => {
       expect(call.event).toBe('$ai_generation')
       expect(call.properties.$ai_response_id).toBe('resp_123')
       expect(call.properties.$ai_model).toBe('gpt-4o')
-      expect(call.properties.$ai_input_tokens).toBe(25)
+      expect(call.properties.$ai_input_tokens).toBe(100)
       expect(call.properties.$ai_output_tokens).toBe(10)
-      expect(call.properties.$ai_total_tokens).toBe(35)
+      expect(call.properties.$ai_total_tokens).toBe(110)
+      expect(call.properties.$ai_cache_read_input_tokens).toBe(60)
+      expect(call.properties.$ai_cache_creation_input_tokens).toBe(20)
+      expect(call.properties.$ai_cache_reporting_exclusive).toBe(false)
       expect(call.properties.$ai_output_choices).toEqual([{ type: 'message', content: 'Hello!' }])
     })
 
@@ -954,7 +990,11 @@ describe('PostHogTracingProcessor', () => {
           input: [{ role: 'user', content: 'Secret message' }],
           output: [{ role: 'assistant', content: 'Secret response' }],
           model: 'gpt-4o',
-          usage: { input_tokens: 10, output_tokens: 20 },
+          usage: {
+            input_tokens: 10,
+            output_tokens: 20,
+            details: { cache_read_input_tokens: 8, cache_creation_input_tokens: 2 },
+          },
         },
       })
 
@@ -968,6 +1008,8 @@ describe('PostHogTracingProcessor', () => {
       // Token counts should still be present
       expect(call.properties.$ai_input_tokens).toBe(10)
       expect(call.properties.$ai_output_tokens).toBe(20)
+      expect(call.properties.$ai_cache_read_input_tokens).toBe(8)
+      expect(call.properties.$ai_cache_creation_input_tokens).toBe(2)
     })
 
     it('redacts function span input/output in privacy mode', async () => {
