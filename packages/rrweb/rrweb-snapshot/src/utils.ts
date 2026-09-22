@@ -939,15 +939,22 @@ export function is2DCanvasBlank(canvas: HTMLCanvasElement): boolean {
       // `getImageData` call that retrieves everything
       // even if we can already tell from the first chunk(s) that
       // the canvas isn't blank
-      const pixelBuffer = new Uint32Array(
-        originalGetImageData.call(
+      let imageData: ImageData;
+      try {
+        imageData = originalGetImageData.call(
           ctx,
           x,
           y,
           Math.min(chunkSize, canvas.width - x),
           Math.min(chunkSize, canvas.height - y),
-        ).data.buffer,
-      );
+        );
+      } catch {
+        // a cross-origin draw taints the canvas and the browser then refuses to
+        // read it back. We cannot prove it is blank, so call it painted and
+        // leave the caller to handle the `toDataURL` that follows.
+        return false;
+      }
+      const pixelBuffer = new Uint32Array(imageData.data.buffer);
       if (pixelBuffer.some((pixel) => pixel !== 0)) return false;
     }
   }

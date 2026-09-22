@@ -75,6 +75,26 @@ function getValidTagName(element: Element): Lowercase<string> {
 let canvasService: HTMLCanvasElement | null;
 let canvasCtx: CanvasRenderingContext2D | null;
 
+// a tainted canvas fails on every snapshot, so warn once rather than on each one
+let taintedCanvasWarned = false;
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time like the img inline path does, rather than blaming taint
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      'Cannot read canvas pixels, so this canvas is left out of the recording.',
+      error,
+    );
+    return;
+  }
+  if (taintedCanvasWarned) return;
+  taintedCanvasWarned = true;
+  console.warn(
+    'Cannot read canvas pixels, so this canvas is left out of the recording. A cross-origin image or video drawn into it taints it.',
+    error,
+  );
+}
+
 // oxlint-disable-next-line no-control-regex
 const SRCSET_NOT_SPACES = /^[^ \t\n\r\u000c]+/; // Don't use \s, to avoid matching non-breaking space
 // oxlint-disable-next-line no-control-regex
@@ -899,34 +919,42 @@ function serializeElementNode(
   // the payload through the masked frame stream — serializing them here would
   // bypass the masking
   if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured?.()) {
-    if ((n as ICanvas).__context === '2d') {
-      // only record this on 2d canvas
-      if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
-        attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+    // `toDataURL` throws a SecurityError on a canvas the page tainted with a
+    // cross-origin draw. This runs inside the full-snapshot serialize pass, so
+    // an escaping throw costs the whole recording: no FullSnapshot event is
+    // emitted and no observer is ever attached. Drop the canvas instead.
+    try {
+      if ((n as ICanvas).__context === '2d') {
+        // only record this on 2d canvas
+        if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
+          attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+            dataURLOptions.type,
+            dataURLOptions.quality,
+          );
+        }
+      } else if (!('__context' in n)) {
+        // context is unknown, better not call getContext to trigger it
+        const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
-      }
-    } else if (!('__context' in n)) {
-      // context is unknown, better not call getContext to trigger it
-      const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
 
-      // create blank canvas of same dimensions
-      const blankCanvas = doc.createElement('canvas');
-      blankCanvas.width = (n as HTMLCanvasElement).width;
-      blankCanvas.height = (n as HTMLCanvasElement).height;
-      const blankCanvasDataURL = blankCanvas.toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
+        // create blank canvas of same dimensions
+        const blankCanvas = doc.createElement('canvas');
+        blankCanvas.width = (n as HTMLCanvasElement).width;
+        blankCanvas.height = (n as HTMLCanvasElement).height;
+        const blankCanvasDataURL = blankCanvas.toDataURL(
+          dataURLOptions.type,
+          dataURLOptions.quality,
+        );
 
-      // no need to save dataURL if it's the same as blank canvas
-      if (canvasDataURL !== blankCanvasDataURL) {
-        attributes.rr_dataURL = canvasDataURL;
+        // no need to save dataURL if it's the same as blank canvas
+        if (canvasDataURL !== blankCanvasDataURL) {
+          attributes.rr_dataURL = canvasDataURL;
+        }
       }
+    } catch (err) {
+      warnCanvasUnreadable(err);
     }
   }
   // save image offline
