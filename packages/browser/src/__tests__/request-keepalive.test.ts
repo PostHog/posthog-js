@@ -123,7 +123,7 @@ describe('request fetch aggregate keepalive', () => {
         } as unknown as PostHog
         const logs = new PostHogLogs(instance)
         const client = createLogsClient(instance)
-        logs._bindClient(() => client)
+        logs.setup(client)
         const payload: OtlpLogsPayload = {
             resourceLogs: [
                 {

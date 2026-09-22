@@ -576,46 +576,5 @@ describe('posthog-logs', () => {
                 })
             })
         })
-
-        describe('status 0 circuit breaker', () => {
-            beforeEach(() => {
-                vi.useFakeTimers()
-            })
-
-            afterEach(() => {
-                vi.useRealTimers()
-                delete (window.navigator as any).onLine
-            })
-
-            const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
-                    opts.callback?.({ statusCode })
-                )
-                logs.captureLog({ body: 'x' })
-                await (logs as any)._core.flush().catch(() => {})
-            }
-
-            const sendCount = () => (mockPostHog._send_request as vi.Mock).mock.calls.length
-
-            it('counts only post-load failures even before deferred setup', async () => {
-                logs.dispose()
-                logs = new PostHogLogs(mockPostHog)
-                const client = new BrowserClientAdapter(mockPostHog)
-                logs._bindClient(() => client)
-                // Before `init` completes, `_send_request` synthesizes
-                // `{ statusCode: 0 }` without any network attempt
-                // (`fireCallbackOnDrop` on the `!__loaded` path). A deferred init
-                // must not arrive to an already-tripped breaker.
-                ;(mockPostHog as any).__loaded = false
-                for (let i = 0; i < 3; i++) {
-                    await flushWith(0)
-                }
-                ;(mockPostHog as any).__loaded = true
-
-                await flushWith(0)
-
-                expect(sendCount()).toBe(4)
-            })
-        })
     })
 })

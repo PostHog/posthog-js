@@ -217,23 +217,20 @@ describe('shared logs', () => {
         expect(console.log).toBe(original)
     })
 
-    it('binds lazily without activating console capture, storage or subscriptions', () => {
+    it('activates console capture, storage and subscriptions once during setup', () => {
         const { console, window } = browser()
         const original = console.log
         const listen = vi.spyOn(window, 'addEventListener')
         const loader = vi.fn()
         const { logs, client } = create({ setup: false, config: { captureConsoleLogs: true }, loader })
-        const getClient = vi.fn(() => client)
         const initialize = vi.spyOn(client.kv, 'initialize')
         const subscribe = vi.spyOn(client, 'onRemoteConfig')
-        logs._bindClient(getClient)
         void logs.logger
-        expect(getClient).not.toHaveBeenCalled()
         expect(listen).not.toHaveBeenCalled()
         logs.logger.info('before setup')
         expect(initialize).not.toHaveBeenCalled()
         expect(subscribe).not.toHaveBeenCalled()
-        expect(listen).toHaveBeenCalledTimes(1)
+        expect(listen).not.toHaveBeenCalled()
         expect(loader).not.toHaveBeenCalled()
         expect(console.log).toBe(original)
         logs.setup(client)
@@ -279,24 +276,13 @@ describe('shared logs', () => {
         expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('removes an early reconnect listener when disposed before setup', () => {
-        const { window } = browser()
+    it('does not activate an extension disposed before setup', () => {
         const { logs, client, send } = create({ setup: false })
-        const remove = vi.spyOn(window, 'removeEventListener')
-        logs._bindClient(() => client)
-        logs.captureLog({ body: 'before setup' })
+        const initialize = vi.spyOn(client.kv, 'initialize')
         logs.dispose()
-        window.dispatchEvent(new Event('online'))
-        expect(send).not.toHaveBeenCalled()
-        expect(remove).toHaveBeenCalledWith('online', expect.any(Function))
-    })
-
-    it('disposes a bound but inactive extension without constructing its client', () => {
-        const { logs, client } = create({ setup: false })
-        const getClient = vi.fn(() => client)
-        logs._bindClient(getClient)
-        logs.dispose()
+        logs.setup(client)
         logs.captureLog({ body: 'disposed' })
-        expect(getClient).not.toHaveBeenCalled()
+        expect(initialize).not.toHaveBeenCalled()
+        expect(send).not.toHaveBeenCalled()
     })
 })

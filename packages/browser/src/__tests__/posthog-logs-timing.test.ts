@@ -36,9 +36,9 @@ afterEach(async () => {
     vi.useRealTimers()
 })
 
-it('excludes a pre-init drop when initialization occurs before its response settles', async () => {
-    for (let i = 0; i < 100; i++) sdk.captureLog({ body: `before-${i}` })
-    sdk.init('logs-same-turn-init', options)
+it('retains logs captured immediately after init through transient failures', async () => {
+    sdk.init('logs-same-turn-init', { ...options, logs: { flushIntervalMs: 0, maxBufferSize: 200 } })
+    for (let i = 0; i < 100; i++) sdk.captureLog({ body: `message-${i}` })
     await settle()
     expect((sdk.logs as any)._consecutiveStatusZeroFailures).toBe(0)
     expect((sdk.logs as any)._queue).toHaveLength(100)
@@ -59,7 +59,7 @@ it('excludes a pre-init drop when initialization occurs before its response sett
     sdk.logs!.flushLogs()
     await settle()
     expect(send).toHaveBeenCalledTimes(3)
-    expect(delivered).toEqual(Array.from({ length: 100 }, (_, i) => ({ stringValue: `before-${i}` })))
+    expect(delivered).toEqual(Array.from({ length: 100 }, (_, i) => ({ stringValue: `message-${i}` })))
     expect((sdk.logs as any)._queue).toHaveLength(0)
 })
 
@@ -117,7 +117,6 @@ it('registers reconnect once across construction, capture and setup without eage
         expect((sdk as any)._browserClientAdapter).toBeUndefined()
         expect(loader).not.toHaveBeenCalled()
         expect(console.log).toBe(originalLog)
-        logs._bindClient(() => sdk._getBrowserClientAdapter())
         logs.captureLog({ body: 'early' })
         logs.setup(sdk._getBrowserClientAdapter())
         expect(onlineCalls()).toHaveLength(1)

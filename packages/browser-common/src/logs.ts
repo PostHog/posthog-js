@@ -95,17 +95,8 @@ export class PostHogLogs implements Extension {
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
-    private _clientSource: (() => Client) | undefined
+    private _client: Client | undefined
     private _setupStarted = false
-
-    private get _client(): Client | undefined {
-        return this._clientSource?.()
-    }
-
-    /** @internal Supply the SDK-owned client without activating the extension. */
-    _bindClient(getClient: () => Client): void {
-        if (!this._disposed && !this._setupStarted) this._clientSource = getClient
-    }
     private _remoteConfigSubscription: Disposable | undefined
     private _disposed = false
 
@@ -226,7 +217,7 @@ export class PostHogLogs implements Extension {
             return
         }
         this._setupStarted = true
-        this._clientSource = () => client
+        this._client = client
         this._logger = client.logger.createLogger('[logs]')
         return continueWith(client.kv.initialize(), () => {
             if (!this._disposed) this._finishSetup(client)
@@ -274,7 +265,7 @@ export class PostHogLogs implements Extension {
         this._stopConsoleRecorder()
         this._remoteConfigSubscription?.dispose()
         this._remoteConfigSubscription = undefined
-        this._clientSource = undefined
+        this._client = undefined
         this._isLoading = false
         this._window?.removeEventListener('online', this._onReconnect)
         // TODO: Multiplex console capture across instances and settle pending log sends so
