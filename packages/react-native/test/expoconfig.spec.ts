@@ -12,12 +12,14 @@ import {
   applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
   buildAndroidDotenvFileGradleValue,
+  buildAndroidForceGradleLine,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
   buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
   moveDsymUploadBuildPhaseToEnd,
+  resolveConflictProps,
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
   resolveReleaseModeProp,
@@ -160,6 +162,15 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expect(wrapped).not.toContain('--posthog-skip-on-conflict')
     expectValidShellSyntax(wrapped)
   })
+
+  it('exports force before the wrapped command so outer wrappers inherit it', () => {
+    const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, false, undefined, true)
+
+    expect(wrapped).toContain('export POSTHOG_FORCE=1\n')
+    expect(wrapped).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+    expectValidShellSyntax(wrapped)
+  })
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -187,6 +198,16 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script, false)
     parsed = JSON.parse(script.shellScript)
     expect(parsed).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+  })
+
+  it('updates force on an already wrapped bundle phase', () => {
+    const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
+    modifyExistingXcodeBuildScript(script)
+    modifyExistingXcodeBuildScript(script, false, undefined, true)
+    expect(JSON.parse(script.shellScript)).toContain('export POSTHOG_FORCE=1')
+
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain('POSTHOG_FORCE')
   })
 
   it('adds and removes the release mode export as the prop changes', () => {
@@ -324,6 +345,16 @@ describe('buildDsymUploadShellScript', () => {
     expect(buildDsymUploadShellScript(false, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
     expect(buildDsymUploadShellScript(true, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
+
+  it('does not set POSTHOG_FORCE by default', () => {
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_FORCE')
+    expect(buildDsymUploadShellScript(true, true)).not.toContain('POSTHOG_FORCE')
+  })
+
+  it('exports POSTHOG_FORCE=1 when force is requested', () => {
+    expect(buildDsymUploadShellScript(false, false, true)).toContain('export POSTHOG_FORCE=1')
+    expect(buildDsymUploadShellScript(true, false, true)).toContain('export POSTHOG_FORCE=1')
+  })
 })
 
 describe('addDsymUploadBuildPhase', () => {
@@ -357,6 +388,27 @@ describe('addDsymUploadBuildPhase', () => {
     const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
     expect(opts.shellScript).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
     expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
+  })
+
+  it('forwards force into the phase script', () => {
+    const xp = mockXcodeProjectForBuildPhase(undefined)
+    addDsymUploadBuildPhase(xp, false, false, true)
+    const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
+    expect(opts.shellScript).toContain('export POSTHOG_FORCE=1')
+    expect(opts.shellScript).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+  })
+
+  it('refreshes a phase written by an SDK without the force option', () => {
+    const existing = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript(true, false)),
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true, false, true)
+
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(true, false, true)))
   })
 
   it('is idempotent — does not add a second phase when one already exists', () => {
@@ -692,6 +744,36 @@ describe('buildAndroidSkipOnConflictGradleLine', () => {
     [true, 'project.ext.posthogReactNativeSkipOnConflict = true'],
   ])('serializes skipOnConflict=%s', (skipOnConflict, expected) => {
     expect(buildAndroidSkipOnConflictGradleLine(skipOnConflict)).toBe(expected)
+  })
+})
+
+describe('buildAndroidForceGradleLine', () => {
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeForce = true'],
+  ])('serializes force=%s', (force, expected) => {
+    expect(buildAndroidForceGradleLine(force)).toBe(expected)
+  })
+
+  it('names the ext property posthog.gradle reads', () => {
+    // Nothing fails at build time when the two drift: the gradle upload just ignores a property
+    // nobody writes and keeps failing on a conflict the prebuild was asked to overwrite.
+    const gradle = fs.readFileSync(path.resolve(__dirname, '..', 'tooling', 'posthog.gradle'), 'utf8')
+
+    expect(gradle).toContain('project.ext.has("posthogReactNativeForce")')
+    expect(gradle).toContain('posthogUploadArgs.add("--force")')
+  })
+})
+
+describe('resolveConflictProps', () => {
+  it('normalizes the options to booleans', () => {
+    expect(resolveConflictProps()).toEqual({ skipOnConflict: false, force: false })
+    expect(resolveConflictProps(true, false)).toEqual({ skipOnConflict: true, force: false })
+    expect(resolveConflictProps(false, true)).toEqual({ skipOnConflict: false, force: true })
+  })
+
+  it('stops the prebuild when both are enabled', () => {
+    expect(() => resolveConflictProps(true, true)).toThrow(/only one of --skip-on-conflict and --force/)
   })
 })
 
@@ -1237,7 +1319,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     '}',
   ].join('\n')
 
-  const compilePlugin = async (projectContents = projectBuildGradle) => {
+  const compilePlugin = async (projectContents = projectBuildGradle, extraProps: Record<string, unknown> = {}) => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
     const androidRoot = path.join(projectRoot, 'android')
     const appRoot = path.join(androidRoot, 'app')
@@ -1259,6 +1341,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     const config = postHogExpoPlugin(withEarlierAppGradlePlugin, {
       uploadNativeSymbols: true,
       disableSandboxing: false,
+      ...extraProps,
     })
     await compileModsAsync(config, { projectRoot, platforms: ['android'] })
 
@@ -1278,6 +1361,13 @@ describe('postHogExpoPlugin Android native symbols', () => {
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  it('writes the conflict-behavior ext property the gradle upload reads', async () => {
+    const result = await compilePlugin(projectBuildGradle, { force: true })
+
+    expect(result.app).toContain('project.ext.posthogReactNativeForce = true')
+    expect(result.app).not.toContain('posthogReactNativeSkipOnConflict')
   })
 
   it('applies the Android plugin when an earlier config plugin registers appBuildGradle first', async () => {
