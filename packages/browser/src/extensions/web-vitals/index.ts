@@ -168,7 +168,6 @@ export class WebVitalsAutocapture {
 
         // web-vitals gives us no way to release its observers, so the registered callbacks can
         // still fire. `_addToBuffer` and `_flushToCapture` re-check `isEnabled` to drop them.
-        // Here we only drop the metrics we already hold and cancel the pending flush.
         clearTimeout(this._delayedFlushTimer)
         this._delayedFlushTimer = undefined
         this._buffer = emptyBuffer()
