@@ -22,6 +22,7 @@ import {
     isGzipRequest,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
+    isNumber,
     isUndefined,
     parseRetryAfterMs,
 } from '@posthog/core'
@@ -503,6 +504,27 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+// A replay flush ships one session's snapshots as a single `$snapshot` event, so halving the
+// batch by event count cannot make it smaller. Its `$snapshot_data` entries are ingested
+// independently, so split those instead and give each half a copy of the other properties.
+const splitOversizedEvent = (event: Record<string, any> | undefined): Record<string, any>[] | undefined => {
+    const snapshotData = event?.properties?.$snapshot_data
+    if (!isArray(snapshotData) || snapshotData.length < 2) {
+        return undefined
+    }
+
+    const mid = Math.ceil(snapshotData.length / 2)
+    return [snapshotData.slice(0, mid), snapshotData.slice(mid)].map((half) => ({
+        ...event,
+        properties: {
+            ...event!.properties,
+            $snapshot_data: half,
+            // the server reads this for size accounting, so it has to describe the half we send
+            ...(isNumber(event!.properties.$snapshot_bytes) ? { $snapshot_bytes: jsonStringify(half).length } : {}),
+        },
+    }))
+}
+
 const addSentAtToBody = (
     data: NonNullable<RequestWithOptions['data']>,
     sentAt = new Date().toISOString()
@@ -535,13 +557,22 @@ const _sendBeacon = (options: TransportRequestOptions) => {
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
         const batch = isArray(options.data) ? options.data : options.data?.batch
-        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(batch.length / 2)
+        if (isArray(batch) && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
             const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
                 isArray(options.data) ? events : { ...options.data, batch: events }
-            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
-            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
-            return
+
+            if (batch.length > 1) {
+                const mid = Math.ceil(batch.length / 2)
+                _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
+                _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
+                return
+            }
+
+            const halves = splitOversizedEvent(batch[0])
+            if (halves) {
+                each(halves, (half) => _sendBeacon({ ...options, data: splitData([half]) }))
+                return
+            }
         }
 
         logger.warn(
