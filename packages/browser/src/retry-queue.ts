@@ -43,6 +43,8 @@ export class RetryQueue {
     private _poller: number | undefined
     private _pollIntervalMs: number = 3000
     private _queue: RetryQueueElement[] = []
+    // Incremented by discard() so responses to requests sent before it are not retried.
+    private _discardCount: number = 0
     private _areWeOnline: boolean
     private _onlineListener: (() => void) | undefined
     private _offlineListener: (() => void) | undefined
@@ -87,6 +89,7 @@ export class RetryQueue {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
+        const discardCount = this._discardCount
         sendRequest(
             this._instance,
             transportOverride ? { ...options, transport: transportOverride } : options,
@@ -94,7 +97,11 @@ export class RetryQueue {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
 
-                    if ((retriesPerformedSoFar ?? 0) < maxRetries && this._instance.is_capturing()) {
+                    if (
+                        (retriesPerformedSoFar ?? 0) < maxRetries &&
+                        this._instance.is_capturing() &&
+                        discardCount === this._discardCount
+                    ) {
                         this._enqueue(
                             {
                                 retriesPerformedSoFar,
@@ -176,6 +183,7 @@ export class RetryQueue {
     }
 
     discard(): void {
+        this._discardCount++
         clearTimeout(this._poller)
         this._poller = undefined
         this._isPolling = false

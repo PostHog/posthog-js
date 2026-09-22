@@ -87,6 +87,22 @@ describe('opt_out_capturing() with pending requests', () => {
         expect(sentEventNames()).toEqual(['in-flight'])
     })
 
+    it('does not retry a request sent before opting out that fails after opting back in', () => {
+        posthog = createPostHog(false)
+        posthog.opt_in_capturing({ captureEventName: false })
+
+        const pendingResponses: TransportCallback[] = []
+        mockRequest.mockImplementation((_options, onResponse) => pendingResponses.push(onResponse))
+
+        posthog.capture('in-flight')
+        posthog.opt_out_capturing()
+        posthog.opt_in_capturing({ captureEventName: false })
+        pendingResponses[0]({ statusCode: 500 })
+        vi.advanceTimersByTime(60_000)
+
+        expect(sentEventNames()).toEqual(['in-flight'])
+    })
+
     it('does not send a failed request already waiting to retry when opting out', () => {
         posthog = createPostHog(false)
         posthog.opt_in_capturing({ captureEventName: false })
