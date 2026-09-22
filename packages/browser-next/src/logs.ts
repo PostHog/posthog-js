@@ -17,26 +17,34 @@ interface LogsEnvironment {
     disposed: boolean
 }
 
+const readSdkContext = (environment: LogsEnvironment) => {
+    const client = environment.client!
+    const session = client.session
+    const distinctId = client.distinctId
+    let currentUrl: string | undefined
+    try {
+        const href = environment.browserWindow?.location?.href
+        if (href) currentUrl = href.split('#')[0]!
+    } catch {
+        /* Unavailable location is omitted. */
+    }
+    const keys = client.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
+    return {
+        distinctId,
+        ...(session?.sessionId ? session : {}),
+        ...(currentUrl ? { currentUrl } : {}),
+        ...(keys?.length ? { activeFeatureFlags: keys } : {}),
+    }
+}
+
 class BrowserNextLogs extends PostHogLogs {
     constructor(
         config: LogsOptions,
         private readonly _environment: LogsEnvironment
     ) {
-        super({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true })
-    }
-
-    protected override _getSdkContext() {
-        const client = this._environment.client!
-        const context = super._getSdkContext()
-        try {
-            const href = this._environment.browserWindow?.location?.href
-            if (href) context.currentUrl = href.split('#')[0]!
-        } catch {
-            /* Unavailable location is omitted. */
-        }
-        const keys = client.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
-        if (keys?.length) context.activeFeatureFlags = keys
-        return context
+        super({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true }, () =>
+            readSdkContext(_environment)
+        )
     }
 
     protected override _getConsoleLoader(): ConsoleLogsLoader | undefined {
