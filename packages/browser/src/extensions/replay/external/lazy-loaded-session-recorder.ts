@@ -2612,9 +2612,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
-        // but only if the document was ever visible. Rotation-born holds stay held.
+        // but only if the document was ever visible. Rotation-born holds stay held. An
+        // overflowed hold takes its recovery snapshot here, not in _releaseHoldAndFlush:
+        // that path early-returns once the hold is cleared, so a cancelled navigation
+        // would never heal the gap between cap and the resumed recording.
         if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {
             this._setFlushHold(undefined)
+            if (this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = false
+                this._tryTakeFullSnapshot()
+            }
         }
 
         // beforeunload cannot wait for async CompressionStream work. Synchronously

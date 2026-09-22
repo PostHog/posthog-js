@@ -3012,6 +3012,34 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
+            it('an overflowed fresh-start hold released by a cancelled unload still heals on the next interaction', () => {
+                // beforeunload fires, the release runs, then the navigation is cancelled and
+                // the page keeps running: the overflow gap needs a recovery full snapshot
+                // on the next interaction, or post-cap incrementals apply to stale DOM
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                const lazy = sessionRecording['_lazyLoadedSessionRecording']
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                sessionRecording.onRRwebEmit(
+                    createFullSnapshot({ timestamp: startingTimestamp + 100 }) as eventWithTime
+                )
+                lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                expect(lazy['_heldBufferOverflowed']).toEqual(true)
+
+                // unload releases the hold and heals the cap gap immediately, so a
+                // cancelled navigation resumes a playable recording without waiting
+                // for the next interaction
+                takeFullSnapshot.mockClear()
+                lazy['_onBeforeUnload']()
+                expect(lazy['_heldBufferOverflowed']).toEqual(false)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                // the next interaction takes no second snapshot
+                emitActiveEvent(startingTimestamp + 500)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
             it('holds the buffer of a background tab that never sees interaction', () => {
                 vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
 
