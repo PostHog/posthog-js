@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.6
+
+### Patch Changes
+
+- [#5016](https://github.com/PostHog/posthog-js/pull/5016) [`4770179`](https://github.com/PostHog/posthog-js/commit/47701797d420bf48b5e002cfe265d373d51647bb) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording active when a cross-origin image or video taints a canvas.
+  (2026-09-22)
+
 ## 1.434.5
 
 ### Patch Changes
