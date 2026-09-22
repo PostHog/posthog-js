@@ -721,7 +721,7 @@ class FeatureFlagsPoller {
     this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
     this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
-    this.propertyMatchingVersion = flagData.propertyMatchingVersion
+    this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
     this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
@@ -981,6 +981,7 @@ class FeatureFlagsPoller {
             group_type_mapping: groupTypeMapping,
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
             minimal_flag_called_events: minimalFlagCalledEvents,
+            property_matching_version: responseJson.property_matching_version,
             propertyMatchingVersion: responseJson.property_matching_version,
             // Keep existing providers and older Node SDKs compatible with newly written entries.
             groupTypeMapping,

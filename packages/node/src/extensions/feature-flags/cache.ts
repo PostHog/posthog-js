@@ -25,6 +25,8 @@ export interface FlagDefinitionCacheData {
   /** Legacy alias for minimal_flag_called_events. */
   minimalFlagCalledEvents?: boolean
   /** Top-level definitions matching version; absent in older caches means legacy matching. */
+  property_matching_version?: number
+  /** Legacy alias for property_matching_version. */
   propertyMatchingVersion?: number
 }
 

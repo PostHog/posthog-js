@@ -2435,6 +2435,11 @@
         {
           "description": "Top-level definitions matching version; absent in older caches means legacy matching.",
           "type": "number",
+          "name": "property_matching_version"
+        },
+        {
+          "description": "Legacy alias for property_matching_version.",
+          "type": "number",
           "name": "propertyMatchingVersion"
         }
       ],

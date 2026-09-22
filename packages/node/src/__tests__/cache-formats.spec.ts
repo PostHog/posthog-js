@@ -118,6 +118,47 @@ describe('Flag definition cache formats', () => {
     })
   })
 
+  it('applies property matching versions from either format on cache reloads', async () => {
+    const versionedFlag: PostHogFeatureFlag = {
+      ...flag,
+      filters: {
+        ...flag.filters,
+        groups: [{ properties: [{ key: 'value', value: false, operator: 'exact', type: 'group' }] }],
+      },
+    }
+    let data: FlagDefinitionCacheInput = { flags: [versionedFlag], cohorts: {}, group_type_mapping: groupMapping }
+    client = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      flagDefinitionCacheProvider: {
+        getFlagDefinitions: () => data,
+        shouldFetchFlagDefinitions: () => false,
+        onFlagDefinitionsReceived: vi.fn(),
+        shutdown: vi.fn(),
+      },
+    })
+    const cases = [
+      { metadata: { property_matching_version: 2 }, expected: false },
+      { metadata: { propertyMatchingVersion: 1 }, expected: true },
+      { metadata: { propertyMatchingVersion: 2 }, expected: false },
+      { metadata: { property_matching_version: 1, propertyMatchingVersion: 2 }, expected: true },
+      { metadata: { property_matching_version: 2, propertyMatchingVersion: 1 }, expected: false },
+      { metadata: {}, expected: true },
+    ]
+    for (const { metadata, expected } of cases) {
+      data = { flags: [versionedFlag], cohorts: {}, group_type_mapping: groupMapping, ...metadata }
+      await client.reloadFeatureFlags()
+      expect(
+        await client.getFeatureFlag('group-flag', 'person', {
+          groups: { company: 'acme' },
+          groupProperties: { company: { value: 'banana' } },
+          onlyEvaluateLocally: true,
+          sendFeatureFlagEvents: false,
+        })
+      ).toBe(expected)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('prefers an empty snake_case group mapping over a populated legacy mapping', async () => {
     client = new PostHog('TEST_API_KEY', {
       personalApiKey: 'TEST_PERSONAL_API_KEY',
@@ -149,6 +190,7 @@ describe('Flag definition cache formats', () => {
             ...definitions,
             group_type_mapping: groupMapping,
             ...(gate === undefined ? {} : { minimal_flag_called_events: gate }),
+            property_matching_version: 2,
           },
         })
       )
@@ -177,6 +219,8 @@ describe('Flag definition cache formats', () => {
         minimal_flag_called_events: gate === true,
         groupTypeMapping: groupMapping,
         minimalFlagCalledEvents: gate === true,
+        property_matching_version: 2,
+        propertyMatchingVersion: 2,
       })
     }
   )
