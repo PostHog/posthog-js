@@ -1438,6 +1438,75 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
         })
 
+        it('keeps the sign of life for the rest of the batch when a record cannot be read', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            // Firefox denies property access on a node from another origin or a dead realm
+            const denied = {
+                get isConnected(): boolean {
+                    throw new Error('Permission denied to access property "isConnected"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: denied, addedNodes: [] },
+                { target: shadowButton, addedNodes: [] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
+        it('scans the other added nodes when one added node cannot be read', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [denied, host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the other roots in a gesture path when one entry cannot be read', () => {
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+            const event = {
+                composedPath: () => [denied, host],
+            } as unknown as Event
+
+            lazyLoadedDeadClicksAutocapture['_observeGesturePath'](event)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('does not throw when a selection endpoint cannot be read', () => {
+            attachHost()
+            const denied = document.createElement('div')
+            Object.defineProperty(denied, 'getRootNode', {
+                value: () => {
+                    throw new Error('Permission denied to access property "getRootNode"')
+                },
+            })
+
+            expect(() =>
+                lazyLoadedDeadClicksAutocapture['_selectionIsInGesture'](denied, {
+                    path: [shadowButton],
+                    trusted: true,
+                    selectionChanged: false,
+                } as any)
+            ).not.toThrow()
+        })
+
         it('forgets observed roots after stopping', () => {
             attachHost()
             triggerMouseEvent(shadowButton, 'click', { composed: true })

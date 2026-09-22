@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined } from '@posthog/core'
+import { isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
 import {
     getEventTarget,
     isTextSelectionTarget,
@@ -25,6 +25,13 @@ function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCan
         }
     }
     return null
+}
+
+// Firefox denies property access on a node from another origin or from a realm that was torn
+// down, and both a composed path and a mutation record can hand us one. A node we cannot read
+// is a node we cannot inspect, so answer no instead of letting the denial escape.
+function isInspectableElement(node: Node | EventTarget | null | undefined): node is Element {
+    return trySafe(() => isElementNode(node as Node)) === true
 }
 
 function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
@@ -248,8 +255,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _observeGesturePath(event: Event): void {
         const path = event.composedPath?.() ?? []
         for (let i = 0; i < path.length; i++) {
-            const node = path[i] as Node
-            if (isElementNode(node)) {
+            const node = path[i]
+            if (isInspectableElement(node)) {
                 this._observeRoot(node.shadowRoot)
             }
         }
@@ -284,22 +291,26 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // needs no scan of its own
         const scanned = new Set<Node>()
         for (const mutation of mutations) {
-            // a root observed directly keeps reporting after its host leaves the page, and a change
-            // off the page is no sign of life. only an explicit `false` is skipped, since older
-            // browsers lack `isConnected`
-            if (mutation.target?.isConnected === false) {
-                continue
-            }
-            this._lastMutation = Date.now()
-            // added content can bring a shadow root of its own, which the observer that reported
-            // the addition cannot see into
-            const addedNodes = mutation.addedNodes
-            for (let i = 0; i < addedNodes.length; i++) {
-                const node = addedNodes[i]
-                if (isElementNode(node) && !scanned.has(node)) {
-                    this._observeShadowRoots(node, scanned)
+            // one record we cannot read must not end the batch: every record behind it would lose
+            // its sign of life and the timeout backstop would report a false dead click
+            try {
+                // a root observed directly keeps reporting after its host leaves the page, and a change
+                // off the page is no sign of life. only an explicit `false` is skipped, since older
+                // browsers lack `isConnected`
+                if (mutation.target?.isConnected === false) {
+                    continue
                 }
-            }
+                this._lastMutation = Date.now()
+                // added content can bring a shadow root of its own, which the observer that reported
+                // the addition cannot see into
+                const addedNodes = mutation.addedNodes
+                for (let i = 0; i < addedNodes.length; i++) {
+                    const node = addedNodes[i]
+                    if (isInspectableElement(node) && !scanned.has(node)) {
+                        this._observeShadowRoots(node, scanned)
+                    }
+                }
+            } catch {}
         }
     }
 
@@ -354,7 +365,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // Native clicks target the nearest common ancestor of the press and release targets.
         // Composed paths preserve this relationship through accessible shadow boundaries.
         for (const node of gesture.path) {
-            if (isElementNode(node as Node) && path.indexOf(node) !== -1) {
+            if (isInspectableElement(node) && path.indexOf(node) !== -1) {
                 gesture.clickTarget = node
                 break
             }
@@ -448,13 +459,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _selectionIsInGesture(node: Node | null | undefined, gesture: MouseSelectionGesture): boolean {
         const target = gesture.path[0] as Node
-        while (node) {
-            if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
-                return true
+        try {
+            while (node) {
+                if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
+                    return true
+                }
+                // Firefox can expose selection endpoints behind a closed root while mouse events
+                // expose only its host. Compare both representations without traversing other content.
+                node = (node.getRootNode() as ShadowRoot).host
             }
-            // Firefox can expose selection endpoints behind a closed root while mouse events
-            // expose only its host. Compare both representations without traversing other content.
-            node = (node.getRootNode() as ShadowRoot).host
+        } catch {
+            // an endpoint we cannot read is an endpoint we cannot match to the gesture
         }
         return false
     }
@@ -462,7 +477,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _selectionTouchesGesture(selection: Selection, gesture: MouseSelectionGesture): boolean {
         const target = gesture.path[0] as Node
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined
-        if (range && isElementNode(target) && range.startContainer.getRootNode() === target.getRootNode()) {
+        const sameRoot = !!range && trySafe(() => range.startContainer.getRootNode() === target.getRootNode())
+        if (range && sameRoot && isElementNode(target)) {
             if (!range.collapsed) {
                 return range.intersectsNode(target)
             }
