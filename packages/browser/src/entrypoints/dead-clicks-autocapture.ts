@@ -31,7 +31,7 @@ function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCan
 // down, and both a composed path and a mutation record can hand us one. A node we cannot read
 // is a node we cannot inspect, so answer no instead of letting the denial escape.
 function isInspectableElement(node: Node | EventTarget | null | undefined): node is Element {
-    return trySafe(() => isElementNode(node as Node)) === true
+    return !!trySafe(() => isElementNode(node as Node))
 }
 
 function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
