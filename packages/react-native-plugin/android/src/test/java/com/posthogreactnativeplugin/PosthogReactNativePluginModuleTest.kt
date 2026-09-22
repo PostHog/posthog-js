@@ -1,6 +1,7 @@
 package com.posthogreactnativeplugin
 
 import com.facebook.react.bridge.JavaOnlyMap
+import com.posthog.android.PostHogAndroidConfig
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import org.junit.Assert.assertEquals
@@ -9,6 +10,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PosthogReactNativePluginModuleTest {
+  @Test
+  fun `native error tracking config enables JVM and native crash capture together`() {
+    for (enabled in listOf(true, false)) {
+      val config = PostHogAndroidConfig("api-key", "https://us.i.posthog.com")
+
+      config.configureNativeErrorTracking(enabled)
+
+      assertEquals(enabled, config.errorTrackingConfig.autoCapture)
+      assertEquals(enabled, config.errorTrackingConfig.captureNativeCrashes)
+    }
+  }
+
   @Test
   fun `touch capture defaults to true when omitted or malformed`() {
     for (map in listOf(null, JavaOnlyMap(), JavaOnlyMap.of("captureTouches", null), JavaOnlyMap.of("captureTouches", "false"))) {

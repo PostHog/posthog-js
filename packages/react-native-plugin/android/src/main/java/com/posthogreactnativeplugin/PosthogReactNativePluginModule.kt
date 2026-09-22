@@ -148,7 +148,7 @@ class PosthogReactNativePluginModule(
               captureScreenViews = false
               flushAt = theFlushAt
               theRequestHeaders?.let { requestHeaders = it }
-              errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+              this.configureNativeErrorTracking(nativeErrorTrackingAutocapture)
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.
@@ -667,6 +667,11 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+internal fun PostHogAndroidConfig.configureNativeErrorTracking(enabled: Boolean) {
+  errorTrackingConfig.autoCapture = enabled
+  errorTrackingConfig.captureNativeCrashes = enabled
+}
 
 internal fun applyScreenshotConfig(
   map: ReadableMap?,
