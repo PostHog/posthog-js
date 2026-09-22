@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.9
+
+### Patch Changes
+
+- [#4970](https://github.com/PostHog/posthog-js/pull/4970) [`708a5f7`](https://github.com/PostHog/posthog-js/commit/708a5f757d9da9dad2a3b0a892708a1fbfcb9de9) Thanks [@Christian2702](https://github.com/Christian2702)! - Session replay no longer defers its input setter hooks on zone.js's patched `setTimeout`. In Angular apps each of those timers ended a zone task and triggered another change detection, so any component writing an input property on every cycle drove the tab into an endless loop at 100% CPU.
+  (2026-09-22)
+
 ## 1.434.8
 
 ### Patch Changes
