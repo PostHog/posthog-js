@@ -1,6 +1,6 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
-import { Compression, FlagsResponse } from '@/types'
+import { start } from './utils/setup'
 import { decompressSync, strFromU8 } from 'fflate'
 
 /**
@@ -37,23 +37,6 @@ test.describe('deferred customizations bundle', () => {
             }
         })
 
-        const flagsResponse: Partial<FlagsResponse> = {
-            flags: {},
-            featureFlags: {},
-            featureFlagPayloads: {},
-            isAuthenticated: false,
-            siteApps: [],
-            supportedCompression: [Compression.Base64],
-            autocaptureExceptions: false,
-            autocapture_opt_out: true,
-        }
-
-        await context.route(/\/array\/[^/]+\/config(\?|$)/, (route) =>
-            route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(flagsResponse) })
-        )
-        await context.route('**/flags/*', (route) =>
-            route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(flagsResponse) })
-        )
         // hold the bundle back so the `loaded` callback always runs first, which is the
         // ordering a deferred script produces on a real page
         await context.route('**/static/customizations.full.js', async (route) => {
@@ -61,7 +44,9 @@ test.describe('deferred customizations bundle', () => {
             await route.fulfill({ path: './dist/customizations.full.js' })
         })
 
-        await page.goto('/playground/deferred-customizations/index.html')
+        // the page runs its own snippet and `init`, so that the `loaded` callback can
+        // reach for the global the deferred bundle has not published yet
+        await start({ initPosthog: false, url: '/playground/deferred-customizations/index.html' }, page, context)
 
         await expect
             .poll(() => flagsRequests.some((request) => '$current_url' in personPropertiesOf(request)), {

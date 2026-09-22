@@ -15,10 +15,9 @@ import { assignableWindow } from '../utils/globals'
  * and Kea loggers - need the bundle to be there already, so a page must not defer the script
  * when it uses them.
  */
-const QUEUEABLE_CUSTOMIZATIONS = ['setAllPersonProfilePropertiesAsPersonPropertiesForFlags'] as const
+const QUEUEABLE_CUSTOMIZATION = 'setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
 
-type QueueableCustomization = (typeof QUEUEABLE_CUSTOMIZATIONS)[number]
-type QueuedCall = [QueueableCustomization, any[]]
+type QueuedCall = [string, any[]]
 
 // a single leading underscore is mangled per bundle, and this key crosses the boundary
 // between the snippet bundle and customizations.full.js
@@ -30,13 +29,11 @@ export function installCustomizationsQueue(): void {
     }
 
     const queue: QueuedCall[] = []
-    const stub: Record<string, any> = { [QUEUE_KEY]: queue }
 
-    QUEUEABLE_CUSTOMIZATIONS.forEach((name) => {
-        stub[name] = (...args: any[]) => queue.push([name, args])
-    })
-
-    assignableWindow.posthogCustomizations = stub
+    assignableWindow.posthogCustomizations = {
+        [QUEUE_KEY]: queue,
+        [QUEUEABLE_CUSTOMIZATION]: (...args: any[]) => queue.push([QUEUEABLE_CUSTOMIZATION, args]),
+    }
 }
 
 export function publishCustomizations(customizations: Record<string, any>): void {
