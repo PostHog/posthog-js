@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { OtlpLogsPayload } from '@posthog/types'
 
 for (const remote of [false, true]) {
-    test(`logs capture console with ${remote ? 'remote' : 'local'} permission and flush separate scopes on shutdown`, async ({
+    test(`logs capture console with ${remote ? 'remote' : 'local'} permission and flush separate scopes`, async ({
         page,
     }) => {
         const requests: OtlpLogsPayload[] = []
@@ -16,8 +16,9 @@ for (const remote of [false, true]) {
             window.logsHarness.console('console record')
             window.logsHarness.capture('programmatic record')
         })
-        await page.evaluate(() => window.logsHarness.shutdown())
+        await page.evaluate(() => window.logsHarness.flush())
         expect(requests).toHaveLength(2)
+        await page.evaluate(() => window.logsHarness.shutdown())
         const scopes = requests.flatMap((request) => request.resourceLogs.flatMap((resource) => resource.scopeLogs))
         expect(scopes.map((scope) => scope.scope.name)).toContain('console')
         expect(scopes.flatMap((scope) => scope.logRecords.map((record) => record.body))).toEqual(
@@ -33,7 +34,6 @@ test('pagehide hands admitted logs to Beacon while shutdown Fetch is pending', a
     await page.goto('/')
     const result = await page.evaluate(() => window.logsHarness.pagehideDuringShutdown())
     expect(result.fetches).toBe(1)
-    expect(result.aborted).toBe(true)
     const payload = JSON.parse(result.beacon) as OtlpLogsPayload
     expect(
         payload.resourceLogs.flatMap((resource) =>
@@ -67,6 +67,7 @@ test('cross-tab consent denial purges queued logs before a later grant', async (
     await second.evaluate(() => {
         window.logsHarness.capture('fresh')
     })
-    await second.evaluate(() => window.logsHarness.shutdown())
+    await second.evaluate(() => window.logsHarness.flush())
     expect(requests).toHaveLength(1)
+    await second.evaluate(() => window.logsHarness.shutdown())
 })

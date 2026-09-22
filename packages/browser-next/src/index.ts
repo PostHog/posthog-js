@@ -1,5 +1,5 @@
 import { snapshotLogsOptions } from './logs-options'
-import type { PostHog, PostHogOptions } from './types'
+import type { Extension, PostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
 import { isAnalyticsExtension } from './analytics-internal'
 import { analytics } from './automatic-analytics'
@@ -7,53 +7,68 @@ import { analytics } from './automatic-analytics'
 /** Creates a browser client with first-party analytics delivery loaded lazily by default. */
 export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
     const extensions = [...(options?.extensions ?? [])]
-    let loadingError: unknown
-    if (!extensions.some(isAnalyticsExtension)) {
-        let configuration: PostHogOptions['analytics'] = { load: 'lazy' }
-        try {
-            configuration = options?.analytics ?? configuration
-        } catch {
-            // Unavailable configuration uses defaults.
+    const loadingErrors: Array<[string, unknown]> = []
+    const install = (
+        label: string,
+        matches: (extension: Extension) => boolean,
+        load: () => Extension | Promise<Extension> | undefined,
+        prepend = false
+    ): Promise<void> | undefined => {
+        if (extensions.some(matches)) return
+        const add = (extension: Extension): void => {
+            if (prepend) extensions.unshift(extension)
+            else extensions.push(extension)
         }
-        if (configuration !== false) {
+        const failed = (error: unknown): void => {
+            if (error) loadingErrors.push([label, error])
+        }
+        try {
+            const extension = load()
+            if (extension instanceof Promise) return extension.then(add).catch(failed)
+            if (extension) add(extension)
+        } catch (error) {
+            failed(error)
+        }
+    }
+    install(
+        'analytics',
+        isAnalyticsExtension,
+        () => {
+            let configuration: PostHogOptions['analytics'] = { load: 'lazy' }
             try {
-                extensions.unshift(analytics(configuration))
-            } catch (error) {
-                loadingError = error
+                configuration = options?.analytics ?? configuration
+            } catch {
+                // Unavailable configuration uses defaults.
             }
-        }
-    }
-    let flagsError: unknown
-    if (!extensions.some((extension) => extension.name === 'featureFlags')) {
-        try {
+            return configuration === false ? undefined : analytics(configuration)
+        },
+        true
+    )
+    const flagsLoading = install(
+        'flags',
+        (extension) => extension.name === 'featureFlags',
+        () => {
             const configuration = options?.flags
-            if (configuration !== false) {
-                const snapshot = configuration && JSON.parse(JSON.stringify(configuration))
-                const { flags } = await import('./flags')
-                extensions.push(flags(snapshot))
-            }
-        } catch (error) {
-            flagsError = error
+            if (configuration === false) return
+            const snapshot = configuration && JSON.parse(JSON.stringify(configuration))
+            return import('./flags').then(({ flags }) => flags(snapshot))
         }
-    }
-    let logsError: unknown
-    if (!extensions.some((extension) => extension.name === 'logs')) {
-        try {
+    )
+    if (flagsLoading) await flagsLoading
+    const logsLoading = install(
+        'logs',
+        (extension) => extension.name === 'logs',
+        () => {
             const configuration = options?.logs
-            if (configuration !== false) {
-                const snapshot = snapshotLogsOptions(configuration)
-                const { logs } = await import('./logs')
-                extensions.push(logs(snapshot))
-            }
-        } catch (error) {
-            logsError = error
+            if (configuration === false) return
+            const snapshot = snapshotLogsOptions(configuration)
+            return import('./logs').then(({ logs }) => logs(snapshot))
         }
-    }
+    )
+    if (logsLoading) await logsLoading
     const client = await createPostHogCore(options, extensions)
-    if (logsError) client.logger.error('Automatic logs loading failed', logsError)
-    if (flagsError) client.logger.error('Automatic flags loading failed', flagsError)
-    if (loadingError) {
-        client.logger.error('Automatic analytics loading failed', loadingError)
+    for (const [label, error] of loadingErrors.reverse()) {
+        client.logger.error(`Automatic ${label} loading failed`, error)
     }
     return client
 }

@@ -163,6 +163,7 @@ process.stdout.write('Pure CommonJS/ESM flags entrypoints and mixed-module lifec
 
 for (const createLogs of [logs, commonJsLogs]) {
     const requests = []
+    const logger = createLogs()
     const client = await createCorePostHog({
         projectToken: 'ph_test',
         storage: false,
@@ -175,13 +176,13 @@ for (const createLogs of [logs, commonJsLogs]) {
             isAuthenticated: false,
             siteApps: [],
         },
-        extensions: [createLogs()],
+        extensions: [logger],
         fetch: async (url, init) => {
             requests.push({ url, body: JSON.parse(init.body) })
             return new Response('{}')
         },
     })
-    client.captureLog({ body: 'mixed logs' })
+    logger.captureLog({ body: 'mixed logs' })
     await client.shutdown()
     if (
         requests.length !== 1 ||

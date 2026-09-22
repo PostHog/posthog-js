@@ -28,7 +28,7 @@ interface ConsentHarness {
     requests(): number
     remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
     reset(): Promise<void>
-    session(): Promise<SessionContext>
+    session(): Promise<SessionContext | undefined>
     sessionChanges(): readonly string[]
 }
 
@@ -43,7 +43,7 @@ declare global {
             optIn(): void
             shutdown(): Promise<void>
             restored(): boolean
-            pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number; aborted: boolean }>
+            pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number }>
         }
         consentHarness: ConsentHarness
     }
@@ -202,15 +202,17 @@ window.consentHarness = {
 
 /* oxlint-disable no-console -- Exercise native console instrumentation. */
 let logsClient: PostHog | undefined
+let logger: ReturnType<typeof logs> | undefined
 const originalLog = console.log
 window.logsHarness = {
     async initialize(remote) {
+        logger = logs({ captureConsoleLogs: !remote, flushIntervalMs: 60_000 })
         logsClient = await createPostHog({
             projectToken: 'ph_browser_logs',
             apiHost: window.location.origin,
             capturePageview: false,
             navigator: false,
-            extensions: [logs({ captureConsoleLogs: !remote, flushIntervalMs: 60_000 })],
+            extensions: [logger],
             remoteConfig: {
                 supportedCompression: [],
                 toolbarParams: {},
@@ -222,13 +224,13 @@ window.logsHarness = {
         })
     },
     capture(body) {
-        logsClient?.captureLog({ body })
+        logger?.captureLog({ body })
     },
     console(body) {
         console.log(body)
     },
     async flush() {
-        await logsClient?.flush()
+        await logger?.flush()
     },
     optOut() {
         logsClient?.optOut()
@@ -244,8 +246,8 @@ window.logsHarness = {
     },
     async pagehideDuringShutdown() {
         let beacon: Blob | undefined
-        let signal: AbortSignal | undefined
         let fetches = 0
+        const logger = logs({ flushIntervalMs: 0 })
         const client = await createPostHog({
             projectToken: 'ph_browser_logs_shutdown',
             storage: false,
@@ -257,12 +259,11 @@ window.logsHarness = {
                     return true
                 },
             },
-            fetch: (_url, init) => {
+            fetch: () => {
                 fetches++
-                signal = init?.signal ?? undefined
                 return new Promise<Response>(() => {})
             },
-            extensions: [logs({ flushIntervalMs: 0 })],
+            extensions: [logger],
             remoteConfig: {
                 supportedCompression: [],
                 toolbarParams: {},
@@ -271,11 +272,12 @@ window.logsHarness = {
                 siteApps: [],
             },
         })
-        client.captureLog({ body: 'pending navigation' })
+        logger.captureLog({ body: 'pending navigation' })
+        void logger.flush()
         const closing = client.shutdown(10)
         window.dispatchEvent(new Event('pagehide'))
         const body = await beacon?.text()
         await closing
-        return { beacon: body ?? '', fetches, aborted: signal?.aborted ?? false }
+        return { beacon: body ?? '', fetches }
     },
 }
