@@ -123,6 +123,33 @@ describe('persistence', () => {
         vi.restoreAllMocks()
     })
 
+    describe('cookie scope cleanup', () => {
+        it('does not probe the cross-subdomain scope when initialized with cross_subdomain_cookie false', () => {
+            const removeSpy = vi.spyOn(cookieStore, '_remove')
+
+            library = new PostHogPersistence({
+                ...makePostHogConfig('test', 'cookie'),
+                cross_subdomain_cookie: false,
+                secure_cookie: false,
+            } as PostHogConfig)
+
+            expect(removeSpy.mock.calls.some(([, crossSubdomain]) => crossSubdomain === true)).toBe(false)
+        })
+
+        it('still clears the previous cross-subdomain cookie when switching from true to false', () => {
+            library = new PostHogPersistence({
+                ...makePostHogConfig('test', 'cookie'),
+                cross_subdomain_cookie: true,
+                secure_cookie: false,
+            } as PostHogConfig)
+            const removeSpy = vi.spyOn(cookieStore, '_remove')
+
+            library.set_cross_subdomain(false)
+
+            expect(removeSpy).toHaveBeenCalledWith(expect.any(String), true)
+        })
+    })
+
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']
     describe.each(persistenceModes)('persistence modes: %p', (persistenceMode) => {
         // Common tests for all storage modes
