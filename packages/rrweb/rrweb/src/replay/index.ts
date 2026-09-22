@@ -101,6 +101,13 @@ const mitt = mittProxy.default || mittProxy;
 
 const REPLAY_CONSOLE_PREFIX = '[replayer]';
 
+/**
+ * Add batches at least this large apply against a detached ancestor. Small
+ * batches keep the plain path: the detach only pays off when per-insert
+ * document updates dominate, and it costs one extra reflow on reattach.
+ */
+const DETACH_ADDS_THRESHOLD = 1000;
+
 const defaultMouseTailConfig = {
   duration: 500,
   lineCap: 'round',
@@ -1680,6 +1687,55 @@ export class Replayer {
   }
 
   /**
+   * When a mutation carries a huge number of adds, detach the subtree they
+   * land in so the adds run against a detached DOM, and return what is
+   * needed to reattach it. Returns null when the batch is small or cannot
+   * be applied detached; the caller then uses the normal live-DOM path.
+   */
+  private detachRootForLargeAddBatch(
+    d: mutationData,
+    mirror: Mirror | RRDOMMirror,
+  ): { node: Node; parent: Node; nextSibling: Node | null } | null {
+    if (this.usingVirtualDom) return null;
+    if (d.adds.length < DETACH_ADDS_THRESHOLD) return null;
+    // Not on the virtual dom path, so this is the real-DOM mirror.
+    const realMirror = mirror as Mirror;
+    const rootId = d.adds[0].parentId;
+    const root = realMirror.getNode(rootId);
+    if (!root || root.nodeType !== Node.ELEMENT_NODE || !root.parentNode) {
+      return null;
+    }
+    const node = root;
+    // Detaching the <html> element would tear down the document itself.
+    if (node.ownerDocument?.documentElement === node) return null;
+    const parent = node.parentNode as Node;
+    const parentId = realMirror.getId(parent);
+    for (const add of d.adds) {
+      // Iframes and documents must attach against a live contentDocument.
+      if (
+        add.node.type === NodeType.Document ||
+        (add.node.type === NodeType.Element &&
+          toLowerCase(add.node.tagName) === 'iframe')
+      ) {
+        return null;
+      }
+      // An add positioned relative to the detached root, or into its
+      // parent, would resolve its siblings against the detached state and
+      // land out of order once the root reattaches.
+      if (
+        add.parentId === parentId ||
+        add.previousId === rootId ||
+        add.nextId === rootId
+      ) {
+        return null;
+      }
+    }
+    const nextSibling = node.nextSibling;
+    parent.removeChild(node);
+    return { node, parent, nextSibling };
+  }
+
+  /**
    * Apply the mutation to the virtual dom or the real dom.
    * @param d - The mutation data.
    * @param isSync - Whether the mutation should be applied synchronously (while fast-forwarding).
@@ -2008,38 +2064,60 @@ export class Replayer {
       }
     };
 
-    d.adds.forEach((mutation) => {
-      appendNode(mutation);
-    });
+    /**
+     * Inserting into a live document makes the browser update style and
+     * layout state per insert, and that update grows with what the document
+     * already holds. A single huge batch (tens of thousands of <style>
+     * nodes) turns this into minutes of blocked main thread. Detaching the
+     * batch's target ancestor first lets the adds land in a detached
+     * subtree, so the document pays that cost once, on reattach. Sibling
+     * resolution is unaffected because nodes still insert into their real
+     * parent. Skipped when the batch carries an iframe or document node:
+     * attaching those needs a live contentDocument.
+     */
+    const detachedRoot = this.detachRootForLargeAddBatch(d, mirror);
 
-    const startTime = performance.now();
+    try {
+      d.adds.forEach((mutation) => {
+        appendNode(mutation);
+      });
 
-    while (queue.length) {
-      // transform queue to resolve tree
-      const resolveTrees = queueToResolveTrees(queue);
+      const startTime = performance.now();
 
-      queue.length = 0;
+      while (queue.length) {
+        // transform queue to resolve tree
+        const resolveTrees = queueToResolveTrees(queue);
 
-      if (performance.now() - startTime > 150) {
-        this.warn(
-          'Timeout in the loop, please check the resolve tree data:',
-          resolveTrees,
-        );
-        break;
-      }
+        queue.length = 0;
 
-      for (const tree of resolveTrees) {
-        const parent = mirror.getNode(tree.value.parentId);
-        if (!parent) {
-          this.debug(
-            'Drop resolve tree since there is no parent for the root node.',
-            tree,
+        if (performance.now() - startTime > 150) {
+          this.warn(
+            'Timeout in the loop, please check the resolve tree data:',
+            resolveTrees,
           );
-        } else {
-          iterateResolveTree(tree, (mutation) => {
-            appendNode(mutation);
-          });
+          break;
         }
+
+        for (const tree of resolveTrees) {
+          const parent = mirror.getNode(tree.value.parentId);
+          if (!parent) {
+            this.debug(
+              'Drop resolve tree since there is no parent for the root node.',
+              tree,
+            );
+          } else {
+            iterateResolveTree(tree, (mutation) => {
+              appendNode(mutation);
+            });
+          }
+        }
+      }
+    } finally {
+      if (detachedRoot) {
+        detachedRoot.parent.insertBefore(
+          detachedRoot.node,
+          detachedRoot.nextSibling,
+        );
       }
     }
 
