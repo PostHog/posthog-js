@@ -24,6 +24,8 @@ export interface SessionContext {
     readonly windowId: string
     /** When the session started, as a Unix timestamp in milliseconds. */
     readonly sessionStartTimestamp: number
+    /** Most recent session activity, as a Unix timestamp in milliseconds. */
+    readonly lastActivityTimestamp: number
 }
 
 /** A captured event, as observed by `onEvent`. */
@@ -107,8 +109,8 @@ export interface Client {
     readonly initialPersonProperties: DeepReadonly<Record<string, unknown>>
     /** Active group memberships attached to events as `$groups`. */
     readonly groups: DeepReadonly<Record<string, string>>
-    /** The current session, created on first read if needed. */
-    readonly session: SessionContext
+    /** The current session, if one exists. Reading it need not create one. */
+    readonly session: SessionContext | undefined
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
 
