@@ -97,6 +97,9 @@
             ],
             "rageclick": [
                 "dist/rageclick.d.ts"
+            ],
+            "replay/*": [
+                "dist/replay/*.d.ts"
             ]
         }
     },
@@ -230,6 +233,11 @@
             "types": "./dist/rageclick.d.ts",
             "require": "./dist/rageclick.js",
             "import": "./dist/rageclick.mjs"
+        },
+        "./replay/*": {
+            "types": "./dist/replay/*.d.ts",
+            "require": "./dist/replay/*.js",
+            "import": "./dist/replay/*.mjs"
         }
     },
     "scripts": {

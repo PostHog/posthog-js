@@ -728,7 +728,7 @@ export interface SessionRecordingOptions {
      * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
-     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
+     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/replay/external/json-ld.ts
      * @default false before the `2026-08-30` defaults, otherwise true
      */
     captureJsonLd?: boolean

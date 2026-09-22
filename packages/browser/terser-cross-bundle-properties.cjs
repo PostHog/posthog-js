@@ -1,5 +1,5 @@
 // These properties are also used by separately emitted legacy extension bundles.
-const globallyReservedPrivateProperties = ['_addCaptureHook', '_send_request']
+const globallyReservedPrivateProperties = ['_addCaptureHook', '_send_request', '_getBrowserClientAdapter']
 
 const crossBundlePrivateProperties = [
     ...globallyReservedPrivateProperties,

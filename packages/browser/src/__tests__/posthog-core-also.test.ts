@@ -19,7 +19,7 @@ import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/session-recording'
+import { SessionRecording } from '../extensions/replay/browser-session-recording'
 import { SessionPropsManager } from '../session-props'
 
 // `var` so the hoisted vi.mock factory below can assign to it without TDZ.
@@ -532,7 +532,9 @@ describe('posthog core', () => {
 
         it('reaches every registered extension and no failure branch throws', async () => {
             const posthog = await createPosthogInstance()
-            const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
+            const replay = posthog.getExtension('sessionRecording')
+            expect(replay).toBe(posthog.sessionRecording)
+            const handlers = [...(posthog as any)._extensions, replay].filter((ext: any) => ext?.onRemoteConfig)
             expect(handlers.length).toBeGreaterThanOrEqual(9)
             const spies = handlers.map((ext: any) => vi.spyOn(ext, 'onRemoteConfig'))
 

@@ -1,10 +1,11 @@
-import { PostHog } from '../../../posthog-core'
-import {
-    CaptureResult,
+import type { ReplayTriggerClient } from '@posthog/browser-common/replay/host'
+import type { CapturedEventInfo } from '@posthog/browser-common'
+import type {
+    Properties,
     SessionRecordingPersistedConfig,
     SessionRecordingTriggerGroup,
     SessionStartReason,
-} from '../../../types'
+} from '@posthog/browser-common/replay/types'
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
@@ -18,23 +19,23 @@ import {
     SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
     SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
     STORED_PERSON_PROPERTIES_KEY,
-} from '../../../constants'
+} from '../constants'
 import {
     EventTriggerMatching,
     LinkedFlagMatching,
     URLTriggerMatching,
     TriggerGroupMatching,
-    SessionRecordingStatus,
+    type SessionRecordingStatus,
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
     triggerGroupsMatchSessionRecordingStatus,
-    TriggerType,
+    type TriggerType,
     AndTriggerMatching,
     OrTriggerMatching,
-    TriggerStatusMatching,
+    type TriggerStatusMatching,
     TRIGGER_PENDING,
 } from './triggerMatching'
-import { sampleOnProperty } from '../../sampling'
+import { sampleOnProperty } from '../sampling'
 import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
@@ -66,7 +67,7 @@ export function decodeSamplingDecision(storedValue: unknown, sessionId: string):
  * Shared context that strategies need to access from the recorder
  */
 export interface RecordingStrategyContext {
-    instance: PostHog
+    client: ReplayTriggerClient
     sessionId: string
     isSampled: boolean | null
     rrwebError: boolean
@@ -110,7 +111,7 @@ export interface RecordingStrategy {
      * Setup event trigger listeners
      */
     setupEventTriggerListeners(
-        onEvent: (callback: (event: CaptureResult) => void) => () => void,
+        onEvent: (callback: (event: CapturedEventInfo) => void) => () => void,
         sessionId: string,
         onActivate: (triggerType: TriggerType, matchDetail?: string) => void
     ): (() => void) | undefined
@@ -167,7 +168,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     private _recordingStatusFunction: typeof anyMatchSessionRecordingStatus = allMatchSessionRecordingStatus
 
     constructor(
-        private readonly _instance: PostHog,
+        private readonly _client: ReplayTriggerClient,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _eventTriggerMatching: EventTriggerMatching,
         private readonly _linkedFlagMatching: LinkedFlagMatching,
@@ -189,7 +190,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
             this._recordingStatusFunction = allMatchSessionRecordingStatus
         }
 
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: config.triggerMatchType,
         })
 
@@ -218,7 +219,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     getMinimumDuration(sessionId: string): number | null {
         // V1: Minimum duration is global from config, doesn't need sessionId
         void sessionId
-        const config = this._instance.get_property('$session_recording_remote_config') as
+        const config = this._client.kv.get('$session_recording_remote_config') as
             | SessionRecordingPersistedConfig
             | undefined
         const duration = config?.minimumDurationMilliseconds
@@ -235,7 +236,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
     }
 
     setupEventTriggerListeners(
-        onEvent: (callback: (event: CaptureResult) => void) => () => void,
+        onEvent: (callback: (event: CapturedEventInfo) => void) => () => void,
         sessionId: string,
         onActivate: (triggerType: TriggerType, matchDetail?: string) => void
     ): (() => void) | undefined {
@@ -243,7 +244,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
             return undefined
         }
 
-        this._removeEventTriggerCaptureHook = onEvent((event: CaptureResult) => {
+        this._removeEventTriggerCaptureHook = onEvent((event: CapturedEventInfo) => {
             try {
                 this._eventTriggerMatching.checkEventTriggerConditions(event.event, onActivate, sessionId)
             } catch (e) {
@@ -258,13 +259,13 @@ export class V1RecordingStrategy implements RecordingStrategy {
         const currentSampleRate = this._sampleRate
 
         if (!isNumber(currentSampleRate)) {
-            this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
-            this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
+            this._client.kv.remove(SESSION_RECORDING_IS_SAMPLED)
+            this._client.kv.remove(SESSION_RECORDING_SAMPLE_RATE)
             return
         }
 
-        const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        const storedSampleRate = this._instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+        const storedValue = this._client.kv.get(SESSION_RECORDING_IS_SAMPLED)
+        const storedSampleRate = this._client.kv.get(SESSION_RECORDING_SAMPLE_RATE)
 
         const storedIsSampled = decodeSamplingDecision(storedValue, sessionId)
 
@@ -285,7 +286,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
             }
         }
 
-        this._instance.persistence?.register({
+        this._client.kv.set({
             [SESSION_RECORDING_IS_SAMPLED]: encodeSamplingDecision(sessionId, shouldSample),
             [SESSION_RECORDING_SAMPLE_RATE]:
                 isNull(storedSampleRate) && storedValue === sessionId ? null : currentSampleRate,
@@ -296,7 +297,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
         if (!isNumber(this._sampleRate)) {
             return
         }
-        const storedValue = this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        const storedValue = this._client.kv.get(SESSION_RECORDING_IS_SAMPLED)
         if (!isBoolean(decodeSamplingDecision(storedValue, sessionId))) {
             this.makeSamplingDecisions(sessionId)
         }
@@ -307,11 +308,11 @@ export class V1RecordingStrategy implements RecordingStrategy {
     }
 
     clearConditionalRecordingPersistence(): void {
-        this._instance.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-        this._instance.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
-        this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
-        this._instance.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
+        this._client.kv.remove(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        this._client.kv.remove(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        this._client.kv.remove(SESSION_RECORDING_IS_SAMPLED)
+        this._client.kv.remove(SESSION_RECORDING_SAMPLE_RATE)
+        this._client.kv.remove(SESSION_RECORDING_PAST_MINIMUM_DURATION)
     }
 
     updateActiveTriggers(sessionId: string): void {
@@ -360,7 +361,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
     private _removeEventTriggerCaptureHook: (() => void) | undefined
 
     constructor(
-        private readonly _instance: PostHog,
+        private readonly _client: ReplayTriggerClient,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
         private readonly _tryAddCustomEvent: (tag: string, payload: any) => void,
@@ -376,7 +377,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         // Setup trigger group matchers
         this._setupTriggerGroups(config.triggerGroups)
 
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: 'v2_trigger_groups',
             [SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT]: config.triggerGroups.length,
         })
@@ -454,14 +455,14 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
     }
 
     setupEventTriggerListeners(
-        onEvent: (callback: (event: CaptureResult) => void) => () => void,
+        onEvent: (callback: (event: CapturedEventInfo) => void) => () => void,
         sessionId: string,
         onActivate: (triggerType: TriggerType, matchDetail?: string) => void
     ): (() => void) | undefined {
         // V2 doesn't use the global onActivate callback - each group activates itself
         void onActivate
 
-        this._removeEventTriggerCaptureHook = onEvent((event: CaptureResult) => {
+        this._removeEventTriggerCaptureHook = onEvent((event: CapturedEventInfo) => {
             // Performance optimization: Stop checking triggers after initial buffer flush
             if (this._hasCompletedInitialFlush) {
                 logger.info('[SessionRecorder] Stopping trigger checks - initial buffer flushed')
@@ -490,7 +491,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                             const matchedTriggers = (matcher.group.conditions.events || []).filter(
                                 (t) => t.name === event.event
                             )
-                            const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+                            const personProperties = this._client.kv.get<Properties>(STORED_PERSON_PROPERTIES_KEY)
                             const anyMatched = matchedTriggers.some(
                                 (t) =>
                                     !t.properties ||
@@ -524,7 +525,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
             // Check if we have a stored decision for this group
             const storageKey = SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + groupId
-            const storedValue = this._instance.get_property(storageKey)
+            const storedValue = this._client.kv.get(storageKey)
 
             // Parse stored decision:
             // - object = current format with session ID, sample rate, and decision
@@ -574,7 +575,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
             // Store the decision
             this._triggerGroupSamplingResults.set(groupId, shouldSample)
-            this._instance.persistence?.register({
+            this._client.kv.set({
                 [storageKey]: {
                     sessionId,
                     sampleRate,
@@ -598,16 +599,16 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
     }
 
     clearConditionalRecordingPersistence(): void {
-        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
-        this._instance.persistence?.unregister(SESSION_RECORDING_SAMPLE_RATE)
-        this._instance.persistence?.unregister(SESSION_RECORDING_PAST_MINIMUM_DURATION)
+        this._client.kv.remove(SESSION_RECORDING_IS_SAMPLED)
+        this._client.kv.remove(SESSION_RECORDING_SAMPLE_RATE)
+        this._client.kv.remove(SESSION_RECORDING_PAST_MINIMUM_DURATION)
 
         // V2: Clear per-group trigger keys
         for (const matcher of this._triggerGroupMatchers) {
             const groupId = matcher.group.id
-            this._instance.persistence?.unregister(SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + groupId)
-            this._instance.persistence?.unregister(SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + groupId)
-            this._instance.persistence?.unregister(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + groupId)
+            this._client.kv.remove(SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX + groupId)
+            this._client.kv.remove(SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX + groupId)
+            this._client.kv.remove(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + groupId)
         }
     }
 
@@ -631,7 +632,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             }
         }
 
-        this._instance.register_for_session({
+        this._client.replay.registerSessionProperties({
             [SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS]: recordingGroups,
         })
     }
@@ -674,7 +675,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         if (!groupProperties || groupProperties.length === 0) {
             return true
         }
-        const personProperties = this._instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+        const personProperties = this._client.kv.get<Properties>(STORED_PERSON_PROPERTIES_KEY)
         return matchTriggerPropertyFilters(groupProperties, eventProperties, personProperties)
     }
 
@@ -686,7 +687,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
         // Create a matcher for each group
         for (const group of groups) {
-            const matcher = new TriggerGroupMatching(this._instance, group, (flag, variant) => {
+            const matcher = new TriggerGroupMatching(this._client, group, (flag, variant) => {
                 this._reportStarted('linked_flag_matched', {
                     flag,
                     variant,

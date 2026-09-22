@@ -1,0 +1,688 @@
+// @vitest-environment jsdom
+
+import { createReplayOptions } from './helpers/replay-options'
+import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
+import { CapturedNetworkRequest } from '@posthog/browser-common/replay/types'
+
+describe('config', () => {
+    describe('network request options', () => {
+        describe('maskRequestFn', () => {
+            it('can enable header recording remotely', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, { recordHeaders: true })
+                expect(networkOptions.recordHeaders).toBe(true)
+                expect(networkOptions.recordBody).toBe(undefined)
+            })
+
+            it('can enable body recording remotely', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, { recordBody: true })
+                expect(networkOptions.recordHeaders).toBe(undefined)
+                expect(networkOptions.recordBody).toBe(true)
+            })
+
+            it('client can force disable recording', () => {
+                const options = createReplayOptions()
+                options.recording.recordHeaders = false
+                options.recording.recordBody = false
+                const networkOptions = buildNetworkRequestOptions(() => options, {
+                    recordHeaders: true,
+                    recordBody: true,
+                })
+                expect(networkOptions.recordHeaders).toBe(false)
+                expect(networkOptions.recordBody).toBe(false)
+            })
+
+            it('should cope with no headers when even if no other config is set', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: undefined,
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: undefined,
+                })
+            })
+
+            it('uses the deprecated mask fn when set', () => {
+                const options = createReplayOptions()
+                options.recording.maskNetworkRequestFn = (data) => {
+                    return {
+                        ...data,
+                        url: 'edited', // deprecated fn only edits the url
+                    }
+                }
+                const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        Authorization: 'Bearer 123',
+                        'content-type': 'application/json',
+                    },
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'edited',
+                    requestHeaders: {
+                        Authorization: 'redacted',
+                        'content-type': 'application/json',
+                    },
+                })
+            })
+
+            it('redacts denied request and response headers, including credential-shaped custom names', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'abc',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'session=secret',
+                        'x-session-id': 'xyz',
+                        'content-type': 'application/json',
+                    },
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'x-gist-encoded-user-token': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                    responseHeaders: {
+                        'set-cookie': 'redacted',
+                        'x-session-id': 'redacted',
+                        'content-type': 'application/json',
+                    },
+                })
+            })
+
+            it.each([
+                [
+                    {
+                        name: 'https://app.posthog.com/api/feature_flag/',
+                    },
+                    {
+                        name: 'https://app.posthog.com/api/feature_flag/',
+                    },
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/s/?_=123',
+                    },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/e/?_=123',
+                    },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/i/v0/e/?_=123',
+                    },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    {
+                        // even an imaginary future world of rust session replay capture
+                        name: 'https://app.posthog.com/i/v0/s/?_=123',
+                    },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    {
+                        // using a relative path as a reverse proxy api host
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
+                    },
+                    undefined,
+                    '/ingest',
+                ],
+                [
+                    {
+                        // using a reverse proxy with a path
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
+                    },
+                    undefined,
+                    'https://app.posthog.com/ingest',
+                ],
+            ])('ignores ingestion paths', (capturedRequest, expected, apiHost?: string) => {
+                const networkOptions = buildNetworkRequestOptions(
+                    () => ({ ...createReplayOptions(), apiHost: apiHost || 'https://us.posthog.com' }),
+                    {}
+                )
+                const x = networkOptions.maskRequestFn!(capturedRequest as CapturedNetworkRequest)
+                expect(x).toEqual(expected)
+            })
+
+            it('ignores rewritten ingestion paths identified by the request router', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {}, (url) => {
+                    return new URL(url).pathname === '/custom-replay/'
+                })
+
+                expect(
+                    networkOptions.maskRequestFn!({
+                        name: 'https://proxy.example.com/custom-replay/?compression=gzip-js',
+                    } as CapturedNetworkRequest)
+                ).toBeUndefined()
+            })
+
+            it('redacts large request body', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    requestBody: 'something very large',
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
+                })
+            })
+
+            it('redacts large response body', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    responseHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    responseBody: 'something very large',
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    responseHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    responseBody: '[SessionRecording] Response body too large to record (1000001 bytes)',
+                })
+            })
+
+            it('no need to redact small payload when there is no content length header', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'some body that has no content length',
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'some body that has no content length',
+                })
+            })
+
+            it('can redact large payload when there is no content length header', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'a'.repeat(1000001),
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
+                })
+            })
+        })
+        describe('payloadHostDenyList', () => {
+            it('uses a default when none provided', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+                expect(networkOptions.payloadHostDenyList).toEqual([
+                    '.lr-ingest.io',
+                    '.ingest.sentry.io',
+                    '.clarity.ms',
+                    'google-analytics.com',
+                    'analytics.google.com',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
+                ])
+            })
+
+            it('adds to the default when deny list is provided', () => {
+                const networkOptions = buildNetworkRequestOptions(createReplayOptions, {
+                    payloadHostDenyList: ['wat', 'huh'],
+                })
+                expect(networkOptions.payloadHostDenyList).toEqual([
+                    'wat',
+                    'huh',
+                    '.lr-ingest.io',
+                    '.ingest.sentry.io',
+                    '.clarity.ms',
+                    'google-analytics.com',
+                    'analytics.google.com',
+                    'nr-data.net',
+                    'datadoghq.com',
+                    'datadoghq.eu',
+                    'ddog-gov.com',
+                    'segment.io',
+                    'rudderstack.com',
+                    'amplitude.com',
+                    'mixpanel.com',
+                    'hotjar.com',
+                    'hotjar.io',
+                    'fullstory.com',
+                ])
+            })
+        })
+    })
+
+    describe('masking/privacy', () => {
+        it('should remove the Authorization header from requests even if no other config is set', () => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                },
+            })
+        })
+
+        it('can amend the provided object', () => {
+            const options = createReplayOptions()
+            options.recording.maskCapturedNetworkRequestFn = (data) => {
+                data.name = 'changed'
+                return data
+            }
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'changed',
+            })
+        })
+
+        it('should remove the Authorization header from requests even when a mask request fn is set', () => {
+            const options = createReplayOptions()
+            options.recording.maskCapturedNetworkRequestFn = (data) => {
+                return {
+                    ...data,
+                    requestHeaders: {
+                        ...(data.requestHeaders ? data.requestHeaders : {}),
+                        'content-type': 'edited',
+                    },
+                }
+            }
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'edited',
+                },
+            })
+        })
+
+        it('should redact password when no masking config is set', () => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'some body with password',
+                responseBody: 'some body with password',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                },
+                requestBody: '[SessionRecording] Request body redacted as might contain: password',
+                responseBody: '[SessionRecording] Response body redacted as might contain: password',
+            })
+        })
+
+        it('mask request fn replaces scrubPayload functionality', () => {
+            const options = createReplayOptions()
+            options.recording.maskCapturedNetworkRequestFn = (data) => {
+                return {
+                    ...data,
+                    requestHeaders: {
+                        ...(data.requestHeaders ? data.requestHeaders : {}),
+                        'content-type': 'edited',
+                    },
+                    requestBody: 'the provided function ran',
+                }
+            }
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'the original value',
+                responseBody: 'the original value',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'edited',
+                },
+                requestBody: 'the provided function ran',
+                responseBody: 'the original value',
+            })
+        })
+
+        it('case insensitively removes headers on the deny list', () => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    AuThOrIzAtIoN: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    AuThOrIzAtIoN: 'redacted',
+                    'content-type': 'application/json',
+                },
+            })
+        })
+
+        it.each([
+            ['timestamp', '{"version":"1785400913428"}'],
+            [
+                'UUID containing an SSN-shaped substring',
+                '{"personalizationOptionId":"a2086e30-2564-40d2-b260-074641cd3b89"}',
+            ],
+        ])('does not redact a network body containing a %s', (_description, body) => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            })
+        })
+
+        it('does not capture SSN data in network bodies', () => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: '{"ssn":"123-45-6789"}',
+                responseBody: '{"ssn":"123456789"}',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
+            })
+        })
+
+        it('does not capture CC data', () => {
+            const networkOptions = buildNetworkRequestOptions(createReplayOptions, {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'take payment with CC 4242 4242 4242 4242',
+                responseBody: 'take payment with CC 4242 4242 4242 4242',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                },
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
+            })
+        })
+
+        it('applies initial URL rewrites from the user mask fn', () => {
+            const options = createReplayOptions()
+            options.recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: data.name.replace('token=secret', 'token=[MASKED]'),
+            })
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page?token=secret',
+                method: undefined,
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toEqual({
+                name: 'https://example.com/page?token=[MASKED]',
+                method: undefined,
+                isInitial: true,
+            })
+        })
+
+        it('retains URL-less required metadata when the user intentionally filters an initial entry', () => {
+            const options = createReplayOptions()
+            options.recording.maskCapturedNetworkRequestFn = () => null
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page?token=secret',
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                isInitial: true,
+                requestHeaders: { 'x-customer-secret': 'secret' },
+                requestBody: 'secret request',
+                responseHeaders: { 'x-customer-secret': 'secret' },
+                responseBody: 'secret response',
+                serverTiming: [{ name: 'customer-secret', description: 'customer-secret', duration: 1 }],
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toEqual({
+                name: '',
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
+                isInitial: true,
+            })
+        })
+
+        it('does not treat initial methodless metadata as a GET request', () => {
+            const options = createReplayOptions()
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) =>
+                data.method === 'GET' ? data : undefined
+            )
+            options.recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const initial = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page?token=secret',
+                method: undefined,
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            const nonInitial = networkOptions.maskRequestFn!({
+                name: 'https://example.com/api',
+                method: 'POST',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledTimes(2)
+            expect(initial).toEqual({
+                name: '',
+                entryType: undefined,
+                startTime: undefined,
+                duration: undefined,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
+                isInitial: true,
+            })
+            expect(nonInitial).toBeUndefined()
+        })
+
+        it('applies the deprecated URL mask adapter to initial entries', () => {
+            const options = createReplayOptions()
+            options.recording.maskNetworkRequestFn = ({ url }) => ({
+                url: url.replace('token=secret', 'token=[MASKED]'),
+            })
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            expect(
+                networkOptions.maskRequestFn!({
+                    name: 'https://example.com/page?token=secret',
+                    isInitial: true,
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: 'https://example.com/page?token=[MASKED]',
+                isInitial: true,
+            })
+
+            options.recording.maskNetworkRequestFn = () => null
+            const filteredOptions = buildNetworkRequestOptions(() => options, {})
+            expect(
+                filteredOptions.maskRequestFn!({
+                    name: 'https://example.com/page?token=secret',
+                    entryType: 'navigation',
+                    startTime: 10,
+                    duration: 20,
+                    isInitial: true,
+                    requestBody: 'customer-secret',
+                    serverTiming: [{ name: 'customer-secret', description: 'customer-secret', duration: 1 }],
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: '',
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
+                isInitial: true,
+            })
+            expect(
+                filteredOptions.maskRequestFn!({
+                    name: 'https://example.com/api?token=secret',
+                    method: 'GET',
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: undefined,
+                method: 'GET',
+            })
+        })
+
+        it('runs enforced cleaning before the user mask fn for initial entries', () => {
+            const options = createReplayOptions()
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) => data)
+            options.recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                isInitial: true,
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                requestBody: 'secret request',
+                responseHeaders: {
+                    'set-cookie': 'session=secret',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                responseBody: 'secret response',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledWith({
+                name: 'something',
+                isInitial: true,
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
+                responseHeaders: {
+                    'set-cookie': 'redacted',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                responseBody: '[SessionRecording] Response body too large to record (1000001 bytes)',
+            })
+            expect(cleaned).toEqual(maskCapturedNetworkRequestFn.mock.calls[0][0])
+        })
+
+        it('does not preserve an initial PostHog ingestion request', () => {
+            const options = { ...createReplayOptions(), apiHost: 'https://example.com/ingest' }
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) => data)
+            options.recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(() => options, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/ingest/s/?token=secret',
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toBeUndefined()
+            expect(maskCapturedNetworkRequestFn).not.toHaveBeenCalled()
+        })
+    })
+})

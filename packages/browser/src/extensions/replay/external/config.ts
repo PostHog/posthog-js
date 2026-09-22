@@ -1,8 +1,9 @@
-import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
+import type { ReplayOptions } from '@posthog/browser-common/replay/host'
+import type { CapturedNetworkRequest, NetworkRecordOptions } from '@posthog/browser-common/replay/types'
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
+import { shouldCaptureValue } from '@posthog/browser-common/utils/should-capture-value'
 import { each } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -160,7 +161,7 @@ const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (
     data: CapturedNetworkRequest,
-    apiHostConfig: PostHogConfig['api_host'],
+    apiHostConfig: string,
     isIngestionEndpoint?: (url: string) => boolean
 ): CapturedNetworkRequest | undefined => {
     if (isIngestionEndpoint?.(data.name)) {
@@ -216,11 +217,15 @@ const limitPayloadSize = (
 
     return (data) => {
         if (data?.requestBody) {
-            data.requestBody = enforcePayloadSizeLimit(data.requestBody, data.requestHeaders, limit, 'Request')
+            data.requestBody = enforcePayloadSizeLimit(data.requestBody, data.requestHeaders, limit, 'Request') as
+                | string
+                | null
         }
 
         if (data?.responseBody) {
-            data.responseBody = enforcePayloadSizeLimit(data.responseBody, data.responseHeaders, limit, 'Response')
+            data.responseBody = enforcePayloadSizeLimit(data.responseBody, data.responseHeaders, limit, 'Response') as
+                | string
+                | null
         }
 
         return data
@@ -250,8 +255,8 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
         return undefined
     }
 
-    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request')
-    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response')
+    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request') as string | null
+    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response') as string | null
 
     return capturedRequest
 }
@@ -268,7 +273,7 @@ export const isInitialMaskFallback = (request: CapturedNetworkRequest | undefine
  *  if someone complains then we'll add an opt-in to let them override it
  */
 export const buildNetworkRequestOptions = (
-    instanceConfig: PostHogConfig,
+    options: () => ReplayOptions,
     remoteNetworkOptions: Pick<
         NetworkRecordOptions,
         'recordHeaders' | 'recordBody' | 'recordPerformance' | 'payloadHostDenyList'
@@ -284,29 +289,26 @@ export const buildNetworkRequestOptions = (
         ],
     }
     // client can always disable despite remote options
-    const canRecordHeaders =
-        instanceConfig.session_recording.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
-    const canRecordBody =
-        instanceConfig.session_recording.recordBody === false ? false : remoteNetworkOptions.recordBody
-    const canRecordPerformance =
-        instanceConfig.capture_performance === false ? false : remoteNetworkOptions.recordPerformance
+    const canRecordHeaders = options().recording.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
+    const canRecordBody = options().recording.recordBody === false ? false : remoteNetworkOptions.recordBody
+    const canRecordPerformance = options().networkTiming === false ? false : remoteNetworkOptions.recordPerformance
 
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.api_host, isIngestionEndpoint))
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), options().apiHost, isIngestionEndpoint))
 
-    const hasDeprecatedMaskFunction = isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+    const hasDeprecatedMaskFunction = isFunction(options().recording.maskNetworkRequestFn)
 
-    if (hasDeprecatedMaskFunction && isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
+    if (hasDeprecatedMaskFunction && isFunction(options().recording.maskCapturedNetworkRequestFn)) {
         logger.warn(
             'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
         )
     }
 
     if (hasDeprecatedMaskFunction) {
-        instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
-            const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+        options().recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
+            const cleanedURL = options().recording.maskNetworkRequestFn!({ url: data.name })
             // Preserve the nullish signal for initial entries so the required-metadata fallback below can
             // remove all customer-controlled content. Keep the deprecated URL-only behavior otherwise.
             if (!cleanedURL && data.isInitial) {
@@ -321,7 +323,7 @@ export const buildNetworkRequestOptions = (
         }
     }
 
-    config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
+    config.maskRequestFn = isFunction(options().recording.maskCapturedNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
               if (!cleanedRequest) {
@@ -332,7 +334,9 @@ export const buildNetworkRequestOptions = (
               // Keep only required, non-content fields before invoking the callback because callbacks may
               // mutate their argument. In particular, do not copy customer-controlled server timing data.
               const requiredInitialMetadata: CapturedNetworkRequest | undefined = cleanedRequest.isInitial
-                  ? {
+                  ? // Preserve own undefined-valued fields with the shared package's exact optional property types.
+                    // oxlint-disable-next-line typescript/consistent-type-assertions
+                    ({
                         name: '',
                         entryType: cleanedRequest.entryType,
                         startTime: cleanedRequest.startTime,
@@ -341,9 +345,9 @@ export const buildNetworkRequestOptions = (
                         timeOrigin: cleanedRequest.timeOrigin,
                         timestamp: cleanedRequest.timestamp,
                         isInitial: true,
-                    }
+                    } as CapturedNetworkRequest)
                   : undefined
-              const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
+              const maskedRequest = options().recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
 
               // A nullish result normally drops the request. Initial timing metadata must remain for replay,
               // so retain it without the URL or any network content rather than exposing deliberately filtered data.
@@ -355,6 +359,8 @@ export const buildNetworkRequestOptions = (
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
 
+    // Preserve own undefined-valued fields with the shared package's exact optional property types.
+    // oxlint-disable-next-line typescript/consistent-type-assertions
     return {
         ...defaultNetworkOptions,
         ...config,
@@ -362,6 +368,6 @@ export const buildNetworkRequestOptions = (
         recordBody: canRecordBody,
         recordPerformance: canRecordPerformance,
         recordInitialRequests: canRecordPerformance,
-        streamNetworkBody: instanceConfig.session_recording.streamNetworkBody === true,
-    }
+        streamNetworkBody: options().recording.streamNetworkBody === true,
+    } as NetworkRecordOptions
 }

@@ -143,7 +143,7 @@ import type { PostHogLogs } from './posthog-logs'
 import type { PostHogMetrics } from './posthog-metrics'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
-import type { SessionRecording } from './extensions/replay/session-recording'
+import type { SessionRecording } from './extensions/replay/browser-session-recording'
 import type { Extension } from './extensions/types'
 import type { Toolbar } from './extensions/toolbar'
 import type { PostHogFeatureFlags } from './posthog-featureflags'
@@ -528,19 +528,28 @@ export class PostHog implements PostHogInterface {
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
-    private _removeExtension<T extends Extension>(extension: T | undefined): void {
+    private _removeExtension<T extends Extension>(extension: T | undefined, dispose?: () => void): void {
         if (!extension) {
+            return
+        }
+        if (this._isSharedExtension(extension)) {
+            this._browserClientAdapter?.remove(extension, dispose)
             return
         }
         const idx = this._extensions.indexOf(extension)
         if (idx !== -1) {
             this._extensions.splice(idx, 1)
         }
+        dispose?.()
     }
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         this._removeExtension(oldExt)
-        this._extensions.push(newExt)
+        if (this._isSharedExtension(newExt)) {
+            void this._getBrowserClientAdapter().add(newExt)
+        } else {
+            this._extensions.push(newExt)
+        }
         newExt.initialize?.()
         return newExt
     }
@@ -1160,8 +1169,16 @@ export class PostHog implements PostHogInterface {
         if (ext.siteApps) {
             this._extensions.push((this.siteApps = new ext.siteApps(this)))
         }
-        if (ext.sessionRecording && !startInCookielessMode) {
-            this._extensions.push((this.sessionRecording = new ext.sessionRecording(this)))
+        if (ext.sessionRecording && !startInCookielessMode && !this._isShutdown) {
+            this.sessionRecording = new ext.sessionRecording(this)
+            if (this._isSharedExtension(this.sessionRecording)) {
+                void this._getBrowserClientAdapter().add(this.sessionRecording)
+                initTasks.push(() => {
+                    void this.sessionRecording?.initialize()
+                })
+            } else {
+                this._extensions.push(this.sessionRecording)
+            }
         }
         if (!this.config.disable_scroll_properties) {
             initTasks.push(() => {
@@ -3872,7 +3889,10 @@ export class PostHog implements PostHogInterface {
         this._isShutdown = true
         this.logs?.flushLogs('sendBeacon')
         this._getBrowserClientAdapter().dispose()
-        this.sessionRecording?.dispose()
+        const recording: Extension | undefined = this.sessionRecording
+        if (recording && !this._isSharedExtension(recording)) {
+            this.sessionRecording?.dispose()
+        }
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
@@ -4719,7 +4739,8 @@ export class PostHog implements PostHogInterface {
         }
         if (this._inCookielessMode()) {
             // Identity changes must not let queued recorder work flush under the replacement identity.
-            this.sessionRecording?.dispose({ discardBufferedEvents: true })
+            const recording = this.sessionRecording
+            this._removeExtension(recording, () => recording?.dispose({ discardBufferedEvents: true }))
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
@@ -4734,14 +4755,15 @@ export class PostHog implements PostHogInterface {
                 this.config.__extensionClasses?.sessionRecording ?? PostHog.__defaultExtensionClasses?.sessionRecording
             if (SessionRecordingClass) {
                 this.sessionRecording = this._replaceExtension(
-                    this.sessionRecording,
+                    undefined,
                     new SessionRecordingClass(this) as SessionRecording
                 )
                 // Replay the cached remote config result so the new recorder picks up
                 // server-side settings (enable flag, endpoint, sampling) that arrived while
                 // we were still in cookieless mode and sessionRecording didn't yet exist.
-                if (this._lastRemoteConfig) {
-                    this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
+                const recording: Extension = this.sessionRecording
+                if (this._lastRemoteConfig && !this._isSharedExtension(recording)) {
+                    recording.onRemoteConfig?.(this._lastRemoteConfig)
                 }
             }
         }
@@ -4797,7 +4819,7 @@ export class PostHog implements PostHogInterface {
         const sessionRecording =
             this.config.cookieless_mode === COOKIELESS_ON_REJECT ? this.sessionRecording : undefined
         // Identity changes must not let queued recorder work flush under the cookieless identity.
-        sessionRecording?.dispose({ discardBufferedEvents: true })
+        this._removeExtension(sessionRecording, () => sessionRecording?.dispose({ discardBufferedEvents: true }))
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
@@ -4813,8 +4835,6 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
-            // Detach the recorder before sessionManager goes away so pending work cannot outlive it.
-            this._removeExtension(sessionRecording)
             this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()

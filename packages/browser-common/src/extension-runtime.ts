@@ -51,6 +51,15 @@ export class ExtensionRuntime implements Disposable {
         return this._extensions.get(name) as T | undefined
     }
 
+    /** Removes this registration synchronously, optionally using host-specific disposal options. */
+    remove(extension: Extension, dispose?: () => void): void {
+        if (this._extensions.get(extension.name) !== extension) {
+            return
+        }
+        this._extensions.delete(extension.name)
+        this._disposeExtension(extension, dispose)
+    }
+
     /** Releases every registered extension once in reverse registration order without waiting for pending setup. */
     dispose(): void {
         if (this._disposed) {
@@ -65,9 +74,9 @@ export class ExtensionRuntime implements Disposable {
         }
     }
 
-    private _disposeExtension(extension: Extension): void {
+    private _disposeExtension(extension: Extension, dispose = () => extension.dispose?.()): void {
         try {
-            const result = extension.dispose?.() as unknown
+            const result = dispose() as unknown
             if (result && isFunction((result as PromiseLike<void>).then)) {
                 void (result as PromiseLike<void>).then(undefined, (error) => {
                     this._logger.error(`Failed to dispose browser extension "${extension.name}"`, error)

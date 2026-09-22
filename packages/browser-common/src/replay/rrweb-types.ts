@@ -63,7 +63,7 @@ export type NodeType = (typeof NodeType)[keyof typeof NodeType]
 export type documentNode = {
     type: typeof NodeType.Document
     childNodes: serializedNodeWithId[]
-    compatMode?: string
+    compatMode?: string | undefined
 }
 
 export type documentTypeNode = {
@@ -78,15 +78,15 @@ export type elementNode = {
     tagName: string
     attributes: attributes
     childNodes: serializedNodeWithId[]
-    isSVG?: true
-    needBlock?: boolean
-    isCustom?: true
+    isSVG?: true | undefined
+    needBlock?: boolean | undefined
+    isCustom?: true | undefined
 }
 
 export type textNode = {
     type: typeof NodeType.Text
     textContent: string
-    isStyle?: true
+    isStyle?: true | undefined
 }
 
 export type cdataNode = {
@@ -100,9 +100,9 @@ export type commentNode = {
 }
 
 export type serializedNode = (documentNode | documentTypeNode | elementNode | textNode | cdataNode | commentNode) & {
-    rootId?: number
-    isShadowHost?: boolean
-    isShadow?: boolean
+    rootId?: number | undefined
+    isShadowHost?: boolean | undefined
+    isShadow?: boolean | undefined
 }
 
 export type serializedNodeWithId = serializedNode & {
@@ -188,7 +188,7 @@ export type metaEvent = {
 export type customEventData<T = unknown> = {
     tag: string
     payload: T
-    href?: string
+    href?: string | undefined
 }
 
 export type customEvent<T = unknown> = {
@@ -225,12 +225,12 @@ export type attributeMutation = {
 export type removedNodeMutation = {
     parentId: number
     id: number
-    isShadow?: boolean
+    isShadow?: boolean | undefined
 }
 
 export type addedNodeMutation = {
     parentId: number
-    previousId?: number | null
+    previousId?: number | null | undefined
     nextId: number | null
     node: serializedNodeWithId
 }
@@ -240,7 +240,7 @@ export type mutationCallbackParam = {
     attributes: attributeMutation[]
     removes: removedNodeMutation[]
     adds: addedNodeMutation[]
-    isAttachIframe?: true
+    isAttachIframe?: true | undefined
 }
 
 export type mutationData = {
@@ -279,9 +279,9 @@ export type PointerTypes = (typeof PointerTypes)[keyof typeof PointerTypes]
 type mouseInteractionParam = {
     type: MouseInteractions
     id: number
-    x?: number
-    y?: number
-    pointerType?: PointerTypes
+    x?: number | undefined
+    y?: number | undefined
+    pointerType?: PointerTypes | undefined
 }
 
 export type mouseInteractionData = {
@@ -315,7 +315,7 @@ export type viewportResizeData = {
 export type inputValue = {
     text: string
     isChecked: boolean
-    userTriggered?: boolean
+    userTriggered?: boolean | undefined
 }
 
 export type inputData = {
@@ -335,11 +335,11 @@ export type MediaInteractions = (typeof MediaInteractions)[keyof typeof MediaInt
 export type mediaInteractionParam = {
     type: MediaInteractions
     id: number
-    currentTime?: number
-    volume?: number
-    muted?: boolean
-    loop?: boolean
-    playbackRate?: number
+    currentTime?: number | undefined
+    volume?: number | undefined
+    muted?: boolean | undefined
+    loop?: boolean | undefined
+    playbackRate?: number | undefined
 }
 
 export type mediaInteractionData = {
@@ -348,7 +348,7 @@ export type mediaInteractionData = {
 
 export type styleSheetAddRule = {
     rule: string
-    index?: number | number[]
+    index?: number | number[] | undefined
 }
 
 export type styleSheetDeleteRule = {
@@ -356,12 +356,12 @@ export type styleSheetDeleteRule = {
 }
 
 export type styleSheetRuleParam = {
-    id?: number
-    styleId?: number
-    removes?: styleSheetDeleteRule[]
-    adds?: styleSheetAddRule[]
-    replace?: string
-    replaceSync?: string
+    id?: number | undefined
+    styleId?: number | undefined
+    removes?: styleSheetDeleteRule[] | undefined
+    adds?: styleSheetAddRule[] | undefined
+    replace?: string | undefined
+    replaceSync?: string | undefined
 }
 
 export type styleSheetRuleData = {
@@ -378,7 +378,7 @@ export type CanvasContext = (typeof CanvasContext)[keyof typeof CanvasContext]
 export type canvasMutationCommand = {
     property: string
     args: Array<unknown>
-    setter?: true
+    setter?: true | undefined
 }
 
 export type canvasMutationParam =
@@ -400,7 +400,7 @@ export type fontParam = {
     family: string
     fontSource: string
     buffer: boolean
-    descriptors?: FontFaceDescriptors
+    descriptors?: FontFaceDescriptors | undefined
 }
 
 export type fontData = {
@@ -423,8 +423,8 @@ export type selectionData = {
 } & selectionParam
 
 export type styleDeclarationParam = {
-    id?: number
-    styleId?: number
+    id?: number | undefined
+    styleId?: number | undefined
     index: number[]
     set?: {
         property: string
@@ -495,7 +495,7 @@ export type eventWithoutTime =
 
 export type eventWithTime = eventWithoutTime & {
     timestamp: number
-    delay?: number
+    delay?: number | undefined
 }
 
 export type mutationCallBack = (m: mutationCallbackParam) => void
@@ -530,19 +530,19 @@ export type customElementCallback = (c: customElementParam) => void
 export type adoptedStyleSheetCallback = (a: adoptedStyleSheetParam) => void
 
 export type hooksParam = {
-    mutation?: mutationCallBack
-    mousemove?: mousemoveCallBack
-    mouseInteraction?: mouseInteractionCallBack
-    scroll?: scrollCallback
-    viewportResize?: viewportResizeCallback
-    input?: inputCallback
-    mediaInteaction?: mediaInteractionCallback
-    styleSheetRule?: styleSheetRuleCallback
-    styleDeclaration?: styleDeclarationCallback
-    canvasMutation?: canvasMutationCallback
-    font?: fontCallback
-    selection?: selectionCallback
-    customElement?: customElementCallback
+    mutation?: mutationCallBack | undefined
+    mousemove?: mousemoveCallBack | undefined
+    mouseInteraction?: mouseInteractionCallBack | undefined
+    scroll?: scrollCallback | undefined
+    viewportResize?: viewportResizeCallback | undefined
+    input?: inputCallback | undefined
+    mediaInteaction?: mediaInteractionCallback | undefined
+    styleSheetRule?: styleSheetRuleCallback | undefined
+    styleDeclaration?: styleDeclarationCallback | undefined
+    canvasMutation?: canvasMutationCallback | undefined
+    font?: fontCallback | undefined
+    selection?: selectionCallback | undefined
+    customElement?: customElementCallback | undefined
 }
 
 export type SamplingStrategy = Partial<{
@@ -559,8 +559,8 @@ export interface ICrossOriginIframeMirror {
     getId(
         iframe: HTMLIFrameElement,
         remoteId: number,
-        parentToRemoteMap?: Map<number, number>,
-        remoteToParentMap?: Map<number, number>
+        parentToRemoteMap?: Map<number, number> | undefined,
+        remoteToParentMap?: Map<number, number> | undefined
     ): number
     getIds(iframe: HTMLIFrameElement, remoteId: number[]): number[]
     getRemoteId(iframe: HTMLIFrameElement, parentId: number, map?: Map<number, number>): number
@@ -578,4 +578,49 @@ export type RecordPlugin<TOptions = unknown> = {
         crossOriginIframeStyleMirror: ICrossOriginIframeMirror
     }) => void
     options: TOptions
+}
+
+// Keep these diagnostic data types in sync with packages/rrweb/rrweb-snapshot/src/snapshot-cost.ts.
+export type SnapshotCost = {
+    /** wall-clock ms of the whole tracked window (the full snapshot task) */
+    durationMs: number
+    /** of `durationMs`, ms spent stringifying stylesheets */
+    stylesheetMs: number
+    /** DOM nodes visited by the serializer */
+    nodeCount: number
+    /** CSSRules read while stringifying stylesheets, all sources */
+    cssRuleCount: number
+    /**
+     * of `cssRuleCount`, rules from sources that can never be deferred
+     * (CSSOM-only `<style>` elements, adoptedStyleSheets). These do not charge
+     * the inlining budget: deferring other sheets buys them no freeze reduction.
+     */
+    nonDeferrableCssRuleCount: number
+    /** `<link rel=stylesheet>` elements whose inlining was deferred past the budget */
+    deferredStylesheetCount: number
+}
+
+export type MutationCost = {
+    /** slowest single mutation batch, in ms, since the last reset */
+    slowestBatchMs: number
+}
+
+/**
+ * Session-cumulative accounting of budget-deferred stylesheets. `failedCount`
+ * and `abandonedCount` are sheets that never made it back into the recording:
+ * both leave the `<link>` serialized with only `rel`/`href`, so replay falls
+ * back to loading the CSS from its original URL - which may 404 or have
+ * changed by then.
+ */
+export type DeferredStylesheetStats = {
+    /** deferral events across every snapshot (a re-deferred sheet counts again) */
+    deferredCount: number
+    /** deferred sheets whose idle-time stringification produced nothing */
+    failedCount: number
+    /** deferred sheets dropped when a teardown flush hit its safety cap */
+    abandonedCount: number
+    /** ms spent stringifying deferred sheets, across every slice */
+    totalMs: number
+    /** slowest single slice of deferred stringification, in ms */
+    slowestSliceMs: number
 }

@@ -1,27 +1,25 @@
+import { createTriggerClient } from './helpers/trigger-client'
+import type { ReplayTriggerClient } from '@posthog/browser-common/replay/host'
 import * as fc from 'fast-check'
 import {
     URLTriggerMatching,
     TRIGGER_ACTIVATED,
     TRIGGER_PENDING,
-} from '../../../extensions/replay/external/triggerMatching'
-import { createMockPostHog } from '../../helpers/posthog-instance'
-import { SessionRecordingUrlTrigger } from '../../../types'
-import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../../constants'
+} from '../../../../extensions/replay/external/triggerMatching'
+import type { SessionRecordingUrlTrigger } from '@posthog/browser-common/replay/types'
+import { SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION } from '../../../../extensions/replay/constants'
 
 describe('checkUrlTriggerConditions - activation loop detection', () => {
     let urlTriggerMatching: URLTriggerMatching
-    let mockPostHog: any
+    let client: ReplayTriggerClient
+    let currentUrl: string
     let onPauseCalls: number
     let onResumeCalls: number
     let onActivateCalls: number
     let persistedSession: string | null
 
     const setWindowLocation = (url: string) => {
-        Object.defineProperty(window, 'location', {
-            value: { href: url },
-            writable: true,
-            configurable: true,
-        })
+        currentUrl = url
     }
 
     const configureTriggers = (
@@ -70,17 +68,16 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         onActivateCalls = 0
         persistedSession = null
 
-        mockPostHog = createMockPostHog({
-            register_for_session: vi.fn(),
-            get_property: vi.fn((key: string) => {
-                if (key === SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION) {
-                    return persistedSession
-                }
-                return undefined
-            }),
+        client = createTriggerClient(() => currentUrl)
+        client.replay.registerSessionProperties = vi.fn()
+        vi.spyOn(client.kv, 'get').mockImplementation((key) => {
+            if (key === SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION) {
+                return persistedSession
+            }
+            return undefined
         })
 
-        urlTriggerMatching = new URLTriggerMatching(mockPostHog)
+        urlTriggerMatching = new URLTriggerMatching(client)
         // Reset URL tracking state for each test
         ;(urlTriggerMatching as any)._lastCheckedUrl = ''
     })

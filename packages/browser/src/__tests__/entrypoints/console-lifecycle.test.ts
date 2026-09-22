@@ -11,7 +11,7 @@ const loadCopy = async () => {
     const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
     const { getRecordConsolePlugin } = await import('../../../../rrweb/plugins/rrweb-plugin-console-record/src')
     const { PostHogLogs } = await import('../../posthog-logs')
-    const { patch } = await import('../../extensions/replay/rrweb-plugins/patch')
+    const { patch } = await import('../../extensions/replay/patch')
     const { patch: rrwebPatch } = await import('@posthog/rrweb-utils')
     return { initializeLogs, getRecordConsolePlugin, PostHogLogs, patch, rrwebPatch }
 }

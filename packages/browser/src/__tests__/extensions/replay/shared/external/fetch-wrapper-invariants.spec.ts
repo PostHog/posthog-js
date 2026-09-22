@@ -2,8 +2,8 @@
  * @vitest-environment node
  */
 
-import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
-import { NetworkRecordOptions } from '../../../../types'
+import { getRecordNetworkPlugin } from '../../../../../extensions/replay/external/network-plugin'
+import { NetworkRecordOptions } from '@posthog/browser-common/replay/types'
 import { csrfHeaderCases, sensitiveHeaderCases, unaffectedHeaderCases } from './test_data/header-cases'
 
 function expectNotToThrow(promise: Promise<Response>) {

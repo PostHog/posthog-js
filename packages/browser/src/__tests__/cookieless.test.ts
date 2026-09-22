@@ -378,6 +378,7 @@ describe('cookieless', () => {
             posthog.opt_in_capturing()
 
             expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(disposeSessionRecording).toHaveBeenCalledOnce()
             expect(identityAtDisposal).toEqual(identityBeforeReplacement)
             expect(posthog.get_distinct_id()).not.toBe(identityBeforeReplacement.distinctId)
             expect(posthog.get_session_id()).not.toBe(identityBeforeReplacement.sessionId)
@@ -414,6 +415,7 @@ describe('cookieless', () => {
             posthog.capture(eventName, eventProperties)
 
             expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(disposeSessionRecording).toHaveBeenCalledOnce()
             expect(identityAtDisposal).toEqual(identityBeforeOptOut)
             expect(beforeSendMock).toBeCalledTimes(4)
             expect(beforeSendMock.mock.calls[3][0].event).toBe(eventName)

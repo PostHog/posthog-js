@@ -14,7 +14,7 @@ import type {
     PackFn,
     RecordPlugin,
     SamplingStrategy,
-} from './rrweb-types'
+} from '@posthog/browser-common/replay/rrweb-types'
 
 // Replication of `MaskInputOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskInputOptions = Partial<{
@@ -80,42 +80,42 @@ type ErrorHandler = (error: unknown, context?: 'rrweb' | 'host') => void | boole
 // Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
     emit?: (e: eventWithTime, isCheckout?: boolean) => void
-    checkoutEveryNth?: number
-    checkoutEveryNms?: number
-    blockClass?: blockClass
-    blockSelector?: string
-    ignoreClass?: string
-    ignoreSelector?: string
-    maskTextClass?: maskTextClass
-    maskTextSelector?: string
-    maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
-    maskInputFn?: MaskInputFn
-    maskTextFn?: MaskTextFn
-    maskAllElementAttributes?: boolean
-    maskAttributeFn?: MaskAttributeFn
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
-    ignoreCSSAttributes?: Set<string>
-    attributeFilter?: string[]
-    inlineStylesheet?: boolean
-    inlineStylesheetBudgetRules?: number
-    hooks?: hooksParam
-    packFn?: PackFn
-    sampling?: SamplingStrategy
-    dataURLOptions?: DataURLOptions
-    canvasResolutionScale?: number
-    canvasMasking?: CanvasMasking
-    recordDOM?: boolean
-    recordCanvas?: boolean
-    recordCrossOriginIframes?: boolean
-    recordAfter?: 'DOMContentLoaded' | 'load'
-    userTriggeredOnInput?: boolean
-    collectFonts?: boolean
-    inlineImages?: boolean
-    plugins?: RecordPlugin[]
-    mousemoveWait?: number
-    keepIframeSrcFn?: KeepIframeSrcFn
-    errorHandler?: ErrorHandler
+    checkoutEveryNth?: number | undefined
+    checkoutEveryNms?: number | undefined
+    blockClass?: blockClass | undefined
+    blockSelector?: string | undefined
+    ignoreClass?: string | undefined
+    ignoreSelector?: string | undefined
+    maskTextClass?: maskTextClass | undefined
+    maskTextSelector?: string | undefined
+    maskAllInputs?: boolean | undefined
+    maskInputOptions?: MaskInputOptions | undefined
+    maskInputFn?: MaskInputFn | undefined
+    maskTextFn?: MaskTextFn | undefined
+    maskAllElementAttributes?: boolean | undefined
+    maskAttributeFn?: MaskAttributeFn | undefined
+    slimDOMOptions?: SlimDOMOptions | 'all' | true | undefined
+    ignoreCSSAttributes?: Set<string> | undefined
+    attributeFilter?: string[] | undefined
+    inlineStylesheet?: boolean | undefined
+    inlineStylesheetBudgetRules?: number | undefined
+    hooks?: hooksParam | undefined
+    packFn?: PackFn | undefined
+    sampling?: SamplingStrategy | undefined
+    dataURLOptions?: DataURLOptions | undefined
+    canvasResolutionScale?: number | undefined
+    canvasMasking?: CanvasMasking | undefined
+    recordDOM?: boolean | undefined
+    recordCanvas?: boolean | undefined
+    recordCrossOriginIframes?: boolean | undefined
+    recordAfter?: 'DOMContentLoaded' | 'load' | undefined
+    userTriggeredOnInput?: boolean | undefined
+    collectFonts?: boolean | undefined
+    inlineImages?: boolean | undefined
+    plugins?: RecordPlugin[] | undefined
+    mousemoveWait?: number | undefined
+    keepIframeSrcFn?: KeepIframeSrcFn | undefined
+    errorHandler?: ErrorHandler | undefined
 }
 
 // Replication of `record` from inside `@posthog/rrweb-record`

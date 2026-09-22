@@ -1,3 +1,4 @@
+import { createTriggerClient } from './helpers/trigger-client'
 import {
     BUFFERING,
     DISABLED,
@@ -13,16 +14,11 @@ import {
     EventTriggerMatching,
     LinkedFlagMatching,
     PAUSED,
-} from '../../../extensions/replay/external/triggerMatching'
-import { SessionRecordingTriggerGroup } from '../../../types'
+} from '../../../../extensions/replay/external/triggerMatching'
+import type { SessionRecordingTriggerGroup } from '@posthog/browser-common/replay/types'
 import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
-import { createMockPostHog } from '../../helpers/posthog-instance'
 
-const fakePostHog = createMockPostHog({
-    register_for_session: () => {},
-    onFeatureFlags: () => () => {}, // Returns cleanup function
-    get_property: () => undefined,
-})
+const client = createTriggerClient()
 
 // Shared test helper: Creates a mock TriggerGroupMatching with optional overrides
 const createMockMatcher = (
@@ -74,7 +70,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -90,7 +86,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -105,7 +101,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             expect(matcher.group).toEqual(group)
         })
 
@@ -121,7 +117,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             expect(matcher.group.minDurationMs).toBe(0)
         })
     })
@@ -341,7 +337,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')
@@ -358,7 +354,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('pageview', onActivate, 'session-1')
             expect(onActivate).not.toHaveBeenCalled()
@@ -380,7 +376,7 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
+            const matcher = new TriggerGroupMatching(client, group, () => {})
             const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')

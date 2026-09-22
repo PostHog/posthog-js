@@ -3,15 +3,11 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
 import { PostHog } from './posthog-core'
-// only importing types here, so won't affect the bundle
-// oxlint-disable-next-line posthog-js/no-external-replay-imports
-import type { SAMPLED } from './extensions/replay/external/triggerMatching'
-import {
-    Compression,
-    type RemoteConfig,
-    type RemoteConfigResult as BrowserCommonRemoteConfigResult,
-    type SessionRecordingRemoteConfig,
-} from '@posthog/browser-common'
+import { Compression, type RemoteConfigResult as BrowserCommonRemoteConfigResult } from '@posthog/browser-common'
+import type {
+    SessionRecordingPersistedConfig as CommonSessionRecordingPersistedConfig,
+    SessionStartReason as CommonSessionStartReason,
+} from '@posthog/browser-common/replay/types'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
 import type { ExtensionConstructor } from './extensions/types'
@@ -21,7 +17,7 @@ import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
 import type { TracingHeaders } from './extensions/tracing-headers'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
-import type { SessionRecording } from './extensions/replay/session-recording'
+import type { SessionRecording } from './extensions/replay/browser-session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
@@ -292,34 +288,7 @@ export interface RetriableRequestWithOptions extends QueuedRequestWithOptions {
     retriesPerformedSoFar?: number
 }
 
-/** the config stored in persistence when session recording remote config is received */
-export type SessionRecordingPersistedConfig = Omit<
-    SessionRecordingRemoteConfig,
-    | 'recordCanvas'
-    | 'canvasFps'
-    | 'canvasQuality'
-    | 'networkPayloadCapture'
-    | 'sampleRate'
-    | 'minimumDurationMilliseconds'
-> & {
-    /**
-     * Used to determine if the persisted config is still valid or we need to wait for a new one
-     * only accepts undefined since older versions of the library didn't set this.
-     */
-    cache_timestamp?: number
-    enabled: boolean
-    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
-        capturePerformance: RemoteConfig['capturePerformance']
-    }
-    canvasRecording: {
-        enabled: SessionRecordingRemoteConfig['recordCanvas']
-        fps: SessionRecordingRemoteConfig['canvasFps']
-        quality: SessionRecordingRemoteConfig['canvasQuality']
-    }
-    // we don't allow string config here
-    sampleRate: number | null
-    minimumDurationMilliseconds: number | null | undefined
-}
+export type SessionRecordingPersistedConfig = CommonSessionRecordingPersistedConfig
 
 /**
  * Outcome of a remote config fetch: the config, or an explicit failure.
@@ -397,15 +366,7 @@ export type ErrorEventArgs = [
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 
-export type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | typeof SAMPLED
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
+export type SessionStartReason = CommonSessionStartReason
 
 export type OverrideConfig = {
     sampling: boolean

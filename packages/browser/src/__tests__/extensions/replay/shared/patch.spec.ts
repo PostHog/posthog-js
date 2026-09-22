@@ -1,4 +1,4 @@
-import { patch } from '../../../../extensions/replay/rrweb-plugins/patch'
+import { patch } from '../../../../extensions/replay/patch'
 import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 
 const fakeWindow = {
