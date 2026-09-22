@@ -111,7 +111,7 @@ export class TestClient implements Client {
     library = { name: 'posthog-test', version: '0.0.0' }
     initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
-    session: SessionContext
+    session: SessionContext | undefined
     canCapture: boolean
 
     private _remoteConfigResult: RemoteConfigResult | undefined
@@ -139,6 +139,7 @@ export class TestClient implements Client {
             sessionId: 'test-session-id',
             windowId: 'test-window-id',
             sessionStartTimestamp: 0,
+            lastActivityTimestamp: 0,
         }
         this.canCapture = options.canCapture ?? true
         this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined

@@ -27,7 +27,12 @@ describe('console recorder handover', () => {
         } as unknown as Console
         client = createTestClient({
             distinctId: 'user-123',
-            session: { sessionId: 'session-123', windowId: 'window-456', sessionStartTimestamp: 0 },
+            session: {
+                sessionId: 'session-123',
+                windowId: 'window-456',
+                sessionStartTimestamp: 0,
+                lastActivityTimestamp: 0,
+            },
         })
         client.kv.set('consoleCaptureEnabled', true)
         host = {
