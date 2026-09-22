@@ -551,8 +551,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
-    // set when a held buffer hit the size cap and was dropped to bound memory; a release
-    // then takes a fresh full snapshot so the recording resumes playable
+    // set when a held buffer hit the size cap and stopped collecting to bound memory; a
+    // release ships what was held and takes a fresh full snapshot to resume playable
     private _heldBufferOverflowed = false
     // a release while the recorder is stopped (e.g. an override during startSessionRecording's
     // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
@@ -1691,6 +1691,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._heldEpochShipsOnUnload = false
         if (this._heldBufferOverflowed) {
             this._heldBufferOverflowed = false
+            // the overflowed hold retained its data, so the release ships it; a fresh full
+            // snapshot bridges the gap between the cap and this release
             this._tryTakeFullSnapshot()
         }
         this._scheduleFlushBuffer()
@@ -2527,17 +2529,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._buffer.windowId = properties.$window_id as string
         }
 
-        // a held buffer can't ship at the cap, so bound memory instead: drop the epoch's data
-        // and stop collecting; a release takes a fresh full snapshot to resume playable
+        // a held buffer can't ship at the cap, so bound memory instead: stop collecting but
+        // keep what is held, so a release still ships the epoch from its start; the release
+        // takes a fresh full snapshot to bridge the gap between cap and interaction
         if (
             this._holdFlushUntilInteraction &&
             (this._heldBufferOverflowed ||
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
-            if (!this._heldBufferOverflowed) {
-                this._heldBufferOverflowed = true
-                this._buffer = this._clearBuffer()
-            }
+            this._heldBufferOverflowed = true
             return
         }
 
@@ -2612,14 +2612,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
-        // but only if the document was ever visible. Rotation-born holds stay held, and an
-        // overflowed hold has nothing playable left to ship.
-        if (
-            this._holdFlushUntilInteraction &&
-            this._heldEpochShipsOnUnload &&
-            this._documentWasEverVisible &&
-            !this._heldBufferOverflowed
-        ) {
+        // but only if the document was ever visible. Rotation-born holds stay held.
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {
             this._setFlushHold(undefined)
         }
 
