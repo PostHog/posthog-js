@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/5055": {
+    "key": "PostHog/posthog-js/issue/5055",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5055",
+    "url": "https://github.com/PostHog/posthog-js/issues/5055",
+    "conclusion": "Confirmed, well-scoped telemetry bug in the OpenAI Agents tracing mapper.",
+    "labels": [
+      "node",
+      "team/ai-observability"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5057",
+    "closed": false,
+    "updatedAt": "2026-09-22T04:39:02.682Z"
+  },
   "PostHog/posthog-js/issue/5034": {
     "key": "PostHog/posthog-js/issue/5034",
     "repo": "PostHog/posthog-js",
