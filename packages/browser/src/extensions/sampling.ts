@@ -8,4 +8,4 @@ export function updateThreshold(currentValue: number | undefined, percent: numbe
     return (isUndefined(currentValue) ? 1 : currentValue) * percent
 }
 
-export { simpleHash, sampleOnProperty } from './replay/sampling'
+export { simpleHash, sampleOnProperty } from '@posthog/browser-common/replay/sampling'

@@ -11,7 +11,7 @@ import {
     resetSnapshotCostState,
 } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
-import { getRecordNetworkPlugin } from '../extensions/replay/external/network-plugin'
+import { getRecordNetworkPlugin } from '@posthog/browser-common/replay/external/network-plugin'
 import { assignableWindow } from '../utils/globals'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}

@@ -19,7 +19,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
+} from '@posthog/browser-common/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
     CapturedNetworkRequest,
@@ -49,7 +49,7 @@ import {
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import Mock = vi.Mock
-import { SessionRecording } from '../../../extensions/replay/browser-session-recording'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
     LazyLoadedSessionRecording,
     RECORDING_IDLE_THRESHOLD_MS,
@@ -57,7 +57,7 @@ import {
     RECORDING_MAX_EVENT_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     PENDING_BUFFER_STORAGE_SUFFIX,
-} from '../../../extensions/replay/external/browser-lazy-loaded-session-recorder'
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 

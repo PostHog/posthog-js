@@ -1,5 +1,5 @@
 import { replayTriggerClient } from './replay-trigger-client'
-import { URLTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
+import { URLTriggerMatching } from '@posthog/browser-common/replay/external/triggerMatching'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 import { SessionRecordingUrlTrigger, PostHogConfig } from '../../../types'
 

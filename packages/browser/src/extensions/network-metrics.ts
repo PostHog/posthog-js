@@ -6,7 +6,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
 import { isPostHogXHR } from '../request'
 import type { MetricAttributes, NetworkMetricsConfig, NetworkMetricsRequest } from '../types'
-import { patch } from './replay/patch'
+import { patch } from '@posthog/browser-common/replay/patch'
 
 const logger = createLogger('[NetworkMetrics]')
 

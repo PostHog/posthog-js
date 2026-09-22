@@ -14,7 +14,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/external/sessionrecording-utils'
+} from '@posthog/browser-common/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import { CaptureResult, Property, QueuedRequestWithOptions, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
@@ -22,12 +22,12 @@ import { RequestRouter } from '../../../utils/request-router'
 import { EventType, type eventWithTime, IncrementalSource } from '@posthog/browser-common/replay/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
-import { SessionRecording } from '../../../extensions/replay/browser-session-recording'
+import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
     LazyLoadedSessionRecording,
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_IDLE_THRESHOLD_MS,
-} from '../../../extensions/replay/external/browser-lazy-loaded-session-recorder'
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 vi.mock('../../../remote-config', () => ({
     RemoteConfigLoader: vi.fn().mockImplementation(() => ({ load: vi.fn() })),

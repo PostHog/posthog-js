@@ -490,6 +490,9 @@ importers:
       '@posthog/types':
         specifier: workspace:^
         version: link:../types
+      fflate:
+        specifier: ^0.4.8
+        version: 0.4.8
       preact:
         specifier: ^10.29.3
         version: 10.29.3
@@ -497,6 +500,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/rrweb-utils':
+        specifier: workspace:*
+        version: link:../rrweb/utils
       '@rsbuild/plugin-react':
         specifier: ^2.1.0
         version: 2.1.0(@rsbuild/core@2.1.13(core-js@3.49.0))(@rspack/core@2.1.10(@swc/helpers@0.5.23))
@@ -512,6 +518,9 @@ importers:
       '@testing-library/preact':
         specifier: 'catalog:'
         version: 3.2.4(preact@10.29.3)
+      fast-check:
+        specifier: ^2.17.0
+        version: 2.17.0
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0
