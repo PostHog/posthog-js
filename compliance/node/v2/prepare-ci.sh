@@ -13,11 +13,11 @@ git status --short > "$artifacts/source-status.txt"
 component='[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*'
 repository="([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?/)?$component(/$component)*"
 if [[ ! "${NODE_IMAGE:-}" =~ ^$repository(:[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$ ]]; then
-    echo 'SDK_COMPLIANCE_NODE_IMAGE must contain a valid digest-pinned Node 24 image (repository@sha256:64-lowercase-hex-digits).' >&2
+    echo 'NODE_IMAGE must contain a valid digest-pinned Node 24 image (repository@sha256:64-lowercase-hex-digits).' >&2
     exit 2
 fi
 if [[ ! "${HARNESS_IMAGE:-}" =~ ^ghcr\.io/posthog/sdk-test-harness-v2@sha256:[0-9a-f]{64}$ ]]; then
-    echo 'SDK_COMPLIANCE_V2_HARNESS_IMAGE must contain the released ghcr.io/posthog/sdk-test-harness-v2@sha256:64-lowercase-hex-digits image.' >&2
+    echo 'HARNESS_IMAGE must contain the released ghcr.io/posthog/sdk-test-harness-v2@sha256:64-lowercase-hex-digits image.' >&2
     exit 2
 fi
 printf 'NODE_IMAGE=%s\nHARNESS_IMAGE=%s\n' "$NODE_IMAGE" "$HARNESS_IMAGE" > "$artifacts/images.txt"
