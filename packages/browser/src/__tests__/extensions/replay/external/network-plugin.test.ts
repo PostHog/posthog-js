@@ -558,6 +558,33 @@ describe('network plugin', () => {
                 stopBroken()
             })
 
+            it("timestamps entries with the observed frame's clock", () => {
+                const broken = createMockWindow()
+                delete broken.mockWindow.PerformanceObserver
+                const healthy = createMockWindow()
+                // the bundle's frame loaded a minute ago and the healthy frame a second ago
+                const frameOrigin = Date.now() - 1000
+                healthy.mockWindow.performance.now = () => Date.now() - frameOrigin
+                const globalNow = vi.spyOn(performance, 'now').mockReturnValue(60_000)
+
+                const callback = vi.fn()
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const stopBroken = plugin.observer(() => {}, broken.mockWindow, networkOptions)
+                const stopHealthy = plugin.observer(callback, healthy.mockWindow, networkOptions)
+
+                const entry = createResourceTimingEntry('https://example.com/api/data', 'proxy', 3)
+                healthy.observerCallbacks[0]({ getEntries: () => [entry] } as PerformanceObserverEntryList)
+
+                const [request] = callback.mock.calls[0][0].requests
+                expect(Math.abs(request.timeOrigin - frameOrigin)).toBeLessThanOrEqual(1)
+                expect(Math.abs(request.timestamp - (frameOrigin + entry.startTime))).toBeLessThanOrEqual(1)
+
+                stopHealthy()
+                stopBroken()
+                globalNow.mockRestore()
+            })
+
             it('still wraps fetch when the frame has no PerformanceObserver but headers are recorded', () => {
                 const { mockWindow } = createMockWindow()
                 delete mockWindow.PerformanceObserver

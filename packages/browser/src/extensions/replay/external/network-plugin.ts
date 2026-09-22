@@ -113,7 +113,13 @@ function initPerformanceObserver(
     try {
         cb({
             requests: initialEntries(win, options).flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
+                prepareRequest(win, {
+                    entry,
+                    method: undefined,
+                    status: undefined,
+                    networkRequest: {},
+                    isInitial: true,
+                })
             ),
             isInitial: true,
         })
@@ -153,7 +159,7 @@ function initPerformanceObserver(
 
         cb({
             requests: performanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {} })
+                prepareRequest(win, { entry, method: undefined, status: undefined, networkRequest: {} })
             ),
         })
     })
@@ -429,7 +435,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         }
                         getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
                             .then((entry) => {
-                                const requests = prepareRequest({
+                                const requests = prepareRequest(win, {
                                     entry,
                                     method: method,
                                     status: xhr?.status,
@@ -478,37 +484,40 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
     !isNull(event) && (event.entryType === 'navigation' || event.entryType === 'resource')
 
-function prepareRequest({
-    entry,
-    method,
-    status,
-    networkRequest,
-    isInitial,
-    start,
-    end,
-    url,
-    initiatorType,
-}: {
-    entry: PerformanceResourceTiming | null
-    method: string | undefined
-    status: number | undefined
-    networkRequest: Partial<CapturedNetworkRequest>
-    isInitial?: boolean
-    start?: number
-    end?: number
-    // if there is no performance observer entry, we still need to know the url
-    url?: string
-    // if there is no performance observer entry, we can provide the initiatorType
-    initiatorType?: string
-}): CapturedNetworkRequest[] {
+// entry times count from the recorded frame's time origin, so the epoch base must come from that frame's clock
+function prepareRequest(
+    win: IWindow,
+    {
+        entry,
+        method,
+        status,
+        networkRequest,
+        isInitial,
+        start,
+        end,
+        url,
+        initiatorType,
+    }: {
+        entry: PerformanceResourceTiming | null
+        method: string | undefined
+        status: number | undefined
+        networkRequest: Partial<CapturedNetworkRequest>
+        isInitial?: boolean
+        start?: number
+        end?: number
+        // if there is no performance observer entry, we still need to know the url
+        url?: string
+        // if there is no performance observer entry, we can provide the initiatorType
+        initiatorType?: string
+    }
+): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
 
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
-    // oxlint-disable-next-line compat/compat
-    const timeOrigin = Math.floor(Date.now() - performance.now())
+    const timeOrigin = Math.floor(Date.now() - win.performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
     // use timeOrigin if we really can't gather a start time
@@ -890,7 +899,7 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
-                        const requests = prepareRequest({
+                        const requests = prepareRequest(win, {
                             entry,
                             method: req.method,
                             status: res?.status,
