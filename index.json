@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/5061": {
+    "key": "PostHog/posthog-js/issue/5061",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5061",
+    "url": "https://github.com/PostHog/posthog-js/issues/5061",
+    "conclusion": "Confirmed Android configuration gap: the existing native-crash opt-in is forwarded only to `autoCapture`, not to Android's separate native-crash setting.",
+    "labels": [
+      "Android",
+      "react-native",
+      "feature/error-tracking",
+      "feature/mobile",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5062",
+    "closed": false,
+    "updatedAt": "2026-09-22T09:29:27.975Z"
+  },
   "PostHog/posthog-js/issue/5055": {
     "key": "PostHog/posthog-js/issue/5055",
     "repo": "PostHog/posthog-js",
