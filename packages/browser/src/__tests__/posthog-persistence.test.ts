@@ -1,3 +1,4 @@
+// @vitest-environment-options {"url": "https://app.example.com/"}
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
 import {
@@ -39,6 +40,7 @@ import {
     memoryStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
+    resetSubDomainCache,
     sessionStore,
 } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
@@ -123,30 +125,56 @@ describe('persistence', () => {
         vi.restoreAllMocks()
     })
 
-    describe('cookie scope cleanup', () => {
-        it('does not probe the cross-subdomain scope when initialized with cross_subdomain_cookie false', () => {
-            const removeSpy = vi.spyOn(cookieStore, '_remove')
-
-            library = new PostHogPersistence({
-                ...makePostHogConfig('test', 'cookie'),
-                cross_subdomain_cookie: false,
+    describe.each(['cookie', 'localStorage+cookie'])('cookie scope cleanup: %s', (persistenceMode) => {
+        const config = (crossSubdomain: boolean): PostHogConfig =>
+            ({
+                ...makePostHogConfig('scope-cleanup', persistenceMode),
+                token: 'scope-cleanup',
+                cross_subdomain_cookie: crossSubdomain,
                 secure_cookie: false,
-            } as PostHogConfig)
+            }) as PostHogConfig
 
-            expect(removeSpy.mock.calls.some(([, crossSubdomain]) => crossSubdomain === true)).toBe(false)
+        beforeEach(() => {
+            resetSubDomainCache()
+            window?.localStorage.clear()
+            document.cookie = 'origin_cookie=1; path=/'
         })
 
-        it('still clears the previous cross-subdomain cookie when switching from true to false', () => {
-            library = new PostHogPersistence({
-                ...makePostHogConfig('test', 'cookie'),
-                cross_subdomain_cookie: true,
-                secure_cookie: false,
-            } as PostHogConfig)
-            const removeSpy = vi.spyOn(cookieStore, '_remove')
+        afterEach(() => {
+            cookieStore._remove('ph_scope-cleanup_posthog', false)
+            cookieStore._remove('ph_scope-cleanup_posthog', true)
+            document.cookie = 'origin_cookie=; max-age=0; path=/'
+            window?.localStorage.clear()
+            resetSubDomainCache()
+        })
 
-            library.set_cross_subdomain(false)
+        it('cleans up a previous cross-subdomain cookie without probing on later host-only loads', () => {
+            const crossSubdomainPage = new PostHogPersistence(config(true))
+            crossSubdomainPage.register({ distinct_id: 'old-user' })
 
-            expect(removeSpy).toHaveBeenCalledWith(expect.any(String), true)
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'old-user' })
+
+            const cookieWrites: string[] = []
+            const cookieSetter = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')?.set
+            const setCookieSpy = vi.spyOn(document, 'cookie', 'set').mockImplementation((value) => {
+                cookieWrites.push(value)
+                cookieSetter?.call(document, value)
+            })
+
+            resetSubDomainCache()
+            const firstHostOnlyPage = new PostHogPersistence(config(false))
+            firstHostOnlyPage.register({ distinct_id: 'new-user' })
+
+            resetSubDomainCache()
+            const writesBeforeSecondLoad = cookieWrites.length
+            const secondHostOnlyPage = new PostHogPersistence(config(false))
+
+            expect(secondHostOnlyPage.get_property('distinct_id')).toBe('new-user')
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'new-user' })
+            expect(document.cookie.match(/ph_scope-cleanup_posthog=/g)).toHaveLength(1)
+            expect(cookieWrites.slice(writesBeforeSecondLoad).some((value) => value.startsWith('dmn_chk_'))).toBe(false)
+
+            setCookieSpy.mockRestore()
         })
     })
 

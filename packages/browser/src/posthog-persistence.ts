@@ -1505,10 +1505,7 @@ export class PostHogPersistence {
     // future caller that clears or rewrites `props` while keeping the entries
     // would leave the retained fingerprint describing stale on-disk content and
     // skip the corrective write.
-    remove({
-        keepGroupEntries = false,
-        removeCrossSubdomainCookie = true,
-    }: { keepGroupEntries?: boolean; removeCrossSubdomainCookie?: boolean } = {}): void {
+    remove({ keepGroupEntries = false }: { keepGroupEntries?: boolean } = {}): void {
         // Any write following this removal owns its complete feature-flag
         // snapshot and must not adopt the entry that was just removed.
         this._markAllCrossTabFeatureFlagChangesPending()
@@ -1518,12 +1515,9 @@ export class PostHogPersistence {
             clearTimeout(this._pendingSaveTimer)
             this._pendingSaveTimer = undefined
         }
-        // Always clear the host-only cookie. Only probe the cross-subdomain scope
-        // when the previous configuration could have written a cookie there.
+        // remove both domain and subdomain cookies
         this._storage._remove(this._name, false)
-        if (removeCrossSubdomainCookie) {
-            this._storage._remove(this._name, true)
-        }
+        this._storage._remove(this._name, true)
         // Wipe the group entries too — even when the split is currently off — so
         // a default flip-flop or version downgrade cannot strand an orphaned
         // flag entry that would leak across users on reset()/opt-out.
@@ -1839,9 +1833,8 @@ export class PostHogPersistence {
 
     set_cross_subdomain(cross_subdomain: boolean): void {
         if (cross_subdomain !== this._cross_subdomain) {
-            const previouslyCrossSubdomain = this._cross_subdomain === true
             this._cross_subdomain = cross_subdomain
-            this.remove({ keepGroupEntries: true, removeCrossSubdomainCookie: previouslyCrossSubdomain })
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
@@ -1849,7 +1842,7 @@ export class PostHogPersistence {
     set_secure(secure: boolean): void {
         if (secure !== this._secure) {
             this._secure = secure
-            this.remove({ keepGroupEntries: true, removeCrossSubdomainCookie: this._cross_subdomain === true })
+            this.remove({ keepGroupEntries: true })
             this.save()
         }
     }
