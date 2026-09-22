@@ -388,6 +388,7 @@ describe('PostHogTracingProcessor', () => {
               usage: {
                 prompt_tokens: 40,
                 completion_tokens: 60,
+                prompt_tokens_details: { cached_tokens: 30, cache_write_tokens: 10 },
                 completion_tokens_details: { reasoning_tokens: 20 },
               },
             },
@@ -543,6 +544,97 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_input).toEqual([{ role: 'user', content: largeContent }])
       expect(Array.isArray(call.properties.$ai_output_choices)).toBe(true)
       expect(call.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: largeContent }])
+    })
+  })
+
+  describe.each(['response', 'raw chat', 'canonical chat'])('%s cache token reporting', (source) => {
+    it.each([
+      { name: 'reads and writes', details: { cached_tokens: 60, cache_write_tokens: 20 }, read: 60, write: 20 },
+      { name: 'explicit zeros', details: { cached_tokens: 0, cache_write_tokens: 0 }, read: 0, write: 0 },
+      { name: 'reads only', details: { cached_tokens: 60 }, read: 60, write: undefined },
+      { name: 'writes only', details: { cache_write_tokens: 20 }, read: undefined, write: 20 },
+      { name: 'empty details', details: {}, read: undefined, write: undefined },
+      { name: 'missing details', details: undefined, read: undefined, write: undefined },
+      { name: 'null details', details: null, read: undefined, write: undefined },
+    ])('preserves $name without changing total tokens', async ({ details, read, write }) => {
+      const usage =
+        source === 'response'
+          ? { input_tokens: 100, output_tokens: 10, input_tokens_details: details }
+          : { prompt_tokens: 100, completion_tokens: 10, prompt_tokens_details: details }
+      const spanData =
+        source === 'response'
+          ? { type: 'response', _response: { model: 'anthropic/claude-sonnet-4.6', usage } }
+          : source === 'raw chat'
+            ? { type: 'generation', output: [{ model: 'anthropic/claude-sonnet-4.6', usage }] }
+            : { type: 'generation', model: 'anthropic/claude-sonnet-4.6', usage }
+
+      await processor.onSpanEnd(createMockSpan({ spanData }) as any)
+
+      expect(mockClient.capture).toHaveBeenCalledTimes(1)
+      const event = mockClient.capture.mock.calls[0][0]
+      expect(event.event).toBe('$ai_generation')
+      expect(event.properties).toMatchObject({
+        $ai_input_tokens: 100,
+        $ai_output_tokens: 10,
+        $ai_total_tokens: 110,
+      })
+      for (const [key, value] of [
+        ['$ai_cache_read_input_tokens', read],
+        ['$ai_cache_creation_input_tokens', write],
+      ] as const) {
+        if (value === undefined) {
+          expect(event.properties).not.toHaveProperty(key)
+        } else {
+          expect(event.properties[key]).toBe(value)
+        }
+      }
+      if (source === 'canonical chat') {
+        expect(event.properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+      } else {
+        expect(event.properties.$ai_cache_reporting_exclusive).toBe(false)
+      }
+    })
+  })
+
+  it.each(['response', 'raw chat'])('retains %s cache counts in privacy mode', async (source) => {
+    const privateProcessor = new PostHogTracingProcessor({ client: mockClient, privacyMode: true })
+    const spanData =
+      source === 'response'
+        ? {
+            type: 'response',
+            _input: 'private prompt',
+            _response: {
+              output: [{ content: 'private response' }],
+              usage: {
+                input_tokens: 100,
+                output_tokens: 10,
+                input_tokens_details: { cached_tokens: 60, cache_write_tokens: 20 },
+              },
+            },
+          }
+        : {
+            type: 'generation',
+            input: [{ content: 'private prompt' }],
+            output: [
+              {
+                content: 'private response',
+                usage: {
+                  prompt_tokens: 100,
+                  completion_tokens: 10,
+                  prompt_tokens_details: { cached_tokens: 60, cache_write_tokens: 20 },
+                },
+              },
+            ],
+          }
+
+    await privateProcessor.onSpanEnd(createMockSpan({ spanData }) as any)
+
+    expect(mockClient.capture.mock.calls[0][0].properties).toMatchObject({
+      $ai_input: null,
+      $ai_output_choices: null,
+      $ai_cache_read_input_tokens: 60,
+      $ai_cache_creation_input_tokens: 20,
+      $ai_cache_reporting_exclusive: false,
     })
   })
 
