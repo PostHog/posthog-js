@@ -28,6 +28,7 @@ interface IWindow extends Window {
 }
 
 const CHECKBOX_COUNT = 50;
+const WRITE_PASSES = 2;
 
 const content = `
   <!DOCTYPE html>
@@ -106,7 +107,7 @@ describe('input setter hooks under a zone.js-patched setTimeout', () => {
     });
     await waitForRAF(ctx.page);
 
-    const result = await ctx.page.evaluate(() => {
+    const result = await ctx.page.evaluate((writePasses: number) => {
       const counts = (window as unknown as Record<string, unknown>)
         .__zone_timer_counts__ as { patched: number; unpatched: number };
       const checkboxes = Array.from(
@@ -119,7 +120,12 @@ describe('input setter hooks under a zone.js-patched setTimeout', () => {
       // detection, which writes the property again.
       const patchedBefore = counts.patched;
       const unpatchedBefore = counts.unpatched;
-      for (const checkbox of checkboxes) checkbox.checked = true;
+      // written twice, as a component re-running the same assignment on every
+      // change detection would: the observer's deduplication sits inside the
+      // deferred callback, so the second write is scheduled either way
+      for (let pass = 0; pass < writePasses; pass++) {
+        for (const checkbox of checkboxes) checkbox.checked = true;
+      }
 
       return {
         patchedDuringWrites: counts.patched - patchedBefore,
@@ -128,11 +134,11 @@ describe('input setter hooks under a zone.js-patched setTimeout', () => {
           (checkbox) => checkbox.checked === true,
         ),
       };
-    });
+    }, WRITE_PASSES);
 
     expect(result).toEqual({
       patchedDuringWrites: 0,
-      unpatchedDuringWrites: CHECKBOX_COUNT,
+      unpatchedDuringWrites: CHECKBOX_COUNT * WRITE_PASSES,
       writesApplySynchronously: true,
     });
 
@@ -142,7 +148,11 @@ describe('input setter hooks under a zone.js-patched setTimeout', () => {
           e.type === EventType.IncrementalSnapshot &&
           e.data.source === IncrementalSource.Input,
       );
+    // one event per element despite the repeated writes: the observer drops the
+    // second one, but only after the deferred callback has already been scheduled
     await waitForCondition(() => inputEvents().length === CHECKBOX_COUNT);
+    await waitForRAF(ctx.page);
+    expect(inputEvents()).toHaveLength(CHECKBOX_COUNT);
     expect(
       inputEvents().every((e) => (e.data as { isChecked: boolean }).isChecked),
     ).toBe(true);
