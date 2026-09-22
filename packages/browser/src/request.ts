@@ -504,23 +504,29 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const halve = <T>(items: T[]): T[][] => {
+    const mid = Math.ceil(items.length / 2)
+    return [items.slice(0, mid), items.slice(mid)]
+}
+
 // A replay flush ships one session's snapshots as a single `$snapshot` event, so halving the
-// batch by event count cannot make it smaller. Its `$snapshot_data` entries are ingested
-// independently, so split those instead and give each half a copy of the other properties.
-const splitOversizedEvent = (event: Record<string, any> | undefined): Record<string, any>[] | undefined => {
+// batch by event count cannot make it smaller. The server ingests `$snapshot_data` entries
+// independently, so halve those instead.
+const halveSnapshotEvent = (event: Record<string, any> | undefined): Record<string, any>[] | undefined => {
     const snapshotData = event?.properties?.$snapshot_data
     if (!isArray(snapshotData) || snapshotData.length < 2) {
         return undefined
     }
 
-    const mid = Math.ceil(snapshotData.length / 2)
-    return [snapshotData.slice(0, mid), snapshotData.slice(mid)].map((half) => ({
+    return halve(snapshotData).map((half) => ({
         ...event,
         properties: {
             ...event!.properties,
             $snapshot_data: half,
             // the server reads this for size accounting, so it has to describe the half we send
-            ...(isNumber(event!.properties.$snapshot_bytes) ? { $snapshot_bytes: jsonStringify(half).length } : {}),
+            ...(isNumber(event!.properties.$snapshot_bytes)
+                ? { $snapshot_bytes: new Blob([jsonStringify(half)]).size }
+                : {}),
         },
     }))
 }
@@ -560,17 +566,10 @@ const _sendBeacon = (options: TransportRequestOptions) => {
         if (isArray(batch) && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
             const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
                 isArray(options.data) ? events : { ...options.data, batch: events }
+            const halves = batch.length > 1 ? halve(batch) : halveSnapshotEvent(batch[0])?.map((event) => [event])
 
-            if (batch.length > 1) {
-                const mid = Math.ceil(batch.length / 2)
-                _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
-                _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
-                return
-            }
-
-            const halves = splitOversizedEvent(batch[0])
             if (halves) {
-                each(halves, (half) => _sendBeacon({ ...options, data: splitData([half]) }))
+                each(halves, (events) => _sendBeacon({ ...options, data: splitData(events) }))
                 return
             }
         }
