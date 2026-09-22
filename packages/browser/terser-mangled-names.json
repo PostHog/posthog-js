@@ -180,6 +180,7 @@
         "_detachWidgetSelectorListener",
         "_determineInitialView",
         "_disabled",
+        "_discardCount",
         "_discardRecording",
         "_displayOptions",
         "_dispose",
