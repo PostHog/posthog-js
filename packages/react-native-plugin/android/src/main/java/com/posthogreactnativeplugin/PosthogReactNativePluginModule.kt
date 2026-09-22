@@ -148,7 +148,7 @@ class PosthogReactNativePluginModule(
               captureScreenViews = false
               flushAt = theFlushAt
               theRequestHeaders?.let { requestHeaders = it }
-              this.configureNativeErrorTracking(nativeErrorTrackingAutocapture)
+              configureNativeErrorTracking(nativeErrorTrackingAutocapture)
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.

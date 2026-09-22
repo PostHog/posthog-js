@@ -14,6 +14,8 @@ class PosthogReactNativePluginModuleTest {
   fun `native error tracking config enables JVM and native crash capture together`() {
     for (enabled in listOf(true, false)) {
       val config = PostHogAndroidConfig("api-key", "https://us.i.posthog.com")
+      config.errorTrackingConfig.autoCapture = !enabled
+      config.errorTrackingConfig.captureNativeCrashes = !enabled
 
       config.configureNativeErrorTracking(enabled)
 
