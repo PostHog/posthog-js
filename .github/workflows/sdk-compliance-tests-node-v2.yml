@@ -1,6 +1,23 @@
 name: Node SDK v2 compliance
 
 on:
+    workflow_dispatch:
+    push:
+        branches: [main]
+        paths:
+            - 'packages/node/**'
+            - 'packages/core/**'
+            - 'packages/types/**'
+            - 'tooling/tsconfig-base/**'
+            - 'compliance/node/v2/**'
+            - '.github/workflows/sdk-compliance-tests-node-v2.yml'
+            - '**/package.json'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - '.npmrc'
+            - 'patches/**'
+            - 'turbo.json'
+            - 'LICENSE'
     pull_request:
         paths:
             - 'packages/node/**'
@@ -25,6 +42,8 @@ jobs:
         runs-on: ubuntu-24.04
         # Leave time for bounded startup/cleanup and artifact upload after a timeout.
         timeout-minutes: 60
+        # Compliance is advisory; the report is reviewed by a human.
+        continue-on-error: true
         permissions:
             contents: read
         strategy:
@@ -40,18 +59,25 @@ jobs:
             HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:672d7a0c777b4092d18f46040a3b9315e9b10c21284956b54d10785cd8918b79
             CAPTURE_MODE: ${{ matrix.mode }}
         steps:
-            # Test the PR head, not GitHub's synthetic integration commit.
+            # Test the PR head or the triggering commit for push/manual runs.
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              id: checkout
+              continue-on-error: true
               with:
-                  ref: ${{ github.event.pull_request.head.sha }}
+                  ref: ${{ github.event.pull_request.head.sha || github.sha }}
                   persist-credentials: false
             - name: Validate image pins and build selected source
+              id: prepare
+              if: steps.checkout.outcome == 'success'
+              continue-on-error: true
               timeout-minutes: 20
               run: |
                   mkdir -p "$RUNNER_TEMP/node-compliance"
                   bash compliance/node/v2/prepare-ci.sh "$RUNNER_TEMP/node-compliance" \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/prepare.log"
             - name: Run isolated compliance profile
+              if: steps.prepare.outcome == 'success'
+              continue-on-error: true
               timeout-minutes: 35
               run: |
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
@@ -59,9 +85,116 @@ jobs:
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/run.log"
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               if: always()
+              continue-on-error: true
               timeout-minutes: 3
               with:
                   name: node-v2-${{ matrix.mode }}
                   path: ${{ runner.temp }}/node-compliance
                   if-no-files-found: error
                   retention-days: 14
+
+    report:
+        name: Compliance results (advisory)
+        needs: compliance
+        if: always()
+        concurrency:
+            group: node-compliance-report-${{ github.event.pull_request.number || github.run_id }}
+            cancel-in-progress: false
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        continue-on-error: true
+        permissions:
+            actions: read
+            pull-requests: write
+        steps:
+            - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: audit
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              continue-on-error: true
+              with:
+                  pattern: node-v2-*
+                  path: ${{ runner.temp }}/node-compliance-results
+            # No checkout or execution of code from the tested revision in this job.
+            - name: Summarize results and update PR comment
+              continue-on-error: true
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  REPORT_ROOT: ${{ runner.temp }}/node-compliance-results
+              with:
+                  script: |
+                      const fs = require('node:fs');
+                      const path = require('node:path');
+                      const marker = '<!-- posthog-sdk-compliance-report-posthog-node -->';
+                      const sha = context.payload.pull_request?.head.sha || context.sha;
+                      const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+                      // Artifact strings are data, not Markdown, HTML or user mentions.
+                      const escape = value => String(value).slice(0, 600).replace(/[&<>@`*_[\]\\|\r\n]/g,
+                          char => `&#${char.charCodeAt(0)};`).slice(0, 400);
+                      const lines = [marker, '# Node SDK compliance v2', '',
+                          '**Advisory results — human review required. A green CI check does not mean conformance.**', '',
+                          `Commit: ${sha}`, `[Workflow run and artifacts](${runUrl})`, ''];
+                      for (const [mode, profile] of [['v0', 'node-legacy'], ['v1', 'node-analytics-v1']]) {
+                          lines.push(`## Capture ${mode}`, '');
+                          try {
+                              const root = path.join(process.env.REPORT_ROOT, `node-v2-${mode}`);
+                              const read = file => {
+                                  const filename = path.join(root, file);
+                                  if (fs.statSync(filename).size > 10 * 1024 * 1024) throw new Error('Report file exceeds 10 MiB');
+                                  return fs.readFileSync(filename, 'utf8');
+                              };
+                              if (read('source.txt').trim() !== sha) throw new Error('Artifact source does not match the tested commit');
+                              const report = JSON.parse(read('reports/report.json'));
+                              if (report.contract_version !== 'sdk-compliance-v2-draft2' ||
+                                  !Array.isArray(report.results) || !Array.isArray(report.errors) ||
+                                  !report.profiles?.some(p => p.id === profile) ||
+                                  report.results.some(r => r.profile_id !== profile || typeof r.result?.status !== 'string')) {
+                                  throw new Error('Invalid compliance report');
+                              }
+                              const results = report.results.filter(r => r.result.status !== 'not_selected');
+                              const passed = results.filter(r => r.result.status === 'passed' && r.result.executed === true);
+                              const failures = results.filter(r => !passed.includes(r));
+                              const notSelected = report.results.length - results.length;
+                              lines.push(`**${passed.length} passed / ${failures.length} non-passing / ${notSelected} not selected**`, '');
+                              for (const r of failures.slice(0, 20)) {
+                                  const failure = r.result.failure;
+                                  lines.push(`- **${escape(r.result.status)}**: ${escape(r.case_id)} — ${escape(failure?.message || r.result.reason || 'No diagnostic message')}`);
+                              }
+                              if (failures.length > 20) lines.push(`- ${failures.length - 20} more non-passing cases; see the artifact.`);
+                              for (const error of report.errors.slice(0, 10)) lines.push(`- Harness error: ${escape(JSON.stringify(error))}`);
+                              if (report.errors.length > 10) lines.push(`- ${report.errors.length - 10} more harness errors; see the artifact.`);
+                              const exit = read('reports/cli-exit.txt').trim();
+                              const validation = read('reports/report-check-exit.txt').trim();
+                              lines.push('', `Harness exit: ${escape(exit)}; report validation exit: ${escape(validation)}.`, '');
+                              if (results.length === 0 || failures.length || report.errors.length || exit !== '0' || validation !== '0') {
+                                  lines.push('**Not conformant or incomplete — review the results and artifact logs.**', '');
+                              } else {
+                                  lines.push('All selected cases passed and report validation succeeded.', '');
+                              }
+                          } catch (error) {
+                              lines.push(`**Results unavailable or incomplete:** ${escape(error.message)}.`,
+                                  'Inspect preparation, execution and artifact-upload logs in the workflow run.', '');
+                          }
+                      }
+                      const body = lines.join('\n');
+                      core.info(body);
+                      await core.summary.addRaw(body).write();
+                      const pr = context.payload.pull_request;
+                      if (!pr || pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` ||
+                          context.actor === 'dependabot[bot]') {
+                          core.info('PR comment skipped: this event has no writable same-repository PR. Results are in the job summary.');
+                          return;
+                      }
+                      const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: pr.number });
+                      if (current.head.sha !== sha) {
+                          core.info('PR head changed; keeping these results in the job summary without replacing the current comment.');
+                          return;
+                      }
+                      const comments = await github.paginate(github.rest.issues.listComments,
+                          { ...context.repo, issue_number: pr.number, per_page: 100 });
+                      const existing = comments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.startsWith(marker));
+                      if (existing) {
+                          await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+                      } else {
+                          await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body });
+                      }
