@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.434.8
+
+### Patch Changes
+
+- [#5054](https://github.com/PostHog/posthog-js/pull/5054) [`36f356d`](https://github.com/PostHog/posthog-js/commit/36f356dac9ff06131ece2c45ec22e0a991fb3ff8) Thanks [@posthog](https://github.com/apps/posthog)! - fix(dead-clicks): survive a denied property access in Firefox
+
+  Firefox denies property access on a DOM node from another origin or from a realm that was torn down. The detector reads `isConnected` and `nodeType` on mutation records and on composed paths, and reads `getRootNode` on selection endpoints, so the denial escaped the MutationObserver callback and stopped the rest of the batch from refreshing the liveness timestamp. A node that cannot be read is now treated as a node that cannot be inspected. (2026-09-22)
+
 ## 1.434.7
 
 ### Patch Changes

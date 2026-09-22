@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.76.0
+
+### Minor Changes
+
+- [#5064](https://github.com/PostHog/posthog-js/pull/5064) [`5b655be`](https://github.com/PostHog/posthog-js/commit/5b655befcb73bb8e1bd4b27725968d7388f8347a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add a `force` option for symbol uploads
+  (2026-09-22)
+
 ## 4.75.0
 
 ### Minor Changes
