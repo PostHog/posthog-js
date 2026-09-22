@@ -110,12 +110,15 @@ const extension = {
 Logs dynamically load during initialization by default, separately from analytics. `captureLog()` explicitly queues an OTLP log; loading the extension alone does not turn on console capture. Console capture follows remote configuration or a local `captureConsoleLogs` opt-in:
 
 ```ts
+import type { LogsExtension } from '@posthog/browser/logs'
+
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     logs: { captureConsoleLogs: true, serviceName: 'storefront', flushIntervalMs: 3_000 },
 })
-posthog.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
-await posthog.flush()
+const logger = posthog.getExtension<LogsExtension>('logs')!
+logger.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
+await logger.flush()
 ```
 
 Use `logs: false` to disable automatic inclusion. For static inclusion without a runtime module request:
@@ -123,15 +126,17 @@ Use `logs: false` to disable automatic inclusion. For static inclusion without a
 ```ts
 import { logs } from '@posthog/browser/logs'
 
+const logger = logs({ serviceName: 'storefront' })
 const posthog = await createPostHog({
     projectToken: '<project-token>',
-    extensions: [logs({ serviceName: 'storefront' })],
+    extensions: [logger],
 })
+logger.captureLog({ body: 'Checkout completed' })
 ```
 
 An explicit logs extension takes precedence over the top-level option, including `false`. The manual core entrypoint never loads logs automatically. Both paths accept the same options: `captureConsoleLogs`, `serviceName`, `serviceVersion`, `environment`, `resourceAttributes`, `beforeSend`, `flushIntervalMs`, `maxBufferSize`, and `maxLogsPerInterval`. Defaults match the legacy browser SDK: a 3,000ms flush interval, 100-record flush trigger, and 1,000 programmatic logs per interval. Console logs have a separate bounded queue and `console` scope, without the programmatic rate cap. Console service defaults to `posthog-browser-logs`; programmatic service defaults to `unknown_service`.
 
-`flush()` and bounded `shutdown()` include both log queues. Consent denial and reset discard queued logs; later opt-in does not revive them. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. Pagehide uses logs Beacon delivery with keepalive Fetch fallback. The existing SDK `logger` remains diagnostic output; application logs use `captureLog()`.
+The logs extension's `flush()` awaits both log queues. `posthog.flush()` only flushes analytics. Consent denial and reset discard queued logs; later opt-in does not revive them. On shutdown or pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 
 ## Capture and delivery
 

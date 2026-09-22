@@ -146,6 +146,8 @@ Put delivery or product behavior in an extension, capability, or adapter. Exampl
 
 An optional module can import the core. The core must not import the optional module.
 
+Application-facing log methods belong to the logs extension reference. Shared/core logs owns its queue, batching, retries, and flush implementation. An extension can observe reset and consent changes to clear its own queued data. On disposal, logs hands queued records to Beacon before releasing resources. `client.flush()` flushes analytics; callers can await `logs.flush()` separately.
+
 Each optional module must have an explicit entry point. A consumer must import that entry point directly.
 
 ### 4.5 Standard preset
