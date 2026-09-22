@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5072](https://github.com/PostHog/posthog-js/issues/5072) | Valid React Native feature gap; a headless Conversations API is more appropriate than shipping a full widget, but its public contract needs agreement before implementation. | enhancement, feature, react-native, feature/mobile, team/client-libraries |  | no | 2026-09-22T22:39:30.085Z |
 | PostHog/posthog-js | [issue 5061](https://github.com/PostHog/posthog-js/issues/5061) | Confirmed Android configuration gap: the existing native-crash opt-in is forwarded only to `autoCapture`, not to Android's separate native-crash setting. | Android, react-native, feature/error-tracking, feature/mobile, team/client-libraries | https://github.com/PostHog/posthog-js/pull/5062 | no | 2026-09-22T09:29:27.975Z |
 | PostHog/posthog-js | [issue 5055](https://github.com/PostHog/posthog-js/issues/5055) | Confirmed, well-scoped telemetry bug in the OpenAI Agents tracing mapper. | node, team/ai-observability | https://github.com/PostHog/posthog-js/pull/5057 | no | 2026-09-22T04:39:02.682Z |
 | PostHog/posthog-js | [issue 5034](https://github.com/PostHog/posthog-js/issues/5034) | Confirmed browser SDK bug: explicit `cross_subdomain_cookie: false` still triggers cross-subdomain cookie-domain probing during persistence cleanup. | javascript, web, team/client-libraries |  | no | 2026-09-20T11:55:58.241Z |
