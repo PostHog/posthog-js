@@ -331,7 +331,7 @@ Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) 
 
 Public API is hard to change once it ships, so agree on it before writing the implementation. Our [SDK guidelines](https://posthog.com/handbook/engineering/sdks/guidelines) explain how we design it.
 
-This section is for external contributors. PostHog Client Libraries maintainers agree on API shape in the PR itself, so they don't need a separate issue.
+This section is for external contributors. PostHog maintainers (members of the PostHog GitHub org) agree on API shape in the PR itself, so they don't need a separate issue.
 
 - **Before you start:** if you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case. Wait for a maintainer to agree on the API shape there before you implement it. Context is more useful to us than code at this stage.
 - **Already have a PR open?** Don't stop or rewrite it. Call out the public API change at the top of the PR description, and link or open an issue so we can discuss the shape there.
