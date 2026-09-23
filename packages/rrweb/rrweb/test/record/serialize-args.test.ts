@@ -320,6 +320,49 @@ describe('serializeArg with dataURLOptions', () => {
     ]);
   });
 
+  it('rethrows when a tainted canvas refuses toDataURL, warning once', () => {
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // the caller drops the mutation, so no substitute image reaches replay
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow('tainted canvas');
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // a tainted canvas fails on every draw, so only the first one warns
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow('tainted canvas');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow(TypeError);
+    expect(() =>
+      serializeArg(canvas, window, context, defaultDataURLOptions),
+    ).toThrow(TypeError);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    warn.mockRestore();
+  });
+
   it('should serialize ImageData with nested canvas in complex structure', () => {
     const canvas = document.createElement('canvas');
     canvas.toDataURL = (t?: string, q?: number) => `data:${t};base64,test`;

@@ -19,6 +19,7 @@
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
     "cassette:record": "node harness/record.mjs",
+    "cassette:record:gemini": "node harness/record-gemini.mjs",
     "lint": "oxlint --report-unused-disable-directives-severity error src tests harness",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests harness --fix",
     "build": "tsdown",

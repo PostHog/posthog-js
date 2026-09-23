@@ -76,6 +76,29 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 
 ## 4. Session & identity
 
+### Shared event properties
+
+Use the underlying PostHog client's `register()` method for values that apply to every event from that client.
+`PostHogMCP` inherits this method from `posthog-node`, and `instrument()` sends events through the supplied client.
+
+```ts
+await posthog.register({ $mcp_server_build: 'example-build', environment: 'production' })
+```
+
+Register these values during startup, before the server accepts requests.
+The build identifier describes the host server release, independently of the analytics SDK version.
+The server supplies it from its deployment configuration; the SDK does not read Git or environment variables for it.
+
+Registered properties apply to MCP events sent through `posthog.capture()`, including tool calls and their exception events, and to ordinary `capture()` events from the client.
+Do not depend on them for inherited `identify()`, `groupIdentify()`, or `alias()` events, or for minimized `$feature_flag_called` events.
+An event's own properties take precedence over registered properties.
+The underlying client's `before_send` hook receives the merged properties.
+The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties.
+Use a separate client when servers need different shared properties.
+Keep user and request data on individual events, because a shared client can serve concurrent requests.
+
+### Session resolution
+
 - **Session ID format**: `ses_<uuidv7>` (`src/extensions/ids.ts`). Uses `uuidv7` from `@posthog/core`.
 - **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — four sources, first match wins:
   1. **Conversation handle** (an agent-carried `conversation_id` tool argument, `enableConversationId: true`): hash it (`deriveSessionIdFromConversation`) — the 2026-07-28 anchor. Never persisted to shared state. See ADR-0004.
@@ -87,6 +110,7 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
   - **JSON-mode constraint**: the auto-mint reaches the wire only with `enableJsonResponse: true` (headers are built after handlers run). SSE flushes headers first, so SSE servers set the header themselves with the exported `encodeSessionId`; the SDK still decodes it. Stateless mode also needs the SDK's usual fresh-transport-per-request pattern.
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
 - **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
+- **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
 - **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:

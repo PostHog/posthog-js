@@ -2,6 +2,7 @@ import { PostHog, type PostHogOptions } from 'posthog-node'
 
 import type {
   FeedbackCaptureData,
+  AnalyticsParameterOwnership,
   CollectFeedbackOptions,
   CollectFeedbackConfig,
   InitializeCaptureData,
@@ -11,6 +12,7 @@ import type {
   McpEvent,
   MissingCapabilityCaptureData,
   PreparedToolCall,
+  PreparedToolResult,
   PrepareToolCallOptions,
   PrepareToolListOptions,
   ToolCallCaptureData,
@@ -24,7 +26,13 @@ import {
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
 } from './feedback'
-import { analyticsOwnsParameter, stripOwnedAnalyticsArguments } from './analytics-parameters'
+import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './analytics-parameters'
+import {
+  addConversationIdToTools,
+  canInjectConversationIdPromptBack,
+  injectConversationIdPromptBack,
+  resolveConversationId,
+} from './conversation-id'
 import {
   addContextParameterToTools,
   getContextDescription,
@@ -44,6 +52,8 @@ import {
   setEventModel,
 } from './model-parameters'
 import { McpEventSink } from './sink'
+import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
+import { deriveSessionIdFromConversation } from './session'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
 /**
@@ -74,6 +84,23 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * `llm_model` argument as fallback. On by default; `false` disables it.
    */
   captureModel?: MCPAnalyticsOptions['captureModel']
+  /**
+   * Correlate calls with an agent-carried `conversation_id` and a derived
+   * PostHog session id. On by default; `false` leaves schemas, arguments, tool
+   * results, and capture data unchanged.
+   */
+  enableConversationId?: boolean
+}
+
+interface PreparedConversationState {
+  minted: boolean
+  outputInstructions: boolean
+}
+
+const PREPARED_CONVERSATION_STATE_KEY = '__posthogMcpConversationState'
+
+type PreparedToolCallWithConversationState = PreparedToolCall & {
+  [PREPARED_CONVERSATION_STATE_KEY]?: PreparedConversationState
 }
 
 /**
@@ -123,7 +150,8 @@ export class PostHogMCP extends PostHog {
   // real tool by that name, and flagging it would shadow the real handler.
   readonly #feedbackOptions: CollectFeedbackOptions | undefined
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
-  readonly #modelParameterOwnership = new Map<string, boolean>()
+  readonly #enableConversationId: boolean
+  readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
@@ -138,6 +166,7 @@ export class PostHogMCP extends PostHog {
       )
     }
     this.#captureModel = options.captureModel
+    this.#enableConversationId = options.enableConversationId ?? true
     applyMcpLibIdentity(this)
   }
 
@@ -199,9 +228,10 @@ export class PostHogMCP extends PostHog {
    * Decorate your `tools/list` response with PostHog's analytics affordances:
    * injects the `context` argument into every tool (so agents state their intent,
    * captured as `$mcp_intent`), injects `llm_model` when the constructor's
-   * `captureModel` option is enabled, appends `get_more_tools` when
-   * `reportMissing` is on, and appends `send_feedback` when `collectFeedback` is
-   * on. Returns a new array; your tools are untouched.
+   * `captureModel` option is enabled, and injects the optional `conversation_id`
+   * handle by default. It appends `get_more_tools` when `reportMissing` is on and
+   * `send_feedback` when `collectFeedback` is on. Returns a new array; your tools
+   * are untouched.
    *
    * The appended `get_more_tools` descriptor carries only the base MCP tool fields
    * (name, description, input schema) — not any framework-specific fields your
@@ -209,8 +239,9 @@ export class PostHogMCP extends PostHog {
    * {@link prepareToolCall}'s `isMissingCapability`, not dispatched through a handler.
    *
    * Call this when there is no `Server` to wrap — it does for a custom dispatcher
-   * what `instrument()` does for a `Server`. Pair it with {@link prepareToolCall}
-   * on the inbound side.
+   * what `instrument()` does for a `Server`. Pair it with
+   * {@link prepareToolCall} on the inbound side and {@link prepareToolResult} on
+   * the outbound side.
    *
    * @example
    * ```ts
@@ -223,9 +254,12 @@ export class PostHogMCP extends PostHog {
     let prepared = isContextEnabled(contextOption)
       ? addContextParameterToTools(tools, getContextDescription(contextOption))
       : [...tools]
+    const ownershipSources: TTool[] = [...tools]
 
     if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#missingCapabilityToolName)) {
-      prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
+      const virtualTool = getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool
+      prepared = [...prepared, virtualTool]
+      ownershipSources.push(virtualTool)
     }
 
     if (
@@ -233,27 +267,36 @@ export class PostHogMCP extends PostHog {
       this.#feedbackOptions !== undefined &&
       !prepared.some((tool) => tool?.name === this.#feedbackToolName)
     ) {
-      prepared = [...prepared, getFeedbackToolDescriptor(this.#feedbackOptions) as TTool]
+      const virtualTool = getFeedbackToolDescriptor(this.#feedbackOptions) as TTool
+      prepared = [...prepared, virtualTool]
+      ownershipSources.push(virtualTool)
+    }
+
+    this.#analyticsParameterOwnership.clear()
+    const ownershipByName = collectAnalyticsParameterOwnership(ownershipSources)
+    for (const [toolName, ownership] of ownershipByName) {
+      this.#analyticsParameterOwnership.set(toolName, ownership)
     }
 
     if (isCaptureModelEnabled(this.#captureModel)) {
-      this.#modelParameterOwnership.clear()
-      const ownershipByName = new Map<string, boolean>()
-      for (const tool of prepared) {
-        if (typeof tool.name !== 'string') {
-          continue
-        }
-        const ownsModel = analyticsOwnsParameter(tool.inputSchema, 'llm_model')
-        ownershipByName.set(tool.name, (ownershipByName.get(tool.name) ?? true) && ownsModel)
-      }
-      for (const [toolName, ownsModel] of ownershipByName) {
-        this.#modelParameterOwnership.set(toolName, ownsModel)
-      }
       const modelDescription = getModelDescription(this.#captureModel)
       prepared = prepared.map((tool) =>
-        typeof tool.name === 'string' && ownershipByName.get(tool.name) === false
+        typeof tool.name === 'string' && ownershipByName.get(tool.name)?.llmModel === false
           ? tool
           : addModelParameterToTool(tool, modelDescription)
+      )
+    }
+
+    if (this.#enableConversationId) {
+      prepared = prepared.map((tool) =>
+        typeof tool.name === 'string' && ownershipByName.get(tool.name)?.conversationId === false
+          ? tool
+          : addConversationIdToTools([tool])[0]
+      )
+      prepared = prepared.map((tool) =>
+        typeof tool.name === 'string' && ownershipByName.get(tool.name)?.outputInstructions === false
+          ? tool
+          : addInstructionsToOutputSchemas([tool])[0]
       )
     }
     return prepared
@@ -264,8 +307,10 @@ export class PostHogMCP extends PostHog {
    * from SDK-owned arguments, strips those arguments before validation, and flags
    * whether the call targeted the `get_more_tools` virtual tool.
    *
-   * Pass the returned intent and model fields to {@link captureToolCall}, and
-   * dispatch the returned `args` to your tool.
+   * Dispatch the returned `args` to your tool. Then pass the tool result and
+   * this prepared call to {@link prepareToolResult}. Use its result as the MCP
+   * response and its session and conversation values with
+   * {@link captureToolCall}.
    *
    * On stateless or multi-replica servers, pass the original tool descriptor
    * so ownership does not depend on which process served `tools/list`.
@@ -279,17 +324,30 @@ export class PostHogMCP extends PostHog {
    * @example
    * ```ts
    * const originalTool = myTools.find((tool) => tool.name === name)
-   * const { intent, intentSource, llmModel, llmModelSource, args, isMissingCapability } =
-   *   posthog.prepareToolCall(name, rawArgs, {
+   * const preparedCall = posthog.prepareToolCall(name, rawArgs, {
    *     originalTool,
    *     requestMeta: request.params?._meta,
    *   })
-   * if (isMissingCapability) {
-   *   posthog.captureMissingCapability({ context: intent, llmModel, llmModelSource, ...identity })
-   *   return getMoreToolsResult()
+   * if (preparedCall.isMissingCapability) {
+   *   const preparedResult = posthog.prepareToolResult(getMoreToolsResult(), preparedCall)
+   *   posthog.captureMissingCapability({
+   *     context: preparedCall.intent,
+   *     sessionId: preparedResult.sessionId,
+   *     conversationId: preparedResult.conversationId,
+   *     ...identity,
+   *   })
+   *   return preparedResult.result
    * }
-   * const result = await runTool(name, args)
-   * posthog.captureToolCall({ toolName: name, intent, intentSource, ...identity })
+   * const toolResult = await runTool(name, preparedCall.args)
+   * const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
+   * posthog.captureToolCall({
+   *   toolName: name,
+   *   intent: preparedCall.intent,
+   *   sessionId: preparedResult.sessionId,
+   *   conversationId: preparedResult.conversationId,
+   *   ...identity,
+   * })
+   * return preparedResult.result
    * ```
    */
   prepareToolCall(
@@ -299,15 +357,22 @@ export class PostHogMCP extends PostHog {
   ): PreparedToolCall {
     const rawContext = args?.context
     const intent = typeof rawContext === 'string' && rawContext.trim() ? rawContext.trim() : undefined
-    const ownsModel =
-      isCaptureModelEnabled(this.#captureModel) &&
-      (options.originalTool
-        ? analyticsOwnsParameter(options.originalTool.inputSchema, 'llm_model')
-        : this.#modelParameterOwnership.get(name) === true)
+    const ownership = options.originalTool
+      ? getAnalyticsParameterOwnership(options.originalTool.inputSchema, options.originalTool.outputSchema)
+      : this.#analyticsParameterOwnership.get(name)
+    const ownsModel = isCaptureModelEnabled(this.#captureModel) && ownership?.llmModel === true
     const resolvedModel = isCaptureModelEnabled(this.#captureModel)
       ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
       : undefined
     const strippedArgs = stripContext(args)
+    const canReadConversationId = this.#enableConversationId && (ownership?.conversationId ?? true)
+    const resolvedConversation = resolveConversationId(canReadConversationId, args)
+    const conversation =
+      resolvedConversation.minted && options.sessionId
+        ? ({ minted: false, conversationId: undefined } as const)
+        : resolvedConversation
+    const conversationId = conversation.conversationId
+    const sessionId = conversationId ? deriveSessionIdFromConversation(conversationId) : options.sessionId
     // A supplied `originalTool` is a real application tool by this name (it
     // comes from the host's own list, which never holds the virtual tool), so
     // the real tool wins — the stateless twin of instrument()'s listing-derived
@@ -315,28 +380,75 @@ export class PostHogMCP extends PostHog {
     // remedy for a collision is configuring a non-colliding `toolName`.
     const isFeedback =
       this.#feedbackOptions !== undefined && name === this.#feedbackToolName && options.originalTool == null
-    return {
+    const preparedCall: PreparedToolCallWithConversationState = {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
       llmModel: resolvedModel?.model,
       llmModelSource: resolvedModel?.source,
-      args: ownsModel
-        ? (stripOwnedAnalyticsArguments(strippedArgs, {
-            context: false,
-            conversationId: false,
-            llmModel: true,
-          }) as Record<string, unknown> | undefined)
-        : strippedArgs,
+      args: stripOwnedAnalyticsArguments(strippedArgs, {
+        context: false,
+        conversationId: this.#enableConversationId && ownership?.conversationId === true,
+        llmModel: ownsModel,
+      }) as Record<string, unknown> | undefined,
+      sessionId,
+      conversationId,
       isMissingCapability: name === this.#missingCapabilityToolName,
       isFeedback,
       feedbackReport: isFeedback ? parseFeedbackReport(args, this.#feedbackOptions) : undefined,
+      // Keep the internal state serializable. Custom dispatchers can pass this
+      // value through workers or clone it before preparing the result.
+      [PREPARED_CONVERSATION_STATE_KEY]: {
+        minted: conversation.minted,
+        outputInstructions: this.#enableConversationId && ownership?.outputInstructions === true,
+      },
+    }
+    return preparedCall
+  }
+
+  /**
+   * Add the conversation handle to a tool result without changing the original
+   * value. A new handle is appended to text content once. When the advertised
+   * output schema supports it, the handle is also mirrored into
+   * `structuredContent`.
+   *
+   * Use the returned session and conversation values for capture. If a new
+   * handle could not reach the client, the conversation value is omitted while
+   * the derived session value is kept.
+   */
+  prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
+    const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
+    const conversationId = preparedCall.conversationId
+    if (!conversationId) {
+      return { result, sessionId: preparedCall.sessionId, conversationId }
+    }
+    if (!state) {
+      return { result, sessionId: preparedCall.sessionId, conversationId: undefined }
+    }
+
+    let preparedResult: unknown = result
+    let delivered = false
+    if (state.outputInstructions) {
+      const mirrored = mirrorInstructionsIntoStructuredContent(preparedResult, conversationId)
+      delivered = mirrored !== preparedResult
+      preparedResult = mirrored
+    }
+    if (state.minted && canInjectConversationIdPromptBack(preparedResult)) {
+      preparedResult = injectConversationIdPromptBack(preparedResult, conversationId)
+      delivered = true
+    }
+
+    return {
+      result: preparedResult as TResult,
+      sessionId: preparedCall.sessionId,
+      conversationId: state.minted && !delivered ? undefined : conversationId,
     }
   }
 
   /**
    * Capture a `get_more_tools` call as a missing-capability report. Emits
    * `$mcp_missing_capability` with the agent's description as `$mcp_intent`. Reply
-   * to the agent with `getMoreToolsResult()`.
+   * to the agent with `getMoreToolsResult()` after passing it through
+   * {@link prepareToolResult}.
    */
   captureMissingCapability(data: MissingCapabilityCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpMissingCapability, data)
@@ -352,7 +464,7 @@ export class PostHogMCP extends PostHog {
    * `$mcp_feedback` with the report's `$mcp_feedback_*` properties and its
    * summary/details as `$mcp_intent`. Reply to the agent with
    * `sendFeedbackResult()` (or a custom text) after routing the report to your
-   * own feedback backend.
+   * own feedback backend and passing the reply through {@link prepareToolResult}.
    */
   captureFeedback(data: FeedbackCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpFeedback, data)
@@ -388,6 +500,7 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
   const event: McpEvent = {
     eventType,
     sessionId: common.sessionId,
+    conversationId: common.conversationId,
     protocolVersion: common.protocolVersion,
     // There is no `extra` on this path, so the host reads the request headers and
     // passes them per capture — the SDK has no transport to read them from. Normalized
@@ -406,6 +519,31 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     event.identifyActorData = common.setProperties
   }
   return event
+}
+
+function collectAnalyticsParameterOwnership<TTool extends ContextInjectableTool>(
+  tools: TTool[]
+): Map<string, AnalyticsParameterOwnership> {
+  const ownershipByName = new Map<string, AnalyticsParameterOwnership>()
+  for (const tool of tools) {
+    if (typeof tool.name !== 'string') {
+      continue
+    }
+    const next = getAnalyticsParameterOwnership(tool.inputSchema, tool.outputSchema)
+    const current = ownershipByName.get(tool.name)
+    ownershipByName.set(
+      tool.name,
+      current
+        ? {
+            context: current.context && next.context,
+            conversationId: current.conversationId && next.conversationId,
+            llmModel: current.llmModel && next.llmModel,
+            outputInstructions: current.outputInstructions && next.outputInstructions,
+          }
+        : next
+    )
+  }
+  return ownershipByName
 }
 
 /**

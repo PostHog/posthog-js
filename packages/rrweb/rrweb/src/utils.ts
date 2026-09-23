@@ -154,6 +154,68 @@ export function throttle<T>(
   };
 }
 
+type WindowWithZone = Window & {
+  Zone?: {
+    __symbol__?: (key: string) => string;
+  };
+};
+
+/*
+zone.js (Angular) patches `setTimeout`, and a timer scheduled while the Angular
+zone is current keeps that zone busy: when the timer completes NgZone reports the
+zone stable and `ApplicationRef.tick()` runs another change detection. A component
+that writes one of the hooked properties on every change detection - a common
+pattern in component libraries - then feeds itself, and the tab never settles.
+zone.js keeps the unpatched globals on the window under the names it exposes
+through `Zone.__symbol__`, the same escape hatch `@posthog/rrweb-utils` already
+uses for patched DOM prototypes. Deferring on that timer keeps the hook out of the
+zone's task bookkeeping; the forwarding to the original setter stays synchronous,
+so the page sees no difference.
+Resolved once, when the hook is installed, which covers both load orders: a
+reference captured before zone.js loads is the native one anyway. It also means a
+timer installed after that point, such as a test's fake timers, is not picked up.
+`Zone` is an ordinary global that any page can define, so neither resolving the
+timer nor calling it may reach the page: a lookup that throws would take
+`hookSetter` - and with it the observer that installs the six hooks - down with
+it, and a throw from the timer itself would land in the middle of the page's own
+assignment, before it has been forwarded to the original setter. Both are
+contained here; losing one recorded write beats breaking the write.
+see: https://github.com/angular/angular/issues/26948
+*/
+function getDeferral(
+  win: Window & typeof globalThis,
+): (callback: () => void) => void {
+  let scheduleTimeout: typeof setTimeout | undefined =
+    typeof win.setTimeout === 'function' ? win.setTimeout : undefined;
+  try {
+    const unpatchedName = (win as WindowWithZone).Zone?.__symbol__?.(
+      'setTimeout',
+    );
+    const unpatched = unpatchedName
+      ? (win as unknown as Record<string, unknown>)[unpatchedName]
+      : undefined;
+    if (typeof unpatched === 'function') {
+      scheduleTimeout = unpatched as typeof setTimeout;
+    }
+  } catch {
+    // noop
+  }
+  if (!scheduleTimeout) {
+    return () => {
+      // noop
+    };
+  }
+  const schedule = scheduleTimeout;
+  return (callback: () => void) => {
+    try {
+      // a bare reference needs `win` as its receiver, or browsers reject the call
+      schedule.call(win, callback, 0);
+    } catch {
+      // noop
+    }
+  };
+}
+
 export function hookSetter<T>(
   target: T,
   key: string | number | symbol,
@@ -162,47 +224,47 @@ export function hookSetter<T>(
   win: Window & typeof globalThis = window,
 ): hookResetter {
   const original = win.Object.getOwnPropertyDescriptor(target, key);
-  win.Object.defineProperty(
-    target,
-    key,
-    isRevoked
-      ? d
-      : {
-          set(value) {
-            // put hooked setter into event loop to avoid of set latency
-            setTimeout(() => {
-              // the accessors read inside `d.set` throw 'Illegal invocation'
-              // when `this` is not a genuine native element (e.g. a proxy);
-              // the page cannot observe this deferred call, so drop the
-              // update rather than throw
-              try {
-                d.set!.call(this, value);
-              } catch {
-                // noop
-              }
-            }, 0);
-            if (original && original.set) {
-              // Runs synchronously in the page's assignment, so a throw escapes
-              // to the host page. A proxy or `setPrototypeOf` fake sits on the
-              // prototype chain, so `instanceof` can't screen `this`; the native
-              // getter fails the same brand check as the setter. Probe it: a
-              // throw means `this` isn't a real element (skip), else forward and
-              // let a genuine setter throw (e.g. a file input) propagate. With
-              // no getter to probe, forward unguarded rather than drop a real
-              // write.
-              if (original.get) {
-                try {
-                  original.get.call(this);
-                } catch {
-                  return;
-                }
-              }
-              original.set.call(this, value);
-            }
-          },
-        },
-  );
-  return () => hookSetter(target, key, original || {}, true);
+  const restore = () => hookSetter(target, key, original || {}, true);
+  if (isRevoked) {
+    win.Object.defineProperty(target, key, d);
+    return restore;
+  }
+  const defer = getDeferral(win);
+  win.Object.defineProperty(target, key, {
+    set(value) {
+      // put hooked setter into event loop to avoid of set latency
+      defer(() => {
+        // the accessors read inside `d.set` throw 'Illegal invocation'
+        // when `this` is not a genuine native element (e.g. a proxy);
+        // the page cannot observe this deferred call, so drop the
+        // update rather than throw
+        try {
+          d.set!.call(this, value);
+        } catch {
+          // noop
+        }
+      });
+      if (original && original.set) {
+        // Runs synchronously in the page's assignment, so a throw escapes
+        // to the host page. A proxy or `setPrototypeOf` fake sits on the
+        // prototype chain, so `instanceof` can't screen `this`; the native
+        // getter fails the same brand check as the setter. Probe it: a
+        // throw means `this` isn't a real element (skip), else forward and
+        // let a genuine setter throw (e.g. a file input) propagate. With
+        // no getter to probe, forward unguarded rather than drop a real
+        // write.
+        if (original.get) {
+          try {
+            original.get.call(this);
+          } catch {
+            return;
+          }
+        }
+        original.set.call(this, value);
+      }
+    },
+  });
+  return restore;
 }
 
 // guard against old third party libraries which redefine Date.now

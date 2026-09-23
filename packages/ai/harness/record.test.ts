@@ -73,7 +73,14 @@ it.each(['transport', 'malformed-stream'])(
 it.each([false, true])('validates the CLI cache sequence before saving (invalid state: %s)', async (invalid) => {
   const directory = await mkdtemp(join(tmpdir(), 'ai-cache-cli-'))
   try {
-    for (const name of ['record.mjs', 'cassette.ts', 'openai-protocol.ts', 'recording-scenarios.mjs', 'fixtures']) {
+    for (const name of [
+      'record.mjs',
+      'cassette.ts',
+      'gemini-protocol.ts',
+      'openai-protocol.ts',
+      'recording-scenarios.mjs',
+      'fixtures',
+    ]) {
       await cp(new URL(name, import.meta.url), join(directory, name), {
         recursive: true,
         filter: (source) => !source.endsWith('.live.json'),
@@ -150,7 +157,13 @@ it.each([false, true])('validates the CLI cache sequence before saving (invalid 
 it.each([false, true])('validates tool arguments before CLI publication (wrong arguments: %s)', async (invalid) => {
   const directory = await mkdtemp(join(tmpdir(), 'ai-tools-cli-'))
   try {
-    for (const name of ['record.mjs', 'cassette.ts', 'openai-protocol.ts', 'recording-scenarios.mjs']) {
+    for (const name of [
+      'record.mjs',
+      'cassette.ts',
+      'gemini-protocol.ts',
+      'openai-protocol.ts',
+      'recording-scenarios.mjs',
+    ]) {
       await cp(new URL(name, import.meta.url), join(directory, name))
     }
     await mkdir(join(directory, 'fixtures'))

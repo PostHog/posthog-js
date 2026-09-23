@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.52.6
+
+### Patch Changes
+
+- [#5078](https://github.com/PostHog/posthog-js/pull/5078) [`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1) Thanks [@rubychilds](https://github.com/rubychilds)! - Honor `filters.holdout` during local feature flag evaluation. A user in an experiment holdout now receives the `holdout-<id>` variant instead of being bucketed into a regular variant, matching how the server evaluates the same flag. The holdout is resolved before the release conditions, so a held-out user never reaches the flag's targeting — including when those conditions would have excluded them, so `isFeatureEnabled` can return true where it previously returned false. Experiments with an active holdout will see variant assignment change for the held-out share of traffic on upgrade, bringing locally evaluated assignments in line with server-evaluated ones.
+  (2026-09-23)
+- Updated dependencies [[`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1)]:
+  - @posthog/core@1.55.2
+
 ## 5.52.5
 
 ### Patch Changes

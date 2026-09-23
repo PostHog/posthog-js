@@ -3112,7 +3112,7 @@
           "name": "bucketing_identifier"
         },
         {
-          "type": "{ aggregation_group_type_index?: number; groups?: FeatureFlagCondition[]; multivariate?: { variants: { key: string; rollout_percentage: number; }[]; }; payloads?: Record<string, string>; early_exit?: boolean; }",
+          "type": "{ aggregation_group_type_index?: number; groups?: FeatureFlagCondition[]; multivariate?: { variants: { key: string; rollout_percentage: number; }[]; }; payloads?: Record<string, string>; holdout?: { id: number; exclusion_percentage: number; } | null; early_exit?: boolean; }",
           "name": "filters"
         },
         {
