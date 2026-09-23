@@ -1,5 +1,6 @@
 ---
-'@posthog/react-native-plugin': patch
+'posthog-react-native': minor
+'@posthog/react-native-plugin': minor
 ---
 
-Capture Android native (NDK) crashes on Android 12+ when `errorTracking.autocapture.nativeCrashes` is enabled, reported on the next app launch (including recent crashes from before the upgrade).
+Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android. Requires Android 12+ and exception autocapture enabled in the project's error tracking settings; crashes are captured on the next app launch and symbolicated against `.so` debug symbols uploaded with the PostHog Gradle plugin. `nativeCrashes` keeps covering Java/Kotlin crashes on Android, and native crashes on Apple platforms.

@@ -39,6 +39,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
 {
   "pluginConfig": {
     "errorTracking": {
+      "androidNdkCrashes": false,
       "exceptionSteps": {
         "enabled": true,
         "maxBytes": 32768,

@@ -2496,10 +2496,24 @@ export class PostHog extends PostHogCore {
     return this._sessionReplayEvalChain
   }
 
-  private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
+  // Two native opt-ins: nativeCrashes covers the platform's own crash handler, while Android
+  // NDK crashes are a separate posthog-android toggle (its tombstone scanner).
+  private _nativeErrorAutocapture(options?: PostHogOptions): { nativeCrashes: boolean; androidNdkCrashes: boolean } {
     const autocapture = options?.errorTracking?.autocapture
-    const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
-    return !this.isDisabled && nativeCrashes
+    if (this.isDisabled || typeof autocapture !== 'object') {
+      return { nativeCrashes: false, androidNdkCrashes: false }
+    }
+    return {
+      nativeCrashes: autocapture.nativeCrashes === true,
+      // Android-only, so it must not bring up the native SDK on other platforms.
+      androidNdkCrashes: Platform.OS === 'android' && autocapture.androidNdkCrashes === true,
+    }
+  }
+
+  // Either opt-in needs the native SDK, so both gate initialization.
+  private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
+    const { nativeCrashes, androidNdkCrashes } = this._nativeErrorAutocapture(options)
+    return nativeCrashes || androidNdkCrashes
   }
 
   private _isNativePluginInitialized(): boolean {
@@ -2546,6 +2560,7 @@ export class PostHog extends PostHogCore {
     enableSessionReplay: boolean = this._isEnableSessionReplay(),
     forcePush: boolean = false
   ): Promise<boolean> {
+    const nativeErrorAutocapture = this._nativeErrorAutocapture(options)
     let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
     let enablePush = this._isPushNativeEnabled(options, forcePush)
 
@@ -2798,7 +2813,8 @@ export class PostHog extends PostHogCore {
             decideReplayConfig: cachedSessionReplayConfig,
           },
           errorTracking: {
-            nativeAutocapture: enableNativeErrorTracking,
+            nativeAutocapture: nativeErrorAutocapture.nativeCrashes,
+            androidNdkCrashes: nativeErrorAutocapture.androidNdkCrashes,
             exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
           },
           // Always sent, even when push init isn't the reason we're here: the native

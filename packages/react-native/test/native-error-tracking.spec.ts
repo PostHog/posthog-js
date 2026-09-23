@@ -1,3 +1,4 @@
+import { Platform } from 'react-native'
 import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
@@ -46,7 +47,10 @@ const resetMockPlugin = (): void => {
 }
 
 describe('native error tracking', () => {
+  const originalPlatform = Platform.OS
+
   beforeEach(() => {
+    Platform.OS = originalPlatform
     resetMockPlugin()
     vi.clearAllMocks()
     setupFetch()
@@ -87,6 +91,68 @@ describe('native error tracking', () => {
     const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
     expect(pluginConfig.sessionReplay.enabled).toBe(false)
     expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
+    // NDK capture is a separate opt-in, so nativeCrashes alone must not enable it.
+    expect(pluginConfig.errorTracking.androidNdkCrashes).toBe(false)
+
+    await posthog.shutdown()
+  })
+
+  it('initializes native error tracking for androidNdkCrashes alone', async () => {
+    Platform.OS = 'android'
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      errorTracking: { autocapture: { androidNdkCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+
+    const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
+    expect(pluginConfig.errorTracking.androidNdkCrashes).toBe(true)
+    expect(pluginConfig.errorTracking.nativeAutocapture).toBe(false)
+
+    await posthog.shutdown()
+  })
+
+  it('ignores androidNdkCrashes on iOS', async () => {
+    Platform.OS = 'ios'
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { androidNdkCrashes: true } },
+    })
+
+    await posthog.ready()
+    await waitForNativePluginEvaluation(posthog)
+
+    expect(mockPlugin.setup).not.toHaveBeenCalled()
+
+    await posthog.shutdown()
+  })
+
+  it('passes both native crash opt-ins when both are enabled', async () => {
+    Platform.OS = 'android'
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      errorTracking: { autocapture: { nativeCrashes: true, androidNdkCrashes: true } },
+    })
+
+    await posthog.ready()
+
+    await waitForExpect(100, () => {
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+    })
+
+    const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
+    expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
+    expect(pluginConfig.errorTracking.androidNdkCrashes).toBe(true)
 
     await posthog.shutdown()
   })

@@ -11,16 +11,18 @@ import org.junit.Test
 
 class PosthogReactNativePluginModuleTest {
   @Test
-  fun `native error tracking config enables JVM and native crash capture together`() {
-    for (enabled in listOf(true, false)) {
-      val config = PostHogAndroidConfig("api-key", "https://us.i.posthog.com")
-      config.errorTrackingConfig.autoCapture = !enabled
-      config.errorTrackingConfig.captureNativeCrashes = !enabled
+  fun `JVM and NDK crash capture are configured independently`() {
+    for (nativeAutocapture in listOf(true, false)) {
+      for (androidNdkCrashes in listOf(true, false)) {
+        val config = PostHogAndroidConfig("api-key", "https://us.i.posthog.com")
+        config.errorTrackingConfig.autoCapture = !nativeAutocapture
+        config.errorTrackingConfig.captureNativeCrashes = !androidNdkCrashes
 
-      config.configureNativeErrorTracking(enabled)
+        config.applyErrorTrackingConfig(nativeAutocapture, androidNdkCrashes)
 
-      assertEquals(enabled, config.errorTrackingConfig.autoCapture)
-      assertEquals(enabled, config.errorTrackingConfig.captureNativeCrashes)
+        assertEquals(nativeAutocapture, config.errorTrackingConfig.autoCapture)
+        assertEquals(androidNdkCrashes, config.errorTrackingConfig.captureNativeCrashes)
+      }
     }
   }
 
