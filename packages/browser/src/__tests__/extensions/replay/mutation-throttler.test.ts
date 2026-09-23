@@ -285,6 +285,53 @@ describe('MutationThrottler', () => {
             expect(unlimited.throttleMutations(eventOfRoughSize(5000))).toBeDefined()
         })
 
+        test('a repeated oversized adds payload is dropped even with the byte budget off', () => {
+            const unlimited = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+                bytesBucketSize: 0,
+                oversizedAddBytes: 1000,
+                oversizedAddBudget: 2,
+                resyncIntervalMs: 10_000,
+                onDroppedOversizedMutation,
+                requestFullSnapshot,
+            })
+
+            // the first rebuilds of the subtree still reach the player
+            expect(unlimited.throttleMutations(eventOfRoughSize(2000))).toBeDefined()
+            expect(unlimited.throttleMutations(eventOfRoughSize(2000))).toBeDefined()
+            expect(onDroppedOversizedMutation).not.toHaveBeenCalled()
+
+            // the rebuild loop past the budget is dropped and resynced instead
+            expect(unlimited.throttleMutations(eventOfRoughSize(2000))).toBeUndefined()
+            expect(onDroppedOversizedMutation).toHaveBeenCalledWith(expect.any(Number))
+            vi.runOnlyPendingTimers()
+            expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
+
+            // ordinary mutations keep flowing while the guard holds
+            expect(unlimited.throttleMutations(eventOfRoughSize(100))).toBeDefined()
+
+            vi.advanceTimersByTime(10_000)
+            expect(unlimited.throttleMutations(eventOfRoughSize(2000))).toBeDefined()
+        })
+
+        test('an oversized adds budget of 0 drops every oversized adds payload', () => {
+            const none = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+                bytesBucketSize: 0,
+                oversizedAddBytes: 1000,
+                oversizedAddBudget: 0,
+            })
+
+            expect(none.throttleMutations(eventOfRoughSize(2000))).toBeUndefined()
+            expect(none.throttleMutations(eventOfRoughSize(100))).toBeDefined()
+        })
+
+        test('the default oversized adds threshold leaves ordinary mutations alone', () => {
+            const defaults = new MutationThrottler(rrwebMock as unknown as rrwebRecord, { bytesBucketSize: 0 })
+
+            for (let i = 0; i < 10; i++) {
+                expect(defaults.throttleMutations(eventOfRoughSize(100_000))).toBeDefined()
+            }
+        })
+
         test('non-mutation events are not charged against the budget', () => {
             const nonMutation = {
                 type: 999,

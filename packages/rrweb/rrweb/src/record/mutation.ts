@@ -14,6 +14,10 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
+  isSnapshotCostTrackingActive,
+  takeDeferredStylesheetLinks,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -206,6 +210,8 @@ export default class MutationBuffer {
   private maskTextClass: observerParam['maskTextClass'];
   private maskTextSelector: observerParam['maskTextSelector'];
   private inlineStylesheet: observerParam['inlineStylesheet'];
+  private inlineStylesheetBudgetRules: observerParam['inlineStylesheetBudgetRules'];
+  private onDeferredStylesheetLinks: observerParam['onDeferredStylesheetLinks'];
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
@@ -236,6 +242,8 @@ export default class MutationBuffer {
         'maskTextClass',
         'maskTextSelector',
         'inlineStylesheet',
+        'inlineStylesheetBudgetRules',
+        'onDeferredStylesheetLinks',
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
@@ -335,10 +343,40 @@ export default class MutationBuffer {
     // goes. Measure it so that cost is visible without a Chrome trace.
     const startedAt = nowMs();
     const startGeneration = getSuspensionGeneration();
+
+    // A full snapshot drains the buffers inside its own tracking window (the
+    // post-snapshot unlock). That window already owns the budget and the
+    // deferred queue, so nesting one here would drain its links before it
+    // emitted them.
+    if (isSnapshotCostTrackingActive()) {
+      try {
+        this.processBufferedMutations();
+      } finally {
+        recordMutationCost(nowMs() - startedAt, startGeneration);
+      }
+      return;
+    }
+
+    // An added subtree is serialized in full, stylesheets included, and a page
+    // that re-creates a big same-origin subtree pays that whole cost again on
+    // every rebuild. Give the batch the same stylesheet budget a full snapshot
+    // gets, so the sheets past the cap are inlined from idle time instead of
+    // freezing this callback.
+    let deferredLinks: HTMLLinkElement[] = [];
+    beginSnapshotCostTracking(this.inlineStylesheetBudgetRules, {
+      isSnapshot: false,
+    });
     try {
       this.processBufferedMutations();
     } finally {
+      endSnapshotCostTracking();
+      deferredLinks = takeDeferredStylesheetLinks();
       recordMutationCost(nowMs() - startedAt, startGeneration);
+    }
+    // After the mutation is emitted: the deferred `_cssText` arrives as an
+    // attribute mutation, so the player needs the node first.
+    if (deferredLinks.length) {
+      this.onDeferredStylesheetLinks?.(deferredLinks);
     }
   };
 

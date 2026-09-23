@@ -11,6 +11,15 @@ import { logger } from '@posthog/browser-common/utils/logger'
 export const DEFAULT_MUTATION_BYTES_REFILL_RATE = 25 * 1024
 export const DEFAULT_MUTATION_RESYNC_INTERVAL_MS = 5 * 60 * 1000
 
+// An `adds` payload this large is a whole subtree being re-serialized, not an
+// ordinary DOM change. Well above what a virtualized list or a calendar grid
+// produces, so ordinary churn never reaches the repeat guard below.
+export const DEFAULT_OVERSIZED_ADD_BYTES = 1024 * 1024
+// Oversized adds allowed before repeats start being dropped. One-off large
+// subtree adds (a route change, a lazily mounted widget) stay in the recording;
+// a rebuild loop stops after it has spent them.
+export const DEFAULT_OVERSIZED_ADD_BUDGET = 3
+
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
     private _rateLimiter: BucketedRateLimiter<number>
@@ -22,6 +31,10 @@ export class MutationThrottler {
     private _resyncIntervalMs: number
     private _resyncTimer: ReturnType<typeof setTimeout> | undefined
     private _lastResyncAt = -Infinity
+    private _oversizedAddBytes: number
+    private _oversizedAddBudgetSize: number
+    private _oversizedAddTokens: number
+    private _lastOversizedAddRefill: number = Date.now()
 
     constructor(
         private readonly _rrweb: rrwebRecord,
@@ -30,6 +43,8 @@ export class MutationThrottler {
             refillRate?: number
             bytesBucketSize?: number
             bytesRefillRate?: number
+            oversizedAddBytes?: number
+            oversizedAddBudget?: number
             resyncIntervalMs?: number
             onBlockedNode?: (id: number, node: Node | null) => void
             onDroppedAttributeMutations?: (count: number) => void
@@ -49,6 +64,17 @@ export class MutationThrottler {
         this._bytesRefillRate = this._options.bytesRefillRate ?? DEFAULT_MUTATION_BYTES_REFILL_RATE
         this._byteBudgetDisabled = !Number.isFinite(this._bytesBucketSize) || this._bytesBucketSize <= 0
         this._byteTokens = this._bytesBucketSize
+        const oversizedAddBytes = this._options.oversizedAddBytes
+        this._oversizedAddBytes =
+            isNumber(oversizedAddBytes) && Number.isFinite(oversizedAddBytes) && oversizedAddBytes > 0
+                ? oversizedAddBytes
+                : DEFAULT_OVERSIZED_ADD_BYTES
+        const oversizedAddBudget = this._options.oversizedAddBudget
+        this._oversizedAddBudgetSize =
+            isNumber(oversizedAddBudget) && Number.isFinite(oversizedAddBudget) && oversizedAddBudget >= 0
+                ? oversizedAddBudget
+                : DEFAULT_OVERSIZED_ADD_BUDGET
+        this._oversizedAddTokens = this._oversizedAddBudgetSize
         const resyncIntervalMs = this._options.resyncIntervalMs
         // guard against 0 (the "scheduled snapshots disabled" config value) and other
         // non-positive values: a zero cooldown would take a full snapshot per dropped mutation
@@ -70,6 +96,18 @@ export class MutationThrottler {
             this._byteTokens + (elapsedMs / 1000) * this._bytesRefillRate
         )
         this._lastByteRefill = now
+    }
+
+    // One token back per resync interval, so a page that rebuilds a big subtree
+    // forever keeps paying for at most one of those payloads per interval.
+    private _refillOversizedAddBudget = () => {
+        const now = Date.now()
+        const intervals = Math.floor((now - this._lastOversizedAddRefill) / this._resyncIntervalMs)
+        if (intervals <= 0) {
+            return
+        }
+        this._oversizedAddTokens = Math.min(this._oversizedAddBudgetSize, this._oversizedAddTokens + intervals)
+        this._lastOversizedAddRefill += intervals * this._resyncIntervalMs
     }
 
     private _onNodeRateLimited = (key: number) => {
@@ -141,6 +179,24 @@ export class MutationThrottler {
             }
         }
 
+        // A page that re-creates a large same-origin subtree - an embedded viewer's
+        // iframe, a heavy widget - re-serializes all of it on every rebuild, then
+        // stringifies and compresses the result. The byte budget below bounds that,
+        // but it is opt-in; this guard is always on and only drops repeats, so a
+        // one-off large add still reaches the player.
+        if (data.adds?.length) {
+            const addsBytes = estimateCompressedEventSize(data.adds)
+            if (addsBytes > this._oversizedAddBytes) {
+                this._refillOversizedAddBudget()
+                if (this._oversizedAddTokens <= 0) {
+                    this._options.onDroppedOversizedMutation?.(addsBytes)
+                    this._scheduleResync()
+                    return
+                }
+                this._oversizedAddTokens -= 1
+            }
+        }
+
         // Check if every part of the mutation is empty in which case there is nothing to do
         const mutationCount = this._numberOfChanges(data)
 
@@ -198,6 +254,8 @@ export class MutationThrottler {
         this.reset()
         this._byteTokens = this._bytesBucketSize
         this._lastByteRefill = Date.now()
+        this._oversizedAddTokens = this._oversizedAddBudgetSize
+        this._lastOversizedAddRefill = Date.now()
         this._lastResyncAt = -Infinity
     }
 }
