@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { createPostHog, FeatureFlagsExtension } from '../src'
 import { localRemoteConfig } from './helpers'
+import type { LogsExtension } from '../src/logs'
 
 it('shares default JSON configuration across flags, logs, surveys and autocapture', async () => {
     const requests: string[] = []
@@ -48,8 +49,9 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
         document.body.innerHTML = '<button>Save</button>'
         document.querySelector('button')!.click()
         expect(captured).toHaveBeenCalledWith(expect.objectContaining({ event: '$autocapture' }))
-        client.captureLog({ body: 'configured products' })
-        await client.flush()
+        const logs = client.getExtension<LogsExtension>('logs')!
+        logs.captureLog({ body: 'configured products' })
+        await logs.flush()
         expect(logBodies).toHaveLength(1)
         expect(requests.filter((path) => path === '/array/ph_products/config')).toHaveLength(1)
     } finally {
