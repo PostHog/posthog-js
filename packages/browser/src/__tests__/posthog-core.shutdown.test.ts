@@ -52,7 +52,7 @@ describe('shutdown()', () => {
         expect(metricsDispose).toHaveBeenCalledTimes(1)
     })
 
-    it('disposes feature flags through the extension runtime', async () => {
+    it('disposes core-owned feature flags', async () => {
         const featureFlagsDispose = vi.spyOn(instance.featureFlags!, 'dispose')
 
         await instance.shutdown()
@@ -76,7 +76,7 @@ describe('shutdown()', () => {
         const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
         const host = instance._getBrowserClientAdapter()
         vi.spyOn(host.logger, 'error').mockImplementation(() => {})
-        await host.add({
+        await instance['_setupExtension']({
             name: 'failing',
             setup: vi.fn(),
             dispose: () => {
@@ -84,7 +84,7 @@ describe('shutdown()', () => {
                 throw new Error('disposal failure')
             },
         })
-        await host.add({
+        await instance['_setupExtension']({
             name: 'survivor',
             setup: vi.fn(),
             dispose: () => {
@@ -107,7 +107,7 @@ describe('shutdown()', () => {
             setup: () => new Promise<void>(() => undefined),
             dispose: vi.fn(),
         }
-        void instance._getBrowserClientAdapter().add(pendingSetup)
+        void instance['_setupExtension'](pendingSetup)
 
         await expect(instance.shutdown(0)).resolves.toBeUndefined()
 
@@ -121,7 +121,7 @@ describe('shutdown()', () => {
         vi.spyOn(instance._requestQueue!, 'unload').mockImplementation(() => {
             order.push('request-unload')
         })
-        await instance._getBrowserClientAdapter().add({
+        await instance['_setupExtension']({
             name: 'synchronous-cleanup',
             setup: vi.fn(),
             dispose: () => {

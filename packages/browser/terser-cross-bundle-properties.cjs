@@ -16,7 +16,6 @@ const knownNonAbiOverlaps = [
     '_POSTHOG_REMOTE_CONFIG',
     '_batchKey',
     '_buffer',
-    '_client',
     '_config',
     '_disposed',
     '_enqueue',

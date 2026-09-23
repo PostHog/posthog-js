@@ -1,9 +1,10 @@
 import type { Client, Extension } from '@posthog/browser-common'
 
-type ExtensionRecord = [extension: Extension, disposed: boolean]
+type ExtensionRecord = [extension: Extension, disposed: boolean, names: string[]]
 
 export class ExtensionRegistry {
     private readonly _records = new Map<string, ExtensionRecord>()
+    private readonly _extensions = new Map<string, Extension>()
     private _disposed = false
 
     private readonly _createClient: (extensionName: string) => Client
@@ -15,7 +16,7 @@ export class ExtensionRegistry {
     }
 
     get<T extends Extension = Extension>(name: string): T | undefined {
-        return this._records.get(name)?.[0] as T | undefined
+        return this._extensions.get(name) as T | undefined
     }
 
     async install(extension: Extension): Promise<void> {
@@ -23,12 +24,18 @@ export class ExtensionRegistry {
             throw new Error('The extension registry is disposed')
         }
         const { name } = extension
-        if (!name || this._records.has(name)) {
-            throw new Error(`An extension named "${name}" is already installed`)
+        const bindings: Array<[string, Extension]> = [[name, extension], ...Object.entries(extension.bindings ?? {})]
+        const names = new Set<string>()
+        for (const [key] of bindings) {
+            if (!key || names.has(key) || this._extensions.has(key)) {
+                throw new Error(`An extension named "${key}" is already installed or the name is invalid`)
+            }
+            names.add(key)
         }
 
-        const record: ExtensionRecord = [extension, false]
+        const record: ExtensionRecord = [extension, false, [...names]]
         this._records.set(name, record)
+        for (const [key, target] of bindings) this._extensions.set(key, target)
         try {
             await extension.setup(this._createClient(name))
             if (this._disposed || record[1]) {
@@ -36,7 +43,7 @@ export class ExtensionRegistry {
             }
         } catch (error) {
             if (this._records.get(name) === record) {
-                this._records.delete(name)
+                this._removeRecord(record)
             }
             try {
                 await this._disposeRecord(record)
@@ -50,7 +57,7 @@ export class ExtensionRegistry {
     async rollback(extension: Extension): Promise<void> {
         const record = this._records.get(extension.name)
         if (record?.[0] === extension) {
-            this._records.delete(extension.name)
+            this._removeRecord(record)
             await this._disposeRecord(record)
         }
     }
@@ -62,6 +69,7 @@ export class ExtensionRegistry {
         this._disposed = true
         const records = Array.from(this._records.values()).reverse()
         this._records.clear()
+        this._extensions.clear()
         await Promise.all(
             records.map(async (record) => {
                 try {
@@ -71,6 +79,11 @@ export class ExtensionRegistry {
                 }
             })
         )
+    }
+
+    private _removeRecord(record: ExtensionRecord): void {
+        this._records.delete(record[0].name)
+        for (const name of record[2]) this._extensions.delete(name)
     }
 
     private async _disposeRecord(record: ExtensionRecord): Promise<void> {

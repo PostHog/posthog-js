@@ -525,6 +525,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
+    private readonly _sharedExtensions: Array<{ extension: BrowserCommonExtension; disposed: boolean }> = []
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
@@ -1102,17 +1103,61 @@ export class PostHog implements PostHogInterface {
 
     private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
         if (this._isSharedExtension(extension)) {
-            initTasks.push(
-                () =>
-                    void this._getBrowserClientAdapter()
-                        .add(extension)
-                        .catch(() => extension.dispose?.())
-                        .catch((error) => {
-                            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
-                        })
-            )
+            initTasks.push(() => void this._setupExtension(extension))
         } else {
             this._extensions.push(extension)
+        }
+    }
+
+    /** Shutdown admission for independently compiled client adapters. */
+    _isBrowserClientClosing(): boolean {
+        return this._isShutdown
+    }
+
+    /** Whether this host still owns a shared extension's active lifecycle. */
+    _isExtensionActive(extension: BrowserCommonExtension): boolean {
+        return (
+            !this._isShutdown &&
+            this._sharedExtensions.some((record) => record.extension === extension && !record.disposed)
+        )
+    }
+
+    private async _setupExtension(extension: BrowserCommonExtension): Promise<void> {
+        if (this._sharedExtensions.some((record) => record.extension === extension)) {
+            return
+        }
+        const record = { extension, disposed: false }
+        this._sharedExtensions.push(record)
+        if (this._isShutdown) {
+            this._disposeExtension(record)
+            return
+        }
+        try {
+            const setup = extension.setup(this._getBrowserClientAdapter())
+            if (setup) await setup
+        } catch (error) {
+            logger.error(`Failed to set up browser extension "${extension.name}"`, error)
+            this._disposeExtension(record)
+        }
+    }
+
+    private _disposeExtension(record: { extension: BrowserCommonExtension; disposed: boolean }): void {
+        if (record.disposed) return
+        record.disposed = true
+        const { extension } = record
+        if (extension === this.featureFlags) {
+            this._featureFlagsReloadingUnsubscribe?.()
+            this._featureFlagsReloadingUnsubscribe = undefined
+        }
+        try {
+            const result = extension.dispose?.() as unknown
+            if (result && isFunction((result as PromiseLike<void>).then)) {
+                void (result as PromiseLike<void>).then(undefined, (error) => {
+                    logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
+                })
+            }
+        } catch (error) {
+            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
         }
     }
 
@@ -1132,7 +1177,7 @@ export class PostHog implements PostHogInterface {
                 this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
                     this._internalEventEmitter.emit('featureFlagsReloading', true)
                 })
-                void this._getBrowserClientAdapter().add(this.featureFlags)
+                void this._setupExtension(this.featureFlags)
             }
         } else {
             this.featureFlags.initialize?.()
@@ -1317,7 +1362,9 @@ export class PostHog implements PostHogInterface {
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        this._browserClientAdapter?.handleRemoteConfig(result)
+        if (!this._isShutdown) {
+            this._internalEventEmitter.emit('extensionsRemoteConfig', result)
+        }
 
         // Every legacy extension receives the canonical result and handles failures itself.
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
@@ -3868,7 +3915,9 @@ export class PostHog implements PostHogInterface {
         }
 
         this._isShutdown = true
-        this._getBrowserClientAdapter().dispose()
+        for (const record of this._sharedExtensions.slice().reverse()) {
+            this._disposeExtension(record)
+        }
         this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
@@ -3879,7 +3928,9 @@ export class PostHog implements PostHogInterface {
         this._requestQueue?.unload()
         this._retryQueue?.unload()
         try {
-            this.featureFlags?.destroy()
+            if (this.featureFlags && !this._isSharedExtension(this.featureFlags)) {
+                ;(this.featureFlags as PostHogFeatureFlags).destroy()
+            }
         } catch (error) {
             logger.error('Error while destroying feature flags', error)
         }

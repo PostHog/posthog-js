@@ -383,6 +383,8 @@ The view must expose capabilities, not the concrete host implementation.
 
 The host must keep extension state separate. The host must dispose extensions in reverse installation order.
 
+An extension may declare additional lookup targets through `bindings`. Its name and binding names share one namespace and are reserved together before setup. Application and extension clients resolve each token to the same target. The registered extension is the sole lifecycle owner: binding targets are not independently set up or disposed. All bindings are removed when the owner fails setup, is rolled back, or is disposed. Browser-next flags binds `FeatureFlagsCommonExtension` from browser-common to its wrapped implementation while its SDK token resolves to the facade.
+
 An extension failure must not stop core capture. A failed setup must remove all reserved registry state.
 
 ## 10. Dependency rules
