@@ -25,19 +25,33 @@ const templatePath = (pathname: string): string =>
         .map((segment) => (isIdLikeSegment(segment) ? ':id' : segment))
         .join('/')
 
-// OTel's fallback `error.type` for a failure the instrumentation cannot name.
-const OTHER_ERROR = '_OTHER'
+const DEFAULT_PORTS: Record<string, number> = { 'http:': 80, 'https:': 443 }
 
-// OTel semantic conventions for `http.client.request.duration`: 4xx and 5xx responses are
-// errors named by their status code; with no response the error is named by its class.
-const outcomeAttributes = (status: number | undefined, error: unknown): MetricAttributes => {
+const KNOWN_HTTP_METHODS = new Set(['CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'TRACE'])
+
+const urlAttributes = (url: HTMLAnchorElement): MetricAttributes => ({
+    'server.address':
+        url.hostname.startsWith('[') && url.hostname.endsWith(']') ? url.hostname.slice(1, -1) : url.hostname,
+    'server.port': Number(url.port) || DEFAULT_PORTS[url.protocol],
+    'url.scheme': url.protocol.slice(0, -1),
+    'url.template': templatePath(url.pathname),
+})
+
+// OTel: a 4xx or 5xx response reports its status as the error type; a request that
+// got no response reports the exception name, or `_OTHER` when there is none.
+const errorType = (status: number | undefined, failure: unknown): string | undefined => {
     if (status) {
-        return status >= 400
-            ? { 'http.response.status_code': status, 'error.type': String(status) }
-            : { 'http.response.status_code': status }
+        return status >= 400 ? String(status) : undefined
     }
-    const errorName = (error as { name?: unknown } | undefined)?.name
-    return { 'error.type': isString(errorName) && errorName ? errorName : OTHER_ERROR }
+    return (failure as Error | undefined)?.name || '_OTHER'
+}
+
+const methodAttributes = (method: string): MetricAttributes => {
+    const original = KNOWN_HTTP_METHODS.has(method) ? method : '_OTHER'
+    return {
+        'http.request.method': original,
+        ...(original === '_OTHER' && method !== original ? { 'http.request.method_original': method } : {}),
+    }
 }
 
 const networkConfig = (instance: PostHog): NetworkMetricsConfig | undefined => {
@@ -64,7 +78,8 @@ const record = (
     status: number | undefined,
     start: number,
     enabled: Enabled,
-    error?: unknown
+    failure?: unknown,
+    fulfilled = false
 ): void => {
     try {
         const config = enabled()
@@ -88,12 +103,12 @@ const record = (
         if (!name) {
             return
         }
+        const error = fulfilled && !normalisedStatus ? undefined : errorType(normalisedStatus, failure)
         const attributes: MetricAttributes = {
-            'http.request.method': request.method,
-            'server.address': url?.hostname ?? '',
-            'url.scheme': url ? url.protocol.slice(0, -1) : '',
-            'url.template': url ? templatePath(url.pathname) : '',
-            ...outcomeAttributes(normalisedStatus, error),
+            ...methodAttributes(request.method),
+            ...(url ? urlAttributes(url) : {}),
+            ...(normalisedStatus ? { 'http.response.status_code': normalisedStatus } : {}),
+            ...(error ? { 'error.type': error } : {}),
             ...config.attributes?.(request, { status: normalisedStatus, durationMs }),
         }
         instance.metrics?.histogram(name, durationMs, { unit: 'ms', attributes })
@@ -123,7 +138,7 @@ const patchFetch = (instance: PostHog, enabled: Enabled): (() => void) => {
                 )
                 return result.then(
                     (response: Response) => {
-                        record(instance, observed, response?.status, start, enabled)
+                        record(instance, observed, response?.status, start, enabled, undefined, true)
                         return response
                     },
                     (error: unknown) => {

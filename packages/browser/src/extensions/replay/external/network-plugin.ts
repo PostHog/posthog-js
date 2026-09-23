@@ -60,29 +60,86 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
-    // if we are only observing timings then we could have a single observer for all types, with buffer true,
-    // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
-    // will deal with those.
-    // so we have a block which captures requests from before fetch/xhr is wrapped
-    // these are marked `isInitial` so playback can display them differently if needed
-    // they will never have method/status/headers/body because they are pre-wrapping that provides that
+const noopHandler: listenerHandler = () => {
+    //
+}
+
+// a partial navigation entry is readable before load and the observer delivers it again once complete.
+// readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd` is final
+function isCompletedNavigationTiming(win: IWindow, entry: PerformanceEntry): entry is PerformanceNavigationTiming {
+    return isNavigationTiming(entry) && win.document?.readyState === 'complete' && entry.loadEventEnd > 0
+}
+
+// an `entryTypes` observation never delivers an entry that completed before it started
+function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
+    if (win.document?.readyState !== 'complete') {
+        return []
+    }
+    return win.performance
+        .getEntriesByType('navigation')
+        .filter((entry): entry is PerformanceNavigationTiming => isCompletedNavigationTiming(win, entry))
+}
+
+// if we are only observing timings then we could have a single observer for all types, with buffer true,
+// but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
+// will deal with those.
+// so we have a block which captures requests from before fetch/xhr is wrapped
+// these are marked `isInitial` so playback can display them differently if needed
+// they will never have method/status/headers/body because they are pre-wrapping that provides that
+// resource entries stay behind `recordInitialRequests`, the navigation entry is the document load
+// timing the waterfall is built from, so it is read whenever navigation is observed at all
+function initialEntries(win: IWindow, options: Required<NetworkRecordOptions>): ObservedPerformanceEntry[] {
     if (options.recordInitialRequests) {
-        const initialPerformanceEntries = win.performance
+        return win.performance
             .getEntries()
             .filter(
                 (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
+                    isCompletedNavigationTiming(win, entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
+    }
+    return options.performanceEntryTypeToObserve.includes('navigation') ? completedNavigationEntries(win) : []
+}
+
+// undefined means this frame cannot observe performance entries, so the caller can tell
+// "nothing to tear down" apart from "nothing started here"
+function initPerformanceObserver(
+    cb: networkCallback,
+    win: IWindow,
+    options: Required<NetworkRecordOptions>
+): listenerHandler | undefined {
+    // the customer's `maskRequestFn` runs synchronously in here. rrweb tears down every observer it has
+    // registered when a plugin throws, so a throw would cost the whole recording, not just this batch
+    try {
         cb({
-            requests: initialPerformanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
+            requests: initialEntries(win, options).flatMap((entry) =>
+                prepareRequest(win, {
+                    entry,
+                    method: undefined,
+                    status: undefined,
+                    networkRequest: {},
+                    isInitial: true,
+                })
             ),
             isInitial: true,
         })
+    } catch (e) {
+        logger.error('Failed to capture initial performance entries for network capture', e)
     }
-    const observer = new win.PerformanceObserver((entries) => {
+    // some frames have no PerformanceObserver, or one without the static list of entry types,
+    // so live network capture is not available there
+    const performanceObserverClass = win.PerformanceObserver as typeof PerformanceObserver | undefined
+    const supportedEntryTypes = performanceObserverClass?.supportedEntryTypes
+    if (!performanceObserverClass || !isArray(supportedEntryTypes)) {
+        return undefined
+    }
+    const entryTypes = supportedEntryTypes.filter((x) => options.performanceEntryTypeToObserve.includes(x))
+    if (!entryTypes.length) {
+        // observe() throws when it is given no valid entry type
+        return undefined
+    }
+
+    const observer = new performanceObserverClass((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
         // as the wrapped functions will do that. Otherwise, this filter becomes a noop
         // because we do want to record them here
@@ -102,14 +159,10 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
 
         cb({
             requests: performanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {} })
+                prepareRequest(win, { entry, method: undefined, status: undefined, networkRequest: {} })
             ),
         })
     })
-    // compat checked earlier
-    const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) =>
-        options.performanceEntryTypeToObserve.includes(x)
-    )
     // initial records are gathered above, so we don't need to observe and buffer each type separately
     observer.observe({ entryTypes })
     return () => {
@@ -382,7 +435,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         }
                         getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
                             .then((entry) => {
-                                const requests = prepareRequest({
+                                const requests = prepareRequest(win, {
                                     entry,
                                     method: method,
                                     status: xhr?.status,
@@ -431,37 +484,40 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
     !isNull(event) && (event.entryType === 'navigation' || event.entryType === 'resource')
 
-function prepareRequest({
-    entry,
-    method,
-    status,
-    networkRequest,
-    isInitial,
-    start,
-    end,
-    url,
-    initiatorType,
-}: {
-    entry: PerformanceResourceTiming | null
-    method: string | undefined
-    status: number | undefined
-    networkRequest: Partial<CapturedNetworkRequest>
-    isInitial?: boolean
-    start?: number
-    end?: number
-    // if there is no performance observer entry, we still need to know the url
-    url?: string
-    // if there is no performance observer entry, we can provide the initiatorType
-    initiatorType?: string
-}): CapturedNetworkRequest[] {
+// entry times count from the recorded frame's time origin, so the epoch base must come from that frame's clock
+function prepareRequest(
+    win: IWindow,
+    {
+        entry,
+        method,
+        status,
+        networkRequest,
+        isInitial,
+        start,
+        end,
+        url,
+        initiatorType,
+    }: {
+        entry: PerformanceResourceTiming | null
+        method: string | undefined
+        status: number | undefined
+        networkRequest: Partial<CapturedNetworkRequest>
+        isInitial?: boolean
+        start?: number
+        end?: number
+        // if there is no performance observer entry, we still need to know the url
+        url?: string
+        // if there is no performance observer entry, we can provide the initiatorType
+        initiatorType?: string
+    }
+): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
 
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
-    // oxlint-disable-next-line compat/compat
-    const timeOrigin = Math.floor(Date.now() - performance.now())
+    const timeOrigin = Math.floor(Date.now() - win.performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
     // use timeOrigin if we really can't gather a start time
@@ -843,7 +899,7 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
-                        const requests = prepareRequest({
+                        const requests = prepareRequest(win, {
                             entry,
                             method: req.method,
                             status: res?.status,
@@ -926,16 +982,25 @@ function initNetworkObserver(
     const performanceObserver = initPerformanceObserver(cb, win, networkOptions)
 
     // only wrap fetch and xhr if headers or body are being recorded
+    const wrapsNetworkPrimitives = networkOptions.recordHeaders || networkOptions.recordBody
+
+    // initialisedHandler is shared by every frame being recorded, so a frame that captures
+    // nothing must leave it for a frame that can, or one degraded frame silences the page
+    if (!performanceObserver && !wrapsNetworkPrimitives) {
+        active = false
+        return noopHandler
+    }
+
     let xhrObserver: listenerHandler = () => {}
     let fetchObserver: listenerHandler = () => {}
-    if (networkOptions.recordHeaders || networkOptions.recordBody) {
+    if (wrapsNetworkPrimitives) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
 
     initialisedHandler = () => {
         active = false
-        performanceObserver()
+        performanceObserver?.()
         xhrObserver()
         fetchObserver()
         initialisedHandler = null

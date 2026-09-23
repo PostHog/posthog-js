@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.54.4",
+  "version": "1.55.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -88,6 +88,7 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   }
 }

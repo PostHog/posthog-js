@@ -1147,23 +1147,21 @@ export interface NetworkMetricsConfig {
     /**
      * Adds attributes to each recorded request. The result is merged over the
      * default attributes, so it can also replace them, e.g. to set
-     * `url.template` to your own route template. Keep attribute values
-     * low-cardinality.
+     * `url.template` to a route template. Keep attribute values low-cardinality.
      *
-     * The default attributes follow the OpenTelemetry semantic conventions
-     * for `http.client.request.duration`: `http.request.method`,
-     * `server.address`, `url.scheme`, `url.template`,
-     * `http.response.status_code` and `error.type`.
+     * The default attributes follow the OTel HTTP client semantic conventions:
+     * `http.request.method`, `server.address`, `server.port`, `url.scheme`,
+     * `url.template`, `http.response.status_code` and `error.type`.
      *
      * The default `url.template` replaces each all-digit or uuid-like path
      * segment with `:id`. Ids that carry a prefix or suffix, such as
      * `order-123` or `38217.pdf`, are kept as they are, so return your own
      * `url.template` for those routes.
      *
-     * `http.response.status_code` is set when a response arrived.
-     * `error.type` is the status code for a 4xx or 5xx response, the error's
-     * class name (e.g. `TypeError`, `AbortError`) when a fetch rejected, and
-     * `_OTHER` when no response arrived for another reason.
+     * `http.response.status_code` is only set when a response arrived.
+     * `error.type` is the status code for a 4xx or 5xx response, the error
+     * name (e.g. `TypeError`) for a rejected fetch, or `_OTHER` when no
+     * response arrived and there is no error.
      */
     attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
 }
@@ -2097,6 +2095,21 @@ export interface PostHogConfig {
      * @default 3000
      */
     feature_flag_request_timeout_ms: number
+
+    /**
+     * How many times to retry a `/flags` request before giving up.
+     *
+     * Only failures that are plausibly transient are retried: HTTP 502 and 504, and a
+     * request that timed out. Every other status is terminal, as is a transport failure
+     * that is not a timeout — in a browser those are usually an ad blocker, an extension
+     * or CORS, which the status-zero circuit breaker already handles, so retrying them
+     * would only add a second doomed request.
+     *
+     * Set to 0 to disable retries.
+     *
+     * @default 1
+     */
+    feature_flag_request_max_retries: number
 
     /**
      * Sets the maximum age (in milliseconds) for cached feature flag values.

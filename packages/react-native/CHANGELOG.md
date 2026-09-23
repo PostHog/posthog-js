@@ -1,5 +1,44 @@
 # posthog-react-native
 
+## 4.77.0
+
+### Minor Changes
+
+- [#5040](https://github.com/PostHog/posthog-js/pull/5040) [`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce) Thanks [@hpouillot](https://github.com/hpouillot)! - Capture fatal React Native JavaScript exceptions through the embedded native SDK, which persists them to its own disk queue synchronously, so a crash is not lost when the process terminates before AsyncStorage finishes writing. The JS queue copy is dropped when native takes the event, so each crash is still sent once.
+
+  Enabling `errorTracking.autocapture.uncaughtExceptions` now initializes the native PostHog SDK on its own, since that queue is what makes the fatal path durable. Apps that previously enabled neither session replay, native crash autocapture nor push will see one additional `/config` request per launch as a result: the native SDKs fetch remote config at setup regardless of `preloadFeatureFlags`. (2026-09-23)
+
+### Patch Changes
+
+- Updated dependencies [[`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce)]:
+  - @posthog/react-native-plugin@2.10.0
+
+## 4.76.0
+
+### Minor Changes
+
+- [#5064](https://github.com/PostHog/posthog-js/pull/5064) [`5b655be`](https://github.com/PostHog/posthog-js/commit/5b655befcb73bb8e1bd4b27725968d7388f8347a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add a `force` option for symbol uploads
+  (2026-09-22)
+
+## 4.75.0
+
+### Minor Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support partial survey responses and persistent resume in React Native, moving surveys toward feature parity across SDKs.
+  (2026-09-18)
+
+### Patch Changes
+
+- Updated dependencies [[`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9)]:
+  - @posthog/core@1.55.0
+
+## 4.74.2
+
+### Patch Changes
+
+- [#5006](https://github.com/PostHog/posthog-js/pull/5006) [`614e508`](https://github.com/PostHog/posthog-js/commit/614e5080753db6229e886f9f3d47f064b02d7cf8) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix source maps to point from the published JavaScript to the original TypeScript source.
+  (2026-09-17)
+
 ## 4.74.1
 
 ### Patch Changes

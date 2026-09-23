@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.13.0",
+  "version": "8.13.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
     "cassette:record": "node harness/record.mjs",
+    "cassette:record:gemini": "node harness/record-gemini.mjs",
     "lint": "oxlint --report-unused-disable-directives-severity error src tests harness",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests harness --fix",
     "build": "tsdown",
@@ -27,12 +28,12 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^3.0.15",
-    "@anthropic-ai/sdk": ">=0.112.3 <0.125.0",
+    "@ai-sdk/provider": "^3.0.16",
+    "@anthropic-ai/sdk": ">=0.112.3 <0.126.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
-    "@langchain/core": "^1.2.9",
+    "@langchain/core": "^1.2.11",
     "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
@@ -43,13 +44,13 @@
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "langchain": "^1.5.10",
+    "langchain": "^1.5.11",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:^",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:native"
   },
   "keywords": [
     "posthog",
@@ -70,7 +71,7 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.112.3 <0.125.0",
+    "@anthropic-ai/sdk": ">=0.112.3 <0.126.0",
     "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",

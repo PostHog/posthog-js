@@ -6,6 +6,8 @@ import {
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
+    setInProgressSurveyState,
+    getInProgressSurveyState,
 } from '../../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
@@ -769,6 +771,8 @@ describe('sendSurveyEvent', () => {
                 $ai_generation_id: 'gen-456',
                 $ai_trace_id: 'trace-789',
                 custom_field: 'custom_value',
+                $survey_name: 'Custom survey name',
+                $set: { custom_person_property: true },
             },
         })
 
@@ -780,6 +784,8 @@ describe('sendSurveyEvent', () => {
         expect(eventProperties.$ai_generation_id).toBe('gen-456')
         expect(eventProperties.$ai_trace_id).toBe('trace-789')
         expect(eventProperties.custom_field).toBe('custom_value')
+        expect(eventProperties.$survey_name).toBe('Custom survey name')
+        expect(eventProperties.$set).toEqual({ '$survey_responded/test-survey-id': true })
     })
 
     it('works without custom properties', () => {
@@ -804,41 +810,46 @@ describe('sendSurveyEvent', () => {
         expect(eventProperties.$ai_generation_id).toBeUndefined()
     })
 
-    it('reloads feature flags when the survey is completed so the internal targeting flag recomputes', () => {
-        const mockReload = vi.fn()
-        const mockPostHog = {
-            capture: vi.fn(),
-            reloadFeatureFlags: mockReload,
-            is_capturing: () => true,
-        } as unknown as PostHog
+    it.each([false, true])(
+        'emits completion=%s and only clears progress and reloads flags on completion',
+        (completed) => {
+            const mockPostHog = {
+                capture: vi.fn(),
+                reloadFeatureFlags: vi.fn(),
+                is_capturing: () => true,
+                get_session_replay_url: () => 'https://us.posthog.com/replay/session-1',
+            } as unknown as PostHog
+            const progress = {
+                surveySubmissionId: 'submission-123',
+                lastQuestionIndex: 0,
+                responses: { $survey_response_q1: 'Great!' },
+                surveyLanguage: 'fr',
+                questionSnapshots: { q1: 'Votre avis ?' },
+            }
+            setInProgressSurveyState(baseSurvey, progress)
 
-        sendSurveyEvent({
-            responses: { $survey_response_q1: 'Great!' },
-            survey: baseSurvey,
-            surveySubmissionId: 'submission-123',
-            isSurveyCompleted: true,
-            posthog: mockPostHog,
-        })
+            sendSurveyEvent({
+                ...progress,
+                survey: baseSurvey,
+                isSurveyCompleted: completed,
+                posthog: mockPostHog,
+            })
 
-        expect(mockReload).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not reload feature flags for a partial (not completed) response', () => {
-        const mockReload = vi.fn()
-        const mockPostHog = {
-            capture: vi.fn(),
-            reloadFeatureFlags: mockReload,
-            is_capturing: () => true,
-        } as unknown as PostHog
-
-        sendSurveyEvent({
-            responses: { $survey_response_q1: 'Great!' },
-            survey: baseSurvey,
-            surveySubmissionId: 'submission-123',
-            isSurveyCompleted: false,
-            posthog: mockPostHog,
-        })
-
-        expect(mockReload).not.toHaveBeenCalled()
-    })
+            expect(mockPostHog.capture).toHaveBeenCalledWith('survey sent', {
+                $survey_id: baseSurvey.id,
+                $survey_name: baseSurvey.name,
+                $survey_iteration: null,
+                $survey_iteration_start_date: null,
+                $survey_submission_id: 'submission-123',
+                $survey_completed: completed,
+                $survey_language: 'fr',
+                $survey_response_q1: 'Great!',
+                $survey_questions: [{ id: 'q1', question: 'Votre avis ?', response: 'Great!' }],
+                sessionRecordingUrl: 'https://us.posthog.com/replay/session-1',
+                $set: { '$survey_responded/test-survey-id': true },
+            })
+            expect(getInProgressSurveyState(baseSurvey)).toEqual(completed ? null : progress)
+            expect(mockPostHog.reloadFeatureFlags).toHaveBeenCalledTimes(completed ? 1 : 0)
+        }
+    )
 })

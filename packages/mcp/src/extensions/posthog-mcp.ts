@@ -71,7 +71,7 @@ export interface PostHogMCPOptions extends PostHogOptions {
   collectFeedback?: CollectFeedbackConfig
   /**
    * Capture the calling model from recognized client metadata, with an injected
-   * `llm_model` argument as fallback. Off by default.
+   * `llm_model` argument as fallback. On by default; `false` disables it.
    */
   captureModel?: MCPAnalyticsOptions['captureModel']
 }

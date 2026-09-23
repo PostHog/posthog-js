@@ -3192,11 +3192,11 @@ describe('PostHogTraces', () => {
     })
 
     it('never exports a span evicted for exceeding maxSpanAgeMs', async () => {
-      const traces = createTraces({ maxSpanAgeMs: 60_000 })
+      const traces = createTraces({ maxLiveSpans: 1, maxSpanAgeMs: 60_000 })
       const leaked = traces.startSpan('leaked')
 
       await vi.advanceTimersByTimeAsync(61_000)
-      // Eviction is lazy: the next startSpan sweeps.
+      // Eviction is lazy: the next startSpan at the bound sweeps.
       traces.startSpan('later').end()
       leaked.end()
       await traces.flush()
@@ -3205,9 +3205,22 @@ describe('PostHogTraces', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('still live after 60000ms'))
     })
 
+    it('exports a long span that ends while under the bound', async () => {
+      const traces = createTraces({ maxSpanAgeMs: 60_000 })
+      const longRunning = traces.startSpan('batch')
+
+      await vi.advanceTimersByTimeAsync(61_000)
+      traces.startSpan('probe').end()
+      longRunning.end()
+      await traces.flush()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['probe', 'batch'])
+    })
+
     it('returns the slot on age eviction so a leak cannot disable tracing', async () => {
       const traces = createTraces({ maxLiveSpans: 1, maxSpanAgeMs: 60_000 })
       traces.startSpan('leaked-forever')
+      expect(traces.startSpan('refused')).toBe(NOOP_SPAN)
 
       await vi.advanceTimersByTimeAsync(61_000)
       traces.startSpan('after-the-leak').end()
@@ -3217,15 +3230,15 @@ describe('PostHogTraces', () => {
     })
 
     it('ages from startSpan, not from a caller-supplied startTime', async () => {
-      const traces = createTraces({ maxSpanAgeMs: 60_000 })
-      // Backdated an hour: aging off the supplied time would evict it immediately.
+      const traces = createTraces({ maxLiveSpans: 1, maxSpanAgeMs: 60_000 })
+      // Backdated an hour: aging off the supplied time would evict it at the next sweep.
       const backdated = traces.startSpan('backdated', { startTime: Date.now() - 3_600_000 })
 
-      traces.startSpan('sweep-trigger').end()
+      expect(traces.startSpan('sweep-trigger')).toBe(NOOP_SPAN)
       backdated.end()
       await traces.flush()
 
-      expect(sentSpans().map((s) => s.name)).toEqual(['sweep-trigger', 'backdated'])
+      expect(sentSpans().map((s) => s.name)).toEqual(['backdated'])
     })
   })
 

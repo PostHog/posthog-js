@@ -356,9 +356,11 @@ export interface TracesConfig {
     maxLiveSpans?: number
 
     /**
-     * How long a span may stay live before the SDK stops accounting for it, in
-     * milliseconds. An evicted span is never exported, and its slot is returned
-     * so one leak cannot disable tracing for the rest of the process. Measured
+     * Age at which a live span counts as leaked, in milliseconds. Checked only
+     * once `maxLiveSpans` is reached: spans this old are then evicted and never
+     * exported, and their slots are returned so one leak cannot disable tracing
+     * for the rest of the process. Below the bound, a long span that ends is
+     * exported as usual. Measured
      * as monotonic elapsed time since `startSpan`, so a caller-supplied
      * `startTime` neither ages a span early nor exempts it.
      *

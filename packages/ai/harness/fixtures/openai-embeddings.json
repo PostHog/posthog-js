@@ -1,0 +1,53 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:19.698Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/embeddings",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "text-embedding-3-small",
+          "input": "Hello from the cassette test.",
+          "dimensions": 8,
+          "encoding_format": "float"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_885e911f4d7f4f489dc5d7a752247dd5"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "object": "list",
+            "data": [
+              {
+                "object": "embedding",
+                "embedding": [
+                  0.0672607421875, -0.56396484375, -0.01346588134765625, -0.5634765625, -0.1285400390625, 0.53564453125,
+                  -0.166015625, -0.1678466796875
+                ],
+                "index": 0
+              }
+            ],
+            "model": "text-embedding-3-small",
+            "usage": {
+              "prompt_tokens": 6,
+              "total_tokens": 6
+            }
+          }
+        }
+      }
+    }
+  ]
+}

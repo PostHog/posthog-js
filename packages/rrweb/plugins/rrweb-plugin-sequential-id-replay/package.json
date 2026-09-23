@@ -39,7 +39,7 @@
         "@posthog/rrweb-plugin-sequential-id-record": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "catalog:native",
         "vite": "catalog:"
     },
     "peerDependencies": {

@@ -18,6 +18,8 @@ export interface FlagDefinitionCacheData {
    * data written by an older SDK version) means full events.
    */
   minimalFlagCalledEvents?: boolean
+  /** Top-level definitions matching version; absent in older caches means legacy matching. */
+  propertyMatchingVersion?: number
 }
 
 /**

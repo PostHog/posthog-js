@@ -8,5 +8,8 @@
     },
     "dependencies": {
         "@changesets/changelog-github": "^0.5.1"
+    },
+    "devDependencies": {
+        "typescript": "catalog:native"
     }
 }

@@ -80,7 +80,7 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
 
 - **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
   protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
-  `enableConversationId`, which is **opt-in**. Without it every request is its own `$session_id`.
+  `enableConversationId`, which is **on by default**. Without it every request is its own `$session_id`.
   The `get_more_tools` and `send_feedback` virtual tools also use this handle, including calls handled
   by a fresh server instance.
 - **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
@@ -160,9 +160,31 @@ over-redacting ordinary prose. It also applies only to `$mcp_intent`: structured
 results are left as-is, because the same shapes are often legitimate data there. If you need a stronger
 guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
 
+### Defaults and opt-outs
+
+On fresh low-level instances, tools with an `outputSchema` deliver new handles through `content` only. Clients that consume only `structuredContent` will not echo those handles, so correlation is not guaranteed for that combination. Unknown ownership can also cause a prompt-back block to be appended for a schema that discovery would not extend; disable `enableConversationId` if that contract is unsuitable.
+
+A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
+
+Intent, model capture, conversation correlation, and exception capture are enabled by default.
+Missing-capability reporting and feedback collection remain disabled.
+
+```ts
+instrument(server, posthog, { captureModel: false, enableConversationId: false })
+```
+
+Model capture adds a required `llm_model` argument to compatible tool schemas. Dispatch never
+enforces it, so servers keep working; strict-schema clients see the new field. Set
+`captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
+`conversation_id` argument and returns a handle in eligible tool results. Clients must echo that
+handle to group later calls; calls without it mint new handles. Set `enableConversationId: false`
+to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
+dispatchers enable model capture by default, but continue to supply their own session IDs.
+The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
-`captureModel` is **off** by default. Turn it on and the SDK records the best model id visible to the
+`captureModel` is **on** by default. The SDK records the best model id visible to the
 server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
 the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
 
@@ -173,32 +195,32 @@ Missing, blank, and `unknown` values are recorded as nothing.
 The recognized metadata path is Codex's `x-codex-turn-metadata.model` field inside request `_meta`.
 Other clients keep using self-report until they expose a stable model field.
 
-Unlike `context`, the self-report fallback degrades to **silence** rather than to a kept argument.
-Its capture and stripping require the SDK to have confirmed the parameter is its own:
+Like `context`, self-report follows the ownership rule of ADR-0011: reading `llm_model` fails
+open where the SDK cannot tell who declared it, stripping it requires proof that the SDK did:
 
 - `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
   request from the live tool registry, so those work even on a fresh instance.
 - The `get_more_tools` virtual tool works on any instance and on either server type: the SDK writes
   that descriptor itself, so what it declares is known without a listing.
-- Instrumenting a low-level `Server` learns ownership of **your** tools while serving `tools/list`.
-  On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or
-  `@rekog/mcp-nest` in its stateless mode — the instance handling a `tools/call` never served one,
-  so for those tools it neither strips `llm_model` nor records `$mcp_llm_model`. Nothing breaks and
-  no wrong value is stored; the property is simply absent while agents still pay a token for the
-  extra field.
+- Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
+  that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
+  answer, so it records `llm_model` as the self-reported model and strips nothing. A tool that
+  declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
+  until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
+  are the escapes. The SDK never replays your listing handler on the call path to find out.
 
 As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
 server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
 from the first `tools/list` and keeps it.
 
-For a custom dispatcher, enable the same option on `PostHogMCP`. Its `prepareToolList()` helper
+For a custom dispatcher, `PostHogMCP` enables the same option by default. Its `prepareToolList()` helper
 injects the field and records ownership by tool name; `prepareToolCall()` returns `llmModel` and
 `llmModelSource` while removing the SDK-owned argument before dispatch. Pass both fields to
 `captureToolCall()`. Pass the original tool descriptor on each call so this also works when
 `tools/list` and `tools/call` reach different server replicas:
 
 ```ts
-const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, { captureModel: true })
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
 
 const tools = posthog.prepareToolList(serverTools)
 const originalTool = serverTools.find((tool) => tool.name === toolName)

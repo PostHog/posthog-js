@@ -69,7 +69,7 @@
         "prettier": "^3.8.3",
         "puppeteer": "^23.11.1",
         "tslib": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:native",
         "vite": "catalog:",
         "vitest": "^1.4.0"
     },

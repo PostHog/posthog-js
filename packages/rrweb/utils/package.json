@@ -35,7 +35,8 @@
         "package.json"
     ],
     "devDependencies": {
-        "vite": "catalog:"
+        "vite": "catalog:",
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "@posthog/core": "workspace:^"

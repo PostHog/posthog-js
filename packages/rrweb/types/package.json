@@ -35,7 +35,8 @@
         "package.json"
     ],
     "devDependencies": {
-        "vite": "catalog:"
+        "vite": "catalog:",
+        "typescript": "catalog:native"
     },
     "browserslist": [
         "supports es6-class"

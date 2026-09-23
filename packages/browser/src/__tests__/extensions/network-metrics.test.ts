@@ -136,6 +136,7 @@ describe('network metrics', () => {
                         attributes: {
                             'http.request.method': method,
                             'server.address': args[0] === '/things' ? 'localhost' : 'api.example.com',
+                            'server.port': args[0] === '/things' ? 80 : 443,
                             'url.scheme': args[0] === '/things' ? 'http' : 'https',
                             'url.template': '/things',
                             'http.response.status_code': 200,
@@ -177,42 +178,79 @@ describe('network metrics', () => {
         })
 
         it.each([
+            ['https://api.example.com/things', 'https', 443],
+            ['http://api.example.com/things', 'http', 80],
+            ['https://api.example.com:8443/things', 'https', 8443],
+            ['http://localhost:3000/things', 'http', 3000],
+        ])('records the scheme and port of %s', async (url, scheme, port) => {
+            start()
+
+            await window.fetch(url)
+
+            expect(recorded()[0][2].attributes).toMatchObject({ 'url.scheme': scheme, 'server.port': port })
+        })
+
+        it.each([
             [200, { 'http.response.status_code': 200 }],
             [302, { 'http.response.status_code': 302 }],
             [404, { 'http.response.status_code': 404, 'error.type': '404' }],
             [503, { 'http.response.status_code': 503, 'error.type': '503' }],
-            [0, { 'error.type': '_OTHER' }],
-        ])('records the outcome of status %s as %o', async (status, outcome) => {
+            [0, {}],
+        ])('records status %s as %o', async (status, expected) => {
             fetchMock.mockResolvedValue({ status })
             start()
 
             await window.fetch('https://api.example.com/things')
 
-            expect(recorded()[0][2].attributes).toEqual({
-                'http.request.method': 'GET',
-                'server.address': 'api.example.com',
-                'url.scheme': 'https',
-                'url.template': '/things',
-                ...outcome,
+            const attributes = recorded()[0][2].attributes
+            expect(attributes).toMatchObject(expected)
+            expect('http.response.status_code' in attributes).toBe(status !== 0)
+            expect('error.type' in attributes).toBe('error.type' in expected)
+        })
+
+        it('does not record an error type for a fulfilled opaque response', async () => {
+            fetchMock.mockResolvedValue({ status: 0 })
+            start()
+
+            await window.fetch('https://api.example.com/things')
+
+            expect(recorded()[0][2].attributes).not.toHaveProperty('error.type')
+        })
+
+        it('bounds unknown methods and preserves the original method', async () => {
+            start()
+
+            await window.fetch('https://api.example.com/things', { method: 'PURGE' })
+
+            expect(recorded()[0][2].attributes).toMatchObject({
+                'http.request.method': '_OTHER',
+                'http.request.method_original': 'PURGE',
             })
+        })
+
+        it('strips brackets from an IPv6 server address', async () => {
+            start()
+
+            await window.fetch('https://[2001:db8::1]/things')
+
+            expect(recorded()[0][2].attributes['server.address']).toBe('2001:db8::1')
         })
 
         it.each([
             ['a TypeError', new TypeError('Failed to fetch'), 'TypeError'],
-            ['a DOMException', Object.assign(new Error('aborted'), { name: 'AbortError' }), 'AbortError'],
-            ['an Error with an empty name', Object.assign(new Error('offline'), { name: '' }), '_OTHER'],
-            ['a string', 'offline', '_OTHER'],
-            ['undefined', undefined, '_OTHER'],
+            ['an AbortError', new DOMException('Aborted', 'AbortError'), 'AbortError'],
+            ['a non-error value', 'offline', '_OTHER'],
         ])(
-            'records a fetch rejected with %s as error.type %s and leaves the rejection for the caller',
+            'records a fetch rejected with %s as the error type and leaves the rejection for the caller',
             async (_, failure, errorType) => {
                 fetchMock.mockRejectedValue(failure)
                 start()
 
                 await expect(window.fetch('https://api.example.com/things')).rejects.toBe(failure)
 
-                expect(recorded()[0][2].attributes['error.type']).toBe(errorType)
-                expect(recorded()[0][2].attributes).not.toHaveProperty('http.response.status_code')
+                const attributes = recorded()[0][2].attributes
+                expect(attributes['error.type']).toBe(errorType)
+                expect('http.response.status_code' in attributes).toBe(false)
             }
         )
 
@@ -291,6 +329,7 @@ describe('network metrics', () => {
                         attributes: {
                             'http.request.method': expectedMethod,
                             'server.address': 'api.example.com',
+                            'server.port': 443,
                             'url.scheme': 'https',
                             'url.template': '/things/:id',
                             ...outcome,
@@ -411,7 +450,7 @@ describe('network metrics', () => {
 
         it('merges attributes from the attributes function over the defaults', async () => {
             fetchMock.mockResolvedValue({ status: 404 })
-            const attributes = vi.fn(() => ({ 'http.route': '/tasks/{taskId}', 'url.template': '/api/things/{id}' }))
+            const attributes = vi.fn(() => ({ route: '/tasks/$taskId', 'url.template': '/api/things/{id}' }))
             start({ attributes })
 
             await window.fetch('https://api.example.com/things/1')
@@ -423,11 +462,12 @@ describe('network metrics', () => {
             expect(recorded()[0][2].attributes).toEqual({
                 'http.request.method': 'GET',
                 'server.address': 'api.example.com',
+                'server.port': 443,
                 'url.scheme': 'https',
                 'url.template': '/api/things/{id}',
                 'http.response.status_code': 404,
                 'error.type': '404',
-                'http.route': '/tasks/{taskId}',
+                route: '/tasks/$taskId',
             })
         })
 

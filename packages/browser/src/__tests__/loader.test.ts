@@ -135,6 +135,24 @@ describe('Snippet loader', () => {
         vi.restoreAllMocks()
     })
 
+    it.each([undefined, {}, { init: 'placeholder' }])('loads over an uninitialized global %j', (placeholder) => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        assignableWindow.posthog = placeholder as any
+
+        init_from_snippet()
+
+        const posthog = assignableWindow.posthog
+        expect(posthog).toBeInstanceOf(PostHog)
+        expect(typeof posthog.init).toBe('function')
+        posthog.init('phc_placeholder', snippetConfig())
+        expect(posthog.__loaded).toBe(true)
+        expect(posthog.config.token).toBe('phc_placeholder')
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(posthog)
+    })
+
     it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {
         vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
         vi.spyOn(console, 'warn').mockImplementation(() => {})

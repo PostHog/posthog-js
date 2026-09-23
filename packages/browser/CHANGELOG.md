@@ -1,5 +1,99 @@
 # posthog-js
 
+## 1.434.11
+
+### Patch Changes
+
+- [#5051](https://github.com/PostHog/posthog-js/pull/5051) [`1549919`](https://github.com/PostHog/posthog-js/commit/1549919965d909ce58e5804e70fc7c28a66a2da5) Thanks [@DeepanshuPal](https://github.com/DeepanshuPal)! - Avoid cross-domain cookie probes when cross-subdomain cookies are disabled.
+  (2026-09-23)
+
+## 1.434.10
+
+### Patch Changes
+
+- [#5060](https://github.com/PostHog/posthog-js/pull/5060) [`a9c40ec`](https://github.com/PostHog/posthog-js/commit/a9c40ec93ce38b11b17a69ff01d3e7b8677f7121) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix SDK initialization when a script loader pre-creates window.posthog as a placeholder object.
+  (2026-09-23)
+
+## 1.434.9
+
+### Patch Changes
+
+- [#4970](https://github.com/PostHog/posthog-js/pull/4970) [`708a5f7`](https://github.com/PostHog/posthog-js/commit/708a5f757d9da9dad2a3b0a892708a1fbfcb9de9) Thanks [@Christian2702](https://github.com/Christian2702)! - Session replay no longer defers its input setter hooks on zone.js's patched `setTimeout`. In Angular apps each of those timers ended a zone task and triggered another change detection, so any component writing an input property on every cycle drove the tab into an endless loop at 100% CPU.
+  (2026-09-22)
+
+## 1.434.8
+
+### Patch Changes
+
+- [#5054](https://github.com/PostHog/posthog-js/pull/5054) [`36f356d`](https://github.com/PostHog/posthog-js/commit/36f356dac9ff06131ece2c45ec22e0a991fb3ff8) Thanks [@posthog](https://github.com/apps/posthog)! - fix(dead-clicks): survive a denied property access in Firefox
+
+  Firefox denies property access on a DOM node from another origin or from a realm that was torn down. The detector reads `isConnected` and `nodeType` on mutation records and on composed paths, and reads `getRootNode` on selection endpoints, so the denial escaped the MutationObserver callback and stopped the rest of the batch from refreshing the liveness timestamp. A node that cannot be read is now treated as a node that cannot be inspected. (2026-09-22)
+
+## 1.434.7
+
+### Patch Changes
+
+- [#5001](https://github.com/PostHog/posthog-js/pull/5001) [`c551218`](https://github.com/PostHog/posthog-js/commit/c5512189b915c6ee2543258455fa3a025a1442d6) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay network capture no longer fails to start in frames without `PerformanceObserver` or its `supportedEntryTypes`; those frames record without live network timing.
+  (2026-09-22)
+
+## 1.434.6
+
+### Patch Changes
+
+- [#5016](https://github.com/PostHog/posthog-js/pull/5016) [`4770179`](https://github.com/PostHog/posthog-js/commit/47701797d420bf48b5e002cfe265d373d51647bb) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording active when a cross-origin image or video taints a canvas.
+  (2026-09-22)
+
+## 1.434.5
+
+### Patch Changes
+
+- [#5021](https://github.com/PostHog/posthog-js/pull/5021) [`9cd834c`](https://github.com/PostHog/posthog-js/commit/9cd834c429a3562d9e4cc428dd0d9604987487e7) Thanks [@posthog](https://github.com/apps/posthog)! - Stop reporting dead clicks on controls inside open shadow roots (such as web components or micro-frontends) when the click updates content inside the shadow root.
+  (2026-09-21)
+
+## 1.434.4
+
+### Patch Changes
+
+- [#5042](https://github.com/PostHog/posthog-js/pull/5042) [`ed9fc04`](https://github.com/PostHog/posthog-js/commit/ed9fc0422a028942101e560dda2d28ef43e381a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `$session_id` being sent as `null` when a sibling tab resets the session before this tab captures its first event (#5036)
+  (2026-09-21)
+
+## 1.434.3
+
+### Patch Changes
+
+- [#5008](https://github.com/PostHog/posthog-js/pull/5008) [`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c) Thanks [@nachogarcia](https://github.com/nachogarcia)! - Retry `/flags` in the browser SDK on HTTP 502/504 and on request timeouts, bounded by the new `feature_flag_request_max_retries` config (default 1, set 0 to disable). Plain transport failures are deliberately left to the existing status-zero circuit breaker.
+  (2026-09-21)
+- Updated dependencies [[`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c)]:
+  - @posthog/types@1.412.4
+
+## 1.434.2
+
+### Patch Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey answer snapshots and response event properties with React Native for consistent partial response reporting.
+  (2026-09-18)
+- Updated dependencies [[`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9)]:
+  - @posthog/core@1.55.0
+
+## 1.434.1
+
+### Patch Changes
+
+- [#4980](https://github.com/PostHog/posthog-js/pull/4980) [`7e07338`](https://github.com/PostHog/posthog-js/commit/7e0733809584c9d02aa0b50067c3f4c7fc6b8c1a) Thanks [@posthog](https://github.com/apps/posthog)! - Capture the document navigation timing in the replay network waterfall when recording starts after the page has loaded, and stop recording a partial duplicate of that entry when recording starts while the page is still loading
+  (2026-09-18)
+
+## 1.434.0
+
+### Minor Changes
+
+- [#5014](https://github.com/PostHog/posthog-js/pull/5014) [`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00) Thanks [@pauldambra](https://github.com/pauldambra)! - Rename the `metrics.network` default attributes to the OTel HTTP client semantic conventions: `http.request.method`, `server.address`, `server.port`, `url.scheme`, `url.template`, `http.response.status_code` and `error.type` replace `method`, `host`, `path` and `status_class`.
+  (2026-09-17)
+
+### Patch Changes
+
+- Updated dependencies [[`5e86154`](https://github.com/PostHog/posthog-js/commit/5e86154bba02eac9c7817997eb4368d954a5fd00)]:
+  - @posthog/types@1.412.2
+
 ## 1.433.10
 
 ### Patch Changes

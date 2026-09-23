@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React, { useState } from 'react'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Survey,
@@ -61,7 +61,6 @@ function SurveySession({ survey, onSubmit }: { survey: Survey; onSubmit: () => v
       <Questions
         survey={survey}
         appearance={defaultSurveyAppearance}
-        responses={responses}
         onResponsesChange={setResponses}
         onSubmit={onSubmit}
       />
@@ -97,6 +96,8 @@ describe('survey response attribution', () => {
     expectCaptured('survey sent', {
       $survey_id: 'attribution',
       $survey_name: 'Response attribution',
+      $survey_submission_id: expect.any(String),
+      $survey_completed: true,
       $survey_questions: ['q1', 'q2', 'q3'].map((id) => ({ id, question: id, response: `answer-${id}` })),
       $survey_response_q1: 'answer-q1',
       $survey_response_q2: 'answer-q2',
@@ -230,4 +231,115 @@ describe('survey response attribution', () => {
       $set: { '$survey_dismissed/attribution': true },
     })
   })
+})
+
+describe('partial survey sessions', () => {
+  it.each([true, false])('restores the next branch and submission ID (partial=%s)', (partial) => {
+    const survey = makeSurvey(false, {
+      enable_partial_responses: partial,
+      questions: [
+        {
+          id: 'q1',
+          type: SurveyQuestionType.Open,
+          question: 'First',
+          branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 2 },
+        },
+        { id: 'q2', type: SurveyQuestionType.Open, question: 'Skipped' },
+        { id: 'q3', type: SurveyQuestionType.Open, question: 'Last' },
+      ] as SurveyQuestion[],
+    })
+    let saved: any
+    const save = (progress: any) => {
+      saved = JSON.parse(JSON.stringify(progress))
+      return true
+    }
+    const first = render(
+      <Questions survey={survey} appearance={defaultSurveyAppearance} onSubmit={vi.fn()} onProgressChange={save} />
+    )
+    fireEvent.click(first.getByTestId('q1'))
+    expect(capture).toHaveBeenCalledTimes(partial ? 1 : 0)
+    if (partial)
+      expect(capture).toHaveBeenLastCalledWith(
+        'survey sent',
+        expect.objectContaining({
+          $survey_completed: false,
+          $survey_submission_id: saved.submissionId,
+          $survey_response_q1: 'answer-q1',
+        })
+      )
+    first.unmount()
+    const complete = vi.fn()
+    const second = render(
+      <Questions
+        survey={survey}
+        appearance={defaultSurveyAppearance}
+        initialProgress={saved}
+        onSubmit={complete}
+        onProgressChange={save}
+      />
+    )
+    expect(second.queryByTestId('q1')).toBeNull()
+    fireEvent.click(second.getByTestId('q3'))
+    expect(complete).toHaveBeenCalledOnce()
+    expect(capture).toHaveBeenLastCalledWith(
+      'survey sent',
+      expect.objectContaining({
+        $survey_completed: true,
+        $survey_submission_id: saved.submissionId,
+        $survey_response_q1: 'answer-q1',
+        $survey_response_q3: 'answer-q3',
+      })
+    )
+    expect(capture.mock.lastCall?.[1]).not.toHaveProperty('$survey_response_q2')
+  })
+})
+
+it('does not duplicate partial or final events when a question submits twice before rendering', () => {
+  const survey = makeSurvey(false, { enable_partial_responses: true })
+  const complete = vi.fn()
+  const ui = render(<Questions survey={survey} appearance={defaultSurveyAppearance} onSubmit={complete} />)
+  for (const id of ['q1', 'q2', 'q3']) {
+    const button = ui.getByTestId(id)
+    act(() => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+    })
+  }
+  expect(capture).toHaveBeenCalledTimes(3)
+  expect(complete).toHaveBeenCalledOnce()
+  expect(capture.mock.calls.map(([, props]) => props.$survey_completed)).toEqual([false, false, true])
+})
+
+it('restores shuffled question order without reshuffling after restart', () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0)
+  const survey = makeSurvey(true)
+  let saved: any
+  const first = render(
+    <Questions
+      survey={survey}
+      appearance={defaultSurveyAppearance}
+      onSubmit={vi.fn()}
+      onProgressChange={(progress) => {
+        saved = JSON.parse(JSON.stringify(progress))
+        return true
+      }}
+    />
+  )
+  fireEvent.click(first.getByTestId('q2'))
+  first.unmount()
+  vi.mocked(Math.random).mockReturnValue(0.9)
+  const complete = vi.fn()
+  const second = render(
+    <Questions survey={survey} appearance={defaultSurveyAppearance} initialProgress={saved} onSubmit={complete} />
+  )
+  fireEvent.click(second.getByTestId('q3'))
+  fireEvent.click(second.getByTestId('q1'))
+  expect(complete).toHaveBeenCalledOnce()
+  expect(capture).toHaveBeenLastCalledWith(
+    'survey sent',
+    expect.objectContaining({
+      $survey_submission_id: saved.submissionId,
+      $survey_response_q2: 'answer-q2',
+    })
+  )
 })

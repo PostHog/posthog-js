@@ -2,14 +2,10 @@ import { shuffle } from '@posthog/core/surveys'
 export { getDisplayOrderChoices, shuffle } from '@posthog/core/surveys'
 import { Survey, SurveyQuestion } from '@posthog/core'
 
-type SurveyWithPartialResponses = Survey & {
-  enable_partial_responses?: boolean | null
-}
-
 const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
 
 export const shouldShuffleQuestions = (survey: Survey): boolean => {
-  const partialResponsesEnabled = (survey as SurveyWithPartialResponses).enable_partial_responses
+  const partialResponsesEnabled = survey.enable_partial_responses
 
   return !!survey.appearance?.shuffleQuestions && !partialResponsesEnabled && !hasBranching(survey)
 }

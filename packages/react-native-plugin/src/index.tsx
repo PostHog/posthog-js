@@ -116,6 +116,29 @@ export function addExceptionStep(message: string, properties?: PostHogReactNativ
   return PosthogReactNativePlugin.addExceptionStep(message, properties ?? {})
 }
 
+/**
+ * Captures a fatal JS exception through the embedded native SDK.
+ *
+ * The JS layer has already run `before_send` and built the final payload. Native captures it
+ * as a `$exception` with `$exception_level: "fatal"`, which both native SDKs write to their
+ * own disk queue synchronously before returning — durability the JS event queue cannot offer
+ * while AsyncStorage is still draining. Native then owns delivery, retry and the relaunch
+ * flush, so nothing needs recovering on the next launch.
+ *
+ * `timestamp` is an ISO-8601 UTC string (`Date#toISOString`). The promise rejects if the
+ * capture did not happen, because the JS caller drops its own copy of the event when this
+ * path is taken.
+ *
+ * @internal Used by `posthog-react-native`'s fatal handler. Not part of the public API.
+ */
+export function captureFatalException(
+  distinctId: string,
+  timestamp: string,
+  properties: PostHogReactNativePluginMap
+): Promise<void> {
+  return PosthogReactNativePlugin.captureFatalException(distinctId, timestamp, properties)
+}
+
 export function registerPushNotificationToken(deviceToken: string, appId: string | null): Promise<void> {
   return PosthogReactNativePlugin.registerPushNotificationToken(deviceToken, appId)
 }
@@ -214,6 +237,12 @@ export interface PostHogReactNativePluginModule {
 
   addExceptionStep: (message: string, properties?: PostHogReactNativePluginMap) => Promise<void>
 
+  captureFatalException: (
+    distinctId: string,
+    timestamp: string,
+    properties: PostHogReactNativePluginMap
+  ) => Promise<void>
+
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
 
   unregisterPushNotificationToken: () => Promise<void>
@@ -236,6 +265,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   startRecording,
   stopRecording,
   addExceptionStep,
+  captureFatalException,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
   setOptOut,

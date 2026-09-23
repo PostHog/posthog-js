@@ -54,6 +54,48 @@ export function buildSurveyResponseProperties(
   }
 }
 
+export function recordSurveyAnswer(
+  { responses, questionSnapshots = {} }: { responses: SurveyResponses; questionSnapshots?: Record<string, string> },
+  questionId: string,
+  response: SurveyResponseValue,
+  question?: SurveyQuestionForResponses
+): { responses: SurveyResponses; questionSnapshots: Record<string, string> } {
+  // Snapshot the question text as it appeared to the user right now, so that
+  // $survey_questions[].question in sent/dismissed events reflects the language
+  // the user saw when they answered, not the language active at event-fire time.
+  return {
+    responses: { ...responses, [getSurveyResponseKey(questionId)]: response },
+    questionSnapshots: question?.id ? { ...questionSnapshots, [question.id]: question.question } : questionSnapshots,
+  }
+}
+
+export function buildSurveyResponseEventProperties({
+  event,
+  survey,
+  responses = {},
+  submissionId,
+  completed,
+  surveyLanguage,
+  questionSnapshots,
+}: {
+  event: 'sent' | 'dismissed' | 'abandoned'
+  survey: SurveyForResponses
+  responses?: SurveyResponses
+  submissionId?: string
+  completed?: boolean
+  surveyLanguage?: string | null
+  questionSnapshots?: Record<string, string>
+}): Record<string, unknown> {
+  return {
+    ...(!isUndefined(submissionId) && { $survey_submission_id: submissionId }),
+    ...(event === 'sent'
+      ? !isUndefined(completed) && { $survey_completed: completed }
+      : { $survey_partially_completed: surveyHasResponses(responses) }),
+    ...(surveyLanguage && { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage }),
+    ...buildSurveyResponseProperties(responses, survey, questionSnapshots),
+  }
+}
+
 export function surveyHasResponses(responses: SurveyResponses = {}): boolean {
   return Object.values(responses).some((response) => !isNullish(response))
 }

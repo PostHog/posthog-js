@@ -1,6 +1,8 @@
 export { getValidationError, getLengthFromRules, getRequirementsHint } from './validation'
 export {
   buildSurveyResponseProperties,
+  buildSurveyResponseEventProperties,
+  recordSurveyAnswer,
   getSurveyInteractionProperty,
   getSurveyOldResponseKey,
   getSurveyResponseKey,

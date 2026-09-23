@@ -14,7 +14,7 @@ function captureMetricsPayloads(context: BrowserContext) {
     return payloads
 }
 
-const attributesOf = (dataPoint: OtlpHistogramDataPoint): Record<string, string | undefined> =>
+const attributesOf = (dataPoint: OtlpHistogramDataPoint): Record<string, string | number | undefined> =>
     Object.fromEntries(dataPoint.attributes.map((a) => [a.key, a.value.stringValue ?? a.value.intValue]))
 
 test.describe('network metrics', () => {
@@ -69,6 +69,7 @@ test.describe('network metrics', () => {
                 count: 2,
                 'http.request.method': 'GET',
                 'server.address': 'localhost',
+                'server.port': expect.stringMatching(/^\d+$/),
                 'url.scheme': 'http',
                 'url.template': '/__network_metrics_test/orders/:id',
                 'http.response.status_code': '200',

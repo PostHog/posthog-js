@@ -26,6 +26,8 @@ import {
   FeatureFlagResultOptions,
   IsFeatureEnabledOptions,
   ErrorTracking as CoreErrorTracking,
+  isObject,
+  uuidv7,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import {
@@ -35,6 +37,7 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
 } from './storage'
+import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
@@ -297,6 +300,7 @@ export class PostHog extends PostHogCore {
   // Unsupported: this plugin can never do push — latched so the enable check stops
   // recomputing, without claiming an instance that isn't there.
   private _pushNativeInitialized: boolean = false
+  private _fatalJsCaptureNativeInitialized: boolean = false
   private _pushNativeUnsupported: boolean = false
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
@@ -311,6 +315,13 @@ export class PostHog extends PostHogCore {
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
+  private _eventsStoragePreloadSucceeded = true
+  private _fatalCaptureObservation?: {
+    eventUuid: string
+    prepareNativeCapture: (queued: PostHogEventProperties) => (() => Promise<void>) | undefined
+    queued: boolean
+    nativeCapture?: () => Promise<void>
+  }
   private _disableSurveys: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
@@ -373,10 +384,29 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, async () => {
-      // captureException can enqueue through wrap() after asynchronous storage initialization.
-      await this._initPromise
-      await this._eventsStorage.waitForPersist()
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, {
+      captureFatalException: (error, hint, eventUuid, timestamp, prepareNativeCapture) =>
+        this._captureFatalAndChooseOwner(eventUuid, prepareNativeCapture, () =>
+          this.captureExceptionInternal(error, { $exception_level: 'fatal' as CoreErrorTracking.SeverityLevel }, hint, {
+            uuid: eventUuid,
+            timestamp,
+          })
+        ),
+      // Other events may still be queued behind the exception, so the fatal path waits for
+      // the JS store to land even when native owns the exception itself.
+      waitForJSPersist: async () => {
+        await this._initPromise
+        return this._eventsStorage.waitForPersistSuccess()
+      },
+      // Memory-mode apps don't have AsyncStorage, and the native SDK's queue is disk-backed:
+      // handing it the exception would land data the rest of the SDK promises never to touch
+      // disk. Keep the event in the JS queue there instead.
+      getPersistenceMode: () => this._persistence || 'file',
+      waitForStorageReady: async () => {
+        await this._initPromise
+        return this._eventsStoragePreloadSucceeded
+      },
+      isNativeCaptureReady: () => this._isNativePluginInitialized(),
     })
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
@@ -403,10 +433,13 @@ export class PostHog extends PostHogCore {
     if (theStorage) {
       this._eventsStorage = createEventsStorage(theStorage)
       this._logsStorage = createLogsStorage(theStorage)
-      // `allSettled` so one pipeline's preload failure doesn't block the other — the failing side
-      // degrades to memory-only via PostHogRNStorage.persist()'s internal catch.
+      // `allSettled` so one pipeline's preload failure doesn't block the other. The failing
+      // cache starts empty; future writes still target its configured storage backend.
       const preloads: Array<['events' | 'logs', Promise<void>]> = []
       if (this._eventsStorage.preloadPromise) {
+        void this._eventsStorage.preloadPromise.catch(() => {
+          this._eventsStoragePreloadSucceeded = false
+        })
         preloads.push(['events', this._eventsStorage.preloadPromise])
       }
       if (this._logsStorage.preloadPromise) {
@@ -551,6 +584,9 @@ export class PostHog extends PostHogCore {
       this.reloadRemoteConfigAsync()
         .then((response) => {
           if (response) {
+            // Applies the remote autocapture kill-switch at the earliest authoritative
+            // point; the flags response may apply it again later.
+            this._errorTracking.onRemoteConfig(response.errorTracking)
             this._handleSurveysFromRemoteConfig(response)
           }
         })
@@ -633,7 +669,13 @@ export class PostHog extends PostHogCore {
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
     const storage = this._storageForKey(key)
-    value !== null ? storage.setItem(key, value) : storage.removeItem(key)
+    if (key === PostHogPersistedProperty.SurveysInProgress && value === null) {
+      const otherProjects = getOtherProjectSurveyProgress(this)
+      otherProjects.length ? storage.setItem(key, otherProjects) : storage.removeItem(key)
+      this._events.emit('surveysReset', undefined)
+    } else {
+      value !== null ? storage.setItem(key, value) : storage.removeItem(key)
+    }
     if (key === PostHogPersistedProperty.PersonProperties) {
       // Notify surveys after the in-memory write, including unsets and resets,
       // without waiting for a feature flag reload.
@@ -670,12 +712,13 @@ export class PostHog extends PostHogCore {
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     this._cancelManualRecordingStart()
-    this._errorTracking.shutdown()
     const start = Date.now()
-    const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
     try {
-      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(shutdownTimeoutMs)])
+      const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
+      const logsBudgetMs = Math.min(remainingMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
+      await Promise.all([this._logs.shutdown(logsBudgetMs), super._shutdown(remainingMs)])
     } finally {
+      this._errorTracking.shutdown()
       // Sync drain runs inside waitForPersist before the race below; the race
       // only bounds the await for in-flight async writes.
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
@@ -1082,8 +1125,24 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
-    const result = super.optOut()
-    void this._eventsStorage.waitForPersist()
+    const coreOptOut = super.optOut()
+    const persistOptOut = (): Promise<void> => {
+      this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
+      return this._eventsStorage.waitForPersist()
+    }
+    const result = Promise.all([
+      coreOptOut,
+      this._isInitialized ? persistOptOut() : this._initPromise.then(persistOptOut),
+    ]).then(() => undefined)
+    // A fatal exception captured before this point lives in the native SDK's own queue, so
+    // there is nothing left on the JS side to clear. _propagateNativeOptOut() below stops
+    // native capturing anything further.
+    //
+    // NOTE: neither native SDK drops what its queue already holds on optOut(), so an
+    // exception captured while opted in can still be delivered after consent is withdrawn.
+    // The JS journal this replaced rotated a generation to prevent exactly that. Delivery
+    // usually happens on the relaunch flush, before a user can opt out, but the guarantee
+    // is weaker than it was.
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
     // native subscription handler keeps its own persisted record and retry loop. unregister is
     // deliberately allowed while opted out.
@@ -2030,22 +2089,65 @@ export class PostHog extends PostHogCore {
     additionalProperties: PostHogEventProperties = {},
     hint?: CoreErrorTracking.EventHint
   ): void {
+    try {
+      const result = this.captureExceptionInternal(error, additionalProperties, hint)
+      if (result?.additionalProperties?.$exception_level === 'fatal') {
+        void this._eventsStorage.waitForPersist()
+        void this._logsStorage.waitForPersist()
+      }
+    } catch (e) {
+      this._logger.error('Error while capturing $exception:', e)
+    }
+  }
+
+  private captureExceptionInternal(
+    error: Error | unknown,
+    additionalProperties: PostHogEventProperties = {},
+    hint?: CoreErrorTracking.EventHint,
+    options?: PostHogCaptureOptions
+  ): {
+    eventUuid: string
+    timestamp: string
+    additionalProperties: PostHogEventProperties
+  } | null {
     const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
 
-    additionalProperties = { ...getExceptionContext(), ...additionalProperties }
+    const merged: PostHogEventProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
-    additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
+    const finalAdditional = this._errorTracking.attachExceptionSteps(merged)
 
-    super.captureException(error, additionalProperties, resolvedHint)
+    const captureOptions: PostHogCaptureOptions = {
+      ...(options || {}),
+      _originatedFromCaptureException: true,
+    }
 
-    // On a fatal crash, persist the exception + recent logs before the app may die.
-    if (additionalProperties?.$exception_level === 'fatal') {
-      void this._eventsStorage.waitForPersist()
-      void this._logsStorage.waitForPersist()
+    this.capture(
+      '$exception',
+      { ...this.buildExceptionProperties(error, resolvedHint), ...finalAdditional },
+      captureOptions
+    )
+
+    const eventUuid = captureOptions.uuid ?? ''
+    const timestamp = (captureOptions.timestamp ?? new Date()).toISOString()
+    return {
+      eventUuid,
+      timestamp,
+      additionalProperties: finalAdditional,
+    }
+  }
+
+  private buildExceptionProperties(error: Error | unknown, hint: CoreErrorTracking.EventHint): PostHogEventProperties {
+    try {
+      const builder = this.getErrorPropertiesBuilder()
+      const exceptionProperties = builder.buildFromUnknown(error, hint) as unknown as PostHogEventProperties
+      return exceptionProperties
+    } catch (e) {
+      this._logger.error('Error while building exception properties:', e)
+      return {}
     }
   }
 
@@ -2260,8 +2362,8 @@ export class PostHog extends PostHogCore {
 
     const surveys = response.surveys
 
-    // If surveys is not an array, it means there are no surveys (its a boolean)
-    if (Array.isArray(surveys) && surveys.length > 0) {
+    // Keep an authoritative empty list distinct from an unavailable survey cache.
+    if (Array.isArray(surveys)) {
       this._cacheSurveys(surveys as Survey[], 'remote config')
     } else {
       this._cacheSurveys(null, 'remote config')
@@ -2488,8 +2590,27 @@ export class PostHog extends PostHogCore {
     return !this.isDisabled && nativeCrashes
   }
 
+  /**
+   * Fatal JavaScript exceptions are handed to the native SDK, which persists them to its own
+   * disk queue synchronously before the process dies. That only works if the native SDK is
+   * set up, so JS uncaught-exception autocapture now warrants native init on its own — an app
+   * that enabled neither replay, native crashes nor push would otherwise have no durable
+   * fatal path at all.
+   */
+  private _isFatalJsCaptureNativeEnabled(): boolean {
+    if (this.isDisabled || this.optedOut || isWeb() || this._persistence === 'memory') {
+      return false
+    }
+    return this._errorTracking.isUncaughtExceptionAutocaptureEnabled()
+  }
+
   private _isNativePluginInitialized(): boolean {
-    return this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized || this._pushNativeInitialized
+    return (
+      this._sessionReplayNativeInitialized ||
+      this._nativeErrorTrackingInitialized ||
+      this._pushNativeInitialized ||
+      this._fatalJsCaptureNativeInitialized
+    )
   }
 
   // Push is enabled unless everything push-related is switched off: both auto-capture
@@ -2534,6 +2655,7 @@ export class PostHog extends PostHogCore {
   ): Promise<boolean> {
     let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
     let enablePush = this._isPushNativeEnabled(options, forcePush)
+    const enableFatalJsCapture = this._isFatalJsCaptureNativeEnabled()
 
     // Session replay has no macOS backend — the native plugin no-ops its recording controls there.
     // Skip it in JS so we don't mark replay initialized or log a false "started" while nothing records.
@@ -2545,7 +2667,7 @@ export class PostHog extends PostHogCore {
       enableSessionReplay = false
     }
 
-    if (!enableSessionReplay && !enableNativeErrorTracking && !enablePush) {
+    if (!enableSessionReplay && !enableNativeErrorTracking && !enablePush && !enableFatalJsCapture) {
       return true
     }
 
@@ -2568,7 +2690,8 @@ export class PostHog extends PostHogCore {
     if (
       (!enableSessionReplay || this._sessionReplayNativeInitialized) &&
       (!enableNativeErrorTracking || this._nativeErrorTrackingInitialized) &&
-      (!enablePush || this._pushNativeInitialized)
+      (!enablePush || this._pushNativeInitialized) &&
+      (!enableFatalJsCapture || this._fatalJsCaptureNativeInitialized)
     ) {
       return true
     }
@@ -2727,10 +2850,12 @@ export class PostHog extends PostHogCore {
       `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
     )
 
-    // Push alone doesn't need native's own feature-flag preload — JS already owns flags. Error
-    // tracking's autocapture kill-switch does, so only skip when push is the sole reason for
-    // setup. Remote config isn't skippable: both native SDKs deprecated that option to a no-op.
-    const pushOnlyInit = enablePush && !enableSessionReplay && !enableNativeErrorTracking
+    // Neither push nor fatal-JS capture needs native's own feature-flag preload — JS already
+    // owns flags, and the fatal path only uses native as a durable queue. Native error
+    // tracking's autocapture kill-switch does need it, as does replay, so only skip when
+    // those two are not why we are here. Remote config isn't skippable: both native SDKs
+    // deprecated that option to a no-op.
+    const pushOnlyInit = (enablePush || enableFatalJsCapture) && !enableSessionReplay && !enableNativeErrorTracking
 
     const sdkOptions = {
       apiKey: this.apiKey,
@@ -2852,6 +2977,10 @@ export class PostHog extends PostHogCore {
         this._pushNativeInitialized = true
         this._logger.info('Push notification native support started.')
       }
+      if (enableFatalJsCapture) {
+        this._fatalJsCaptureNativeInitialized = true
+        this._logger.info('Native durable capture for fatal JavaScript exceptions started.')
+      }
       return true
     } catch (e) {
       this._logger.error(`Native PostHog plugin failed to start: ${e}.`)
@@ -2898,6 +3027,7 @@ export class PostHog extends PostHogCore {
     const options = this._sessionReplayOptions
     const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
     const enablePush = this._isPushNativeEnabled(options)
+    const enableFatalJsCapture = this._isFatalJsCaptureNativeEnabled()
     // On the re-arm path (flags reloaded after identify/reset) cachedRemoteConfig
     // isn't passed in, so fall back to the persisted remote config for capture gating.
     const remoteConfig =
@@ -2908,7 +3038,7 @@ export class PostHog extends PostHogCore {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
-      if (enableNativeErrorTracking || enablePush) {
+      if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
       const request = this._manualRecordingStartRequest
@@ -3012,13 +3142,57 @@ export class PostHog extends PostHogCore {
    * trigger check never drops an event or throws into the capture path.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    const observation = this._fatalCaptureObservation
+    const isObservedFatal =
+      observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
     const processed = super.processBeforeEnqueue(message)
+    let suppress = false
+    if (isObservedFatal && processed && observation) {
+      // The final, before_send-accepted payload. Offer it to the native SDK here rather than
+      // after enqueueing: if native takes ownership the JS copy must never reach the queue,
+      // and if the payload cannot be built we must still fall through to the JS queue. Both
+      // outcomes have to be decided in this one step or the exception can end up in neither
+      // queue, or in both.
+      try {
+        observation.nativeCapture = observation.prepareNativeCapture(processed)
+      } catch (e) {
+        this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
+        observation.nativeCapture = undefined
+      }
+      suppress = observation.nativeCapture !== undefined
+      observation.queued = !suppress
+    }
     try {
       this._maybeActivateEventTrigger(processed?.['event'])
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
     }
-    return processed
+    return suppress ? null : processed
+  }
+
+  /**
+   * Capture a fatal exception and decide which queue owns it. The native SDK persists a
+   * fatal `$exception` synchronously, so when it is available it takes the event and the JS
+   * queue copy is dropped; otherwise the event stays in the JS queue as usual.
+   */
+  private _captureFatalAndChooseOwner(
+    eventUuid: string,
+    prepareNativeCapture: (queued: PostHogEventProperties) => (() => Promise<void>) | undefined,
+    capture: () => unknown
+  ): { queued: boolean; nativeCapture?: () => Promise<void> } {
+    const observation: NonNullable<PostHog['_fatalCaptureObservation']> = {
+      eventUuid,
+      prepareNativeCapture,
+      queued: false,
+    }
+    const previousObservation = this._fatalCaptureObservation
+    this._fatalCaptureObservation = observation
+    try {
+      capture()
+    } finally {
+      this._fatalCaptureObservation = previousObservation
+    }
+    return { queued: observation.queued, nativeCapture: observation.nativeCapture }
   }
 
   private _maybeActivateEventTrigger(eventName: unknown): void {
