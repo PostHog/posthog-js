@@ -17,7 +17,6 @@ const knownNonAbiOverlaps = [
     '_batchKey',
     '_buffer',
     '_config',
-    '_disposed',
     '_enqueue',
     '_events',
     '_extends',

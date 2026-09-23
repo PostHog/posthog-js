@@ -202,8 +202,6 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               '_surveyManager',
 
                               // lifecycle lookup from independently released bundle-local client adapters
-                              '_isExtensionActive',
-                              '_isBrowserClientClosing',
 
                               // private ABI between independently emitted slim cores and extension bundles
                               ...(preserveCrossBundleProperties
