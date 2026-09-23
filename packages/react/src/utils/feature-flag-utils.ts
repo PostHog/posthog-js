@@ -1,15 +1,8 @@
 /* oxlint-disable no-console */
 import { isBoolean, isObject, isString, isUndefined } from './type-utils'
 
+// Hooks re-run on every render, so a flag is only warned about once.
 const warnedFlags = new Set<string>()
-
-function warnOnce(flag: string, message: string): void {
-    if (warnedFlags.has(flag)) {
-        return
-    }
-    warnedFlags.add(flag)
-    console.warn(`[PostHog.js] Invalid bootstrapped value for feature flag "${flag}": ${message}`)
-}
 
 /**
  * Bootstrapped flag values must be a variant string or a boolean. Apps that pass the
@@ -21,17 +14,17 @@ export function normalizeBootstrappedFlagValue(flag: string, value: unknown): st
         return value
     }
 
+    let flattened: string | boolean | undefined
     if (isObject(value) && (isBoolean(value.enabled) || isString(value.variant))) {
-        const flattened = isString(value.variant) ? value.variant : !!value.enabled
-        warnOnce(
-            flag,
-            `expected a variant string or a boolean, got a flag detail object. Using ${JSON.stringify(
-                flattened
-            )} instead. Pass \`variant ?? enabled\` in \`bootstrap.featureFlags\`.`
-        )
-        return flattened
+        flattened = isString(value.variant) ? value.variant : !!value.enabled
     }
 
-    warnOnce(flag, `expected a variant string or a boolean, got ${typeof value}. Ignoring it.`)
-    return undefined
+    if (!warnedFlags.has(flag)) {
+        warnedFlags.add(flag)
+        console.warn(
+            `[PostHog.js] Invalid bootstrapped value for feature flag "${flag}": expected a variant string or a boolean. ` +
+                (isUndefined(flattened) ? 'Ignoring it.' : `Using ${JSON.stringify(flattened)} from the flag detail.`)
+        )
+    }
+    return flattened
 }

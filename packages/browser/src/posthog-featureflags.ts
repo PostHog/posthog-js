@@ -707,20 +707,16 @@ export class PostHogFeatureFlags implements Extension {
             return value
         }
 
+        let flattened: string | boolean | undefined
         if (isObject(value) && (isBoolean(value.enabled) || isString(value.variant))) {
-            const flattened = isString(value.variant) ? value.variant : !!value.enabled
-            this._logger.warn(
-                `Invalid bootstrapped value for feature flag "${key}": expected a variant string or a boolean, got a flag detail object. Using ${JSON.stringify(
-                    flattened
-                )} instead. Pass \`variant ?? enabled\` in \`bootstrap.featureFlags\`.`
-            )
-            return flattened
+            flattened = isString(value.variant) ? value.variant : !!value.enabled
         }
 
         this._logger.warn(
-            `Invalid bootstrapped value for feature flag "${key}": expected a variant string or a boolean, got ${typeof value}. Ignoring it.`
+            `Invalid bootstrapped value for feature flag "${key}": expected a variant string or a boolean. ` +
+                (isUndefined(flattened) ? 'Ignoring it.' : `Using ${JSON.stringify(flattened)} from the flag detail.`)
         )
-        return undefined
+        return flattened
     }
 
     initialize(): void {
