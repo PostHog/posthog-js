@@ -294,6 +294,7 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
   private _nativeErrorTrackingInitialized: boolean = false
+  private _androidNdkCrashesUnsupportedWarned: boolean = false
   // Initialized: setup() ran carrying push config, so a live native instance exists.
   // Unsupported: this plugin can never do push — latched so the enable check stops
   // recomputing, without claiming an instance that isn't there.
@@ -2496,6 +2497,15 @@ export class PostHog extends PostHogCore {
     return this._sessionReplayEvalChain
   }
 
+  private _pluginVersionAtLeast(major: number, minor: number): boolean {
+    const version = OptionalReactNativePluginVersion?.match(/^(\d+)\.(\d+)\.\d+(?:\+[\w.-]+)?$/)
+    if (!version) {
+      return false
+    }
+    const [installedMajor, installedMinor] = [Number(version[1]), Number(version[2])]
+    return installedMajor > major || (installedMajor === major && installedMinor >= minor)
+  }
+
   // Two native opt-ins: nativeCrashes covers the platform's own crash handler, while Android
   // NDK crashes are a separate posthog-android toggle (its tombstone scanner).
   private _nativeErrorAutocapture(options?: PostHogOptions): { nativeCrashes: boolean; androidNdkCrashes: boolean } {
@@ -2503,14 +2513,22 @@ export class PostHog extends PostHogCore {
     if (this.isDisabled || typeof autocapture !== 'object') {
       return { nativeCrashes: false, androidNdkCrashes: false }
     }
-    return {
-      nativeCrashes: autocapture.nativeCrashes === true,
-      // Android-only, so it must not bring up the native SDK on other platforms.
-      androidNdkCrashes: Platform.OS === 'android' && autocapture.androidNdkCrashes === true,
+    // Android-only, so it must not bring up the native SDK on other platforms.
+    let androidNdkCrashes = Platform.OS === 'android' && autocapture.androidNdkCrashes === true
+    // Older plugins ignore the key, so it would start the native SDK with nothing to capture.
+    if (androidNdkCrashes && !this._pluginVersionAtLeast(2, 10)) {
+      if (!this._androidNdkCrashesUnsupportedWarned) {
+        this._androidNdkCrashesUnsupportedWarned = true
+        this._logger.warn(
+          `errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.10.0 or later ` +
+            `(installed: ${OptionalReactNativePluginVersion ?? 'unknown'}); ignoring.`
+        )
+      }
+      androidNdkCrashes = false
     }
+    return { nativeCrashes: autocapture.nativeCrashes === true, androidNdkCrashes }
   }
 
-  // Either opt-in needs the native SDK, so both gate initialization.
   private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
     const { nativeCrashes, androidNdkCrashes } = this._nativeErrorAutocapture(options)
     return nativeCrashes || androidNdkCrashes
@@ -2561,7 +2579,7 @@ export class PostHog extends PostHogCore {
     forcePush: boolean = false
   ): Promise<boolean> {
     const nativeErrorAutocapture = this._nativeErrorAutocapture(options)
-    let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    let enableNativeErrorTracking = nativeErrorAutocapture.nativeCrashes || nativeErrorAutocapture.androidNdkCrashes
     let enablePush = this._isPushNativeEnabled(options, forcePush)
 
     // Session replay has no macOS backend — the native plugin no-ops its recording controls there.
@@ -2639,12 +2657,7 @@ export class PostHog extends PostHogCore {
     } = options?.sessionReplayConfig ?? {}
 
     if (captureTouches === false && !isMacOS()) {
-      const pluginVersion = OptionalReactNativePluginVersion?.match(/^(\d+)\.(\d+)\.\d+(?:\+[\w.-]+)?$/)
-      const supportsCaptureTouches =
-        pluginVersion &&
-        (Number(pluginVersion[1]) > 2 || (Number(pluginVersion[1]) === 2 && Number(pluginVersion[2]) >= 9))
-
-      if (!supportsCaptureTouches) {
+      if (!this._pluginVersionAtLeast(2, 9)) {
         this._logger.warn(
           `sessionReplayConfig.captureTouches: false requires @posthog/react-native-plugin 2.9.0 or later. ` +
             `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) may still record touch coordinates. ` +

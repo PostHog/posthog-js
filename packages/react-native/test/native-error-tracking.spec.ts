@@ -3,8 +3,12 @@ import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
+const pluginVersion = vi.hoisted(() => ({ current: '2.10.0' as string | undefined }))
+
 vi.mock('../src/optional/OptionalPlugin', () => ({
-  OptionalReactNativePluginVersion: undefined,
+  get OptionalReactNativePluginVersion() {
+    return pluginVersion.current
+  },
   OptionalReactNativePlugin: {
     start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
@@ -51,6 +55,7 @@ describe('native error tracking', () => {
 
   beforeEach(() => {
     Platform.OS = originalPlatform
+    pluginVersion.current = '2.10.0'
     resetMockPlugin()
     vi.clearAllMocks()
     setupFetch()
@@ -91,7 +96,6 @@ describe('native error tracking', () => {
     const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
     expect(pluginConfig.sessionReplay.enabled).toBe(false)
     expect(pluginConfig.errorTracking.nativeAutocapture).toBe(true)
-    // NDK capture is a separate opt-in, so nativeCrashes alone must not enable it.
     expect(pluginConfig.errorTracking.androidNdkCrashes).toBe(false)
 
     await posthog.shutdown()
@@ -114,6 +118,25 @@ describe('native error tracking', () => {
     const [, , pluginConfig] = mockPlugin.setup.mock.calls[0]
     expect(pluginConfig.errorTracking.androidNdkCrashes).toBe(true)
     expect(pluginConfig.errorTracking.nativeAutocapture).toBe(false)
+
+    await posthog.shutdown()
+  })
+
+  it('ignores androidNdkCrashes with a plugin older than 2.10.0', async () => {
+    Platform.OS = 'android'
+    pluginVersion.current = '2.9.4'
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      errorTracking: { autocapture: { androidNdkCrashes: true } },
+    })
+
+    await posthog.ready()
+    await waitForNativePluginEvaluation(posthog)
+
+    expect(mockPlugin.setup).not.toHaveBeenCalled()
 
     await posthog.shutdown()
   })
