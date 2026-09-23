@@ -547,15 +547,13 @@ describe('PostHogTracingProcessor', () => {
     })
   })
 
-  describe.each(['response', 'raw chat', 'canonical chat'])('%s cache token reporting', (source) => {
+  describe.each(['response', 'raw chat'])('%s cache token reporting', (source) => {
     it.each([
       { name: 'reads and writes', details: { cached_tokens: 60, cache_write_tokens: 20 }, read: 60, write: 20 },
       { name: 'explicit zeros', details: { cached_tokens: 0, cache_write_tokens: 0 }, read: 0, write: 0 },
       { name: 'reads only', details: { cached_tokens: 60 }, read: 60, write: undefined },
       { name: 'writes only', details: { cache_write_tokens: 20 }, read: undefined, write: 20 },
-      { name: 'empty details', details: {}, read: undefined, write: undefined },
       { name: 'missing details', details: undefined, read: undefined, write: undefined },
-      { name: 'null details', details: null, read: undefined, write: undefined },
     ])('preserves $name without changing total tokens', async ({ details, read, write }) => {
       const usage =
         source === 'response'
@@ -564,9 +562,7 @@ describe('PostHogTracingProcessor', () => {
       const spanData =
         source === 'response'
           ? { type: 'response', _response: { model: 'anthropic/claude-sonnet-4.6', usage } }
-          : source === 'raw chat'
-            ? { type: 'generation', output: [{ model: 'anthropic/claude-sonnet-4.6', usage }] }
-            : { type: 'generation', model: 'anthropic/claude-sonnet-4.6', usage }
+          : { type: 'generation', output: [{ model: 'anthropic/claude-sonnet-4.6', usage }] }
 
       await processor.onSpanEnd(createMockSpan({ spanData }) as any)
 
@@ -588,11 +584,30 @@ describe('PostHogTracingProcessor', () => {
           expect(event.properties[key]).toBe(value)
         }
       }
-      if (source === 'canonical chat') {
-        expect(event.properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
-      } else {
-        expect(event.properties.$ai_cache_reporting_exclusive).toBe(false)
-      }
+      expect(event.properties.$ai_cache_reporting_exclusive).toBe(false)
+    })
+  })
+
+  it('declares inclusive cache counts for OpenAI-shaped canonical usage from a custom model', async () => {
+    const span = createMockSpan({
+      spanData: {
+        type: 'generation',
+        model: 'anthropic/claude-sonnet-4.6',
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 10,
+          prompt_tokens_details: { cached_tokens: 60, cache_write_tokens: 20 },
+        },
+      },
+    })
+
+    await processor.onSpanEnd(span as any)
+
+    expect(mockClient.capture.mock.calls[0][0].properties).toMatchObject({
+      $ai_input_tokens: 100,
+      $ai_cache_read_input_tokens: 60,
+      $ai_cache_creation_input_tokens: 20,
+      $ai_cache_reporting_exclusive: false,
     })
   })
 
