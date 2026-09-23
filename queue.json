@@ -17,7 +17,7 @@
         "commentId": 4080815896,
         "commentUrl": "https://github.com/PostHog/posthog-js/pull/5062#discussion_r4080815896"
       },
-      "attempts": 0
+      "attempts": 1
     },
     {
       "id": "pull_request-5062-fix-address-review-no-comment-no-close-1790154843762",
