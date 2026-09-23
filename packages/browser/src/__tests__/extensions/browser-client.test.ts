@@ -375,7 +375,7 @@ describe('BrowserClientAdapter', () => {
         expect(remove).toHaveBeenCalledTimes(1)
     })
 
-    it('dispatches both logs queues at shutdown without admitting reentrant logs', async () => {
+    it('flushes both logs queues and releases capture resources during shutdown', async () => {
         const posthog = await createPosthogInstance(undefined, {
             capture_pageview: false,
             advanced_disable_flags: true,
@@ -403,16 +403,21 @@ describe('BrowserClientAdapter', () => {
         expect(requestHeader).toHaveBeenCalledTimes(2)
         expect(send).toHaveBeenCalledTimes(2)
         expect(
-            send.mock.calls.map(([options]) => [
-                options.transport,
-                (options.data as any).resourceLogs[0].scopeLogs[0].logRecords[0].body,
-            ])
+            send.mock.calls.flatMap(([options]) =>
+                (options.data as any).resourceLogs[0].scopeLogs[0].logRecords.map((record: any) => [
+                    options.transport,
+                    record.body,
+                ])
+            )
         ).toEqual([
             ['sendBeacon', { stringValue: 'programmatic' }],
             ['sendBeacon', { stringValue: 'console' }],
         ])
-        expect(beforeSend).toHaveBeenCalledTimes(2)
-        expect(posthog._getBrowserClientAdapter().canCapture).toBe(false)
+        beforeSend.mockClear()
+        posthog.captureLog({ body: 'after cleanup' })
+        logger.info('after cleanup')
+        expect(beforeSend).not.toHaveBeenCalled()
+        expect(send).toHaveBeenCalledTimes(2)
     })
 
     it('exposes the project token and adapts caller-owned request options', async () => {
@@ -480,7 +485,6 @@ describe('BrowserClientAdapter', () => {
         const client = new BrowserClientAdapter(instance)
         await client.sendRequest(path, { target })
         expect(vi.mocked(instance._send_request).mock.calls[0][0].batchKey).toBe(batchKey)
-        client.dispose()
     })
 
     it('uses the regular API target by default and resolves dropped requests', async () => {

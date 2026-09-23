@@ -118,22 +118,21 @@ describe('logs entrypoint', () => {
             expect(disposeLogs).not.toHaveBeenCalled()
         })
 
-        it('observes current-core shutdown and lookup availability through the bundle-local view', () => {
-            const active = vi.fn(() => true)
-            const closing = vi.fn(() => false)
+        it('reads the current host logs reference for each capture', () => {
             mockPostHog.version = '1.434.0'
-            mockPostHog._isExtensionActive = active
-            mockPostHog._isBrowserClientClosing = closing
-            mockPostHog.logs = { captureConsoleLog: mockEmit } as any
+            const logs = { captureConsoleLog: mockEmit } as any
+            mockPostHog.logs = logs
             const stop = assignableWindow.__PosthogExtensions__.logs.initializeLogs(mockPostHog)
             assignableWindow.console.log('captured')
-            active.mockReturnValue(false)
-            assignableWindow.console.log('failed setup')
-            active.mockReturnValue(true)
-            closing.mockReturnValue(true)
-            assignableWindow.console.log('shutdown')
+            mockPostHog.logs = undefined
+            assignableWindow.console.log('unavailable')
             expect(mockEmit).toHaveBeenCalledTimes(1)
+            mockPostHog.logs = logs
+            assignableWindow.console.log('available')
+            expect(mockEmit).toHaveBeenCalledTimes(2)
             stop()
+            assignableWindow.console.log('after cleanup')
+            expect(mockEmit).toHaveBeenCalledTimes(2)
         })
 
         it('does not set distinct_id or location.href — core adds posthogDistinctId/url.full downstream', () => {

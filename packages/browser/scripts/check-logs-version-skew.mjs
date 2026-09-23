@@ -100,6 +100,7 @@ try {
                     }
                     logs.dispose = () => {
                         dispose++
+                        stop()
                     }
                     const original = console.warn
                     const stop = window.__PosthogExtensions__.logs.initializeLogs(host)
@@ -110,7 +111,6 @@ try {
                     console.warn('version-skew-resumed')
                     const bodiesBeforeShutdown = calls.map((call) => call.body)
                     if (current) {
-                        // Use the real terminal host state while preventing product cleanup from removing this test's wrapper.
                         void host.shutdown()
                         console.warn('version-skew-shutdown')
                     }
