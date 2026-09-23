@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.10
+
+### Patch Changes
+
+- [#5060](https://github.com/PostHog/posthog-js/pull/5060) [`a9c40ec`](https://github.com/PostHog/posthog-js/commit/a9c40ec93ce38b11b17a69ff01d3e7b8677f7121) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix SDK initialization when a script loader pre-creates window.posthog as a placeholder object.
+  (2026-09-23)
+
 ## 1.434.9
 
 ### Patch Changes
