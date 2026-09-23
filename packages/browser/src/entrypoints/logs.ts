@@ -49,11 +49,10 @@ const captureConsoleLogForHost = (
     logs: NonNullable<PostHog['logs']>,
     options: CaptureLogOptions
 ): void => {
-    if (isFunction(logs.captureConsoleLog)) {
+    if (isClient(host)) {
         logs.captureConsoleLog(options)
         return
     }
-    if (isClient(host)) return
 
     // `_captureConsoleLog` had six generated names across core-backed releases.
     // Select by the stable SDK version instead of probing generated names,
@@ -62,8 +61,10 @@ const captureConsoleLogForHost = (
     // service name, scope, queue, and rate limits.
     const name = historicalCaptureConsoleLogName(host.version)
     const historicalCaptureConsoleLog = name ? (logs as unknown as HistoricalLogs)[name] : undefined
-    if (isFunction(historicalCaptureConsoleLog)) {
-        historicalCaptureConsoleLog.call(logs, options)
+    if (name) {
+        if (isFunction(historicalCaptureConsoleLog)) historicalCaptureConsoleLog.call(logs, options)
+    } else if (isFunction(logs.captureConsoleLog)) {
+        logs.captureConsoleLog(options)
     }
 }
 

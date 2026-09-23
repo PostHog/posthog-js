@@ -125,11 +125,10 @@ describe('logs entrypoint', () => {
         })
 
         it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.18', '1.419.3', '1.420.0'])(
-            'should not select a capture method for unsupported PostHog version %s',
+            'does not guess a generated capture method for unsupported PostHog version %s',
             (version) => {
                 const captures = {
                     captureLog: vi.fn(),
-                    captureConsoleLog: vi.fn(),
                     le: vi.fn(),
                     de: vi.fn(),
                     he: vi.fn(),

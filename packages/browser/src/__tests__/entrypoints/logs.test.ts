@@ -121,6 +121,7 @@ describe('logs entrypoint', () => {
         it('observes current-core shutdown and lookup availability through the bundle-local view', () => {
             const active = vi.fn(() => true)
             const closing = vi.fn(() => false)
+            mockPostHog.version = '1.434.0'
             mockPostHog._isExtensionActive = active
             mockPostHog._isBrowserClientClosing = closing
             mockPostHog.logs = { captureConsoleLog: mockEmit } as any
