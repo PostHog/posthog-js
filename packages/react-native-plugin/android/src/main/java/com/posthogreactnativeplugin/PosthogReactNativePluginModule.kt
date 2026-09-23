@@ -669,6 +669,7 @@ private fun getDoubleOrNull(
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
 
 internal fun PostHogAndroidConfig.configureNativeErrorTracking(enabled: Boolean) {
+  // React Native exposes one nativeCrashes option; as on iOS, it enables both Android crash sources.
   errorTrackingConfig.autoCapture = enabled
   errorTrackingConfig.captureNativeCrashes = enabled
 }
