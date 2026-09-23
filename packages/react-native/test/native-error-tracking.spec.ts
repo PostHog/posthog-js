@@ -125,6 +125,7 @@ describe('native error tracking', () => {
   it('ignores androidNdkCrashes with a plugin older than 2.10.0', async () => {
     Platform.OS = 'android'
     pluginVersion.current = '2.9.4'
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
       flushInterval: 0,
@@ -132,13 +133,18 @@ describe('native error tracking', () => {
       capturePushNotificationOpened: false,
       errorTracking: { autocapture: { androidNdkCrashes: true } },
     })
+    posthog.debug(true)
 
     await posthog.ready()
     await waitForNativePluginEvaluation(posthog)
 
     expect(mockPlugin.setup).not.toHaveBeenCalled()
+    expect(warnSpy.mock.calls.flat().join(' ')).toContain(
+      'errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.10.0 or later'
+    )
 
     await posthog.shutdown()
+    warnSpy.mockRestore()
   })
 
   it('ignores androidNdkCrashes on iOS', async () => {
