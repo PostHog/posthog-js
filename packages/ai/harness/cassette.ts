@@ -4,13 +4,14 @@ import { open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
+import { geminiPath, geminiStreamChunks, validateGeminiJSON } from './gemini-protocol.ts'
 import { openaiJson, openaiStream, safeJson } from './openai-protocol.ts'
 
 const MAX_BYTES = 8 * 1024 * 1024
 const MAX_REQUEST_BYTES = 1024 * 1024
 const TIMEOUT_MS = 15_000
 const requestHeaders = ['content-type', 'anthropic-version', 'anthropic-beta'] as const
-const credentialHeaders = ['authorization', 'x-api-key', 'cookie'] as const
+const credentialHeaders = ['authorization', 'x-api-key', 'x-goog-api-key', 'cookie'] as const
 const responseContentTypes = [
   'text/event-stream',
   'application/json',
@@ -19,7 +20,7 @@ const responseContentTypes = [
   'application/x-subrip',
 ] as const
 const provenanceSchema = z.strictObject({
-  source: z.enum(['synthetic', 'anthropic', 'openai']),
+  source: z.enum(['synthetic', 'anthropic', 'gemini', 'openai']),
   recordedAt: z.iso.datetime(),
   providerSdkVersion: z.string().min(1),
 })
@@ -71,7 +72,7 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
   if (typeof value === 'string') {
     if (
       [...secrets].some((secret) => secret && value.includes(secret)) ||
-      /\b(?:sk-(?:ant-|proj-|svcacct-|[a-z0-9]{20})|Bearer\s+\S+)/i.test(value)
+      /\b(?:sk-(?:ant-|proj-|svcacct-|[a-z0-9]{20})|Bearer\s+\S+)|AIza[\w-]{20,}/i.test(value)
     ) {
       throw new CassetteFailure('secret')
     }
@@ -79,9 +80,8 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
     for (const item of value) assertSafe(item, secrets)
   } else if (value && typeof value === 'object') {
     for (const [key, item] of Object.entries(value)) {
-      assertSafe(key, secrets)
       if (
-        /^(?:authorization|x-api-key|api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token|cookie|set-cookie)$/i.test(
+        /^(?:authorization|x-api-key|x-goog-api-key|api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token|cookie|set-cookie)$/i.test(
           key
         )
       ) {
@@ -91,6 +91,20 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
       assertSafe(item, secrets)
     }
   }
+}
+
+function parseJSON(text: string, secrets: Set<string>): unknown {
+  assertSafe(text, secrets)
+  // Scan decoded tokens before parsing can discard duplicate object members.
+  for (const token of text.matchAll(/"(?:[^"\\]|\\.)*"\s*:?/g)) {
+    const isKey = token[0].endsWith(':')
+    const value: unknown = JSON.parse(isKey ? token[0].slice(0, -1) : token[0])
+    assertSafe(value, secrets)
+    if (isKey && typeof value === 'string') assertSafe({ [value]: null }, secrets)
+  }
+  const value: unknown = JSON.parse(text)
+  assertSafe(value, secrets)
+  return value
 }
 
 function streamChunks(text: string, secrets: Set<string>): string[] {
@@ -115,7 +129,7 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
       .map((line) => line.slice(5).trimStart())
       .join('\n')
     if (!data) continue
-    const event: unknown = JSON.parse(data)
+    const event: unknown = parseJSON(data, secrets)
     assertSafe(event, secrets)
     if (!event || typeof event !== 'object' || !('type' in event)) throw new Error('Invalid SSE event')
     if (lastType === 'message_stop' || event.type === 'error') throw new Error('Invalid Anthropic stream completion')
@@ -220,8 +234,9 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
 function checkRoute(method: string | undefined, path: string, source: Provenance['source']): void {
   const url = new URL(path, 'http://127.0.0.1')
   if (url.origin !== 'http://127.0.0.1' || url.hash) throw new Error('Unexpected cassette request route')
-  if (source !== 'openai' && method === 'POST' && path === '/v1/messages') return
-  if (source === 'anthropic') throw new Error('Unexpected cassette request route')
+  if ((source === 'anthropic' || source === 'synthetic') && method === 'POST' && path === '/v1/messages') return
+  if ((source === 'gemini' || source === 'synthetic') && method === 'POST' && geminiPath.test(path)) return
+  if (source === 'anthropic' || source === 'gemini') throw new Error('Unexpected cassette request route')
   if (
     method === 'POST' &&
     !url.search &&
@@ -315,10 +330,12 @@ function responseBody(
   secrets: Set<string>
 ): Interaction['response']['body'] {
   const path = request.path
+  const gemini = geminiPath.test(path)
   const fields = Array.isArray(request.body.fields) ? request.body.fields : []
   const field = (name: string) => fields.find((item) => Array.isArray(item) && item[0] === name)?.[1]
-  const streaming =
-    request.method === 'GET'
+  const streaming = gemini
+    ? path.endsWith(':streamGenerateContent?alt=sse')
+    : request.method === 'GET'
       ? new URL(path, 'http://127.0.0.1').searchParams.get('stream') === 'true'
       : request.body.stream === true || field('stream') === 'true'
   if (streaming !== (contentType === 'text/event-stream')) throw new CassetteFailure('response')
@@ -326,10 +343,20 @@ function responseBody(
   if (contentType === 'text/event-stream')
     return {
       kind: 'sse',
-      chunks: path === '/v1/messages' ? streamChunks(text, secrets) : openaiStream(text, path, safe),
+      chunks:
+        path === '/v1/messages'
+          ? streamChunks(text, secrets)
+          : gemini
+            ? geminiStreamChunks(text, (frame) => safeJson(frame, safe), safe)
+            : openaiStream(text, path, safe),
     }
   if (path === '/v1/messages') throw new CassetteFailure('response')
-  if (contentType === 'application/json') return { kind: 'json', value: openaiJson(text, path, safe) }
+  if (contentType === 'application/json') {
+    if (!gemini) return { kind: 'json', value: openaiJson(text, path, safe) }
+    const value = safeJson(text, safe)
+    validateGeminiJSON(path, value, safe)
+    return { kind: 'json', value }
+  }
   if (['text/plain', 'text/vtt', 'application/x-subrip'].includes(contentType) && path === '/v1/audio/transcriptions') {
     safe(text)
     return { kind: 'text', text }
@@ -435,7 +462,7 @@ async function serve(
 
 export async function startReplay({ path }: { path: string }) {
   if ((await stat(path)).size > MAX_BYTES * 2) throw new Error('Cassette exceeds size limit')
-  const cassette = cassetteSchema.parse(JSON.parse(await readFile(path, 'utf8')))
+  const cassette = cassetteSchema.parse(parseJSON(await readFile(path, 'utf8'), new Set()))
   assertSafe(cassette, new Set())
   for (const interaction of cassette.interactions) {
     checkRoute(interaction.request.method, interaction.request.path, cassette.provenance.source)
@@ -473,13 +500,20 @@ export async function startRecorder(options: {
   secrets?: string[]
 }) {
   const provenance = provenanceSchema.parse(options.provenance)
-  const upstream = new URL(options.upstreamURL)
+  let upstream: URL
+  try {
+    upstream = new URL(options.upstreamURL)
+  } catch {
+    throw new Error('Unsupported recording upstream')
+  }
   const validOrigin =
     provenance.source === 'anthropic'
       ? upstream.origin === 'https://api.anthropic.com'
-      : provenance.source === 'openai'
-        ? upstream.origin === 'https://api.openai.com'
-        : upstream.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(upstream.hostname)
+      : provenance.source === 'gemini'
+        ? upstream.origin === 'https://generativelanguage.googleapis.com'
+        : provenance.source === 'openai'
+          ? upstream.origin === 'https://api.openai.com'
+          : upstream.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(upstream.hostname)
   if (
     !validOrigin ||
     upstream.username ||
@@ -536,9 +570,12 @@ export async function startRecorder(options: {
           await result.body?.cancel()
           throw new CassetteFailure('response')
         }
-        for (const key of credentialHeaders) {
+        for (const key of [...credentialHeaders, 'set-cookie']) {
           const secret = result.headers.get(key)
-          if (secret) secrets.add(secret)
+          if (secret) {
+            secrets.add(secret)
+            secrets.add(secret.replace(/^Bearer\s+/i, ''))
+          }
         }
         const responseHeaders = interactionSchema.shape.response.shape.headers.parse({
           'content-type': result.headers.get('content-type')!.split(';')[0].trim(),

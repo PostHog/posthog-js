@@ -1,0 +1,75 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-23T04:03:57.844Z",
+    "providerSdkVersion": "1.52.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Call describe_shape for a blue triangle with three sides."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "describe_shape",
+                  "description": "Describe an artificial shape.",
+                  "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                      "color": {
+                        "type": "STRING"
+                      },
+                      "sides": {
+                        "type": "INTEGER"
+                      }
+                    },
+                    "required": ["color", "sides"]
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "allowedFunctionNames": ["describe_shape"],
+              "mode": "ANY"
+            }
+          },
+          "generationConfig": {
+            "maxOutputTokens": 256
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": {
+          "kind": "sse",
+          "chunks": [
+            "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"describe_shape\",\"args\": {\"sides\": 3,\"color\": \"blue\"},\"id\": \"call_388245\"},\"thoughtSignature\": \"EnEKbwFpFH0Ts+XiQe03yxGba0pLLd5PVpww6lf8bK9iSFOcKLxQrP86AgHcC1Qb0H7Hg6F9IOS3qtwtcOCRh795ELDhn40ZzoPC0WTQmxsQ8dnEnk6WdbFjYfWJd1D53RnhSL6MU9ab5sQ5DDDs1NmzaA==\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 67,\"candidatesTokenCount\": 20,\"totalTokenCount\": 87,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 67}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.1-flash-lite\",\"responseId\": \"rk-zapiBBLfVz7IP3L7zqQM\"}\n\n",
+            "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 67,\"candidatesTokenCount\": 20,\"totalTokenCount\": 87,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 67}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.1-flash-lite\",\"responseId\": \"rk-zapiBBLfVz7IP3L7zqQM\"}\n\n"
+          ]
+        }
+      }
+    }
+  ]
+}
