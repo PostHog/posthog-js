@@ -62,13 +62,12 @@ class BrowserClientKeyValueStore implements KeyValueStore {
 const REMOTE_CONFIG_EVENT = 'extensionsRemoteConfig'
 
 /** A capability view of a PostHog instance. The instance owns extension lifecycle. */
-export class BrowserClientAdapter implements Client, Disposable {
+export class BrowserClientAdapter implements Client {
     readonly kv: KeyValueStore
     readonly onEvent: Listener<CapturedEventInfo>
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     private readonly _logger: Logger
-    private _disposed = false
 
     constructor(readonly instance: PostHog) {
         this._logger = logger
@@ -88,7 +87,6 @@ export class BrowserClientAdapter implements Client, Disposable {
             return createDisposable(unsubscribe)
         }
         this.onRemoteConfig = (handler) => {
-            if (this._disposed) return createDisposable(() => {})
             const invoke = (result: RemoteConfigResult): void => {
                 try {
                     handler(result)
@@ -151,7 +149,6 @@ export class BrowserClientAdapter implements Client, Disposable {
     }
 
     get canCapture(): boolean {
-        if (this._disposed || this.instance._isBrowserClientClosing?.()) return false
         // Older cores have no is_capturing() or cookieless mode.
         return isFunction(this.instance.is_capturing) ? this.instance.is_capturing() : !this.isOptedOut
     }
@@ -163,7 +160,6 @@ export class BrowserClientAdapter implements Client, Disposable {
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined {
-        if (this._disposed) return undefined
         let extension: Extension | undefined
         switch (name) {
             case FeatureFlagsExtension:
@@ -180,11 +176,7 @@ export class BrowserClientAdapter implements Client, Disposable {
                 extension = this.instance.autocapture
                 break
         }
-        // Historical cores own these instances without the shared lifecycle state.
-        return extension &&
-            (!isFunction(this.instance._isExtensionActive) || this.instance._isExtensionActive(extension))
-            ? (extension as T)
-            : undefined
+        return extension as T | undefined
     }
 
     capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
@@ -204,11 +196,6 @@ export class BrowserClientAdapter implements Client, Disposable {
 
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
         return createDisposable(this.instance._registerExtensionEventProperties(producer))
-    }
-
-    /** Retire this view without releasing host-owned extensions or caller-owned subscriptions. */
-    dispose(): void {
-        this._disposed = true
     }
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {

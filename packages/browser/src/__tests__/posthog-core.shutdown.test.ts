@@ -1,4 +1,3 @@
-import type { Extension } from '@posthog/browser-common'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { PostHog } from '../posthog-core'
@@ -53,7 +52,7 @@ describe('shutdown()', () => {
     })
 
     it('disposes core-owned feature flags', async () => {
-        const featureFlagsDispose = vi.spyOn(instance.featureFlags!, 'dispose')
+        const featureFlagsDispose = vi.spyOn(instance.featureFlags!, 'destroy')
 
         await instance.shutdown()
 
@@ -76,20 +75,12 @@ describe('shutdown()', () => {
         const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
         const host = instance._getBrowserClientAdapter()
         vi.spyOn(host.logger, 'error').mockImplementation(() => {})
-        await instance['_setupExtension']({
-            name: 'failing',
-            setup: vi.fn(),
-            dispose: () => {
-                order.push('failing')
-                throw new Error('disposal failure')
-            },
+        vi.spyOn(instance.logs!, 'dispose').mockImplementation(() => {
+            order.push('failing')
+            throw new Error('disposal failure')
         })
-        await instance['_setupExtension']({
-            name: 'survivor',
-            setup: vi.fn(),
-            dispose: () => {
-                order.push('survivor')
-            },
+        vi.spyOn(instance.surveys!, 'dispose').mockImplementation(() => {
+            order.push('survivor')
         })
 
         await expect(instance.shutdown()).resolves.toBeUndefined()
@@ -99,19 +90,49 @@ describe('shutdown()', () => {
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
 
+    it.each(['recording', 'logs-flush', 'metrics-flush', 'metrics-dispose', 'request-unload'])(
+        'continues cleanup after %s throws',
+        async (failure) => {
+            const unsubscribe = vi.fn()
+            instance['_featureFlagsReloadingUnsubscribe'] = unsubscribe
+            const targets = {
+                recording: vi.spyOn(instance.sessionRecording!, 'dispose'),
+                'logs-flush': vi.spyOn(instance.logs!, 'flushLogs'),
+                'metrics-flush': vi.spyOn(instance.metrics!, 'flush'),
+                'metrics-dispose': vi.spyOn(instance.metrics!, 'dispose'),
+                'request-unload': vi.spyOn(instance._requestQueue!, 'unload'),
+            }
+            targets[failure as keyof typeof targets].mockImplementation(() => {
+                throw new Error('cleanup failed')
+            })
+            const surveys = vi.spyOn(instance.surveys!, 'dispose')
+            const flags = vi.spyOn(instance.featureFlags, 'destroy')
+            const retryQueue = vi.spyOn(instance._retryQueue!, 'unload')
+            const persistence = vi.spyOn(instance.persistence!, 'destroy')
+
+            await expect(instance.shutdown()).resolves.toBeUndefined()
+
+            expect(surveys).toHaveBeenCalledTimes(1)
+            expect(unsubscribe).toHaveBeenCalledTimes(1)
+            expect(flags).toHaveBeenCalledTimes(1)
+            expect(targets['request-unload']).toHaveBeenCalledTimes(1)
+            expect(retryQueue).toHaveBeenCalledTimes(1)
+            expect(persistence).toHaveBeenCalledTimes(1)
+        }
+    )
+
     it('cleans pending setup immediately and does not delay queue flushing', async () => {
         const requestQueueUnload = vi.spyOn(instance._requestQueue!, 'unload')
         const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
-        const pendingSetup: Extension = {
-            name: 'pending-setup',
-            setup: () => new Promise<void>(() => undefined),
-            dispose: vi.fn(),
-        }
-        void instance['_setupExtension'](pendingSetup)
+        vi.spyOn(instance.logs!, 'setup').mockImplementation(() => new Promise<void>(() => undefined))
+        const dispose = vi.spyOn(instance.logs!, 'dispose')
+        const tasks: Array<() => void> = []
+        instance['_enrollExtension'](instance.logs!, tasks)
+        tasks[0]()
 
         await expect(instance.shutdown(0)).resolves.toBeUndefined()
 
-        expect(pendingSetup.dispose).toHaveBeenCalledTimes(1)
+        expect(dispose).toHaveBeenCalledTimes(1)
         expect(requestQueueUnload).toHaveBeenCalledTimes(1)
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
@@ -121,17 +142,30 @@ describe('shutdown()', () => {
         vi.spyOn(instance._requestQueue!, 'unload').mockImplementation(() => {
             order.push('request-unload')
         })
-        await instance['_setupExtension']({
-            name: 'synchronous-cleanup',
-            setup: vi.fn(),
-            dispose: () => {
-                order.push('extension-dispose')
-            },
+        vi.spyOn(instance.logs!, 'dispose').mockImplementation(() => {
+            order.push('extension-dispose')
         })
 
         await instance.shutdown()
 
         expect(order).toEqual(['extension-dispose', 'request-unload'])
+    })
+
+    it('cancels a time-sliced initialization continuation', async () => {
+        vi.useFakeTimers()
+        const now = vi.spyOn(performance, 'now').mockReturnValue(0).mockReturnValueOnce(31)
+        const initialize = vi.fn()
+        try {
+            instance.config.__preview_deferred_init_extensions = true
+            instance['_processInitTaskQueue']([initialize], 0)
+            expect(initialize).not.toHaveBeenCalled()
+            await instance.shutdown()
+            vi.advanceTimersByTime(1)
+            expect(initialize).not.toHaveBeenCalled()
+        } finally {
+            now.mockRestore()
+            vi.useRealTimers()
+        }
     })
 
     it('does not throw when called before the client has loaded', async () => {

@@ -282,7 +282,7 @@ describe('__extensionClasses enrollment', () => {
         await vi.waitFor(() => {
             expect(dispose).toHaveBeenCalledTimes(1)
         })
-        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose extension "logs"', disposeError)
     })
 
     it('bundles logs through the shared lifecycle', () => {
