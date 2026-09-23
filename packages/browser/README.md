@@ -29,7 +29,7 @@ The slim core and the extension bundles are ES modules only, because a bundler m
 
 ## Slim build
 
-Use the slim build when the SDK is on the critical rendering path. The core carries no extension, so your bundler keeps out every extension you do not pass. Measured on version 1.434.11 with esbuild, an app bundle that imports the default build is about 99 KB after minification and gzip. The same app with the slim core alone is about 50 KB. Each extension you add moves the number back up.
+Use the slim build when the SDK is on the critical rendering path. The core carries no extension, so your bundler keeps out every extension you do not pass. Measured with esbuild on version 1.434.11, an app bundle with the default build is about 99 KB after minification and gzip, and about 50 KB with the slim core alone. Each extension you add moves the number back up.
 
 Pass the extension bundles your site uses through `__extensionClasses`:
 
@@ -68,7 +68,7 @@ export const Providers = ({ children }: { children: ReactNode }) => (
 )
 ```
 
-The client works as it is at runtime. The cast is a TypeScript limitation: the slim bundle publishes its own declarations, and `PostHog` is a class with private members, so TypeScript compares the two declarations by name rather than by shape.
+The client works as it is at runtime. The cast covers a TypeScript limitation: the slim bundle publishes its own `PostHog` declaration, which TypeScript treats as a different type from the canonical one.
 
 ## Surveys and capture
 
