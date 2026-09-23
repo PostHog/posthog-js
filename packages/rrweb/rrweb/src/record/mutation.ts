@@ -344,33 +344,31 @@ export default class MutationBuffer {
     const startedAt = nowMs();
     const startGeneration = getSuspensionGeneration();
 
-    // A full snapshot drains the buffers inside its own tracking window (the
-    // post-snapshot unlock). That window already owns the budget and the
-    // deferred queue, so nesting one here would drain its links before it
-    // emitted them.
-    if (isSnapshotCostTrackingActive()) {
-      try {
-        this.processBufferedMutations();
-      } finally {
-        recordMutationCost(nowMs() - startedAt, startGeneration);
-      }
-      return;
-    }
-
     // An added subtree is serialized in full, stylesheets included, and a page
     // that re-creates a big same-origin subtree pays that whole cost again on
     // every rebuild. Give the batch the same stylesheet budget a full snapshot
     // gets, so the sheets past the cap are inlined from idle time instead of
-    // freezing this callback.
+    // freezing this callback. Only added and moved nodes are serialized, so an
+    // attribute- or text-only batch skips the bookkeeping. A full snapshot
+    // drains the buffers inside its own window (the post-snapshot unlock); that
+    // window already owns the budget and the deferred queue, so nesting one
+    // here would drain its links before it emitted them.
+    const budgeted =
+      (this.addedSet.size > 0 || this.movedSet.size > 0) &&
+      !isSnapshotCostTrackingActive();
     let deferredLinks: HTMLLinkElement[] = [];
-    beginSnapshotCostTracking(this.inlineStylesheetBudgetRules, {
-      isSnapshot: false,
-    });
+    if (budgeted) {
+      beginSnapshotCostTracking(this.inlineStylesheetBudgetRules, {
+        isSnapshot: false,
+      });
+    }
     try {
       this.processBufferedMutations();
     } finally {
-      endSnapshotCostTracking();
-      deferredLinks = takeDeferredStylesheetLinks();
+      if (budgeted) {
+        endSnapshotCostTracking();
+        deferredLinks = takeDeferredStylesheetLinks();
+      }
       recordMutationCost(nowMs() - startedAt, startGeneration);
     }
     // After the mutation is emitted: the deferred `_cssText` arrives as an

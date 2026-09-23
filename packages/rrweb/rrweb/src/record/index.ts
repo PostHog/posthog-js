@@ -341,14 +341,12 @@ function record<T = eventWithTime>(
     );
     deferredStylesheetInlinings.add(inlining);
   };
-  // A queue's own emit can synchronously open or drain another, so iterate a
-  // copy rather than the live set.
-  const forEachDeferredStylesheetInlining = (
-    fn: (inlining: DeferredStylesheetInlining) => void,
-  ) => {
+  // A queue's own emit can synchronously open or drain another, so drain the
+  // set before running anything against it.
+  const takeDeferredStylesheetInlinings = () => {
     const inlinings = Array.from(deferredStylesheetInlinings);
     deferredStylesheetInlinings.clear();
-    inlinings.forEach(fn);
+    return inlinings;
   };
   const {
     emit,
@@ -717,7 +715,11 @@ function record<T = eventWithTime>(
       // snapshot is about to replace, so drop it rather than emitting stale mutations.
       // No sheet is lost: this snapshot re-serializes every link, so a still-attached
       // sheet is either inlined within the new budget or re-deferred into a new queue.
-      forEachDeferredStylesheetInlining((inlining) => inlining.cancel());
+      callAllSafely(
+        takeDeferredStylesheetInlinings().map(
+          (inlining) => () => inlining.cancel(),
+        ),
+      );
 
       // When we take a full snapshot, old tracked StyleSheets need to be removed.
       stylesheetManager.reset();
@@ -827,14 +829,13 @@ function record<T = eventWithTime>(
       on(
         'pagehide',
         () => {
-          forEachDeferredStylesheetInlining((inlining) => {
-            try {
-              inlining.flush();
-            } catch (e) {
-              // flush drives the user's emit/mask callbacks; their throw must
-              // not surface on the host page's pagehide dispatch
-            }
-          });
+          // flush drives the user's emit/mask callbacks; their throw must not
+          // surface on the host page's pagehide dispatch
+          callAllSafely(
+            takeDeferredStylesheetInlinings().map(
+              (inlining) => () => inlining.flush(),
+            ),
+          );
         },
         window,
       ),
@@ -1125,14 +1126,13 @@ function record<T = eventWithTime>(
     return () => {
       // finish the deferred CSS while the emit path is still wired up, so the
       // sheets this recording deferred don't silently vanish with it
-      forEachDeferredStylesheetInlining((inlining) => {
-        try {
-          inlining.flush();
-        } catch (e) {
-          // flush drives the user's emit/mask callbacks; their throw must not
-          // abort the teardown below and leak observers and listeners
-        }
-      });
+      // flush drives the user's emit/mask callbacks; their throw must not abort
+      // the teardown below and leak observers and listeners
+      callAllSafely(
+        takeDeferredStylesheetInlinings().map(
+          (inlining) => () => inlining.flush(),
+        ),
+      );
       callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

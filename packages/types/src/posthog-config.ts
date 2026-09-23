@@ -979,6 +979,7 @@ export interface SessionRecordingOptions {
      * ADVANCED: the largest `adds` payload, in bytes, that is not treated as a whole
      * subtree being re-serialized. Repeats beyond `__mutationOversizedAddBudget` are
      * dropped and the recording resyncs with a full snapshot.
+     * Only takes effect while the byte budget is off, which subsumes it.
      * Normally only altered alongside posthog support guidance.
      *
      * @default 1048576
@@ -988,7 +989,7 @@ export interface SessionRecordingOptions {
     /**
      * ADVANCED: how many oversized `adds` payloads are recorded before repeats are
      * dropped. One token is returned per full-snapshot interval. 0 drops every
-     * oversized add.
+     * oversized add. Only takes effect while the byte budget is off.
      * Normally only altered alongside posthog support guidance.
      *
      * @default 3

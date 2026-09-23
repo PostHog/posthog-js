@@ -20,6 +20,9 @@ export const DEFAULT_OVERSIZED_ADD_BYTES = 1024 * 1024
 // a rebuild loop stops after it has spent them.
 export const DEFAULT_OVERSIZED_ADD_BUDGET = 3
 
+const numberOr = (value: number | undefined, fallback: number, min: number): number =>
+    isNumber(value) && Number.isFinite(value) && value >= min ? value : fallback
+
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
     private _rateLimiter: BucketedRateLimiter<number>
@@ -64,24 +67,12 @@ export class MutationThrottler {
         this._bytesRefillRate = this._options.bytesRefillRate ?? DEFAULT_MUTATION_BYTES_REFILL_RATE
         this._byteBudgetDisabled = !Number.isFinite(this._bytesBucketSize) || this._bytesBucketSize <= 0
         this._byteTokens = this._bytesBucketSize
-        const oversizedAddBytes = this._options.oversizedAddBytes
-        this._oversizedAddBytes =
-            isNumber(oversizedAddBytes) && Number.isFinite(oversizedAddBytes) && oversizedAddBytes > 0
-                ? oversizedAddBytes
-                : DEFAULT_OVERSIZED_ADD_BYTES
-        const oversizedAddBudget = this._options.oversizedAddBudget
-        this._oversizedAddBudgetSize =
-            isNumber(oversizedAddBudget) && Number.isFinite(oversizedAddBudget) && oversizedAddBudget >= 0
-                ? oversizedAddBudget
-                : DEFAULT_OVERSIZED_ADD_BUDGET
+        this._oversizedAddBytes = numberOr(this._options.oversizedAddBytes, DEFAULT_OVERSIZED_ADD_BYTES, 1)
+        this._oversizedAddBudgetSize = numberOr(this._options.oversizedAddBudget, DEFAULT_OVERSIZED_ADD_BUDGET, 0)
         this._oversizedAddTokens = this._oversizedAddBudgetSize
-        const resyncIntervalMs = this._options.resyncIntervalMs
         // guard against 0 (the "scheduled snapshots disabled" config value) and other
         // non-positive values: a zero cooldown would take a full snapshot per dropped mutation
-        this._resyncIntervalMs =
-            isNumber(resyncIntervalMs) && Number.isFinite(resyncIntervalMs) && resyncIntervalMs > 0
-                ? resyncIntervalMs
-                : DEFAULT_MUTATION_RESYNC_INTERVAL_MS
+        this._resyncIntervalMs = numberOr(this._options.resyncIntervalMs, DEFAULT_MUTATION_RESYNC_INTERVAL_MS, 1)
     }
 
     private _refillByteBudget = () => {
@@ -179,24 +170,6 @@ export class MutationThrottler {
             }
         }
 
-        // A page that re-creates a large same-origin subtree - an embedded viewer's
-        // iframe, a heavy widget - re-serializes all of it on every rebuild, then
-        // stringifies and compresses the result. The byte budget below bounds that,
-        // but it is opt-in; this guard is always on and only drops repeats, so a
-        // one-off large add still reaches the player.
-        if (data.adds?.length) {
-            const addsBytes = estimateCompressedEventSize(data.adds)
-            if (addsBytes > this._oversizedAddBytes) {
-                this._refillOversizedAddBudget()
-                if (this._oversizedAddTokens <= 0) {
-                    this._options.onDroppedOversizedMutation?.(addsBytes)
-                    this._scheduleResync()
-                    return
-                }
-                this._oversizedAddTokens -= 1
-            }
-        }
-
         // Check if every part of the mutation is empty in which case there is nothing to do
         const mutationCount = this._numberOfChanges(data)
 
@@ -206,6 +179,18 @@ export class MutationThrottler {
         }
 
         if (this._byteBudgetDisabled) {
+            // With the byte budget off nothing bounds a page that re-creates a large
+            // same-origin subtree - an embedded viewer's iframe, a heavy widget - which
+            // re-serializes all of it on every rebuild, then stringifies and compresses
+            // the result. Drop only the repeats, so a one-off large add still reaches
+            // the player. The byte budget subsumes this when it is on, and measuring
+            // the payload twice would itself cost a walk of the added subtree.
+            const oversizedAddBytes = this._repeatedOversizedAddBytes(data)
+            if (oversizedAddBytes > 0) {
+                this._options.onDroppedOversizedMutation?.(oversizedAddBytes)
+                this._scheduleResync()
+                return
+            }
             return event
         }
 
@@ -219,6 +204,24 @@ export class MutationThrottler {
         this._byteTokens -= eventBytes
 
         return event
+    }
+
+    // Bytes in an `adds` payload large enough to be a whole subtree re-serialized,
+    // once the budget for those has run out. 0 when this batch is within budget.
+    private _repeatedOversizedAddBytes = (data: Partial<mutationCallbackParam>): number => {
+        if (!data.adds?.length) {
+            return 0
+        }
+        const addsBytes = estimateCompressedEventSize(data.adds)
+        if (addsBytes <= this._oversizedAddBytes) {
+            return 0
+        }
+        this._refillOversizedAddBudget()
+        if (this._oversizedAddTokens <= 0) {
+            return addsBytes
+        }
+        this._oversizedAddTokens -= 1
+        return 0
     }
 
     // A dropped mutation leaves the player's DOM stale until the next full snapshot. Ask for
