@@ -6,8 +6,10 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const script = new URL('./run-compliance.sh', import.meta.url).pathname
-for (const [scenario, exit] of [
+for (const [scenario, exit, mode = 'v0'] of [
     ['success', 0],
+    ['success', 0, 'v1'],
+    ['cli-and-cleanup-failed', 7],
     ['cli-failed', 7],
     ['missing-report', 1],
     ['bad-report', 1],
@@ -21,7 +23,7 @@ for (const [scenario, exit] of [
     ['startup-hung', 1],
     ['cleanup-hung', 1],
 ]) {
-    test(`compliance caller: ${scenario}`, (t) => {
+    test(`compliance caller (${mode}): ${scenario}`, (t) => {
         const root = mkdtempSync(join(tmpdir(), 'node-caller-test-'))
         t.after(() => rmSync(root, { recursive: true, force: true }))
         const bin = join(root, 'bin')
@@ -50,12 +52,12 @@ case "$1" in
                 empty-report) echo '{}' > "$CALLER_TEST_ROOT/reports/report.json" ;;
                 *) echo '{"run_id":"test-run"}' > "$CALLER_TEST_ROOT/reports/report.json" ;;
             esac
-            [[ "$CALLER_TEST_SCENARIO" != cli-failed ]] || exit 7
+            [[ "$CALLER_TEST_SCENARIO" != cli-failed && "$CALLER_TEST_SCENARIO" != cli-and-cleanup-failed ]] || exit 7
         fi ;;
     network)
         if [[ "$2" = rm ]]; then
             [[ "$CALLER_TEST_SCENARIO" != cleanup-hung ]] || /bin/sleep 30
-            [[ "$CALLER_TEST_SCENARIO" != cleanup-failed ]] || exit 1
+            [[ "$CALLER_TEST_SCENARIO" != cleanup-failed && "$CALLER_TEST_SCENARIO" != cli-and-cleanup-failed ]] || exit 1
         fi ;;
 esac
 `,
@@ -63,7 +65,7 @@ esac
         )
         writeFileSync(join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 })
         const started = Date.now()
-        const result = spawnSync('bash', [script, 'adapter:test', 'harness:test', 'v0', join(root, 'reports')], {
+        const result = spawnSync('bash', [script, 'adapter:test', 'harness:test', mode, join(root, 'reports')], {
             env: {
                 ...process.env,
                 PATH: `${bin}:${process.env.PATH}`,
@@ -83,11 +85,14 @@ esac
         assert.ok(!commands.includes('--publish'))
         assert.ok(commands.includes('network rm'))
         if (!scenario.startsWith('startup-')) {
-            assert.ok(commands.includes('check-report --report /reports/report.json --profile node-legacy'))
+            const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
+            assert.ok(commands.includes(`check-report --report /reports/report.json --profile ${profile}`))
+            assert.ok(commands.includes(`--profile ${profile} --timeout-ms`))
+            assert.ok(commands.includes(`POSTHOG_CAPTURE_MODE=${mode}`))
             assert.ok(commands.includes('--network none'))
             assert.equal(
                 readFileSync(join(root, 'reports/cli-exit.txt'), 'utf8').trim(),
-                scenario === 'cli-failed' ? '7' : scenario === 'run-hung' ? '124' : '0'
+                scenario.startsWith('cli-') ? '7' : scenario === 'run-hung' ? '124' : '0'
             )
         }
         if (scenario.endsWith('-hung')) {

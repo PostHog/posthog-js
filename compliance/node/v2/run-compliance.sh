@@ -30,19 +30,19 @@ cleanup() {
     status=$?
     trap - EXIT
     if "$adapter_created"; then
-        docker logs "$adapter" > "$reports/adapter.log" 2>&1 || status=1
-        docker rm -f "$adapter" > "$reports/adapter-cleanup.log" 2>&1 || status=1
+        docker logs "$adapter" > "$reports/adapter.log" 2>&1 || { ((status != 0)) || status=1; }
+        docker rm -f "$adapter" > "$reports/adapter-cleanup.log" 2>&1 || { ((status != 0)) || status=1; }
     fi
     if "$harness_created"; then
-        docker logs "$harness" > "$reports/harness.log" 2>&1 || status=1
-        docker rm -f "$harness" > "$reports/harness-cleanup.log" 2>&1 || status=1
+        docker logs "$harness" > "$reports/harness.log" 2>&1 || { ((status != 0)) || status=1; }
+        docker rm -f "$harness" > "$reports/harness-cleanup.log" 2>&1 || { ((status != 0)) || status=1; }
     fi
     if "$check_created"; then
-        docker logs "$check" > "$reports/report-check.log" 2>&1 || status=1
-        docker rm -f "$check" > "$reports/report-check-cleanup.log" 2>&1 || status=1
+        docker logs "$check" > "$reports/report-check.log" 2>&1 || { ((status != 0)) || status=1; }
+        docker rm -f "$check" > "$reports/report-check-cleanup.log" 2>&1 || { ((status != 0)) || status=1; }
     fi
     if "$network_created"; then
-        docker network rm "$network" > "$reports/network-cleanup.log" 2>&1 || status=1
+        docker network rm "$network" > "$reports/network-cleanup.log" 2>&1 || { ((status != 0)) || status=1; }
     fi
     exit "$status"
 }
