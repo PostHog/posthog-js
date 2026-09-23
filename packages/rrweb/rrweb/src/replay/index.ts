@@ -1826,6 +1826,12 @@ export class Replayer {
       ...this.legacy_missingNodeRetryMap,
     };
     const queue: addedNodeMutation[] = [];
+    /**
+     * A dialog appended while its subtree is detached (the large-add-batch
+     * path below) cannot show(): applyDialogToTopLevel needs a connected
+     * node. Hold such dialogs here and apply them after the reattach.
+     */
+    const pendingDialogs: Node[] = [];
 
     const appendNode = (mutation: addedNodeMutation) => {
       if (!this.iframe.contentDocument) {
@@ -1909,7 +1915,11 @@ export class Replayer {
       const afterAppend = (node: Node | RRNode, id: number) => {
         // Skip the plugin onBuild callback for virtual dom
         if (this.usingVirtualDom) return;
-        applyDialogToTopLevel(node);
+        if (node.nodeName === 'DIALOG' && !(node as Node).isConnected) {
+          pendingDialogs.push(node as Node);
+        } else {
+          applyDialogToTopLevel(node);
+        }
         for (const plugin of this.config.plugins || []) {
           if (plugin.onBuild) plugin.onBuild(node, { id, replayer: this });
         }
@@ -2073,7 +2083,9 @@ export class Replayer {
      * subtree, so the document pays that cost once, on reattach. Sibling
      * resolution is unaffected because nodes still insert into their real
      * parent. Skipped when the batch carries an iframe or document node:
-     * attaching those needs a live contentDocument.
+     * attaching those needs a live contentDocument. Note that on this path
+     * plugin onBuild hooks receive detached nodes (isConnected === false,
+     * element.sheet === null).
      */
     const detachedRoot = this.detachRootForLargeAddBatch(d, mirror);
 
@@ -2119,6 +2131,9 @@ export class Replayer {
           detachedRoot.nextSibling,
         );
       }
+      pendingDialogs.forEach((dialog) => {
+        applyDialogToTopLevel(dialog);
+      });
     }
 
     if (Object.keys(legacy_missingNodeMap).length) {

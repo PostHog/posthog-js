@@ -39,6 +39,7 @@ import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import hugeAddMutationEvents from './events/huge-add-mutation';
+import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
 import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
@@ -1038,6 +1039,26 @@ describe('replayer', function () {
       // the sibling-of-root add must land between #root and #d-span
       bodyOrder: ['root', 'c-span', 'd-span'],
     });
+  });
+
+  it('opens a modal dialog added inside a huge add mutation', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(hugeAddMutationDialogEvents)}`,
+    );
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const dialog = doc.querySelector('dialog');
+        return {
+          open: dialog.open,
+          isModal: dialog.matches('dialog:modal'),
+        };
+      })()
+    `);
+    expect(result).toEqual({ open: true, isModal: true });
   });
 
   it('replays same timestamp events in correct order', async () => {
