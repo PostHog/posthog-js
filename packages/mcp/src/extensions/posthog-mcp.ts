@@ -97,6 +97,12 @@ interface PreparedConversationState {
   outputInstructions: boolean
 }
 
+const PREPARED_CONVERSATION_STATE_KEY = '__posthogMcpConversationState'
+
+type PreparedToolCallWithConversationState = PreparedToolCall & {
+  [PREPARED_CONVERSATION_STATE_KEY]?: PreparedConversationState
+}
+
 /**
  * A `posthog-node` client with first-class MCP analytics. Use this when there is
  * no `Server`/`McpServer` to wrap (e.g. a custom HTTP or hono dispatcher): the
@@ -146,7 +152,6 @@ export class PostHogMCP extends PostHog {
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #enableConversationId: boolean
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
-  readonly #preparedConversationState = new WeakMap<PreparedToolCall, PreparedConversationState>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
@@ -375,7 +380,7 @@ export class PostHogMCP extends PostHog {
     // remedy for a collision is configuring a non-colliding `toolName`.
     const isFeedback =
       this.#feedbackOptions !== undefined && name === this.#feedbackToolName && options.originalTool == null
-    const preparedCall: PreparedToolCall = {
+    const preparedCall: PreparedToolCallWithConversationState = {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
       llmModel: resolvedModel?.model,
@@ -390,11 +395,13 @@ export class PostHogMCP extends PostHog {
       isMissingCapability: name === this.#missingCapabilityToolName,
       isFeedback,
       feedbackReport: isFeedback ? parseFeedbackReport(args, this.#feedbackOptions) : undefined,
+      // Keep the internal state serializable. Custom dispatchers can pass this
+      // value through workers or clone it before preparing the result.
+      [PREPARED_CONVERSATION_STATE_KEY]: {
+        minted: conversation.minted,
+        outputInstructions: this.#enableConversationId && ownership?.outputInstructions === true,
+      },
     }
-    this.#preparedConversationState.set(preparedCall, {
-      minted: conversation.minted,
-      outputInstructions: this.#enableConversationId && ownership?.outputInstructions === true,
-    })
     return preparedCall
   }
 
@@ -409,10 +416,13 @@ export class PostHogMCP extends PostHog {
    * the derived session value is kept.
    */
   prepareToolResult<TResult>(result: TResult, preparedCall: PreparedToolCall): PreparedToolResult<TResult> {
-    const state = this.#preparedConversationState.get(preparedCall)
+    const state = (preparedCall as PreparedToolCallWithConversationState)[PREPARED_CONVERSATION_STATE_KEY]
     const conversationId = preparedCall.conversationId
-    if (!conversationId || !state) {
+    if (!conversationId) {
       return { result, sessionId: preparedCall.sessionId, conversationId }
+    }
+    if (!state) {
+      return { result, sessionId: preparedCall.sessionId, conversationId: undefined }
     }
 
     let preparedResult: unknown = result

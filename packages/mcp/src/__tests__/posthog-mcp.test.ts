@@ -664,6 +664,38 @@ describe('PostHogMCP', () => {
       expect(prepared.conversationId).toBe(preparedCall.conversationId)
     })
 
+    it('preserves result preparation when the prepared call crosses a serialization boundary', () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
+      const transportedCall = JSON.parse(JSON.stringify(preparedCall))
+      const prepared = posthog.prepareToolResult(
+        { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } },
+        transportedCall
+      )
+
+      expect(prepared.result.content.at(-1)).toEqual({
+        type: 'text',
+        text: JSON.stringify({ conversation_id: preparedCall.conversationId }),
+      })
+      expect(prepared.result.structuredContent[MCP_INSTRUCTIONS_KEY]).toEqual({
+        conversation_id: preparedCall.conversationId,
+      })
+      expect(prepared.conversationId).toBe(preparedCall.conversationId)
+    })
+
+    it('omits conversation capture when prepared delivery state is missing', () => {
+      const toolResult = { content: [] }
+      const prepared = posthog.prepareToolResult(toolResult, {
+        sessionId: 'ses_123',
+        conversationId,
+        isMissingCapability: false,
+        isFeedback: false,
+      })
+
+      expect(prepared).toEqual({ result: toolResult, sessionId: 'ses_123', conversationId: undefined })
+      expect(prepared.result).toBe(toolResult)
+    })
+
     it('preserves application-owned structured instructions', () => {
       const tool = {
         ...tools[0],
