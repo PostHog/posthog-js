@@ -156,7 +156,7 @@ describe('deferred extension initialization', () => {
                 const cached = [{ id: 'cached', type: SurveyType.API }]
                 posthog.register({ [SURVEYS]: cached, [SURVEYS_LOADED_AT]: Date.now() })
                 const callback = vi.fn()
-                expect(client.getExtension('surveys')).toBeUndefined()
+                expect(client.getExtension('surveys')).toBe(posthog.surveys)
                 posthog.getSurveys(callback)
                 expect(callback).toHaveBeenCalledWith([], {
                     isLoaded: false,

@@ -115,7 +115,6 @@ describe('BrowserClientAdapter', () => {
             { survey_id: 'test' },
             expect.objectContaining({ transport: 'sendBeacon', send_instantly: true })
         )
-        client.dispose()
     })
 
     it('delegates session notifications without reading or creating a session', () => {
@@ -137,9 +136,10 @@ describe('BrowserClientAdapter', () => {
         subscription.dispose()
         subscription.dispose()
         expect(unsubscribe).toHaveBeenCalledTimes(1)
-        client.dispose()
-        client.onSession(listener)
-        expect(instance.onSessionId).toHaveBeenCalledTimes(1)
+        const nextSubscription = client.onSession(listener)
+        expect(instance.onSessionId).toHaveBeenCalledTimes(2)
+        nextSubscription.dispose()
+        expect(unsubscribe).toHaveBeenCalledTimes(2)
     })
 
     it('isolates a failing session listener', () => {
@@ -156,7 +156,6 @@ describe('BrowserClientAdapter', () => {
             })
         ).not.toThrow()
         expect(log).toHaveBeenCalledWith('Browser extension session listener failed', expect.any(Error))
-        client.dispose()
         log.mockRestore()
     })
 
@@ -606,7 +605,6 @@ describe('BrowserClientAdapter', () => {
         expect(send).toHaveBeenCalledWith(
             expect.objectContaining({ url: 'https://api.example.com/api/surveys/?token=rewritten-token' })
         )
-        client.dispose()
     })
 
     it('uses the regular API target by default and resolves dropped requests', async () => {
