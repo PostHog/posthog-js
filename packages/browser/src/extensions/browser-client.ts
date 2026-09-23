@@ -74,9 +74,6 @@ export class BrowserClientAdapter implements Client {
         this._logger = logger
         this.kv = new BrowserClientKeyValueStore(instance)
         this.onSession = (handler) => {
-            if (this._disposed) {
-                return createDisposable(() => {})
-            }
             return createDisposable(
                 this.instance.onSessionId((sessionId) => {
                     try {
