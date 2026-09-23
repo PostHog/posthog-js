@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import {
@@ -174,6 +176,126 @@ describe('local evaluation', () => {
     expect(await posthog.getFeatureFlag('distinct-id-flag', 'some-distinct-id')).toEqual(true)
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  describe('holdouts', () => {
+    // Mirrors the server: a holdout is resolved before the release conditions, so a held-out
+    // value is excluded from the flag's targeting rather than bucketed into a variant.
+    const holdoutFlag = (exclusionPercentage?: number, rolloutPercentage = 100): any => ({
+      flags: [
+        {
+          id: 1,
+          name: 'Experiment Flag',
+          key: 'experiment-flag',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: rolloutPercentage }],
+            multivariate: {
+              variants: [
+                { key: 'control', rollout_percentage: 50 },
+                { key: 'test', rollout_percentage: 50 },
+              ],
+            },
+            ...(exclusionPercentage === undefined
+              ? {}
+              : { holdout: { id: 727, exclusion_percentage: exclusionPercentage } }),
+          },
+        },
+      ],
+    })
+
+    const newPosthog = (): PostHog =>
+      new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+    const distinctIds = Array.from({ length: 20 }, (_, index) => `user_${index + 1}`)
+
+    it('excludes every distinct id at 100%', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(100) }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 5)) {
+        expect(await posthog.getFeatureFlag('experiment-flag', distinctId)).toEqual('holdout-727')
+      }
+    })
+
+    it('excludes nobody at 0%', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(0) }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 5)) {
+        expect(['control', 'test']).toContain(await posthog.getFeatureFlag('experiment-flag', distinctId))
+      }
+    })
+
+    it('is resolved before the release conditions', async () => {
+      // The flag releases to nobody, so without the holdout this returns false.
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(100, 0) }))
+      posthog = newPosthog()
+
+      expect(await posthog.getFeatureFlag('experiment-flag', 'user_1')).toEqual('holdout-727')
+    })
+
+    // A holdout we cannot interpret must fall through to normal evaluation. The damaging
+    // reading is the opposite one: a NaN percentage makes every hash comparison false, which
+    // silently holds out 100% of traffic on a flag the server evaluates normally.
+    it.each([
+      ['a null id', { id: null, exclusion_percentage: 100 }],
+      ['a null percentage', { id: 727, exclusion_percentage: null }],
+      ['a non-numeric percentage', { id: 727, exclusion_percentage: 'ten' }],
+      ['a missing percentage', { id: 727 }],
+    ])('ignores a holdout with %s', async (_, holdout) => {
+      const flags = holdoutFlag(100)
+      flags.flags[0].filters.holdout = holdout
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 3)) {
+        expect(['control', 'test']).toContain(await posthog.getFeatureFlag('experiment-flag', distinctId))
+      }
+    })
+
+    it('buckets the same people the server does', async () => {
+      // The server hashes `holdout-<distinct_id>`. Pinning the membership set guards the string
+      // construction: reusing the flag rollout hash, which joins with a dot, still looks uniform
+      // and deterministic while holding out different people.
+      const exclusionPercentage = 20
+      // Hashed independently of the SDK, so this asserts parity with the server rather than
+      // with our own implementation of it.
+      // Written as a parsed literal because the hex form is not exactly representable as a
+      // double, which the linter rejects. Same value the SDK divides by.
+      const longScale = parseInt('fffffffffffffff', 16)
+      const serverHash = (prefix: string, distinctId: string): number =>
+        parseInt(createHash('sha1').update(`${prefix}${distinctId}`).digest('hex').slice(0, 15), 16) / longScale
+
+      const expected: string[] = []
+      const dotJoined: string[] = []
+      for (const distinctId of distinctIds) {
+        if (serverHash('holdout-', distinctId) <= exclusionPercentage / 100) {
+          expected.push(distinctId)
+        }
+        if (serverHash('holdout.', distinctId) <= exclusionPercentage / 100) {
+          dotJoined.push(distinctId)
+        }
+      }
+      // Guard the guard: if these ever coincide the test would pass with the bug present.
+      expect(expected).not.toEqual(dotJoined)
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(exclusionPercentage) }))
+      posthog = newPosthog()
+
+      const heldOut: string[] = []
+      for (const distinctId of distinctIds) {
+        if ((await posthog.getFeatureFlag('experiment-flag', distinctId)) === 'holdout-727') {
+          heldOut.push(distinctId)
+        }
+      }
+
+      expect(heldOut).toEqual(expected)
+    })
   })
 
   describe('early exit', () => {

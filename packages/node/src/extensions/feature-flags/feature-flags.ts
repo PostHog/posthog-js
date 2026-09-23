@@ -3,6 +3,7 @@ import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchRespo
 import {
   getFeatureFlagHash,
   getFeatureFlagVariant,
+  getHoldoutVariant,
   getFeatureFlagVariantLookupTable,
   InconclusiveMatchError,
   matchFeatureFlagProperty,
@@ -521,6 +522,14 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+
+    // Holdouts are resolved before the release conditions, so a held-out value is excluded
+    // from the flag's targeting rather than being bucketed into a variant.
+    const holdoutVariant = await getHoldoutVariant(flagFilters.holdout, bucketingValue)
+    if (holdoutVariant !== undefined) {
+      return holdoutVariant
+    }
+
     const flagConditions = flagFilters.groups || []
     const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
