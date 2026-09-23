@@ -258,6 +258,50 @@ describe('local evaluation', () => {
       }
     })
 
+    it('buckets a group-aggregated flag by the group key, not the distinct id', async () => {
+      // The server hashes holdouts with the flag-level aggregation, so a group flag holds out
+      // whole groups. The ids below are chosen so that hashing the distinct id instead fails in
+      // both directions: at 30%, company_6 is held out and user_1 is not, while user_5 is held
+      // out and company_1 is not.
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                name: 'Group Experiment Flag',
+                key: 'group-experiment-flag',
+                active: true,
+                filters: {
+                  aggregation_group_type_index: 0,
+                  groups: [{ properties: [], rollout_percentage: 100 }],
+                  multivariate: {
+                    variants: [
+                      { key: 'control', rollout_percentage: 50 },
+                      { key: 'test', rollout_percentage: 50 },
+                    ],
+                  },
+                  holdout: { id: 727, exclusion_percentage: 30 },
+                },
+              },
+            ],
+            group_type_mapping: { '0': 'company' },
+          },
+        })
+      )
+      posthog = newPosthog()
+
+      const evaluate = (distinctId: string, company: string): Promise<any> =>
+        posthog.getFeatureFlag('group-experiment-flag', distinctId, { groups: { company } })
+
+      // Held-out group, distinct id that is not held out on its own.
+      expect(await evaluate('user_1', 'company_6')).toEqual('holdout-727')
+      // Non-held-out group, distinct id that would be held out on its own.
+      expect(['control', 'test']).toContain(await evaluate('user_5', 'company_1'))
+      // Two people in the same group land in the same arm.
+      expect(await evaluate('user_5', 'company_6')).toEqual('holdout-727')
+    })
+
     it('buckets the same people the server does', async () => {
       // The server hashes `holdout-<distinct_id>`. Pinning the membership set guards the string
       // construction: reusing the flag rollout hash, which joins with a dot, still looks uniform
