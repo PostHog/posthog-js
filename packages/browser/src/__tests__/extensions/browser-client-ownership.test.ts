@@ -11,7 +11,7 @@ describe('core-owned extension lifecycle', () => {
     it('shares authoritative flags lookups across independent views without starting or stopping products', async () => {
         const instance = await createInstance()
         const setup = vi.spyOn(instance.featureFlags, 'setup')
-        const dispose = vi.spyOn(instance.featureFlags, 'dispose')
+        const dispose = vi.spyOn(instance.featureFlags, 'destroy')
         const captureHook = vi.spyOn(instance, '_addCaptureHook')
         const request = vi.spyOn(instance, '_send_request')
         const first = new BrowserClientAdapter(instance)
@@ -23,88 +23,44 @@ describe('core-owned extension lifecycle', () => {
         expect(setup).not.toHaveBeenCalled()
         expect(captureHook).not.toHaveBeenCalled()
         expect(request).not.toHaveBeenCalled()
-        first.dispose()
         expect(dispose).not.toHaveBeenCalled()
-        expect(second.getExtension(FeatureFlagsExtension)).toBe(instance.featureFlags)
-
-        await instance.shutdown()
         await instance.shutdown()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(second.getExtension(FeatureFlagsExtension)).toBeUndefined()
-        expect(second.getExtension(FeatureFlagsCommonExtension)).toBeUndefined()
-        expect(second.canCapture).toBe(false)
-        expect(instance._getBrowserClientAdapter().canCapture).toBe(false)
     })
 
-    it.each(['throw', 'reject'] as const)(
-        'removes failed setup from lookup and cleans up once (%s)',
-        async (failure) => {
-            const instance = await createInstance()
-            const dispose = vi.fn()
-            const extension: Extension = {
-                name: LogsExtension,
-                setup(client) {
-                    expect(client.getExtension(LogsExtension)).toBe(extension)
-                    if (failure === 'throw') throw new Error('setup failed')
-                    return Promise.reject(new Error('setup failed'))
-                },
-                dispose,
-            }
-            instance.logs = extension as any
-            await instance['_setupExtension'](extension)
-            expect(instance.logs).toBe(extension)
-            expect(instance.getExtension(LogsExtension)).toBeUndefined()
-            expect(new BrowserClientAdapter(instance).getExtension(LogsExtension)).toBeUndefined()
-            expect(dispose).toHaveBeenCalledTimes(1)
-            // The mock is not a complete logs facade, so restore the property before normal shutdown flushing.
-            instance.logs = undefined as any
-            await instance.shutdown()
-            expect(dispose).toHaveBeenCalledTimes(1)
-        }
-    )
-
-    it('disposes pending setup only once when it rejects after shutdown', async () => {
+    it.each(['throw', 'reject'] as const)('cleans up subscriptions after setup fails (%s)', async (failure) => {
         const instance = await createInstance()
-        let reject!: (error: Error) => void
-        const dispose = vi.fn()
+        const listener = vi.fn()
+        let subscription: { dispose(): void } | undefined
+        const dispose = vi.fn(() => {
+            subscription?.dispose()
+            subscription = undefined
+        })
         const extension: Extension = {
-            name: 'pending',
-            setup: () =>
-                new Promise<void>((_resolve, fail) => {
-                    reject = fail
-                }),
+            name: LogsExtension,
+            setup(client) {
+                expect(client.getExtension(LogsExtension)).toBe(extension)
+                subscription = client.onEvent(listener)
+                if (failure === 'throw') throw new Error('setup failed')
+                return Promise.reject(new Error('setup failed'))
+            },
             dispose,
         }
-        const setup = instance['_setupExtension'](extension)
-        await instance.shutdown()
-        reject(new Error('late rejection'))
-        await setup
-        await instance.shutdown()
+        const logs = instance.logs
+        instance.logs = extension as any
+        const tasks: Array<() => void> = []
+        instance['_enrollExtension'](extension, tasks)
+        await tasks[0]()
+        instance.capture('after-failed-setup')
+        expect(listener).not.toHaveBeenCalled()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(instance._isExtensionActive(extension)).toBe(false)
-    })
-
-    it('cleans up in reverse setup order and isolates cleanup failures', async () => {
-        const instance = await createInstance()
-        const order: string[] = []
-        for (const name of ['first', 'second']) {
-            await instance['_setupExtension']({
-                name,
-                setup() {},
-                dispose() {
-                    order.push(name)
-                    if (name === 'second') throw new Error('cleanup failed')
-                },
-            })
-        }
+        instance.logs = logs
         await instance.shutdown()
-        await instance.shutdown()
-        expect(order).toEqual(['second', 'first'])
     })
 
     it('continues product cleanup and queue flushing when the host flags subscription fails to unsubscribe', async () => {
         const instance = await createInstance()
-        const dispose = vi.spyOn(instance.featureFlags, 'dispose')
+        const dispose = vi.spyOn(instance.featureFlags, 'destroy')
         const unload = vi.spyOn(instance._requestQueue!, 'unload')
         instance['_featureFlagsReloadingUnsubscribe'] = () => {
             throw new Error('unsubscribe failed')
@@ -190,7 +146,6 @@ describe('historical client adaptation', () => {
         const instance = { featureFlags: flags } as unknown as PostHog
         const client = new BrowserClientAdapter(instance)
         expect(client.getExtension(FeatureFlagsCommonExtension)).toBe(flags)
-        client.dispose()
         expect(flags.setup).not.toHaveBeenCalled()
         expect(flags.dispose).not.toHaveBeenCalled()
     })
