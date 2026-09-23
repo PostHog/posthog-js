@@ -30,10 +30,9 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
-    const extension: FeatureFlags & { getActiveFlags(): string[] } = {
+    const extension: FeatureFlags = {
         name: FeatureFlagsExtension,
         bindings: { [FeatureFlagsCommonExtension]: shared },
-        getActiveFlags: () => (disposed ? [] : shared.getFlags()),
         setup: async (value: BrowserClient) => {
             client = value
             await shared.setup(value)

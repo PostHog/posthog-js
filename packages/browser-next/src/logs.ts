@@ -4,7 +4,7 @@ import { PostHogLogs } from '@posthog/browser-common/logs'
 import type { ConsoleLogsLoader } from '@posthog/browser-common/logs-types'
 import { initializeLogs, replayConsoleBuffer } from '@posthog/browser-common/console-logs'
 import type { ConsoleLogsHost } from '@posthog/browser-common/console-logs'
-import type { FlagsExtension } from './flags-internal'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
@@ -28,7 +28,7 @@ const readSdkContext = (environment: LogsEnvironment) => {
     } catch {
         /* Unavailable location is omitted. */
     }
-    const keys = client.getExtension<FlagsExtension>('featureFlags')?.getActiveFlags?.()
+    const keys = client.getExtension(FeatureFlagsCommonExtension)?.getFlags()
     return {
         distinctId,
         ...(session?.sessionId ? session : {}),
