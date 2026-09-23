@@ -60,6 +60,10 @@ export default defineConfig({
                 find: '@posthog/browser-common/extension-runtime',
                 replacement: fromRoot('../browser-common/src/extension-runtime.ts'),
             },
+            {
+                find: '@posthog/browser-common/extension-tokens',
+                replacement: fromRoot('../browser-common/src/extension-tokens.ts'),
+            },
             { find: '@posthog/browser-common/pubsub', replacement: fromRoot('../browser-common/src/pubsub.ts') },
             {
                 find: '@posthog/browser-common/tests/client-conformance',

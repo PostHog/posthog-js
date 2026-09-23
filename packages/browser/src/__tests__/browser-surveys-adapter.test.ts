@@ -52,7 +52,8 @@ it('borrows released-core capabilities without starting a second lifecycle or su
     const context = getSurveyRenderContext(instance)!
     expect(getSurveyRenderContext(instance)).toBe(context)
     expect(context.surveys).toBe(instance.surveys)
-    expect(context.client!.getExtension('featureFlags')).toBe(flags)
+    expect(context.client!.constructor).toBe(BrowserClientAdapter)
+    expect(context.client!.getExtension('featureFlagsCommon')).toBe(flags)
     persistence.register({ '$surveys': [{ id: 'cached' }] })
     expect(context.client!.kv.get('$surveys')).toEqual([{ id: 'cached' }])
     expect(context.client!.canCapture).toBe(true)
@@ -60,6 +61,8 @@ it('borrows released-core capabilities without starting a second lifecycle or su
     expect(instance._addCaptureHook).not.toHaveBeenCalled()
     expect(flags.onFeatureFlags).not.toHaveBeenCalled()
     expect(flags.setup).not.toHaveBeenCalled()
+    ;(context.client as BrowserClientAdapter).dispose()
+    expect(context.client!.getExtension('featureFlagsCommon')).toBeUndefined()
     expect(flags.dispose).not.toHaveBeenCalled()
     persistence.clear()
 })
