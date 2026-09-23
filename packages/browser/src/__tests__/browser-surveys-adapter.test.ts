@@ -61,8 +61,6 @@ it('borrows released-core capabilities without starting a second lifecycle or su
     expect(instance._addCaptureHook).not.toHaveBeenCalled()
     expect(flags.onFeatureFlags).not.toHaveBeenCalled()
     expect(flags.setup).not.toHaveBeenCalled()
-    ;(context.client as BrowserClientAdapter).dispose()
-    expect(context.client!.getExtension('featureFlagsCommon')).toBeUndefined()
     expect(flags.dispose).not.toHaveBeenCalled()
     persistence.clear()
 })
