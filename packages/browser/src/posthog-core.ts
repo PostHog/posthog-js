@@ -1146,8 +1146,13 @@ export class PostHog implements PostHogInterface {
         record.disposed = true
         const { extension } = record
         if (extension === this.featureFlags) {
-            this._featureFlagsReloadingUnsubscribe?.()
+            const unsubscribe = this._featureFlagsReloadingUnsubscribe
             this._featureFlagsReloadingUnsubscribe = undefined
+            try {
+                unsubscribe?.()
+            } catch (error) {
+                logger.error('Failed to unsubscribe feature flag reloading', error)
+            }
         }
         try {
             const result = extension.dispose?.() as unknown

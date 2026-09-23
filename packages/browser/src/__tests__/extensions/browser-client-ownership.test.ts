@@ -102,6 +102,18 @@ describe('core-owned extension lifecycle', () => {
         expect(order).toEqual(['second', 'first'])
     })
 
+    it('continues product cleanup and queue flushing when the host flags subscription fails to unsubscribe', async () => {
+        const instance = await createInstance()
+        const dispose = vi.spyOn(instance.featureFlags, 'dispose')
+        const unload = vi.spyOn(instance._requestQueue!, 'unload')
+        instance['_featureFlagsReloadingUnsubscribe'] = () => {
+            throw new Error('unsubscribe failed')
+        }
+        await expect(instance.shutdown()).resolves.toBeUndefined()
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(unload).toHaveBeenCalledTimes(1)
+    })
+
     it('replays host remote configuration published after a fallback view was constructed', async () => {
         const instance = await createInstance()
         const client = new BrowserClientAdapter(instance)
