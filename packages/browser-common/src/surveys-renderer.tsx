@@ -1,5 +1,5 @@
 import { SURVEYS } from './surveys-config'
-import type { PostHogFeatureFlags } from './feature-flags'
+import { FeatureFlagsCommonExtension } from './extension-tokens'
 import { getSurveyReplayUrl } from './survey-render-context'
 import { uuidv7 } from './utils/uuidv7'
 import { surveyStorage } from './utils/survey-storage'
@@ -171,9 +171,8 @@ export class SurveyManager {
         // Re-translate when identify() or setPersonPropertiesForFlags() reloads flags,
         // which may have updated the 'language' person property.
         this._unsubscribeFeatureFlags =
-            posthog.client
-                ?.getExtension<PostHogFeatureFlags>('featureFlags')
-                ?.onFeatureFlags(() => this._onLanguageChange()) ?? null
+            posthog.client?.getExtension(FeatureFlagsCommonExtension)?.onFeatureFlags(() => this._onLanguageChange()) ??
+            null
     }
 
     private _onLanguageChange(): void {
@@ -802,7 +801,7 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const featureFlags = this._host.client?.getExtension<PostHogFeatureFlags>('featureFlags')
+        const featureFlags = this._host.client?.getExtension(FeatureFlagsCommonExtension)
         const isFeatureEnabled = !!featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
@@ -868,7 +867,7 @@ export class SurveyManager {
         if (
             survey.internal_targeting_flag_key &&
             isSurveyIterationBased(survey) &&
-            !this._host.client?.getExtension<PostHogFeatureFlags>('featureFlags')?.hasLoadedFlags
+            !this._host.client?.getExtension(FeatureFlagsCommonExtension)?.hasLoadedFlags
         ) {
             this._warnIfFeatureFlagsDisabled(survey.internal_targeting_flag_key)
             return {

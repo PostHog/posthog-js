@@ -106,6 +106,22 @@ describe('survey-event-receiver', () => {
             expect(unsubscribe).toHaveBeenCalledTimes(1)
         })
 
+        it('keeps event activation in memory when no session exists', () => {
+            instance.getSessionId = () => undefined
+            const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
+            surveyEventReceiver.register(surveysWithEvents)
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+            registeredHook('billing_changed')
+            expect(instance.client.session).toBeUndefined()
+            expect(surveyEventReceiver.getSurveys()).toContain('first-survey')
+            surveyEventReceiver.dispose()
+
+            const nextReceiver = new SurveyEventReceiver(instance.client, instance)
+            nextReceiver.register(surveysWithEvents)
+            expect(nextReceiver.getSurveys()).not.toContain('first-survey')
+            nextReceiver.dispose()
+        })
+
         it('receiver activates survey on event', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance.client, instance)
             surveyEventReceiver.register(surveysWithEvents)

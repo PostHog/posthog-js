@@ -40,8 +40,12 @@ let flags
 let logs
 let commonJsLogs
 let commonJsFlags
+let FeatureFlagsCommonExtension
 try {
     const require = createRequire(import.meta.url)
+    ;({ FeatureFlagsCommonExtension } = await import('@posthog/browser-common/extension-tokens'))
+    if (require('@posthog/browser-common/extension-tokens').FeatureFlagsCommonExtension !== FeatureFlagsCommonExtension)
+        throw new Error('Common feature flags token differs between module formats')
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
     ;({ analytics } = await import('@posthog/browser/analytics'))
@@ -197,6 +201,7 @@ process.stdout.write('Pure CommonJS/ESM logs entrypoints and mixed-module logs l
 
 for (const create of [createPostHog, createEsmPostHog]) {
     let lookupShared
+    let lookupFacade
     const client = await create({
         projectToken: 'ph_lookup',
         storage: false,
@@ -210,7 +215,8 @@ for (const create of [createPostHog, createEsmPostHog]) {
             {
                 name: 'consumer',
                 setup(value) {
-                    lookupShared = () => value.getExtension('featureFlags')
+                    lookupShared = () => value.getExtension(FeatureFlagsCommonExtension)
+                    lookupFacade = () => value.getExtension('featureFlags')
                 },
             },
         ],
@@ -220,17 +226,24 @@ for (const create of [createPostHog, createEsmPostHog]) {
     if (
         !shared ||
         shared === facade ||
+        lookupFacade() !== facade ||
+        client.getExtension(FeatureFlagsCommonExtension) !== shared ||
         facade.getFeatureFlag('lookup')?.variant !== 'shared' ||
         shared.getFeatureFlag('lookup') !== 'shared'
     )
-        throw new Error('Dynamic flags did not preserve public facade and internal shared lookup')
+        throw new Error('Dynamic flags did not resolve SDK and common tokens consistently')
     facade.updateFlags({ lookup: 'updated' })
     if (shared.getFeatureFlag('lookup') !== 'updated' || (await shared.reloadFeatureFlagsAsync()).status !== 'skipped')
         throw new Error('Dynamic flags shared lookup did not use the live implementation')
     client.reset()
     if (shared.getFeatureFlag('lookup') !== undefined) throw new Error('Dynamic flags shared state survived reset')
     await client.dispose()
-    if (lookupShared() !== undefined || client.getExtension('featureFlags') !== undefined)
+    if (
+        lookupShared() !== undefined ||
+        lookupFacade() !== undefined ||
+        client.getExtension(FeatureFlagsCommonExtension) !== undefined ||
+        client.getExtension('featureFlags') !== undefined
+    )
         throw new Error('Dynamic flags lookup survived disposal')
 }
 process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')

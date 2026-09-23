@@ -21,6 +21,12 @@ describe('shared survey rendering capabilities', () => {
         expect(getSurveyReplayUrl({ config })).toBeUndefined()
     })
 
+    it('omits the replay URL when there is no session', () => {
+        const client = new TestClient({ projectToken: 'ph_test' })
+        Object.defineProperty(client, 'session', { value: undefined })
+        expect(getSurveyReplayUrl({ client, config: { ...config, uiHost: 'https://app.example.com' } })).toBeUndefined()
+    })
+
     it('sends abandonment using shared unload delivery and standalone localStorage', () => {
         const client = new TestClient()
         const write = vi.spyOn(client.kv, 'set')

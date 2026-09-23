@@ -96,7 +96,7 @@ describe('posthog-logs', () => {
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: vi.fn(() => 'https://us.i.posthog.com'),
+                    endpointFor: vi.fn((_target, path) => `https://us.i.posthog.com${path}`),
                 },
                 _send_request: vi.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
                 get_property: vi.fn(),
@@ -148,7 +148,7 @@ describe('posthog-logs', () => {
                 expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
                     expect.objectContaining({
                         method: 'POST',
-                        url: 'https://us.i.posthog.com?token=test-token',
+                        url: 'https://us.i.posthog.com/i/v1/logs?token=test-token',
                         data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
                         compression: 'best-available',
                         batchKey: 'logs',
@@ -167,14 +167,14 @@ describe('posthog-logs', () => {
                 expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
                     expect.objectContaining({
                         method: 'POST',
-                        url: 'https://us.i.posthog.com?token=test-token',
+                        url: 'https://us.i.posthog.com/i/v1/logs?token=test-token',
                         data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
                         compression: 'best-available',
                         batchKey: 'logs',
                         transport: 'sendBeacon',
                     })
                 )
-                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
+                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs?token=test-token')
                 logs.dispose()
             })
 
@@ -192,7 +192,7 @@ describe('posthog-logs', () => {
                 logs.flushLogs('fetch')
                 expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
                     expect.objectContaining({
-                        url: 'https://us.i.posthog.com?token=changed%20token',
+                        url: 'https://us.i.posthog.com/i/v1/logs?token=changed%20token',
                         transport: 'fetch',
                     })
                 )
@@ -311,7 +311,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
+                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs?token=test-token')
                 const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })

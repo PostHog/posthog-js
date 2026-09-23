@@ -21,7 +21,12 @@ export const createSurveyTriggerHost = (overrides: Partial<SurveyTriggerFixture>
     fixture.client = new TestClient()
     Object.defineProperties(fixture.client, {
         kv: { value: kv },
-        session: { get: () => ({ sessionId: fixture.getSessionId() }) },
+        session: {
+            get: () => {
+                const sessionId = fixture.getSessionId()
+                return sessionId ? { sessionId } : undefined
+            },
+        },
         onSession: {
             value: (listener: (id: string) => void) => ({
                 dispose: fixture.subscribeSession?.(listener) ?? (() => {}),
