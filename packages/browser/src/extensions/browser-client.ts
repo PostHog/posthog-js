@@ -13,12 +13,13 @@ import type {
     SendRequestInit,
     SessionContext,
 } from '@posthog/browser-common'
-import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { Compression, isUndefined, type Logger } from '@posthog/core'
+import { Compression, isFunction, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
+import { AutocaptureExtension, FeatureFlagsExtension, LogsExtension, SurveysExtension } from '../extension-tokens'
 import { extendURLParams } from '../request'
 import type { PostHog } from '../posthog-core'
 import type { CaptureOptions, EventName, Properties, QueuedRequestWithOptions, RemoteConfigResult } from '../types'
@@ -60,27 +61,25 @@ class BrowserClientKeyValueStore implements KeyValueStore {
 
 const REMOTE_CONFIG_EVENT = 'extensionsRemoteConfig'
 
-/** One shared extension client and lifecycle host per browser-v1 PostHog instance. */
+/** A capability view of a PostHog instance. The instance owns extension lifecycle. */
 export class BrowserClientAdapter implements Client, Disposable {
     readonly kv: KeyValueStore
     readonly onEvent: Listener<CapturedEventInfo>
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     private readonly _logger: Logger
-    private readonly _runtime: ExtensionRuntime
-    private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _disposed = false
 
     constructor(readonly instance: PostHog) {
         this._logger = logger
-        this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
         this.onEvent = (handler) => {
-            const unsubscribe = this.instance.on('eventCaptured', (event) => {
+            const unsubscribe = this.instance._addCaptureHook((event, payload) => {
+                if (!payload) return
                 try {
                     handler({
-                        event: event.event,
-                        properties: event.properties,
+                        event,
+                        properties: payload.properties,
                     })
                 } catch (error) {
                     this._logger.error('Browser extension event listener failed', error)
@@ -89,10 +88,7 @@ export class BrowserClientAdapter implements Client, Disposable {
             return createDisposable(unsubscribe)
         }
         this.onRemoteConfig = (handler) => {
-            if (this._disposed) {
-                return createDisposable(() => {})
-            }
-
+            if (this._disposed) return createDisposable(() => {})
             const invoke = (result: RemoteConfigResult): void => {
                 try {
                     handler(result)
@@ -101,12 +97,11 @@ export class BrowserClientAdapter implements Client, Disposable {
                 }
             }
             const unsubscribe = this.instance._internalEventEmitter.on(REMOTE_CONFIG_EVENT, invoke)
-            if (this._latestRemoteConfigResult) {
-                invoke(this._latestRemoteConfigResult)
+            if (this.instance._lastRemoteConfig) {
+                invoke(this.instance._lastRemoteConfig)
             }
             return createDisposable(unsubscribe)
         }
-        this._runtime = new ExtensionRuntime(logger.createLogger('[BrowserExtensions]'), this)
     }
 
     get logger(): Logger {
@@ -151,22 +146,45 @@ export class BrowserClientAdapter implements Client, Disposable {
         }
     }
 
+    get isOptedOut(): boolean {
+        return this.instance.has_opted_out_capturing()
+    }
+
     get canCapture(): boolean {
-        return this.instance.is_capturing()
+        if (this._disposed || this.instance._isBrowserClientClosing?.()) return false
+        // Older cores have no is_capturing() or cookieless mode.
+        return isFunction(this.instance.is_capturing) ? this.instance.is_capturing() : !this.isOptedOut
     }
 
     get projectToken(): string {
         return this.instance.config.token
     }
 
-    add(extension: Extension): Promise<void> {
-        return this._runtime.add(extension)
-    }
-
     getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined {
-        return this._runtime.getExtension<T>(name)
+        if (this._disposed) return undefined
+        let extension: Extension | undefined
+        switch (name) {
+            case FeatureFlagsExtension:
+            case FeatureFlagsCommonExtension:
+                extension = this.instance.featureFlags
+                break
+            case LogsExtension:
+                extension = this.instance.logs
+                break
+            case SurveysExtension:
+                extension = this.instance.surveys
+                break
+            case AutocaptureExtension:
+                extension = this.instance.autocapture
+                break
+        }
+        // Historical cores own these instances without the shared lifecycle state.
+        return extension &&
+            (!isFunction(this.instance._isExtensionActive) || this.instance._isExtensionActive(extension))
+            ? (extension as T)
+            : undefined
     }
 
     capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
@@ -188,13 +206,9 @@ export class BrowserClientAdapter implements Client, Disposable {
         return createDisposable(this.instance._registerExtensionEventProperties(producer))
     }
 
-    handleRemoteConfig(result: RemoteConfigResult): void {
-        if (this._disposed) {
-            return
-        }
-
-        this._latestRemoteConfigResult = result
-        this.instance._internalEventEmitter.emit(REMOTE_CONFIG_EVENT, result)
+    /** Retire this view without releasing host-owned extensions or caller-owned subscriptions. */
+    dispose(): void {
+        this._disposed = true
     }
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
@@ -223,13 +237,5 @@ export class BrowserClientAdapter implements Client, Disposable {
             requestOptions.callback = resolve
             this.instance._send_request(requestOptions)
         })
-    }
-
-    dispose(): void {
-        if (this._disposed) {
-            return
-        }
-        this._disposed = true
-        this._runtime.dispose()
     }
 }
