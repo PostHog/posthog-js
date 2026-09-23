@@ -50,8 +50,8 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                on: (_event, listener) =>
-                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
+                _addCaptureHook: (listener) =>
+                    mockAddCaptureHook((event, payload) => listener(event, payload ?? { event, properties: {} })),
                 sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: currentSessionId }) } as any,
                 getSurveys: vi.fn((callback) => callback([survey])),
 
@@ -260,8 +260,8 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                on: (_event, listener) =>
-                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
+                _addCaptureHook: (listener) =>
+                    mockAddCaptureHook((event, payload) => listener(event, payload ?? { event, properties: {} })),
                 sessionManager: { checkAndGetSessionAndWindowId: () => ({ sessionId: currentSessionId }) } as any,
                 getSurveys: vi.fn((callback) => callback([armed, shown])),
                 onSessionId: () => () => {},
@@ -344,8 +344,8 @@ describe('survey-event-receiver', () => {
             instance = createMockPostHog({
                 config,
                 persistence: new PostHogPersistence(config),
-                on: (_event, listener) =>
-                    mockAddCaptureHook((event, payload) => listener(payload ?? { event, properties: {} })),
+                _addCaptureHook: (listener) =>
+                    mockAddCaptureHook((event, payload) => listener(event, payload ?? { event, properties: {} })),
                 getSurveys: vi.fn((callback) => callback([survey])),
                 sessionManager: {
                     checkAndGetSessionAndWindowId: () => ({ sessionId: hasSession ? currentSessionId : undefined }),

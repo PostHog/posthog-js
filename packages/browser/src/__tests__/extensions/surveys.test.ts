@@ -5,7 +5,7 @@ import { beforeEach } from 'vitest'
 import { PostHog } from '../../posthog-core'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
-import { FeatureFlagsExtension } from '../../extension-tokens'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { FlagsResponse } from '../../types'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
@@ -93,7 +93,9 @@ describe('SurveyManager', () => {
         }
 
         expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
-        expect(getSurveyRenderContext(mockPostHog)!.client!.getExtension).toHaveBeenCalledWith(FeatureFlagsExtension)
+        expect(getSurveyRenderContext(mockPostHog)!.client!.getExtension).toHaveBeenCalledWith(
+            FeatureFlagsCommonExtension
+        )
         expect(registeredFeatureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', { send_event: true })
         expect(registeredFeatureFlags.getFeatureFlag).toHaveBeenCalledWith('linked-flag-key', { send_event: false })
         expect(mockPostHog.featureFlags.isFeatureEnabled).not.toHaveBeenCalled()

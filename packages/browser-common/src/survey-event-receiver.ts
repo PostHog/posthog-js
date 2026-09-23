@@ -28,7 +28,7 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
                 const subscription = _client.onSession(listener)
                 return () => subscription.dispose()
             },
-            getSessionId: () => _client.session.sessionId,
+            getSessionId: () => _client.session?.sessionId,
             getProperty: (key) => _client.kv.get(key),
             setElementSelectors: (selectors) =>
                 _client

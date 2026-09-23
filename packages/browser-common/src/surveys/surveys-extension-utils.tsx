@@ -1,4 +1,4 @@
-import type { PostHogFeatureFlags } from '../feature-flags'
+import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
 import { surveyStorage } from '../utils/survey-storage'
@@ -474,7 +474,7 @@ export const sendSurveyEvent = ({
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
-        posthog.client?.getExtension<PostHogFeatureFlags>('featureFlags')?.reloadFeatureFlags()
+        posthog.client?.getExtension(FeatureFlagsCommonExtension)?.reloadFeatureFlags()
     }
 }
 

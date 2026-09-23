@@ -2,7 +2,6 @@ import type { PostHog } from './posthog-core'
 import { PostHogSurveys } from '@posthog/browser-common/surveys'
 import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
-import type { Client, Extension, ExtensionToken } from '@posthog/browser-common'
 import { assignableWindow } from './utils/globals'
 import { BrowserClientAdapter } from './extensions/browser-client'
 
@@ -49,40 +48,7 @@ export class BrowserSurveys extends PostHogSurveys {
     }
 }
 
-/** Released cores own survey orchestration; the lazy renderer only borrows their capabilities. */
-class LegacySurveyClient extends BrowserClientAdapter {
-    override readonly onEvent: Client['onEvent']
-    constructor(instance: PostHog) {
-        super(instance)
-        this.onEvent = (handler) => ({
-            dispose: instance._addCaptureHook((event, payload) => {
-                if (payload) handler({ event, properties: payload.properties })
-            }),
-        })
-    }
-
-    override get canCapture(): boolean {
-        // is_capturing was introduced in 1.260.0, alongside cookieless capture.
-        return this.instance.is_capturing ? this.instance.is_capturing() : !this.instance.has_opted_out_capturing()
-    }
-
-    override get isOptedOut(): boolean {
-        return this.instance.has_opted_out_capturing()
-    }
-
-    override getExtension<T extends Extension>(name: ExtensionToken<T>): T | undefined
-    override getExtension<T extends Extension = Extension>(name: string): T | undefined
-    override getExtension<T extends Extension = Extension>(name: string): T | undefined {
-        // Old cores have the same scalar flags operations, but no shared extension registry.
-        return (name === 'featureFlags'
-            ? this.instance.featureFlags
-            : name === 'autocapture'
-              ? this.instance.autocapture
-              : undefined) as unknown as T | undefined
-    }
-}
-
-const legacyContexts = new WeakMap<PostHog, SurveyRenderContext>()
+const compatibilityContexts = new WeakMap<PostHog, SurveyRenderContext>()
 
 /** Called by the lazy bundle and preview entrypoint, never as a modern pre-setup fallback. */
 export function getSurveyRenderContext(instance?: PostHog): SurveyRenderContext | undefined {
@@ -94,16 +60,18 @@ export function getSurveyRenderContext(instance?: PostHog): SurveyRenderContext 
             },
         }
     if (instance.surveys?.getRenderContext) return instance.surveys.getRenderContext()
-    let context = legacyContexts.get(instance)
+    let context = compatibilityContexts.get(instance)
     if (!context) {
+        // Older posthog-js cores can load a newer surveys bundle. Adapt their existing
+        // instances for lookup only; the core retains ownership of setup and disposal.
         context = {
-            client: new LegacySurveyClient(instance),
+            client: new BrowserClientAdapter(instance),
             get config() {
                 return config.get()
             },
             surveys: instance.surveys,
         }
-        legacyContexts.set(instance, context)
+        compatibilityContexts.set(instance, context)
     }
     return context
 }
