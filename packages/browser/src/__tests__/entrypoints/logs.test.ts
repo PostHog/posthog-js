@@ -94,6 +94,47 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it.each([
+            ['1.410.4', 'le'],
+            ['1.410.10', 'de'],
+            ['1.418.3', 'he'],
+            ['1.418.10', 'ui'],
+            ['1.418.14', 'ci'],
+            ['1.419.2', 'vi'],
+            ['1.420.0', 'captureConsoleLog'],
+            ['1.434.0', 'captureConsoleLog'],
+        ])('adapts the historical %s host without owning its logs lifecycle', (version, method) => {
+            const setup = vi.fn()
+            const disposeLogs = vi.fn()
+            mockPostHog.version = version
+            mockPostHog.logs = { [method]: mockEmit, setup, dispose: disposeLogs } as any
+            const stop = assignableWindow.__PosthogExtensions__.logs.initializeLogs(mockPostHog)
+            assignableWindow.console.log('captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(setup).not.toHaveBeenCalled()
+            stop()
+            assignableWindow.console.log('after cleanup')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(disposeLogs).not.toHaveBeenCalled()
+        })
+
+        it('observes current-core shutdown and lookup availability through the bundle-local view', () => {
+            const active = vi.fn(() => true)
+            const closing = vi.fn(() => false)
+            mockPostHog._isExtensionActive = active
+            mockPostHog._isBrowserClientClosing = closing
+            mockPostHog.logs = { captureConsoleLog: mockEmit } as any
+            const stop = assignableWindow.__PosthogExtensions__.logs.initializeLogs(mockPostHog)
+            assignableWindow.console.log('captured')
+            active.mockReturnValue(false)
+            assignableWindow.console.log('failed setup')
+            active.mockReturnValue(true)
+            closing.mockReturnValue(true)
+            assignableWindow.console.log('shutdown')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            stop()
+        })
+
         it('does not set distinct_id or location.href — core adds posthogDistinctId/url.full downstream', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
