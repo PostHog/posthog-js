@@ -22,3 +22,8 @@ export const isBoolean = function (x: unknown): x is boolean {
 export const isNull = function (x: unknown): x is null {
     return x === null
 }
+
+export const isObject = function (x: unknown): x is Record<string, any> {
+    // oxlint-disable-next-line posthog-js/no-direct-object-check, posthog-js/no-direct-array-check
+    return x === Object(x) && !Array.isArray(x)
+}

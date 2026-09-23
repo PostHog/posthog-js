@@ -1,5 +1,5 @@
 /* oxlint-disable no-console */
-import { isBoolean, isNull, isString, isUndefined } from './type-utils'
+import { isBoolean, isObject, isString, isUndefined } from './type-utils'
 
 const warnedFlags = new Set<string>()
 
@@ -21,18 +21,15 @@ export function normalizeBootstrappedFlagValue(flag: string, value: unknown): st
         return value
     }
 
-    if (typeof value === 'object' && !isNull(value)) {
-        const detail = value as { enabled?: unknown; variant?: unknown }
-        if (isBoolean(detail.enabled) || isString(detail.variant)) {
-            const flattened = isString(detail.variant) ? detail.variant : !!detail.enabled
-            warnOnce(
-                flag,
-                `expected a variant string or a boolean, got a flag detail object. Using ${JSON.stringify(
-                    flattened
-                )} instead. Pass \`variant ?? enabled\` in \`bootstrap.featureFlags\`.`
-            )
-            return flattened
-        }
+    if (isObject(value) && (isBoolean(value.enabled) || isString(value.variant))) {
+        const flattened = isString(value.variant) ? value.variant : !!value.enabled
+        warnOnce(
+            flag,
+            `expected a variant string or a boolean, got a flag detail object. Using ${JSON.stringify(
+                flattened
+            )} instead. Pass \`variant ?? enabled\` in \`bootstrap.featureFlags\`.`
+        )
+        return flattened
     }
 
     warnOnce(flag, `expected a variant string or a boolean, got ${typeof value}. Ignoring it.`)
