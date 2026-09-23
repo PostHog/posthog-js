@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.53.0
+
+### Minor Changes
+
+- [#5050](https://github.com/PostHog/posthog-js/pull/5050) [`31dd1ad`](https://github.com/PostHog/posthog-js/commit/31dd1adbe2fbf938902ec284e81b87622bf218cc) Thanks [@posthog](https://github.com/apps/posthog)! - Read a feature flag's evaluation runtime with `getFeatureFlagEvaluationRuntime(key)` and `getFeatureFlagKeysByEvaluationRuntime(runtime)`
+  (2026-09-23)
+
 ## 5.52.6
 
 ### Patch Changes
