@@ -391,6 +391,12 @@ export type PostHogFeatureFlag = {
       }[]
     }
     payloads?: Record<string, string>
+    // Experiment holdout. Resolved before the release conditions, so a held-out value is
+    // excluded from the flag's targeting entirely.
+    holdout?: {
+      id: number
+      exclusion_percentage: number
+    } | null
     // Flag-level toggle: when true, condition evaluation stops and returns false as soon as a
     // group's property filters match but the rollout percentage excludes the user, rather than
     // continuing to evaluate later groups.
