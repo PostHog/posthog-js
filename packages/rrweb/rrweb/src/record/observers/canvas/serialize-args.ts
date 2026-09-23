@@ -1,6 +1,27 @@
 import { encode } from 'base64-arraybuffer';
 import type { IWindow, CanvasArg, DataURLOptions } from '@posthog/rrweb-types';
 
+// a tainted canvas fails on every draw it is passed to, so warn once. The prefix
+// matches the other canvas capture warnings
+let taintedCanvasWarned = false;
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time rather than blaming taint and going quiet
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      '[replay] canvas capture: skipping a canvas draw because its pixels cannot be read.',
+      error,
+    );
+    return;
+  }
+  if (taintedCanvasWarned) return;
+  taintedCanvasWarned = true;
+  console.warn(
+    '[replay] canvas capture: skipping a canvas draw because its pixels cannot be read. A cross-origin image or video drawn into it taints it.',
+    error,
+  );
+}
+
 // TODO: unify with `replay/webgl.ts`
 type CanvasVarMap = Map<string, unknown[]>;
 const canvasVarMap: Map<RenderingContext, CanvasVarMap> = new Map();
@@ -98,7 +119,14 @@ export function serializeArg(
   } else if (value instanceof HTMLCanvasElement) {
     const name = 'HTMLImageElement';
     // TODO: move `toDataURL` to web worker if possible
-    const src = value.toDataURL(dataURLOptions.type, dataURLOptions.quality);
+    let src: string;
+    try {
+      src = value.toDataURL(dataURLOptions.type, dataURLOptions.quality);
+    } catch (error) {
+      // the caller drops the whole mutation, so replay keeps the last frame
+      warnCanvasUnreadable(error);
+      throw error;
+    }
     return {
       rr_type: name,
       src,

@@ -1,0 +1,72 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-23T04:04:00.505Z",
+    "providerSdkVersion": "1.52.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-embedding-001:batchEmbedContents",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "requests": [
+            {
+              "content": {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "A blue triangle."
+                  }
+                ]
+              },
+              "outputDimensionality": 8,
+              "model": "models/gemini-embedding-001"
+            },
+            {
+              "content": {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "A red square."
+                  }
+                ]
+              },
+              "outputDimensionality": 8,
+              "model": "models/gemini-embedding-001"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "embeddings": [
+              {
+                "values": [
+                  -0.008439371, 0.015376077, -0.0030608035, -0.08021865, -0.0007064652, -0.02009579, 0.031843774,
+                  -0.009681308
+                ]
+              },
+              {
+                "values": [
+                  0.014565103, 0.021581067, 0.002959896, -0.076777615, -0.0130637335, -0.0013395138, 0.023348559,
+                  0.001349778
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

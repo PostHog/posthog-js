@@ -1,0 +1,129 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:18.212Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_output_tokens": 16,
+          "input": "Count from one to one hundred, spelling out each number."
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_7c84bdce282e429780197bb28f17f47e"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_09b5040d5d55d78c016aaf408a671c87d294c76a85e729ed5f",
+            "object": "response",
+            "created_at": 1789870218,
+            "status": "incomplete",
+            "background": false,
+            "billing": {
+              "payer": "developer"
+            },
+            "completed_at": null,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": {
+              "reason": "max_output_tokens"
+            },
+            "instructions": null,
+            "max_output_tokens": 16,
+            "max_tool_calls": null,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "moderation": null,
+            "output": [
+              {
+                "id": "msg_09b5040d5d55d78c016aaf408b3aec87d2a9006dc090f16ec6",
+                "type": "message",
+                "status": "incomplete",
+                "content": [
+                  {
+                    "type": "output_text",
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "Sure! Here are the numbers from one to one hundred, spelled out:\n\none"
+                  }
+                ],
+                "role": "assistant"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": null,
+              "effort": null,
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": "auto",
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 19,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 16,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 35
+            },
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ]
+}

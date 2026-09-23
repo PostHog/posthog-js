@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined } from '@posthog/core'
+import { isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
 import {
     getEventTarget,
     isTextSelectionTarget,
@@ -25,6 +25,13 @@ function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCan
         }
     }
     return null
+}
+
+// Firefox denies property access on a node from another origin or from a realm that was torn
+// down, and both a composed path and a mutation record can hand us one. A node we cannot read
+// is a node we cannot inspect, so answer no instead of letting the denial escape.
+function isInspectableElement(node: Node | EventTarget | null | undefined): node is Element {
+    return !!trySafe(() => isElementNode(node as Node))
 }
 
 function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
@@ -126,6 +133,7 @@ type MouseSelectionGesture = {
 //   - absolute timeout:  nothing at all within mutation_threshold_ms * 1.1 (the catch-all backstop)
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
     private _mutationObserver: MutationObserver | undefined
+    private _observedRoots = new WeakSet<Node>()
     private _lastMutation: number | undefined
     private _lastScroll: number | undefined
     private _lastSelectionChanged: number | undefined
@@ -205,18 +213,59 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this._onMutation(mutations)
             })
-            this._mutationObserver.observe(observerTarget, {
-                attributes: true,
-                characterData: true,
-                childList: true,
-                subtree: true,
-            })
+            this._observeRoot(observerTarget)
+        }
+    }
+
+    // An observed subtree stops at a shadow boundary, so a click that re-renders inside a shadow
+    // root looks like nothing happened. Each root we want changes from needs its own observe call.
+    private _observeRoot(root: Node | null | undefined): void {
+        if (!root || !this._mutationObserver) {
+            return
+        }
+        if (this._observedRoots.has(root)) {
+            return
+        }
+        this._mutationObserver.observe(root, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true,
+        })
+        this._observedRoots.add(root)
+        this._observeShadowRoots(root)
+    }
+
+    // Observe every open shadow root this node hosts or contains. Nested roots are covered
+    // because each root observed here is scanned in turn. Every scanned element is added to
+    // `scanned`, when given, so a caller can skip nodes an earlier scan already covered.
+    private _observeShadowRoots(node: Node, scanned?: Set<Node>): void {
+        if (isElementNode(node) && node.shadowRoot) {
+            this._observeRoot(node.shadowRoot)
+        }
+        const descendants = (node as Element).querySelectorAll?.('*') ?? []
+        for (let i = 0; i < descendants.length; i++) {
+            scanned?.add(descendants[i])
+            this._observeRoot(descendants[i].shadowRoot)
+        }
+    }
+
+    // A gesture inside an open shadow root exposes that root in its composed path, so we can
+    // watch the root before the application's own handlers render into it.
+    private _observeGesturePath(event: Event): void {
+        const path = event.composedPath?.() ?? []
+        for (let i = 0; i < path.length; i++) {
+            const node = path[i]
+            if (isInspectableElement(node)) {
+                this._observeRoot(node.shadowRoot)
+            }
         }
     }
 
     stop() {
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
+        this._observedRoots = new WeakSet()
         assignableWindow.removeEventListener('click', this._onClick, { capture: true })
         assignableWindow.removeEventListener('mousedown', this._onMouseDown, { capture: true })
         assignableWindow.removeEventListener('mouseup', this._onMouseUp, { capture: true })
@@ -237,9 +286,32 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._touchStart = undefined
     }
 
-    private _onMutation(_mutations: MutationRecord[]): void {
-        // we don't actually care about the content of the mutations, right now
-        this._lastMutation = Date.now()
+    private _onMutation(mutations: MutationRecord[]): void {
+        // every scan in this batch reads the DOM as it is now, so a node an earlier scan visited
+        // needs no scan of its own
+        const scanned = new Set<Node>()
+        for (const mutation of mutations) {
+            // one record we cannot read must not end the batch: every record behind it would lose
+            // its sign of life and the timeout backstop would report a false dead click
+            try {
+                // a root observed directly keeps reporting after its host leaves the page, and a change
+                // off the page is no sign of life. only an explicit `false` is skipped, since older
+                // browsers lack `isConnected`
+                if (mutation.target?.isConnected === false) {
+                    continue
+                }
+                this._lastMutation = Date.now()
+                // added content can bring a shadow root of its own, which the observer that reported
+                // the addition cannot see into
+                const addedNodes = mutation.addedNodes
+                for (let i = 0; i < addedNodes.length; i++) {
+                    const node = addedNodes[i]
+                    if (isInspectableElement(node) && !scanned.has(node)) {
+                        this._observeShadowRoots(node, scanned)
+                    }
+                }
+            } catch {}
+        }
     }
 
     private _startClickObserver() {
@@ -260,6 +332,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onMouseDown = (event: Event): void => {
+        this._observeGesturePath(event)
         this._clearMouseSelection()
         if ((event as MouseEvent).button === 0) {
             const gesture: MouseSelectionGesture = {
@@ -292,7 +365,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // Native clicks target the nearest common ancestor of the press and release targets.
         // Composed paths preserve this relationship through accessible shadow boundaries.
         for (const node of gesture.path) {
-            if (isElementNode(node as Node) && path.indexOf(node) !== -1) {
+            if (isInspectableElement(node) && path.indexOf(node) !== -1) {
                 gesture.clickTarget = node
                 break
             }
@@ -304,6 +377,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onClick = (event: Event): void => {
+        // a click without a preceding mousedown, e.g. a keyboard activation, reaches us here first
+        this._observeGesturePath(event)
         const mouseEvent = event as MouseEvent
         const click: ObservedDeadClick | null = asCandidate(mouseEvent, { type: 'click' })
         const gesture = this._mouseSelection
@@ -384,13 +459,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _selectionIsInGesture(node: Node | null | undefined, gesture: MouseSelectionGesture): boolean {
         const target = gesture.path[0] as Node
-        while (node) {
-            if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
-                return true
+        try {
+            while (node) {
+                if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
+                    return true
+                }
+                // Firefox can expose selection endpoints behind a closed root while mouse events
+                // expose only its host. Compare both representations without traversing other content.
+                node = (node.getRootNode() as ShadowRoot).host
             }
-            // Firefox can expose selection endpoints behind a closed root while mouse events
-            // expose only its host. Compare both representations without traversing other content.
-            node = (node.getRootNode() as ShadowRoot).host
+        } catch {
+            // an endpoint we cannot read is an endpoint we cannot match to the gesture
         }
         return false
     }
@@ -398,7 +477,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _selectionTouchesGesture(selection: Selection, gesture: MouseSelectionGesture): boolean {
         const target = gesture.path[0] as Node
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined
-        if (range && isElementNode(target) && range.startContainer.getRootNode() === target.getRootNode()) {
+        const sameRoot = !!range && trySafe(() => range.startContainer.getRootNode() === target.getRootNode())
+        if (range && sameRoot && isElementNode(target)) {
             if (!range.collapsed) {
                 return range.intersectsNode(target)
             }
@@ -544,6 +624,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onTouchStart = (event: Event): void => {
+        this._observeGesturePath(event)
         const touches = (event as TouchEvent).touches
         // only single-finger gestures are swipes; a second finger (pinch/zoom) is not,
         // so a multi-touch start clears any tracked origin rather than measuring against it

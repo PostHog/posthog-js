@@ -1,41 +1,48 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import { geminiPath, geminiStreamChunks, validateGeminiJSON } from './gemini-protocol.ts'
+import { openaiJson, openaiStream, safeJson } from './openai-protocol.ts'
 
 const MAX_BYTES = 8 * 1024 * 1024
 const MAX_REQUEST_BYTES = 1024 * 1024
 const TIMEOUT_MS = 15_000
 const requestHeaders = ['content-type', 'anthropic-version', 'anthropic-beta'] as const
 const credentialHeaders = ['authorization', 'x-api-key', 'x-goog-api-key', 'cookie'] as const
+const responseContentTypes = [
+  'text/event-stream',
+  'application/json',
+  'text/plain',
+  'text/vtt',
+  'application/x-subrip',
+] as const
 const provenanceSchema = z.strictObject({
-  source: z.enum(['synthetic', 'anthropic', 'gemini']),
+  source: z.enum(['synthetic', 'anthropic', 'gemini', 'openai']),
   recordedAt: z.iso.datetime(),
   providerSdkVersion: z.string().min(1),
 })
-const requestSchema = z.strictObject({
-  method: z.literal('POST'),
-  path: z.union([z.literal('/v1/messages'), z.string().regex(geminiPath)]),
-  headers: z.partialRecord(z.enum(requestHeaders), z.string()),
-  body: z.record(z.string(), z.unknown()),
-})
 const interactionSchema = z.strictObject({
-  request: requestSchema,
-  response: z.union([
-    z.strictObject({
-      status: z.literal(200),
-      headers: z.strictObject({ 'content-type': z.literal('text/event-stream') }),
-      body: z.strictObject({ kind: z.literal('sse'), chunks: z.array(z.string()).min(1) }),
+  request: z.strictObject({
+    method: z.enum(['GET', 'POST']),
+    path: z.string().min(1),
+    headers: z.partialRecord(z.enum(requestHeaders), z.string()),
+    body: z.record(z.string(), z.unknown()),
+  }),
+  response: z.strictObject({
+    status: z.literal(200),
+    headers: z.strictObject({
+      'content-type': z.enum(responseContentTypes),
+      'x-request-id': z.string().optional(),
     }),
-    z.strictObject({
-      status: z.literal(200),
-      headers: z.strictObject({ 'content-type': z.literal('application/json') }),
-      body: z.strictObject({ kind: z.literal('json'), value: z.record(z.string(), z.unknown()) }),
-    }),
-  ]),
+    body: z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('sse'), chunks: z.array(z.string()).min(1) }),
+      z.strictObject({ kind: z.literal('json'), value: z.unknown() }),
+      z.strictObject({ kind: z.literal('text'), text: z.string() }),
+    ]),
+  }),
 })
 const cassetteSchema = z.strictObject({
   formatVersion: z.literal(1),
@@ -65,7 +72,7 @@ function assertSafe(value: unknown, secrets: Set<string>): void {
   if (typeof value === 'string') {
     if (
       [...secrets].some((secret) => secret && value.includes(secret)) ||
-      /\b(?:sk-ant-|sk-proj-|Bearer\s+\S+)|AIza[\w-]{20,}/i.test(value)
+      /\b(?:sk-(?:ant-|proj-|svcacct-|[a-z0-9]{20})|Bearer\s+\S+)|AIza[\w-]{20,}/i.test(value)
     ) {
       throw new CassetteFailure('secret')
     }
@@ -224,9 +231,37 @@ function streamChunks(text: string, secrets: Set<string>): string[] {
   return chunks
 }
 
-async function readRequest(request: IncomingMessage, secrets = new Set<string>()): Promise<Interaction['request']> {
-  if (request.method !== 'POST' || (request.url !== '/v1/messages' && !geminiPath.test(request.url ?? '')))
-    throw new Error('Unexpected cassette request route')
+function checkRoute(method: string | undefined, path: string, source: Provenance['source']): void {
+  const url = new URL(path, 'http://127.0.0.1')
+  if (url.origin !== 'http://127.0.0.1' || url.hash) throw new Error('Unexpected cassette request route')
+  if ((source === 'anthropic' || source === 'synthetic') && method === 'POST' && path === '/v1/messages') return
+  if ((source === 'gemini' || source === 'synthetic') && method === 'POST' && geminiPath.test(path)) return
+  if (source === 'anthropic' || source === 'gemini') throw new Error('Unexpected cassette request route')
+  if (
+    method === 'POST' &&
+    !url.search &&
+    (['/v1/chat/completions', '/v1/responses', '/v1/embeddings', '/v1/audio/transcriptions'].includes(path) ||
+      /^\/v1\/responses\/[a-zA-Z0-9_-]+\/cancel$/.test(path))
+  )
+    return
+  if (method === 'GET' && /^\/v1\/responses\/[a-zA-Z0-9_-]+$/.test(url.pathname)) {
+    const seen = new Set<string>()
+    for (const [key, value] of url.searchParams) {
+      if (
+        seen.has(key) ||
+        !((key === 'stream' && /^(?:true|false)$/.test(value)) || (key === 'starting_after' && /^\d+$/.test(value)))
+      ) {
+        throw new Error('Unsupported retrieval query')
+      }
+      seen.add(key)
+    }
+    return
+  }
+  throw new Error('Unexpected cassette request route')
+}
+
+async function readRequest(request: IncomingMessage, source: Provenance['source'], secrets: Set<string>) {
+  checkRoute(request.method, request.url ?? '', source)
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
@@ -234,21 +269,104 @@ async function readRequest(request: IncomingMessage, secrets = new Set<string>()
     if (size > MAX_REQUEST_BYTES) throw new Error('Cassette request exceeds size limit')
     chunks.push(chunk)
   }
-  const body = parseJSON(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)), secrets)
+  const raw = Buffer.concat(chunks)
+  if (request.method === 'GET' && raw.length) throw new Error('GET requests must not have a body')
+  const contentType = request.headers['content-type'] ?? ''
+  let body: unknown
+  if (contentType.startsWith('multipart/form-data')) {
+    if (request.url !== '/v1/audio/transcriptions') throw new Error('Unsupported multipart route')
+    assertSafe(raw.toString('utf8'), secrets)
+    const form = await new Response(raw, { headers: { 'content-type': contentType } }).formData()
+    const fields: [string, string][] = []
+    const files: Array<{ name: string; filename: string; type: string; size: number; sha256: string }> = []
+    for (const [name, value] of form) {
+      if (typeof value === 'string') {
+        assertSafe({ [name]: value }, secrets)
+        fields.push([name, value])
+      } else
+        files.push({
+          name,
+          filename: value.name,
+          type: value.type,
+          size: value.size,
+          sha256: createHash('sha256')
+            .update(Buffer.from(await value.arrayBuffer()))
+            .digest('hex'),
+        })
+    }
+    body = {
+      fields: fields.sort(([a], [b]) => a.localeCompare(b)),
+      files: files.sort((a, b) => a.name.localeCompare(b.name)),
+    }
+  } else {
+    body = raw.length ? safeJson(raw.toString('utf8'), (value) => assertSafe(value, secrets)) : {}
+  }
   if (
     request.url === '/v1/messages' &&
     (!body || typeof body !== 'object' || !('stream' in body) || body.stream !== true)
   ) {
     throw new Error('Only streaming JSON requests are supported')
   }
-  return requestSchema.parse({
+  const normalizedHeaders = Object.fromEntries(
+    requestHeaders.flatMap((key) => (request.headers[key] === undefined ? [] : [[key, request.headers[key]]]))
+  )
+  if (contentType.startsWith('multipart/form-data')) normalizedHeaders['content-type'] = 'multipart/form-data'
+  const url = new URL(request.url!, 'http://127.0.0.1')
+  url.searchParams.sort()
+  const canonical = interactionSchema.shape.request.parse({
     method: request.method,
-    path: request.url,
-    headers: Object.fromEntries(
-      requestHeaders.flatMap((key) => (request.headers[key] === undefined ? [] : [[key, request.headers[key]]]))
-    ),
+    path: `${url.pathname}${url.search}`,
+    headers: normalizedHeaders,
     body,
   })
+  assertSafe(canonical, secrets)
+  return { canonical, raw }
+}
+
+function responseBody(
+  text: string,
+  contentType: string,
+  request: Interaction['request'],
+  secrets: Set<string>
+): Interaction['response']['body'] {
+  const path = request.path
+  const gemini = geminiPath.test(path)
+  const fields = Array.isArray(request.body.fields) ? request.body.fields : []
+  const field = (name: string) => fields.find((item) => Array.isArray(item) && item[0] === name)?.[1]
+  const streaming = gemini
+    ? path.endsWith(':streamGenerateContent?alt=sse')
+    : request.method === 'GET'
+      ? new URL(path, 'http://127.0.0.1').searchParams.get('stream') === 'true'
+      : request.body.stream === true || field('stream') === 'true'
+  if (streaming !== (contentType === 'text/event-stream')) throw new CassetteFailure('response')
+  const safe = (value: unknown) => assertSafe(value, secrets)
+  if (contentType === 'text/event-stream')
+    return {
+      kind: 'sse',
+      chunks:
+        path === '/v1/messages'
+          ? streamChunks(text, secrets)
+          : gemini
+            ? geminiStreamChunks(text, (frame) => safeJson(frame, safe), safe)
+            : openaiStream(text, path, safe),
+    }
+  if (path === '/v1/messages') throw new CassetteFailure('response')
+  if (contentType === 'application/json') {
+    if (!gemini) return { kind: 'json', value: openaiJson(text, path, safe) }
+    const value = safeJson(text, safe)
+    validateGeminiJSON(path, value, safe)
+    return { kind: 'json', value }
+  }
+  if (['text/plain', 'text/vtt', 'application/x-subrip'].includes(contentType) && path === '/v1/audio/transcriptions') {
+    safe(text)
+    return { kind: 'text', text }
+  }
+  throw new CassetteFailure('response')
+}
+
+function serializedBody(body: Interaction['response']['body']): string[] {
+  if (body.kind === 'sse') return body.chunks
+  return [body.kind === 'json' ? JSON.stringify(body.value) : body.text]
 }
 
 async function writeChunk(response: ServerResponse, chunk: string, signal: AbortSignal): Promise<void> {
@@ -342,41 +460,31 @@ async function serve(
   }
 }
 
-function validateInteraction(interaction: Interaction, source: Provenance['source'], secrets: Set<string>): void {
-  const anthropic = interaction.request.path === '/v1/messages'
-  if ((source === 'anthropic' && !anthropic) || (source === 'gemini' && anthropic)) throw new CassetteFailure('request')
-  const streaming = anthropic || interaction.request.path.endsWith(':streamGenerateContent?alt=sse')
-  const body = interaction.response.body
-  if (streaming !== (body.kind === 'sse')) throw new CassetteFailure('response')
-  if (body.kind === 'sse') {
-    if (anthropic) streamChunks(body.chunks.join(''), secrets)
-    else
-      geminiStreamChunks(
-        body.chunks.join(''),
-        (text) => parseJSON(text, secrets),
-        (value) => assertSafe(value, secrets)
-      )
-  } else validateGeminiJSON(interaction.request.path, body.value, (value) => assertSafe(value, secrets))
-}
-
 export async function startReplay({ path }: { path: string }) {
   if ((await stat(path)).size > MAX_BYTES * 2) throw new Error('Cassette exceeds size limit')
   const cassette = cassetteSchema.parse(parseJSON(await readFile(path, 'utf8'), new Set()))
   assertSafe(cassette, new Set())
-  for (const interaction of cassette.interactions)
-    validateInteraction(interaction, cassette.provenance.source, new Set())
+  for (const interaction of cassette.interactions) {
+    checkRoute(interaction.request.method, interaction.request.path, cassette.provenance.source)
+    const validated = responseBody(
+      serializedBody(interaction.response.body).join(''),
+      interaction.response.headers['content-type'],
+      interaction.request,
+      new Set()
+    )
+    if (validated.kind !== interaction.response.body.kind) throw new Error('Mismatched response format')
+  }
   let index = 0
   return serve(
     async (incoming, response, signal) => {
-      const request = await classified('request', () => readRequest(incoming))
+      const { canonical: request } = await classified('request', () =>
+        readRequest(incoming, cassette.provenance.source, new Set())
+      )
       const interaction = cassette.interactions[index]
       if (!interaction || !isDeepStrictEqual(request, interaction.request)) throw new CassetteFailure('mismatch')
       index++
       response.writeHead(interaction.response.status, interaction.response.headers)
-      const body = interaction.response.body
-      if (body.kind === 'sse') {
-        for (const chunk of body.chunks) await writeChunk(response, chunk, signal)
-      } else await writeChunk(response, JSON.stringify(body.value), signal)
+      for (const chunk of serializedBody(interaction.response.body)) await writeChunk(response, chunk, signal)
       response.end()
     },
     async () => {
@@ -403,7 +511,9 @@ export async function startRecorder(options: {
       ? upstream.origin === 'https://api.anthropic.com'
       : provenance.source === 'gemini'
         ? upstream.origin === 'https://generativelanguage.googleapis.com'
-        : upstream.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(upstream.hostname)
+        : provenance.source === 'openai'
+          ? upstream.origin === 'https://api.openai.com'
+          : upstream.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(upstream.hostname)
   if (
     !validOrigin ||
     upstream.username ||
@@ -432,14 +542,13 @@ export async function startRecorder(options: {
             }
           }
         }
-        const request = await classified('request', () => readRequest(incoming, secrets))
-        const anthropic = request.path === '/v1/messages'
-        if ((provenance.source === 'anthropic' && !anthropic) || (provenance.source === 'gemini' && anthropic))
-          throw new CassetteFailure('request')
-        const streaming = anthropic || request.path.endsWith(':streamGenerateContent?alt=sse')
-        const contentType = streaming ? 'text/event-stream' : 'application/json'
+        const { canonical: request, raw } = await classified('request', () =>
+          readRequest(incoming, provenance.source, secrets)
+        )
         assertSafe(request, secrets)
         const headers = new Headers(request.headers)
+        if (typeof incoming.headers['content-type'] === 'string')
+          headers.set('content-type', incoming.headers['content-type'])
         for (const key of credentialHeaders) {
           const value = incoming.headers[key]
           if (typeof value === 'string') headers.set(key, value)
@@ -447,13 +556,15 @@ export async function startRecorder(options: {
         const result = await fetch(new URL(request.path, upstream), {
           method: request.method,
           headers,
-          body: JSON.stringify(request.body),
+          body: request.method === 'GET' ? undefined : raw,
           redirect: 'error',
           signal,
         })
         if (
           result.status !== 200 ||
-          result.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== contentType ||
+          !(responseContentTypes as readonly string[]).includes(
+            result.headers.get('content-type')?.split(';')[0].trim() ?? ''
+          ) ||
           !result.body
         ) {
           await result.body?.cancel()
@@ -466,7 +577,12 @@ export async function startRecorder(options: {
             secrets.add(secret.replace(/^Bearer\s+/i, ''))
           }
         }
-        if (streaming) response.writeHead(200, { 'content-type': contentType })
+        const responseHeaders = interactionSchema.shape.response.shape.headers.parse({
+          'content-type': result.headers.get('content-type')!.split(';')[0].trim(),
+          ...(result.headers.get('x-request-id') ? { 'x-request-id': result.headers.get('x-request-id') } : {}),
+        })
+        assertSafe(responseHeaders, secrets)
+        response.writeHead(200, responseHeaders)
         const decoder = new TextDecoder('utf-8', { fatal: true })
         let text = ''
         for await (const bytes of result.body) {
@@ -474,39 +590,22 @@ export async function startRecorder(options: {
           if (totalBytes > MAX_BYTES) throw new Error('Cassette response exceeds size limit')
           const chunk = decoder.decode(bytes, { stream: true })
           text += chunk
-          if (streaming) await writeChunk(response, chunk, signal)
+          await writeChunk(response, chunk, signal)
         }
         const tail = decoder.decode()
         text += tail
-        if (streaming && tail) await writeChunk(response, tail, signal)
-        const body: Interaction['response']['body'] = await classified('stream', () =>
-          streaming
-            ? {
-                kind: 'sse' as const,
-                chunks: anthropic
-                  ? streamChunks(text, secrets)
-                  : geminiStreamChunks(
-                      text,
-                      (text) => parseJSON(text, secrets),
-                      (value) => assertSafe(value, secrets)
-                    ),
-              }
-            : { kind: 'json' as const, value: z.record(z.string(), z.unknown()).parse(parseJSON(text, secrets)) }
+        if (tail) await writeChunk(response, tail, signal)
+        const body = await classified('stream', () =>
+          responseBody(text, responseHeaders['content-type'], request, secrets)
         )
-        const interaction = interactionSchema.parse({
+        interactions.push({
           request,
           response: {
             status: 200,
-            headers: { 'content-type': contentType },
+            headers: responseHeaders,
             body,
           },
         })
-        await classified('stream', () => validateInteraction(interaction, provenance.source, secrets))
-        interactions.push(interaction)
-        if (!streaming) {
-          response.writeHead(200, { 'content-type': contentType })
-          await writeChunk(response, text, signal)
-        }
         response.end()
       } finally {
         recording = false
@@ -515,7 +614,6 @@ export async function startRecorder(options: {
     async () => {
       const cassette = cassetteSchema.parse({ formatVersion: 1, provenance, interactions })
       assertSafe(cassette, secrets)
-      for (const interaction of interactions) validateInteraction(interaction, provenance.source, secrets)
       const serialized = `${JSON.stringify(cassette, null, 2)}\n`
       if (Buffer.byteLength(serialized) > MAX_BYTES * 2) throw new Error('Cassette exceeds size limit')
       const temporary = `${options.path}.${randomUUID()}.tmp`

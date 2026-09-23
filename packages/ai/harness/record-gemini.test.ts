@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from 'node:child_process'
-import { cp, mkdtemp, readFile, rm, symlink } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -77,13 +77,11 @@ it.each(['generate', 'stream', 'tools', 'tools-stream', 'embed'])(
         'gemini-scenarios.mjs',
         'cassette.ts',
         'gemini-protocol.ts',
-        'fixtures',
+        'openai-protocol.ts',
       ]) {
-        await cp(new URL(name, import.meta.url), join(directory, name), {
-          recursive: true,
-          filter: (path) => !path.endsWith('.live.json'),
-        })
+        await cp(new URL(name, import.meta.url), join(directory, name))
       }
+      await mkdir(join(directory, 'fixtures'))
       await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(directory, 'node_modules'), 'dir')
       const intercept = `
       const realFetch = globalThis.fetch;
