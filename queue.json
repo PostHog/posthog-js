@@ -1,21 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "pull_request-5062-fix-address-review-no-comment-no-close-1790154843762",
-      "kind": "pull_request",
-      "number": 5062,
-      "mode": "fix",
-      "command": "address-review",
-      "actor": "marandaneto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-09-23T09:14:03.762Z",
-      "source": {
-        "eventName": "pull_request_review",
-        "runId": 35841664182,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/35841664182"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
