@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-extensions",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point exposing the pre-grouped extension bundles that posthog-js/slim composes with: session replay, analytics autocapture, feature flags, error tracking, product tours and site apps. Pass the bundles a site uses through the __extensionClasses config and a bundler keeps the rest out. ESM-only; consumed by bundlers via the `module` field.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/extensions"
+    },
+    "main": "../dist/extension-bundles.js",
+    "module": "../dist/extension-bundles.js",
+    "types": "../dist/extension-bundles.d.ts"
+}

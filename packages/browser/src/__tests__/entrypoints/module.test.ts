@@ -389,6 +389,66 @@ void clients
     )
 
     it.each([
+        ['posthog-js/slim', 'module.slim'],
+        ['posthog-js/slim/no-external', 'module.slim.no-external'],
+        ['posthog-js/extensions', 'extension-bundles'],
+    ])('%s ships an ESM entry for bundlers', (specifier, bundle) => {
+        // These three are ES module only. The slim core exists so a bundler can tree-shake it,
+        // and the extension bundles it composes with are ES modules too, so there is no
+        // CommonJS twin to require.
+        expect(resolveAsConsumer.resolve(specifier)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+
+        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
+        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
+        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
+        expect(resolveFromShim(shim.module)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        // The slim declarations stay separate from the package's own `types`: they mark each
+        // tree-shakeable extension as possibly undefined, and the extension bundles are typed
+        // against them.
+        expect(resolveFromShim(shim.types)).toBe(path.join(installedPackageRoot, `dist/${bundle}.d.ts`))
+    })
+
+    it.each([ts.ModuleResolutionKind.Node10, ts.ModuleResolutionKind.Bundler])(
+        'types both slim subpaths as clients that accept the published extension bundles with module resolution %s',
+        (moduleResolution) => {
+            const fixturePath = path.join(consumerDirectory, 'slim.ts')
+            fs.writeFileSync(
+                fixturePath,
+                `
+import posthog from 'posthog-js/slim'
+import posthogNoExternal from 'posthog-js/slim/no-external'
+import { AnalyticsExtensions, SessionReplayExtensions } from 'posthog-js/extensions'
+
+for (const client of [posthog, posthogNoExternal]) {
+    client.init('phc_test', {
+        __extensionClasses: { ...AnalyticsExtensions, ...SessionReplayExtensions },
+    })
+}
+`
+            )
+
+            const program = ts.createProgram([fixturePath], {
+                esModuleInterop: true,
+                module: ts.ModuleKind.ESNext,
+                moduleResolution,
+                noEmit: true,
+                skipLibCheck: true,
+                strict: true,
+                target: ts.ScriptTarget.ESNext,
+                types: [],
+            })
+            const diagnostics = ts.getPreEmitDiagnostics(program)
+            expect(
+                ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                    getCanonicalFileName: (fileName) => fileName,
+                    getCurrentDirectory: () => consumerDirectory,
+                    getNewLine: () => '\n',
+                })
+            ).toBe('')
+        }
+    )
+
+    it.each([
         'posthog-js',
         'posthog-js/customizations',
         'posthog-js/dist/module.full.no-external.js',
