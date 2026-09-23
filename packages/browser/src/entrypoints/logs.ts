@@ -1,5 +1,6 @@
 import { assignableWindow } from '../utils/globals'
 import { LogsExtension } from '../extension-tokens'
+import { BrowserClientAdapter } from '../extensions/browser-client'
 import type { PostHog } from '../posthog-core'
 import type { CaptureLogOptions } from '../types'
 import type { Client } from '@posthog/browser-common'
@@ -12,13 +13,6 @@ import type { ConsoleLogsHost } from '@posthog/browser-common/console-logs'
 import type { BufferedConsoleEntry } from '../logs-types'
 
 const isClient = (host: PostHog | Client): host is Client => 'canCapture' in host
-
-const getCapturingLogs = (host: PostHog | Client) => {
-    if (isClient(host)) {
-        return host.canCapture ? host.getExtension(LogsExtension) : undefined
-    }
-    return host.is_capturing() ? host.logs : undefined
-}
 
 type HistoricalCaptureConsoleLogName = 'le' | 'de' | 'he' | 'ui' | 'ci' | 'vi'
 type HistoricalLogs = Partial<Record<HistoricalCaptureConsoleLogName, (options: CaptureLogOptions) => void>>
@@ -55,10 +49,11 @@ const captureConsoleLogForHost = (
     logs: NonNullable<PostHog['logs']>,
     options: CaptureLogOptions
 ): void => {
-    if (isClient(host)) {
+    if (isFunction(logs.captureConsoleLog)) {
         logs.captureConsoleLog(options)
         return
     }
+    if (isClient(host)) return
 
     // `_captureConsoleLog` had six generated names across core-backed releases.
     // Select by the stable SDK version instead of probing generated names,
@@ -72,20 +67,23 @@ const captureConsoleLogForHost = (
     }
 }
 
-const consoleHost = (host: PostHog | Client): ConsoleLogsHost => ({
-    console: assignableWindow.console,
-    hostname: assignableWindow.location.host,
-    getCapturingLogs: () => {
-        const logs = getCapturingLogs(host)
-        return logs
-            ? {
-                  captureConsoleLog: (options) => captureConsoleLogForHost(host, logs, options),
-                  captureBufferedConsoleLog: (options, context, occurredAtMs) =>
-                      logs.captureBufferedConsoleLog?.(options, context, occurredAtMs),
-              }
-            : undefined
-    },
-})
+const consoleHost = (host: PostHog | Client): ConsoleLogsHost => {
+    const client = isClient(host) ? host : new BrowserClientAdapter(host)
+    return {
+        console: assignableWindow.console,
+        hostname: assignableWindow.location.host,
+        getCapturingLogs: () => {
+            const logs = client.canCapture ? client.getExtension(LogsExtension) : undefined
+            return logs
+                ? {
+                      captureConsoleLog: (options) => captureConsoleLogForHost(host, logs, options),
+                      captureBufferedConsoleLog: (options, context, occurredAtMs) =>
+                          logs.captureBufferedConsoleLog?.(options, context, occurredAtMs),
+                  }
+                : undefined
+        },
+    }
+}
 const initializeLogs = (host: PostHog | Client): (() => void) => initializeConsoleLogs(consoleHost(host))
 const replayConsoleBuffer = (host: PostHog | Client, entries: BufferedConsoleEntry[]) =>
     replayBuffer(consoleHost(host), entries)
