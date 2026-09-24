@@ -217,8 +217,9 @@ const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
 
 const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
 
-// our own word keywords match whole words, so "prev" doesn't suppress "preview"
-const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = {}
+// our own word keywords match whole words, so "prev" doesn't suppress "preview". no prototype, so a
+// user keyword such as "constructor" can't resolve to an inherited member
+const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = Object.create(null)
 each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
     if (isWordKeyword(keyword)) {
         DEFAULT_WORD_KEYWORD_REGEXES[keyword] = new RegExp(`\\b${keyword}\\b`)

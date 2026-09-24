@@ -1093,6 +1093,26 @@ describe('Autocapture system', () => {
 
                     expect(rageClickThreeTimes(el)).toContain('$rageclick')
                 })
+
+                it.each(['constructor', '__proto__'])(
+                    'a custom "%s" keyword suppresses a matching label',
+                    (keyword) => {
+                        posthog.config.rageclick = { content_ignorelist: [keyword] }
+
+                        expect(rageClickThreeTimes(buttonWithText(keyword))).not.toContain('$rageclick')
+                    }
+                )
+
+                it.each(['constructor', '__proto__'])(
+                    'a custom "%s" keyword keeps every click and the rageclick on a non-matching label',
+                    (keyword) => {
+                        posthog.config.rageclick = { content_ignorelist: [keyword] }
+
+                        const captured = rageClickThreeTimes(buttonWithText('Buy now'))
+                        expect(captured).toContain('$rageclick')
+                        expect(captured.filter((event) => event === '$autocapture')).toHaveLength(3)
+                    }
+                )
             })
 
             describe('when a custom array copies the defaults and adds to them', () => {
