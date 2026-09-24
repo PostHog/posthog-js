@@ -109,7 +109,6 @@ export const logs = (options: LogsOptions = {}): LogsExtension => {
             environment.disposed = true
             subscriptions.splice(0).forEach((subscription) => subscription.dispose())
             try {
-                shared.flushLogs('sendBeacon')
                 environment.browserWindow?.removeEventListener('pagehide', pagehide)
             } finally {
                 try {

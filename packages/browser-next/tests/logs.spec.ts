@@ -174,7 +174,7 @@ describe('logs', () => {
             })
             output.log('hello', { answer: 42 })
             getLogs(client).captureLog({ body: 'programmatic' })
-            await getLogs(client).flush()
+            await client.flush()
             expect(original).toHaveBeenCalledWith('hello', { answer: 42 })
             expect(bodies).toHaveLength(2)
             expect(bodies.map((body) => body.resourceLogs[0]?.scopeLogs[0]?.scope.name)).toEqual([
@@ -254,7 +254,9 @@ describe('logs', () => {
     )
 
     it('stops capture before invoking a caller-supplied transport during shutdown', async () => {
+        const admission: boolean[] = []
         const fetch = vi.fn(async () => {
+            admission.push(client.canCapture)
             getLogs(client).captureLog({ body: 'reentrant' })
             return new Response('{}')
         })
@@ -262,6 +264,33 @@ describe('logs', () => {
         getLogs(client).captureLog({ body: 'before shutdown' })
         await client.shutdown()
         expect(fetch).toHaveBeenCalledOnce()
+        expect(admission).toEqual([false])
+    })
+
+    it('awaits extension flushes before cleanup and bounds stalled extensions at shutdown', async () => {
+        const dispose = vi.fn()
+        const admission: boolean[] = []
+        let finish!: () => void
+        const flush = vi.fn(() => {
+            admission.push(client.canCapture)
+            return new Promise<void>((resolve) => {
+                finish = resolve
+            })
+        })
+        const client = await create({ extensions: [{ name: 'buffered', setup: vi.fn(), flush, dispose }] })
+        const pending = client.flush()
+        expect(flush).toHaveBeenCalledWith('flush')
+        finish()
+        await pending
+        const closing = client.shutdown(10)
+        expect(flush).toHaveBeenLastCalledWith('shutdown')
+        expect(admission).toEqual([true, false])
+        expect(dispose).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(10)
+        await closing
+        expect(dispose).toHaveBeenCalledOnce()
+        expect(flush).toHaveBeenCalledTimes(2)
+        finish()
     })
 
     it('bounds shutdown while a stalled request retains its own timeout', async () => {
@@ -320,20 +349,23 @@ describe('logs', () => {
         expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('keeps client flush analytics-only and hands off queued logs before disposal', async () => {
+    it('flushes logs through normal delivery on client flush and shutdown', async () => {
         const sendBeacon = vi.fn(() => true)
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ navigator: { sendBeacon }, disableBotDetection: true, fetch })
         getLogs(client).captureLog({ body: 'before shutdown' })
         await client.flush()
         expect(sendBeacon).not.toHaveBeenCalled()
-        expect(fetch).not.toHaveBeenCalled()
+        expect(fetch).toHaveBeenCalledOnce()
+        getLogs(client).captureLog({ body: 'shutdown record' })
         await client.shutdown()
-        expect(sendBeacon).toHaveBeenCalledOnce()
-        const body = (sendBeacon.mock.calls as unknown as Array<[string, Blob]>)[0]![1]
-        expect(records(JSON.parse(await body.text())).map((record) => record.body)).toEqual([
-            { stringValue: 'before shutdown' },
-        ])
+        expect(sendBeacon).not.toHaveBeenCalled()
+        expect(fetch).toHaveBeenCalledTimes(2)
+        const calls = fetch.mock.calls as unknown as Array<[string, RequestInit]>
+        expect(
+            calls.flatMap(([, init]) => records(JSON.parse(init.body as string))).map((record) => record.body)
+        ).toEqual([{ stringValue: 'before shutdown' }, { stringValue: 'shutdown record' }])
+        expect(calls.every(([, init]) => !init.keepalive)).toBe(true)
     })
 
     it('uses logs Beacon on pagehide, falls back to keepalive, and removes the listener', async () => {
