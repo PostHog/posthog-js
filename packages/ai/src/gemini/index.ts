@@ -157,10 +157,12 @@ export class WrappedModels {
                   if (firstTokenTime === undefined) {
                     firstTokenTime = Date.now()
                   }
-                  const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
+                  const funcCall = (part as Part & { functionCall?: { id?: string; name?: string; args?: unknown } })
+                    .functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({
                       type: 'function',
+                      ...(funcCall.id != null ? { id: funcCall.id } : {}),
                       function: {
                         name: funcCall.name,
                         arguments: funcCall.args || {},

@@ -250,6 +250,208 @@ describe('Utilities for other modules', () => {
         vi.useRealTimers();
       }
     });
+
+    describe('deferring on an unpatched timer', () => {
+      const zoneGlobals = window as unknown as Record<string, unknown>;
+      const symbolFor = (key: string) => `__zone_symbol__${key}`;
+      let originalSetTimeout: typeof setTimeout;
+      let nativeSetTimeout: typeof setTimeout;
+
+      beforeEach(() => {
+        originalSetTimeout = window.setTimeout;
+        nativeSetTimeout = originalSetTimeout.bind(window) as typeof setTimeout;
+      });
+
+      // the globals are restored here rather than in each test, so that a test
+      // failing before its own cleanup cannot leak a patched timer or a `Zone`
+      // into the ones after it
+      afterEach(() => {
+        window.setTimeout = originalSetTimeout;
+        delete zoneGlobals.Zone;
+        delete zoneGlobals.__zone_symbol__setTimeout;
+        document.body.innerHTML = '';
+      });
+
+      const flushTimers = () =>
+        new Promise((resolve) => nativeSetTimeout(resolve, 0));
+
+      const deferringTimer = () =>
+        vi.fn((callback: () => void) => nativeSetTimeout(callback, 0));
+
+      // the hook is installed on a throwaway prototype, so there is nothing
+      // shared to restore afterwards
+      const hookValueSetter = (
+        hookedSet: () => void,
+        win: Window & typeof globalThis,
+        nativeSet: () => void = vi.fn(),
+      ) => {
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set: nativeSet,
+        });
+        hookSetter(proto, 'value', { set: hookedSet }, false, win);
+        return Object.create(proto) as { value: string };
+      };
+
+      it('should defer on the timer zone.js left unpatched', async () => {
+        const patchedSetTimeout = deferringTimer();
+        const unpatchedSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = unpatchedSetTimeout;
+        window.setTimeout = patchedSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const nativeSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window, nativeSet);
+        element.value = 'test';
+
+        // a timer scheduled through the patched global keeps the Angular zone
+        // busy, so NgZone runs another change detection when it completes; a
+        // component that writes the property on every change detection then
+        // feeds itself forever
+        expect(patchedSetTimeout).not.toHaveBeenCalled();
+        expect(unpatchedSetTimeout).toHaveBeenCalledTimes(1);
+        // the page-visible write stays synchronous
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should defer on the timer of the window the hook was installed for', async () => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameWindow = iframe.contentWindow as
+          | (Window & typeof globalThis)
+          | null;
+        if (!frameWindow) throw new Error('the iframe has no window');
+
+        // zone.js patches every window it reaches, so the hook has to pick the
+        // unpatched timer of the window it was installed for
+        const patchedSetTimeout = deferringTimer();
+        const topUnpatchedSetTimeout = vi.fn();
+        const frameUnpatchedSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = topUnpatchedSetTimeout;
+        window.setTimeout = patchedSetTimeout as unknown as typeof setTimeout;
+
+        const frameGlobals = frameWindow as unknown as Record<string, unknown>;
+        frameGlobals.Zone = { __symbol__: symbolFor };
+        frameGlobals.__zone_symbol__setTimeout = frameUnpatchedSetTimeout;
+        frameWindow.setTimeout =
+          patchedSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, frameWindow);
+        element.value = 'test';
+
+        expect(patchedSetTimeout).not.toHaveBeenCalled();
+        expect(topUnpatchedSetTimeout).not.toHaveBeenCalled();
+        expect(frameUnpatchedSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should fall back to the window timer when no unpatched one is exposed', async () => {
+        const windowSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should fall back to the window timer when the lookup throws', async () => {
+        const windowSetTimeout = deferringTimer();
+        // `Zone` is an ordinary global, so a page is free to put anything there
+        zoneGlobals.Zone = {
+          __symbol__: () => {
+            throw new Error('not the zone.js you were looking for');
+          },
+        };
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        // a throw here would escape the loop that installs the six input hooks,
+        // leaving the earlier ones in place with no resetter to remove them
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should not let a throwing timer reach the page', async () => {
+        const nativeSet = vi.fn();
+        const throwingSetTimeout = vi.fn(() => {
+          throw new Error('the page owns this global too');
+        });
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = throwingSetTimeout;
+
+        const element = hookValueSetter(vi.fn(), window, nativeSet);
+
+        // the deferral runs inside the page's own assignment and before it is
+        // forwarded, so a throw here would swallow the page's write
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(throwingSetTimeout).toHaveBeenCalledTimes(1);
+        expect(nativeSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should not let a window without a usable timer reach the page', async () => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameWindow = iframe.contentWindow as
+          | (Window & typeof globalThis)
+          | null;
+        if (!frameWindow) throw new Error('the iframe has no window');
+
+        const nativeSet = vi.fn();
+        const hookedSet = vi.fn();
+        frameWindow.setTimeout = undefined as unknown as typeof setTimeout;
+
+        const element = hookValueSetter(hookedSet, frameWindow, nativeSet);
+
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await flushTimers();
+        expect(hookedSet).not.toHaveBeenCalled();
+      });
+
+      it('should use the window timer when nothing patched it', async () => {
+        const windowSetTimeout = deferringTimer();
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        expect('Zone' in window).toBe(false);
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+    });
   });
 
   describe('inDom()', () => {

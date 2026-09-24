@@ -542,6 +542,12 @@ export interface McpCaptureCommon {
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
   /**
+   * Conversation handle → `$mcp_conversation_id`. For custom dispatchers,
+   * use the value returned by {@link PostHogMCP.prepareToolResult} so a newly
+   * minted handle is captured only when it reached the client.
+   */
+  conversationId?: string
+  /**
    * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
    * every capture for the session (like `sessionId`) so later events carry it too,
    * not just the initialize event — the `PostHogMCP` client holds no per-session state.
@@ -695,9 +701,15 @@ export interface PrepareToolCallOptions {
    * Passing it also disambiguates a feedback-tool name collision: a real tool
    * by that name is dispatched normally instead of being flagged as feedback.
    */
-  originalTool?: { inputSchema?: unknown }
+  originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
   /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
   requestMeta?: JsonRecord
+  /**
+   * A session id carried by the request or transport. A valid echoed
+   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
+   * from minting a second session handle.
+   */
+  sessionId?: string
 }
 
 /**
@@ -714,8 +726,16 @@ export interface PreparedToolCall {
   llmModel?: string
   /** How the model id was obtained. */
   llmModelSource?: MCPAnalyticsModelSource
-  /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
+  /** The call arguments with SDK-owned analytics keys removed. */
   args?: Record<string, unknown>
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /**
+   * The resolved conversation handle. Use the value from
+   * {@link PostHogMCP.prepareToolResult} for capture because result delivery can
+   * remove a newly minted handle from analytics.
+   */
+  conversationId?: string
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
   /**
@@ -732,6 +752,16 @@ export interface PreparedToolCall {
    * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
    */
   feedbackReport?: FeedbackReport
+}
+
+/** Result of {@link PostHogMCP.prepareToolResult}. */
+export interface PreparedToolResult<TResult = unknown> {
+  /** The result to return to the MCP client. */
+  result: TResult
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /** The conversation handle to capture, if it reached the client. */
+  conversationId?: string
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */

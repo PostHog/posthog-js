@@ -744,6 +744,64 @@
         },
         {
           "category": "Feature flags",
+          "description": "Get where a locally loaded feature flag is meant to be evaluated.",
+          "details": "Read from the definitions local evaluation already holds, so no request is made. A definition that carries no runtime reports `all`, the default PostHog applies.",
+          "id": "getFeatureFlagEvaluationRuntime",
+          "showDocs": true,
+          "title": "getFeatureFlagEvaluationRuntime",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst runtime = client.getFeatureFlagEvaluationRuntime('my-flag')\n// Returns: 'client'\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            }
+          ],
+          "returnType": {
+            "id": "FeatureFlagEvaluationRuntime | undefined",
+            "name": "FeatureFlagEvaluationRuntime | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the keys of locally loaded flags that a runtime can evaluate.",
+          "details": "A flag set to `all` suits either runtime, so it is returned for `client` and for `server`, and asking for `all` returns every loaded flag. Use this to decide which flags to hand to a browser when a backend serves flags to its own frontend.",
+          "id": "getFeatureFlagKeysByEvaluationRuntime",
+          "showDocs": true,
+          "title": "getFeatureFlagKeysByEvaluationRuntime",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')\n// Returns: ['web-banner', 'shared-copy']\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The runtime to match",
+              "isOptional": false,
+              "type": "FeatureFlagEvaluationRuntime",
+              "name": "evaluationRuntime"
+            }
+          ],
+          "returnType": {
+            "id": "string[]",
+            "name": "string[]"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
           "description": "Get the payload for a feature flag.",
           "details": null,
           "id": "getFeatureFlagPayload",
@@ -2329,6 +2387,13 @@
       "example": "(typeof FeatureFlagError)[Exclude<keyof typeof FeatureFlagError, 'apiError'>] | ReturnType<typeof FeatureFlagError.apiError> | string"
     },
     {
+      "id": "FeatureFlagEvaluationRuntime",
+      "name": "FeatureFlagEvaluationRuntime",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "\"all\" | \"client\" | \"server\""
+    },
+    {
       "id": "FeatureFlagMetadata",
       "name": "FeatureFlagMetadata",
       "properties": [],
@@ -3112,7 +3177,7 @@
           "name": "bucketing_identifier"
         },
         {
-          "type": "{ aggregation_group_type_index?: number; groups?: FeatureFlagCondition[]; multivariate?: { variants: { key: string; rollout_percentage: number; }[]; }; payloads?: Record<string, string>; early_exit?: boolean; }",
+          "type": "{ aggregation_group_type_index?: number; groups?: FeatureFlagCondition[]; multivariate?: { variants: { key: string; rollout_percentage: number; }[]; }; payloads?: Record<string, string>; holdout?: { id: number; exclusion_percentage: number; } | null; early_exit?: boolean; }",
           "name": "filters"
         },
         {
@@ -3149,6 +3214,11 @@
           "description": "Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,\n2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a\nfallback so local-evaluation context filtering still works against those servers.",
           "type": "string[]",
           "name": "evaluation_tags"
+        },
+        {
+          "description": "Where the flag is meant to be evaluated. Absent or null on a flag that does not set a\nruntime, and on servers older than the field; both mean `all`, the default PostHog applies.",
+          "type": "FeatureFlagEvaluationRuntime",
+          "name": "evaluation_runtime"
         }
       ],
       "path": "src/types.ts"

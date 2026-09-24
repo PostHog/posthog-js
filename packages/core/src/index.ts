@@ -11,6 +11,7 @@ export {
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,
+  getHoldoutVariant,
   hashSHA1,
   InconclusiveMatchError,
   matchFeatureFlagProperty,

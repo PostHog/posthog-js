@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-23T04:03:52.612Z",
+    "providerSdkVersion": "1.52.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Reply with a short greeting."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "maxOutputTokens": 256
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": {
+          "kind": "sse",
+          "chunks": [
+            "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Hello! How can I help you today?\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 7,\"candidatesTokenCount\": 9,\"totalTokenCount\": 16,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 7}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.1-flash-lite\",\"responseId\": \"qE-zasyMNMWDz7IPkuHWmQ8\"}\n\n",
+            "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"EnEKbwFpFH0TexMTwB+wuXtVBINESaNkN7o7nTabXr5S1Mrnz74VNVNScLCe3MBB9FegtfkxaXRlaoytBq/Gwb5CankqHy29BWkBawUHhiRZ5aQy28ig2VEeDVx3pTuKIQinhbLJcRoTdqViiUcYjFnSWw==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 7,\"candidatesTokenCount\": 9,\"totalTokenCount\": 16,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 7}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.1-flash-lite\",\"responseId\": \"qE-zasyMNMWDz7IPkuHWmQ8\"}\n\n"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,25 @@
 # posthog-react-native
 
+## 4.77.0
+
+### Minor Changes
+
+- [#5040](https://github.com/PostHog/posthog-js/pull/5040) [`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce) Thanks [@hpouillot](https://github.com/hpouillot)! - Capture fatal React Native JavaScript exceptions through the embedded native SDK, which persists them to its own disk queue synchronously, so a crash is not lost when the process terminates before AsyncStorage finishes writing. The JS queue copy is dropped when native takes the event, so each crash is still sent once.
+
+  Enabling `errorTracking.autocapture.uncaughtExceptions` now initializes the native PostHog SDK on its own, since that queue is what makes the fatal path durable. Apps that previously enabled neither session replay, native crash autocapture nor push will see one additional `/config` request per launch as a result: the native SDKs fetch remote config at setup regardless of `preloadFeatureFlags`. (2026-09-23)
+
+### Patch Changes
+
+- Updated dependencies [[`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce)]:
+  - @posthog/react-native-plugin@2.10.0
+
+## 4.76.0
+
+### Minor Changes
+
+- [#5064](https://github.com/PostHog/posthog-js/pull/5064) [`5b655be`](https://github.com/PostHog/posthog-js/commit/5b655befcb73bb8e1bd4b27725968d7388f8347a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add a `force` option for symbol uploads
+  (2026-09-22)
+
 ## 4.75.0
 
 ### Minor Changes

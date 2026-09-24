@@ -33,6 +33,7 @@ print_command_error() {
 # WITH_ENVIRONMENT is executed by React Native
 
 POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
+POSTHOG_FORCE_ENABLED="${POSTHOG_FORCE:-}"
 # The mode is explicit when the environment or a --posthog-release-mode argument supplies it, and
 # implicit when only the event default applies. The difference decides how an old posthog-cli is
 # handled below: an explicit mode fails the build, the implicit default softens to a bound upload.
@@ -45,6 +46,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
       POSTHOG_SKIP_ON_CONFLICT_ENABLED=1
+      shift
+      ;;
+    --posthog-force)
+      POSTHOG_FORCE_ENABLED=1
       shift
       ;;
     --posthog-release-mode)
@@ -72,9 +77,25 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+posthog_flag_is_enabled() {
+  [ "$1" = "1" ] || [ "$1" = "true" ]
+}
+
+# How an upload treats a symbol set that already exists with different content: skip-on-conflict
+# keeps the stored one, force overwrites it, and the default fails the build. posthog-cli declares
+# the two flags mutually exclusive, so reject the pair here rather than letting the upload fail on
+# an argument-parser error after the bundle is built.
+if posthog_flag_is_enabled "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" && posthog_flag_is_enabled "$POSTHOG_FORCE_ENABLED"; then
+  echo "error: posthog skip-on-conflict and force cannot both be set. posthog-cli accepts only one of --skip-on-conflict and --force."
+  exit 1
+fi
+
 POSTHOG_UPLOAD_ARGS=()
-if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "true" ]; then
+if posthog_flag_is_enabled "$POSTHOG_SKIP_ON_CONFLICT_ENABLED"; then
   POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)
+fi
+if posthog_flag_is_enabled "$POSTHOG_FORCE_ENABLED"; then
+  POSTHOG_UPLOAD_ARGS+=(--force)
 fi
 
 # How the release a build belongs to gets associated with the exceptions it reports. This covers

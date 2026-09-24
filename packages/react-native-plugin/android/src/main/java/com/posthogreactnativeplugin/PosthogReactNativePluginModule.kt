@@ -11,6 +11,8 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.JavascriptException
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.posthog.PostHog
@@ -23,6 +25,11 @@ import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
 import com.posthog.internal.PostHogSessionManager
+import java.text.ParseException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 class PosthogReactNativePluginModule(
@@ -397,6 +404,54 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  /**
+   * Capture a fatal JavaScript exception through the native SDK.
+   *
+   * The JS layer has already run `before_send` and built the final payload; this only hands
+   * it to posthog-android. A `$exception` carrying `$exception_level: "fatal"` takes the
+   * SDK's fatal path, which writes the record to its own disk queue synchronously before
+   * returning — the durability the JS event queue cannot promise while AsyncStorage is still
+   * draining. Delivery, retry and the relaunch flush are then the native SDK's job.
+   *
+   * The JS side drops its own copy of the event when this path is taken, so this must not
+   * silently no-op: a rejection tells JS the capture did not happen.
+   */
+  @ReactMethod
+  fun captureFatalException(
+    distinctId: String,
+    timestamp: String,
+    properties: ReadableMap,
+    promise: Promise,
+  ) {
+    try {
+      val parsedTimestamp = parseIso8601(timestamp)
+      if (parsedTimestamp == null) {
+        promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: invalid timestamp '$timestamp'")
+        return
+      }
+      // capture() returns silently when the SDK was never set up. JS gives up its own copy of
+      // the event before calling this, so a false success would lose the crash without a
+      // trace; report it instead.
+      if (PostHog.getConfig<PostHogConfig>() == null) {
+        promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: the native SDK is not set up")
+        return
+      }
+      // ReadableMap.toHashMap() is HashMap<String, Any?>; the native API takes Map<String, Any>?.
+      @Suppress("UNCHECKED_CAST")
+      val nativeProperties = properties.toHashMap() as Map<String, Any>
+      PostHog.capture(
+        event = "\$exception",
+        distinctId = distinctId.takeIf { it.isNotEmpty() },
+        properties = nativeProperties,
+        timestamp = parsedTimestamp,
+      )
+      promise.resolve(null)
+    } catch (e: Throwable) {
+      logError("captureFatalException", e)
+      promise.reject(FATAL_CAPTURE_ERROR_CODE, e)
+    }
+  }
+
   private fun getMap(
     map: ReadableMap?,
     key: String,
@@ -573,6 +628,7 @@ class PosthogReactNativePluginModule(
     const val DEFAULT_THROTTLE_DELAY_MS = 1000
 
     private const val PUSH_ERROR_CODE = "PosthogReactNativePluginError"
+    private const val FATAL_CAPTURE_ERROR_CODE = "PosthogReactNativePluginFatalCaptureError"
     private const val PUSH_IDENTITY_EVENT = "PostHogPushIdentityRequest"
     private const val PUSH_IDENTITY_REPLY_TTL_MS = 15_000L
 
@@ -646,6 +702,23 @@ class PosthogReactNativePluginModule(
           } catch (e: Throwable) {
             null
           }
+  }
+}
+
+// The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly
+// rather than trusting a locale-dependent default, and treat anything unparseable as a
+// caller error: silently substituting "now" would attribute the crash to the wrong instant.
+internal fun parseIso8601(value: String): Date? {
+  if (value.isEmpty()) {
+    return null
+  }
+  val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+  format.timeZone = TimeZone.getTimeZone("UTC")
+  format.isLenient = false
+  return try {
+    format.parse(value)
+  } catch (_: ParseException) {
+    null
   }
 }
 

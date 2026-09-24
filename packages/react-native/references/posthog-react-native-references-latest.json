@@ -4157,6 +4157,10 @@
           "name": "addExceptionStep"
         },
         {
+          "type": "((distinctId: string, timestamp: string, properties: PostHogReactNativePluginMap) => Promise<void>) & ((distinctId: string, timestamp: string, properties: { [key: string]: any; }) => Promise<void>)",
+          "name": "captureFatalException"
+        },
+        {
           "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",
           "name": "registerPushNotificationToken"
         },

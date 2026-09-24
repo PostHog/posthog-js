@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.18.0
+
+### Minor Changes
+
+- [#5074](https://github.com/PostHog/posthog-js/pull/5074) [`7133bdb`](https://github.com/PostHog/posthog-js/commit/7133bdb7e5eb4a15f834f6f4d634cfab2de64ee2) Thanks [@gesh](https://github.com/gesh)! - Add conversation and session correlation helpers for custom MCP dispatchers.
+  (2026-09-23)
+
 ## 0.17.0
 
 ### Minor Changes

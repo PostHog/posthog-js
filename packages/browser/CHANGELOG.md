@@ -1,5 +1,41 @@
 # posthog-js
 
+## 1.434.12
+
+### Patch Changes
+
+- [#5073](https://github.com/PostHog/posthog-js/pull/5073) [`60bd968`](https://github.com/PostHog/posthog-js/commit/60bd9685c199c0cd0b9134682053fffac41edb1f) Thanks [@ksvat](https://github.com/ksvat)! - The replayer no longer freezes the tab on a mutation that adds tens of thousands of nodes at once. It now applies a batch of 1,000 or more adds against a detached subtree, so the document updates style and layout once instead of per insert. A recorded batch of 25,746 style elements went from 92 seconds of blocked main thread to 1.5 seconds.
+  (2026-09-23)
+
+## 1.434.11
+
+### Patch Changes
+
+- [#5051](https://github.com/PostHog/posthog-js/pull/5051) [`1549919`](https://github.com/PostHog/posthog-js/commit/1549919965d909ce58e5804e70fc7c28a66a2da5) Thanks [@DeepanshuPal](https://github.com/DeepanshuPal)! - Avoid cross-domain cookie probes when cross-subdomain cookies are disabled.
+  (2026-09-23)
+
+## 1.434.10
+
+### Patch Changes
+
+- [#5060](https://github.com/PostHog/posthog-js/pull/5060) [`a9c40ec`](https://github.com/PostHog/posthog-js/commit/a9c40ec93ce38b11b17a69ff01d3e7b8677f7121) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix SDK initialization when a script loader pre-creates window.posthog as a placeholder object.
+  (2026-09-23)
+
+## 1.434.9
+
+### Patch Changes
+
+- [#4970](https://github.com/PostHog/posthog-js/pull/4970) [`708a5f7`](https://github.com/PostHog/posthog-js/commit/708a5f757d9da9dad2a3b0a892708a1fbfcb9de9) Thanks [@Christian2702](https://github.com/Christian2702)! - Session replay no longer defers its input setter hooks on zone.js's patched `setTimeout`. In Angular apps each of those timers ended a zone task and triggered another change detection, so any component writing an input property on every cycle drove the tab into an endless loop at 100% CPU.
+  (2026-09-22)
+
+## 1.434.8
+
+### Patch Changes
+
+- [#5054](https://github.com/PostHog/posthog-js/pull/5054) [`36f356d`](https://github.com/PostHog/posthog-js/commit/36f356dac9ff06131ece2c45ec22e0a991fb3ff8) Thanks [@posthog](https://github.com/apps/posthog)! - fix(dead-clicks): survive a denied property access in Firefox
+
+  Firefox denies property access on a DOM node from another origin or from a realm that was torn down. The detector reads `isConnected` and `nodeType` on mutation records and on composed paths, and reads `getRootNode` on selection endpoints, so the denial escaped the MutationObserver callback and stopped the rest of the batch from refreshing the liveness timestamp. A node that cannot be read is now treated as a node that cannot be inspected. (2026-09-22)
+
 ## 1.434.7
 
 ### Patch Changes

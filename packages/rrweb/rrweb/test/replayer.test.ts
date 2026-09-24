@@ -38,6 +38,8 @@ import adoptedStyleSheetModification from './events/adopted-style-sheet-modifica
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
+import hugeAddMutationEvents from './events/huge-add-mutation';
+import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
 import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
@@ -999,6 +1001,64 @@ describe('replayer', function () {
     }, ReplayerEvents.Finish);
 
     expect(status).toEqual(false);
+  });
+
+  it('applies a huge add mutation with sibling order intact', async () => {
+    await page.evaluate(`events = ${JSON.stringify(hugeAddMutationEvents)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const div = doc.querySelector('#root');
+        const children = Array.from(div.children);
+        return {
+          childCount: children.length,
+          first: children[0].textContent,
+          last: children[children.length - 1].textContent,
+          styleAfterA: children[1].textContent,
+          lastOfBatch1: children[1100].textContent,
+          firstOfBatch2: children[1101].textContent,
+          lastOfBatch2: children[1700].textContent,
+          bodyOrder: Array.from(doc.body.children).map(
+            (el) => el.id || el.tagName,
+          ),
+        };
+      })()
+    `);
+    expect(result).toEqual({
+      // A + 1100 batch-1 styles + 600 batch-2 styles + B
+      childCount: 1702,
+      first: 'A',
+      last: 'B',
+      styleAfterA: '.m1c0 { color: red; }',
+      lastOfBatch1: '.m1c1099 { color: red; }',
+      firstOfBatch2: '.m2c0 { color: red; }',
+      lastOfBatch2: '.m2c599 { color: red; }',
+      // the sibling-of-root add must land between #root and #d-span
+      bodyOrder: ['root', 'c-span', 'd-span'],
+    });
+  });
+
+  it('opens a modal dialog added inside a huge add mutation', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(hugeAddMutationDialogEvents)}`,
+    );
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const dialog = doc.querySelector('dialog');
+        return {
+          open: dialog.open,
+          isModal: dialog.matches('dialog:modal'),
+        };
+      })()
+    `);
+    expect(result).toEqual({ open: true, isModal: true });
   });
 
   it('replays same timestamp events in correct order', async () => {
