@@ -111,6 +111,60 @@ export interface CompileOptions {
     readonly exit: { readonly reason: string; readonly name?: string; readonly description?: string }
 }
 
+function isBlank(value: unknown): boolean {
+    return typeof value !== 'string' || value.trim() === ''
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// The types already require these options, but the CLI evaluates a file without type-checking it,
+// so a missing option must reach the author as a refusal, not as a TypeError inside the compiler.
+function checkRequiredOptions(options: CompileOptions): void {
+    const given = options as Partial<Record<keyof CompileOptions, unknown>>
+    if (typeof given.key !== 'string') {
+        throw new WorkflowError({
+            status: 'missing_key',
+            message: 'The workflow has no key.',
+            why: 'The key is the identity of the workflow in a project. Without it a push cannot tell which workflow the file owns.',
+            fix: "Pass a key to workflow(), for example key: 'onboarding-nudge'.",
+        })
+    }
+    if (isBlank(given.name)) {
+        throw new WorkflowError({
+            status: 'missing_name',
+            message: 'The workflow has no name.',
+            why: 'The name is what PostHog shows for the workflow, and the SDK has no default for it.',
+            fix: "Pass a name to workflow(), for example name: 'Onboarding nudge'.",
+        })
+    }
+    if (!isRecord(given.trigger)) {
+        throw new WorkflowError({
+            status: 'missing_trigger',
+            message: 'The workflow has no trigger.',
+            why: 'The trigger decides when a run starts, so a workflow without one never runs.',
+            fix: 'Pass on to workflow(), built with onEvent, onSchedule or trigger.',
+        })
+    }
+    if (!Array.isArray(given.steps)) {
+        throw new WorkflowError({
+            status: 'missing_steps',
+            message: 'The workflow has no steps.',
+            why: 'The steps are the path a run takes, and the value passed is not a path.',
+            fix: 'Pass steps to workflow(), built with path() and at least one step.',
+        })
+    }
+    if (!isRecord(given.exit) || isBlank(given.exit.reason)) {
+        throw new WorkflowError({
+            status: 'missing_exit',
+            message: isRecord(given.exit) ? 'The workflow exit has no reason.' : 'The workflow has no exit.',
+            why: 'The exit is the terminal step, and its reason is the label PostHog records when a run finishes.',
+            fix: "Pass an exit with a reason to workflow(), for example exit: { reason: 'Onboarding finished' }.",
+        })
+    }
+}
+
 function checkKey(key: string): void {
     if (key.length === 0 || key.length > MAX_WORKFLOW_KEY_LENGTH || !WORKFLOW_KEY_PATTERN.test(key)) {
         throw new WorkflowError({
@@ -640,6 +694,7 @@ function emitPath(placements: readonly Placement[], continuation: string, contex
  * @param emitOptions - Where to read a `secret` from. Defaults to `process.env`.
  * @returns The definition, and the secret inputs it resolved.
  * @throws {WorkflowError} The first rule the workflow breaks. The statuses are
+ * `missing_key`, `missing_name`, `missing_trigger`, `missing_steps`, `missing_exit`,
  * `duplicate_action_id`, `reserved_action_id`, `invalid_action_id`,
  * `action_id_too_long`, `unnamed_action_id`, `step_name_too_long`, `invalid_key`,
  * `invalid_duration`, `duration_over_unit_cap`, `empty_path`, `invalid_email_sender`,
@@ -662,6 +717,7 @@ function emitPath(placements: readonly Placement[], continuation: string, contex
  * ```
  */
 export function compile(options: CompileOptions, emitOptions: EmitOptions = {}): EmitResult {
+    checkRequiredOptions(options)
     checkKey(options.key)
     const variables = options.variables ?? []
     checkVariables(variables)

@@ -931,6 +931,30 @@ describe('@posthog/workflows', () => {
         )
     })
 
+    for (const [label, change, status] of [
+        ['no exit', { exit: undefined }, 'missing_exit'],
+        ['an exit that is not an object', { exit: 'done' }, 'missing_exit'],
+        ['an exit with an empty reason', { exit: { reason: ' ' } }, 'missing_exit'],
+        ['no key', { key: undefined }, 'missing_key'],
+        ['no name', { name: undefined }, 'missing_name'],
+        ['no trigger', { on: undefined }, 'missing_trigger'],
+        ['no steps', { steps: undefined }, 'missing_steps'],
+    ] as const) {
+        test(`refuses a workflow with ${label}`, () => {
+            // A file the CLI loads is never type-checked, so the options can break the types.
+            const options = {
+                key: 'untyped',
+                name: 'Untyped',
+                on: onSchedule(),
+                steps: path(delay('1d', { name: 'Wait' })),
+                exit: { reason: 'Done' },
+                ...change,
+            } as unknown as Parameters<typeof workflow>[0]
+
+            assert.strictEqual(refusal(() => workflow(options).emit({ env })).status, status)
+        })
+    }
+
     test('carries the status and the variables the file declares', () => {
         const flow = workflow({
             key: 'with-variables',
