@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5089](https://github.com/PostHog/posthog-js/issues/5089) | Well-scoped new SDK and CLI proposal, but it is a substantial public API and deployment surface that should be reviewed through the linked draft implementation before approval. | feature, node, javascript, enhancement |  | no | 2026-09-24T07:03:41.160Z |
 | PostHog/posthog-js | [issue 5085](https://github.com/PostHog/posthog-js/issues/5085) | Confirmed @posthog/ai telemetry bug: Gemini function-call IDs and follow-up tool-call/result content are dropped from captured generation data. | node, team/ai-observability, bug | https://github.com/PostHog/posthog-js/pull/5086 | no | 2026-09-24T04:48:15.165Z |
 | PostHog/posthog-js | [issue 5084](https://github.com/PostHog/posthog-js/issues/5084) | Confirmed posthog-node bug: local feature-flag evaluation always schedules a recurring timer, including when a shared cache says this instance should not fetch definitions. | node, feature/flags, team/client-libraries, performance, bug |  | no | 2026-09-24T01:58:25.038Z |
 | PostHog/posthog-js | [issue 5072](https://github.com/PostHog/posthog-js/issues/5072) | Valid React Native feature gap; a headless Conversations API is more appropriate than shipping a full widget, but its public contract needs agreement before implementation. | enhancement, feature, react-native, feature/mobile, team/client-libraries |  | no | 2026-09-22T22:39:30.085Z |
