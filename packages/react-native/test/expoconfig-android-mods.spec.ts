@@ -105,7 +105,10 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
         '        classpath("com.posthog:posthog-android-gradle-plugin:1.4.0")\n    }\n}'
       )
     )
-    fs.writeFileSync(path.join(projectRoot, 'android/app/build.gradle'), appGradle.replace('\n', `\n${applyLine}\n`))
+    fs.writeFileSync(
+      path.join(projectRoot, 'android/app/build.gradle'),
+      ['apply plugin: "com.android.application"', applyLine, '', 'android {', '    namespace "com.example"', '}', ''].join('\n')
+    )
 
     await prebuild(true, { uploadNativeSymbols: { includeSource: true } })
 
