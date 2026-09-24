@@ -3057,8 +3057,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // rrweb defaults to the window load event, which waits for every image, font
             // and subframe, so a page whose load event is late or never fires records
             // nothing. A full snapshot only needs the DOM to exist, not every resource
-            // loaded; a stylesheet still pending at snapshot time goes through the
-            // deferred inlining above. Set after the spread so it is not a user option.
+            // loaded. A stylesheet still pending 5s after the snapshot keeps only its href,
+            // so replay refetches it. Set after the spread so it is not a user option.
             recordAfter: 'DOMContentLoaded',
         })
 
