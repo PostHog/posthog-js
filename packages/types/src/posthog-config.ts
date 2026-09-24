@@ -132,9 +132,9 @@ export interface RageclickConfig {
      * (e.g. '+', '-', '>') always match exactly, so they don't suppress text like "sign-up", "5 > 3",
      * or "C++".
      *
-     * A `rageclick` object of your own replaces the date-gated default below the `'2025-11-30'`
-     * defaults, and whenever you pass one to `set_config`. Set this property explicitly to keep
-     * content filtering in those cases.
+     * Below the `'2025-11-30'` defaults, and in any `set_config` call, a `rageclick` object you pass
+     * replaces the default instead of merging with it, so set this property explicitly there to keep
+     * content filtering.
      *
      * @default undefined
      * (`true` when `defaults` is `'2025-11-30'` or later;

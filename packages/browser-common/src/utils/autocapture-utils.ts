@@ -80,8 +80,8 @@ export function getSafeText(el: Element): string {
 
 /*
  * Get the direct text content of an element, joining its text nodes with the given separator.
- * `getSafeText` joins them with nothing, which keeps `$el_text` as it has always been captured,
- * so a separator is only for readers that need the words of a label kept apart.
+ * `getSafeText` joins them with nothing, which is what `$el_text` expects; pass a separator
+ * only when the words of a label must stay apart.
  * @param {Element} el - element to get the text of
  * @param {string} separator - placed after each text node
  * @returns {string} the element's direct text content
@@ -294,10 +294,9 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
         }
     }
 
-    // an icon-only control often carries its label on the icon inside it, e.g.
-    // <button><svg aria-label="Next slide"/></button>, so we read aria-label from the click target
-    // up to the control and stop there, so a wrapping region's aria-label is never used to match.
-    // the same walk collects the text of every element on the way, e.g. <a><strong>Next</strong></a>
+    // an icon-only control often carries its label on the icon, e.g. <button><svg aria-label="Next"/></button>,
+    // so we walk from the click target up to the control, and no further so a wrapping region's label
+    // never matches, collecting aria-label and each element's text on the way
     let ariaLabel = ''
     const pathToControl: Element[] = []
     for (const candidate of targetElementList) {
@@ -398,10 +397,8 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true.
-        // That is the value every project below the 2025-11-30 defaults resolves to, so turning the
-        // filter on here would change which events those projects capture. Opt in with
-        // { content_ignorelist: true } or a newer `defaults` date
+        // every project below the 2025-11-30 defaults resolves to rageclick: true, so filtering stays off
+        // here to keep capturing what they always have; opt in with { content_ignorelist: true }
         contentIgnorelist = undefined
         ignoreTextSelection = false
     } else {
