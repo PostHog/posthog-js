@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "pull_request-5062-auto-none-no-comment-no-close-1790269093621",
-      "kind": "pull_request",
-      "number": 5062,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-09-24T16:58:13.621Z",
-      "source": {
-        "eventName": "pull_request",
-        "runId": 36030876227,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36030876227"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
