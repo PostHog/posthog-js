@@ -29,6 +29,12 @@ interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
 }
 
+interface FormattedGeminiFunctionResponse {
+  type: 'tool_result'
+  tool_use_id?: string
+  content: unknown
+}
+
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
   private readonly client: GoogleGenAI
@@ -277,8 +283,8 @@ export class WrappedModels {
     }
   }
 
-  private formatPartsAsContentBlocks(parts: unknown[]): FormattedContent {
-    const blocks: FormattedContent = []
+  private formatPartsAsContentBlocks(parts: unknown[]): Array<FormattedContentItem | FormattedGeminiFunctionResponse> {
+    const blocks: Array<FormattedContentItem | FormattedGeminiFunctionResponse> = []
 
     for (const part of parts) {
       // Handle dict/object with text field
@@ -294,6 +300,30 @@ export class WrappedModels {
         const inlineData = (part as any).inlineData
         const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
         blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
+      } else if (part && typeof part === 'object' && 'functionCall' in part) {
+        const functionCall = (part as Part).functionCall
+        if (functionCall?.name) {
+          blocks.push({
+            type: 'function',
+            ...(functionCall.id != null && { id: functionCall.id }),
+            function: { name: functionCall.name, arguments: functionCall.args ?? {} },
+          })
+        }
+      } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+        const functionResponse = (part as Part).functionResponse
+        if (functionResponse?.name) {
+          blocks.push({
+            type: 'tool_result',
+            ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
+            content:
+              functionResponse.parts !== undefined
+                ? {
+                    ...(functionResponse.response !== undefined && { response: functionResponse.response }),
+                    parts: functionResponse.parts,
+                  }
+                : (functionResponse.response ?? {}),
+          })
+        }
       }
     }
 
