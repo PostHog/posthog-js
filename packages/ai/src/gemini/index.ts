@@ -157,10 +157,14 @@ export class WrappedModels {
                   if (firstTokenTime === undefined) {
                     firstTokenTime = Date.now()
                   }
-                  const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
+                  const funcCall = (part as Part & {
+                    functionCall?: { id?: string; name?: string; args?: string | Record<string, unknown> }
+                  })
+                    .functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({
                       type: 'function',
+                      ...(funcCall.id !== undefined ? { id: funcCall.id } : {}),
                       function: {
                         name: funcCall.name,
                         arguments: funcCall.args || {},
@@ -288,6 +292,33 @@ export class WrappedModels {
       // Handle string parts
       else if (typeof part === 'string') {
         blocks.push({ type: 'text', text: part })
+      }
+      // Handle function calls
+      else if (part && typeof part === 'object' && 'functionCall' in part) {
+        const functionCall = (part as {
+          functionCall?: { id?: string; name?: string; args?: string | Record<string, unknown> }
+        }).functionCall
+        if (functionCall?.name) {
+          blocks.push({
+            type: 'function',
+            ...(functionCall.id !== undefined ? { id: functionCall.id } : {}),
+            function: {
+              name: functionCall.name,
+              arguments: functionCall.args ?? {},
+            },
+          })
+        }
+      }
+      // Handle function responses
+      else if (part && typeof part === 'object' && 'functionResponse' in part) {
+        const functionResponse = (part as { functionResponse?: { id?: string; response?: unknown } }).functionResponse
+        if (functionResponse) {
+          blocks.push({
+            type: 'tool_result',
+            ...(functionResponse.id !== undefined ? { tool_use_id: functionResponse.id } : {}),
+            content: functionResponse.response ?? functionResponse,
+          })
+        }
       }
       // Handle inlineData (images, audio, PDFs)
       else if (part && typeof part === 'object' && 'inlineData' in part) {
