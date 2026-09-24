@@ -1,4 +1,4 @@
-import type { Plugin, OutputOptions, OutputAsset, OutputChunk, RenderedChunk } from 'rollup'
+import type { Plugin, OutputOptions, OutputAsset, OutputChunk, RenderedChunk, NormalizedOutputOptions } from 'rollup'
 import {
     PluginConfig,
     resolveConfig,
@@ -37,6 +37,30 @@ const JS_CHUNK_REGEX = /\.(js|mjs|cjs)$/
 const PROLOGUE_REGEX =
     /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*;|[^\S\n]*\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
 
+// True when a prologue matched by PROLOGUE_REGEX holds a directive, not only a hashbang and comments.
+const DIRECTIVE_IN_PROLOGUE_REGEX = /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*["']/
+
+// Rolldown (Vite 8) minifies after renderChunk, and minification rewrites an injected snippet
+// (quoting, variable names, syntax). posthog-cli finds and strips the snippet by exact text so that
+// it hashes a chunk without its release id, so in event mode every release would upload unchanged
+// chunks again. Under rolldown the snippet therefore goes in after minification: rolldown adds this
+// line through `output.postBanner` and shifts the source map by it, and generateBundle swaps it for
+// the chunk's snippet. The banner can't carry the snippet itself, because rolldown evaluates it
+// before renderChunk derives the chunk id. The line holds no mappings, so the map stays valid.
+const SNIPPET_PLACEHOLDER = '/*posthog-chunk-id-snippet*/'
+
+// Rolldown's `output.postBanner`, which Rollup's types don't know.
+type RolldownAddon = string | ((chunk: RenderedChunk) => string | Promise<string>)
+type RolldownOutputOptions = { postBanner?: RolldownAddon }
+
+async function renderAddon(addon: RolldownAddon | undefined, chunk: RenderedChunk): Promise<string> {
+    return (typeof addon === 'function' ? await addon(chunk) : addon) ?? ''
+}
+
+function joinAddons(...addons: (string | undefined)[]): string {
+    return addons.filter(Boolean).join('\n')
+}
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
     const posthogOptions = resolveConfig(userOptions)
     const eventReleaseMode = posthogOptions.sourcemaps.releaseMode === 'event'
@@ -48,10 +72,24 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     let warnedAboutMissingRelease = false
     const chunkIdsByPreliminaryFileName = new Map<string, Set<string>>()
 
+    // Snippets that generateBundle still has to swap in (see SNIPPET_PLACEHOLDER), per rolldown
+    // output. Keyed by the postBanner function each output gets, which renderChunk and
+    // generateBundle receive back in their output options, so two outputs that render the same
+    // file name keep their own snippets.
+    const snippetsByOutput = new WeakMap<object, Map<string, string>>()
+    // The same snippets by file name across outputs, for augmentChunkHash, which gets no output
+    // options. Hashing them keeps file names content hashes: a new release or chunk id renames the
+    // file instead of changing its bytes under the same name.
+    const deferredSnippetsByPreliminaryFileName = new Map<string, Set<string>>()
+
+    function addToSet(map: Map<string, Set<string>>, key: string, value: string) {
+        const values = map.get(key) ?? new Set<string>()
+        values.add(value)
+        map.set(key, values)
+    }
+
     function rememberChunkId(preliminaryFileName: string, chunkId: string) {
-        const chunkIds = chunkIdsByPreliminaryFileName.get(preliminaryFileName) ?? new Set<string>()
-        chunkIds.add(chunkId)
-        chunkIdsByPreliminaryFileName.set(preliminaryFileName, chunkIds)
+        addToSet(chunkIdsByPreliminaryFileName, preliminaryFileName, chunkId)
     }
 
     function injectChunkId(code: string, chunkId: string, releaseId?: string) {
@@ -72,6 +110,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             releaseIdPromise = undefined
             warnedAboutMissingRelease = false
             chunkIdsByPreliminaryFileName.clear()
+            deferredSnippetsByPreliminaryFileName.clear()
         },
 
         config() {
@@ -89,20 +128,35 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             handler(options: OutputOptions) {
                 if (!posthogOptions.sourcemaps.enabled) return options
 
-                return {
+                const withSourcemaps = {
                     ...options,
                     sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
-                }
+                } as const
+                if (!(this?.meta as { rolldownVersion?: string } | undefined)?.rolldownVersion) return withSourcemaps
+
+                // The user's own postBanner comes first, so a directive or hashbang in it still
+                // leads the chunk.
+                const { postBanner } = options as RolldownOutputOptions
+                const outputPostBanner = async (chunk: RenderedChunk) =>
+                    joinAddons(
+                        await renderAddon(postBanner, chunk),
+                        JS_CHUNK_REGEX.test(chunk.fileName) ? SNIPPET_PLACEHOLDER : undefined
+                    )
+                snippetsByOutput.set(outputPostBanner, new Map())
+                return { ...withSourcemaps, postBanner: outputPostBanner }
             },
         },
 
         // Chunk ids are injected in-memory, before rollup writes the files and
         // before `generateBundle` — where SRI plugins (e.g. vite-plugin-sri3)
         // compute integrity hashes and rollup resolves [hash] file names. The
-        // written files are final; nothing may rewrite them afterwards.
+        // written files are final; nothing may rewrite them afterwards. Under
+        // rolldown the snippet lands at the start of generateBundle instead (see
+        // SNIPPET_PLACEHOLDER), still ahead of SRI plugins and already counted
+        // in the file name hash by augmentChunkHash.
         renderChunk: {
             order: 'post',
-            handler(code: string, chunk: RenderedChunk) {
+            handler(code: string, chunk: RenderedChunk, outputOptions?: NormalizedOutputOptions) {
                 if (!posthogOptions.sourcemaps.enabled) return null
                 if (!JS_CHUNK_REGEX.test(chunk.fileName)) return null
                 // Already carries an id (watch-mode re-render, another tool)
@@ -117,17 +171,38 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     return null
                 }
 
+                // Under rolldown the snippet goes in after minification (see SNIPPET_PLACEHOLDER).
+                // Rolldown lifts a hashbang above the placeholder line, but a directive would end up
+                // below the snippet and stop being a directive, so a chunk that has one keeps the
+                // snippet inside its code, where the minifier may still rewrite it.
+                const postBanner = (outputOptions as RolldownOutputOptions | undefined)?.postBanner
+                const outputSnippets = typeof postBanner === 'function' ? snippetsByOutput.get(postBanner) : undefined
+                const deferredSnippets =
+                    outputSnippets && !DIRECTIVE_IN_PROLOGUE_REGEX.test(code.match(PROLOGUE_REGEX)?.[0] ?? '')
+                        ? outputSnippets
+                        : undefined
+                const inject = (chunkId: string, releaseId?: string) => {
+                    if (!deferredSnippets) return injectChunkId(code, chunkId, releaseId)
+                    const snippet = createChunkIdSnippet(chunkId, releaseId)
+                    deferredSnippets.set(chunk.fileName, snippet)
+                    addToSet(deferredSnippetsByPreliminaryFileName, chunk.fileName, snippet)
+                    return null
+                }
+
                 if (!eventReleaseMode) {
                     const chunkId = createChunkId()
                     rememberChunkId(chunk.fileName, chunkId)
-                    return injectChunkId(code, chunkId)
+                    return inject(chunkId)
                 }
 
                 // Event mode carries the release inside the chunk, which means resolving it before
                 // the snippet is built. The id is content-addressed so an unchanged chunk keeps its
-                // id (and its symbol set) across rebuilds.
+                // id (and its symbol set) across rebuilds. A chunk that gets its snippet after
+                // minification starts with the placeholder line, so the id covers that line too.
+                // Its layout differs from the same code with the snippet inside, and a shared id
+                // would let one layout's upload overwrite the other's symbol set.
                 releaseIdPromise ??= resolveReleaseId(posthogOptions)
-                const chunkId = createStableChunkId(code)
+                const chunkId = createStableChunkId(deferredSnippets ? `${SNIPPET_PLACEHOLDER}\n${code}` : code)
                 rememberChunkId(chunk.fileName, chunkId)
                 return releaseIdPromise.then((releaseId) => {
                     // A build that identifies no release still symbolicates from its chunk ids, so
@@ -139,21 +214,33 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                             '[posthog-rollup-plugin] no release could be resolved, injecting chunk ids only, so exceptions from this build will report no release. Set sourcemaps.releaseName and sourcemaps.releaseVersion, or build from a git repository or a supported CI environment.'
                         )
                     }
-                    return injectChunkId(code, chunkId, releaseId)
+                    return inject(chunkId, releaseId)
                 })
             },
         },
 
-        // Vite 8's Oxc output minifier runs after renderChunk and removes the CLI-facing comment,
-        // while preserving the executable snippet. Restore the same comment once output minification
-        // is complete. preliminaryFileName links the final OutputChunk back to its RenderedChunk even
-        // when Rollup replaces a [hash] placeholder. Matching against the tracked id avoids treating
-        // unrelated bundled `_posthogChunkIds` strings as injected chunks.
+        augmentChunkHash(chunk: RenderedChunk) {
+            const snippets = deferredSnippetsByPreliminaryFileName.get(chunk.fileName)
+            return snippets && Array.from(snippets).sort().join('\n')
+        },
+
+        // Swaps each placeholder line for its chunk's snippet, or for nothing when the chunk kept
+        // its snippet in code. Then restores the CLI-facing comment, which Vite 8's Oxc output
+        // minifier removes and which the snippet itself doesn't carry. preliminaryFileName links the
+        // final OutputChunk back to its RenderedChunk even when Rollup replaces a [hash] placeholder.
+        // Matching against the tracked id avoids treating unrelated bundled `_posthogChunkIds`
+        // strings as injected chunks.
         generateBundle: {
             order: 'pre',
-            handler(_options, bundle) {
+            handler(options, bundle) {
+                const postBanner = (options as RolldownOutputOptions).postBanner
+                const outputSnippets = typeof postBanner === 'function' ? snippetsByOutput.get(postBanner) : undefined
                 for (const chunk of Object.values(bundle)) {
                     if (chunk.type !== 'chunk' || !JS_CHUNK_REGEX.test(chunk.fileName)) continue
+                    if (outputSnippets) {
+                        const snippet = outputSnippets.get(chunk.preliminaryFileName) ?? ''
+                        chunk.code = chunk.code.replace(SNIPPET_PLACEHOLDER, () => snippet)
+                    }
                     if (determineChunkIdFromSource(chunk.code)) continue
 
                     const chunkId = Array.from(chunkIdsByPreliminaryFileName.get(chunk.preliminaryFileName) ?? []).find(

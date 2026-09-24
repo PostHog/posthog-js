@@ -30,12 +30,13 @@ type TestPlugin = {
     config: () => { build: { sourcemap: 'hidden' | true } } | undefined
     buildStart: () => void
     outputOptions: {
-        handler: (options: OutputOptions) => OutputOptions
+        handler: (this: unknown, options: OutputOptions) => OutputOptions
     }
     renderChunk: {
         order: 'post'
-        handler: (code: string, chunk: { fileName: string }) => RenderChunkResult
+        handler: (code: string, chunk: { fileName: string }, outputOptions?: object) => RenderChunkResult
     }
+    augmentChunkHash: (chunk: { fileName: string }) => string | undefined
     generateBundle: {
         order: 'pre'
         handler: (options: OutputOptions, bundle: Record<string, unknown>) => void
@@ -274,6 +275,99 @@ describe('posthogRollupPlugin', () => {
             plugin.generateBundle.handler({} as OutputOptions, bundle)
 
             expect(determineChunkIdFromSource(bundle[fileName].code)).toBeUndefined()
+        })
+    })
+
+    describe('under rolldown', () => {
+        const rolldownContext = { meta: { rolldownVersion: '1.1.5' } }
+        const code = 'console.log("app");'
+        const preliminaryFileName = 'assets/index-!~{000}~.js'
+        const fileName = 'assets/index-abc123.js'
+        const placeholder = '/*posthog-chunk-id-snippet*/'
+
+        type RolldownOutputOptions = OutputOptions & { postBanner: (chunk: { fileName: string }) => Promise<string> }
+
+        // Runs one chunk through the hooks in rolldown's order. Rolldown evaluates postBanner before
+        // renderChunk, then minifies, then puts the banner on a line of its own above the code.
+        async function renderUnderRolldown(plugin: TestPlugin, userOptions: object = {}, chunkCode = code) {
+            const outputOptions = plugin.outputOptions.handler.call(
+                rolldownContext,
+                userOptions as OutputOptions
+            ) as RolldownOutputOptions
+            const renderedChunk = { fileName: preliminaryFileName }
+            const banner = await outputOptions.postBanner(renderedChunk)
+            const rendered = await plugin.renderChunk.handler(chunkCode, renderedChunk, outputOptions)
+            const hash = plugin.augmentChunkHash(renderedChunk)
+            const bundle = {
+                [fileName]: {
+                    type: 'chunk',
+                    fileName,
+                    preliminaryFileName,
+                    code: `${banner}\n${rendered?.code ?? chunkCode}`,
+                },
+            }
+            plugin.generateBundle.handler(outputOptions, bundle)
+            return { banner, rendered, hash, code: bundle[fileName].code }
+        }
+
+        it('swaps the snippet in after minification, byte for byte, and hashes it into the file name', async () => {
+            const { banner, rendered, hash, code: final } = await renderUnderRolldown(testPlugin(options))
+            const chunkId = determineChunkIdFromSource(final)!
+            const snippet = createChunkIdSnippet(chunkId, 'release-id-1')
+
+            expect(banner).toBe(placeholder)
+            expect(rendered).toBeNull()
+            expect(final).toBe(`${snippet}\n${code}${createChunkIdComment(chunkId)}`)
+            expect(hash).toBe(snippet)
+        })
+
+        it('swaps in a chunk-id-only snippet in symbol-set mode', async () => {
+            const { code: final } = await renderUnderRolldown(testPlugin(symbolSetOptions))
+            const chunkId = determineChunkIdFromSource(final)!
+
+            expect(final).toBe(`${createChunkIdSnippet(chunkId)}\n${code}${createChunkIdComment(chunkId)}`)
+        })
+
+        it('keeps the user postBanner first', async () => {
+            const fromFunction = await renderUnderRolldown(testPlugin(options), {
+                postBanner: async () => '"use client";',
+            })
+            const fromString = await renderUnderRolldown(testPlugin(options), { postBanner: '/*! license */' })
+
+            expect(fromFunction.banner).toBe(`"use client";\n${placeholder}`)
+            expect(fromFunction.code.startsWith('"use client";\n!function(){try{')).toBe(true)
+            expect(fromString.banner).toBe(`/*! license */\n${placeholder}`)
+        })
+
+        it('gives a chunk under rolldown its own chunk id, since its layout differs', async () => {
+            const inCode = await testPlugin(options).renderChunk.handler(code, { fileName: 'index.js' })
+            const { code: final } = await renderUnderRolldown(testPlugin(options))
+
+            expect(determineChunkIdFromSource(final)).not.toBe(determineChunkIdFromSource(inCode!.code))
+        })
+
+        it('keeps the snippet in code for a chunk with a directive', async () => {
+            const directiveCode = '"use client";console.log("app");'
+            const { rendered, hash, code: final } = await renderUnderRolldown(testPlugin(options), {}, directiveCode)
+
+            expect(rendered!.code.startsWith('"use client";!function(){try{')).toBe(true)
+            expect(hash).toBeUndefined()
+            expect(final.startsWith('\n"use client";!function(){try{')).toBe(true)
+        })
+
+        it('injects in code when another plugin replaced the postBanner', async () => {
+            const plugin = testPlugin(options)
+            plugin.outputOptions.handler.call(rolldownContext, {} as OutputOptions)
+
+            const result = await plugin.renderChunk.handler(
+                code,
+                { fileName: preliminaryFileName },
+                {
+                    postBanner: async () => '',
+                }
+            )
+
+            expect(result!.code.startsWith('!function(){try{')).toBe(true)
         })
     })
 
