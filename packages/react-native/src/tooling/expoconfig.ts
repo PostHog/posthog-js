@@ -20,6 +20,9 @@ const {
 // version that reads posthog.dotenvFile. 1.6.0 is the first version that ignores
 // posthog.releaseMode with a deprecation warning, so the R8 mapping always binds to the release.
 const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.6.0'
+// 1.5.0 is the first version with the `posthog { uploadNativeSymbols }` extension. A project
+// prebuilt by an older posthog-react-native keeps its older classpath, so it gets bumped.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION = [1, 5]
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
@@ -147,7 +150,7 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   classpathPresent: boolean
 } {
   if (projectBuildGradle.includes('posthog-android-gradle-plugin')) {
-    return { contents: projectBuildGradle, classpathPresent: true }
+    return { contents: bumpPostHogAndroidGradlePluginClasspath(projectBuildGradle), classpathPresent: true }
   }
 
   const classpathLine = `        classpath("com.posthog:posthog-android-gradle-plugin:${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}")`
@@ -175,6 +178,25 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   }
 }
 
+// Only a literal version older than the native-symbols one is bumped; newer or
+// variable-driven versions are the app's own choice, so those only get a warning.
+function bumpPostHogAndroidGradlePluginClasspath(projectBuildGradle: string): string {
+  const [minMajor, minMinor] = POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION
+  if (!/com\.posthog:posthog-android-gradle-plugin:\d+\.\d+\.\d+/.test(projectBuildGradle)) {
+    console.warn(
+      'PostHog: Could not read the com.posthog:posthog-android-gradle-plugin version in the project build.gradle. ' +
+        `uploadNativeSymbols needs ${minMajor}.${minMinor}.0 or later, or the build fails.`
+    )
+  }
+  return projectBuildGradle.replace(
+    /(com\.posthog:posthog-android-gradle-plugin:)(\d+)\.(\d+)\.\d+/g,
+    (match: string, prefix: string, major: string, minor: string) => {
+      const older = Number(major) < minMajor || (Number(major) === minMajor && Number(minor) < minMinor)
+      return older ? `${prefix}${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}` : match
+    }
+  )
+}
+
 // Applies the com.posthog.android plugin in the app module. Idempotent.
 export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string {
   if (/apply plugin: ["']com\.posthog\.android["']/.test(appBuildGradle)) {
@@ -199,6 +221,44 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
   return appBuildGradle
 }
 
+const POSTHOG_NATIVE_SYMBOLS_MARKER = 'posthog-native-symbols'
+const POSTHOG_NATIVE_SYMBOLS_BEGIN = `// @generated begin ${POSTHOG_NATIVE_SYMBOLS_MARKER} - posthog-react-native (DO NOT MODIFY)`
+const POSTHOG_NATIVE_SYMBOLS_END = `// @generated end ${POSTHOG_NATIVE_SYMBOLS_MARKER}`
+
+// The block is inserted before the apply line's own line break, so it owns only the break in front
+// of it. The `\r?` keeps the block removable after an editor or a Windows checkout has normalized the
+// file to CRLF.
+const POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN = new RegExp(
+  `\\r?\\n[ \\t]*${escapeRegExp(POSTHOG_NATIVE_SYMBOLS_BEGIN)}[\\s\\S]*?${escapeRegExp(
+    POSTHOG_NATIVE_SYMBOLS_END
+  )}[ \\t]*`,
+  'g'
+)
+
+// Strips the managed block, so turning uploadNativeSymbols off stops the `.so` (and source) upload.
+export function removePostHogAndroidNativeSymbolsExtension(appBuildGradle: string): string {
+  return appBuildGradle.replace(POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN, '')
+}
+
+// Enables the com.posthog.android `.so` debug-symbol upload for NDK crashes, right after the
+// plugin's apply line. Replaces its own managed block, so a changed includeSource is picked up.
+export function setPostHogAndroidNativeSymbolsExtension(appBuildGradle: string, includeSource: boolean): string {
+  const contents = removePostHogAndroidNativeSymbolsExtension(appBuildGradle)
+  const applyPattern = /^([ \t]*apply plugin: ["']com\.posthog\.android["'].*)$/m
+  if (!applyPattern.test(contents)) {
+    return appBuildGradle
+  }
+  const block = [
+    POSTHOG_NATIVE_SYMBOLS_BEGIN,
+    'posthog {',
+    '    uploadNativeSymbols = true',
+    `    includeNativeSymbolSources = ${includeSource}`,
+    '}',
+    POSTHOG_NATIVE_SYMBOLS_END,
+  ].join('\n')
+  return contents.replace(applyPattern, `$1\n${block}`)
+}
+
 // Expo's standard mods run their action before the previously registered action. This wrapper
 // deliberately runs its action after the rest of the project Gradle mod chain, so it can safely
 // coordinate the project classpath and app plugin edits without relying on mod-key order.
@@ -215,7 +275,7 @@ const withFinalizedProjectBuildGradle = (config: any, action: (config: any) => a
   })
 }
 
-const withAndroidNativeSymbolsPlugin = (config: any) => {
+const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => {
   return withFinalizedProjectBuildGradle(config, async (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
@@ -240,9 +300,21 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
       return config
     }
 
-    const contents = applyPostHogAndroidGradlePlugin(appBuildGradle.contents)
+    const contents = setPostHogAndroidNativeSymbolsExtension(
+      applyPostHogAndroidGradlePlugin(appBuildGradle.contents),
+      includeSource
+    )
     if (contents !== appBuildGradle.contents) {
       await fs.promises.writeFile(appBuildGradle.path, contents)
+    }
+    return config
+  })
+}
+
+const withoutAndroidNativeSymbolsExtension = (config: any) => {
+  return withAppBuildGradle(config, (config: any) => {
+    if (config.modResults.language === 'groovy') {
+      config.modResults.contents = removePostHogAndroidNativeSymbolsExtension(config.modResults.contents)
     }
     return config
   })
@@ -1029,15 +1101,16 @@ type PostHogPluginProps = {
    *  - iOS: a build phase that runs posthog-ios's `upload-symbols.sh`
    *    (`posthog-cli dsym upload`).
    *  - Android: the official `com.posthog.android` Gradle plugin, which uploads
-   *    ProGuard/R8 mapping files and injects the matching map-id into the app.
+   *    ProGuard/R8 mapping files and injects the matching map-id into the app, and
+   *    uploads native (`.so`) debug symbols for NDK crashes (`uploadNativeSymbols`).
    *
    * Pass `{ includeSource: true }` to also upload native source files so PostHog
-   * can show source-code context around native crashes. This is **iOS only** —
-   * the Android proguard upload has no source-inclusion equivalent, so the flag
-   * is ignored there. Note it uploads your source code to PostHog, hence opt-in.
+   * can show source-code context around native crashes (on Android, C/C++ sources via
+   * `includeNativeSymbolSources`). Note it uploads your source code to PostHog, hence opt-in.
    *
-   * Default: false. Pair this with `errorTracking.autocapture.nativeCrashes` at
-   * runtime — without uploaded symbols, native stack traces won't be symbolicated.
+   * Default: false. Pair this with `errorTracking.autocapture.nativeCrashes` (and
+   * `androidNdkCrashes` for Android NDK crashes) at runtime — without uploaded
+   * symbols, native stack traces won't be symbolicated.
    * Requires `posthog-cli` to be available and authenticated during release builds.
    */
   uploadNativeSymbols?: boolean | { includeSource?: boolean }
@@ -1099,8 +1172,9 @@ type PostHogPluginProps = {
    * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
    * the release their build creates. The R8 half of that needs the `com.posthog.android` gradle
    * plugin 1.6.0, which ignores the deprecated `posthog.releaseMode` key. A fresh prebuild injects
-   * that version, but a project whose android/build.gradle already carries an older classpath line
-   * keeps it: bump the line by hand or prebuild with `--clean`.
+   * that version. With `uploadNativeSymbols` on, an existing literal classpath older than 1.5.0 is
+   * bumped to 1.6.0. Any other older line, whether 1.5.x, older with `uploadNativeSymbols` off, or
+   * variable-driven, is kept: bump it by hand or prebuild with `--clean`.
    *
    * `event` (the default; still EXPERIMENTAL while the rollout settles) uploads the maps
    * release-independent, and each event resolves its own release from the `$app_namespace` /
@@ -1148,7 +1222,7 @@ type PostHogPluginProps = {
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
-// flat shape. `includeSource` is iOS-only and ignored on Android.
+// flat shape.
 export function resolveNativeSymbolUpload(prop: PostHogPluginProps['uploadNativeSymbols']): {
   enabled: boolean
   includeSource: boolean
@@ -1243,10 +1317,10 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
     dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
     releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
   }
-  // includeSource is iOS-only, so on Android we only care whether upload is enabled.
-  if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
-    config = withAndroidNativeSymbolsPlugin(config)
-  }
+  const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
+  config = nativeSymbols.enabled
+    ? withAndroidNativeSymbolsPlugin(config, nativeSymbols.includeSource)
+    : withoutAndroidNativeSymbolsExtension(config)
   config = withAndroidPlugin(config, props.skipOnConflict === true, props.force === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
   config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
@@ -1272,6 +1346,8 @@ module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflict
 module.exports.buildAndroidForceGradleLine = buildAndroidForceGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
+module.exports.setPostHogAndroidNativeSymbolsExtension = setPostHogAndroidNativeSymbolsExtension
+module.exports.removePostHogAndroidNativeSymbolsExtension = removePostHogAndroidNativeSymbolsExtension
 module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting
 module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
 module.exports.resolveDotenvFileProp = resolveDotenvFileProp

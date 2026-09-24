@@ -42,10 +42,10 @@ interface AutocaptureOptions {
    * describe that launch rather than the crash. The first launch after enabling this also
    * captures the native crashes the OS still holds from before.
    *
-   * For readable stack traces, upload the app's `.so` debug symbols by enabling
-   * `uploadNativeSymbols` in the PostHog Gradle plugin: https://posthog.com/docs/error-tracking/upload-mappings/android
+   * For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols`
+   * on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication
    *
-   * Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.10.0 or newer.
+   * Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.11.0 or newer.
    */
   androidNdkCrashes?: boolean
 }

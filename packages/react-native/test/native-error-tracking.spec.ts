@@ -3,7 +3,7 @@ import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
-const pluginVersion = vi.hoisted(() => ({ current: '2.10.0' as string | undefined }))
+const pluginVersion = vi.hoisted(() => ({ current: '2.11.0' as string | undefined }))
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
   get OptionalReactNativePluginVersion() {
@@ -55,7 +55,7 @@ describe('native error tracking', () => {
 
   beforeEach(() => {
     Platform.OS = originalPlatform
-    pluginVersion.current = '2.10.0'
+    pluginVersion.current = '2.11.0'
     resetMockPlugin()
     vi.clearAllMocks()
     setupFetch()
@@ -122,9 +122,9 @@ describe('native error tracking', () => {
     await posthog.shutdown()
   })
 
-  it('ignores androidNdkCrashes with a plugin older than 2.10.0', async () => {
+  it('ignores androidNdkCrashes with a plugin older than 2.11.0', async () => {
     Platform.OS = 'android'
-    pluginVersion.current = '2.9.4'
+    pluginVersion.current = '2.10.0'
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
       flushInterval: 0,
@@ -139,7 +139,7 @@ describe('native error tracking', () => {
 
     expect(mockPlugin.setup).not.toHaveBeenCalled()
     expect(warnSpy.mock.calls.flat().join(' ')).toContain(
-      'errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.10.0 or later'
+      'errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.11.0 or later'
     )
 
     await posthog.shutdown()

@@ -88,12 +88,33 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     const app = readGradle('app/build.gradle')
     expect(project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
     expect(app.split(applyLine)).toHaveLength(2)
+    expect(app).toContain('    uploadNativeSymbols = true\n    includeNativeSymbolSources = false')
     expect(app).toContain('posthog.gradle')
     expect(warnings()).toEqual([expect.stringContaining('Added an onNewIntent override')])
 
     await prebuild()
     expect(readGradle('build.gradle')).toBe(project)
     expect(readGradle('app/build.gradle')).toBe(app)
+  })
+
+  it('upgrades a project prebuilt with a classpath that predates native symbols', async () => {
+    fs.writeFileSync(
+      path.join(projectRoot, 'android/build.gradle'),
+      projectGradle.replace(
+        '    }\n}',
+        '        classpath("com.posthog:posthog-android-gradle-plugin:1.4.0")\n    }\n}'
+      )
+    )
+    fs.writeFileSync(path.join(projectRoot, 'android/app/build.gradle'), appGradle.replace('\n', `\n${applyLine}\n`))
+
+    await prebuild(true, { uploadNativeSymbols: { includeSource: true } })
+
+    const project = readGradle('build.gradle')
+    expect(project).not.toContain('posthog-android-gradle-plugin:1.4.0')
+    expect(project.split('posthog-android-gradle-plugin')).toHaveLength(2)
+    const app = readGradle('app/build.gradle')
+    expect(app.split(applyLine)).toHaveLength(2)
+    expect(app).toContain('    uploadNativeSymbols = true\n    includeNativeSymbolSources = true')
   })
 
   it('does not apply the plugin when the project has no buildscript dependencies', async () => {
@@ -129,6 +150,14 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     expect(readGradle('build.gradle')).toBe(projectGradle)
     expect(readGradle('app/build.gradle')).not.toContain(applyLine)
     expect(readGradle('app/build.gradle')).toContain('posthog.gradle')
+  })
+
+  it('removes the native-symbol block when uploadNativeSymbols is turned off', async () => {
+    await prebuild(true, { uploadNativeSymbols: { includeSource: true } })
+    await prebuild(false)
+    const app = readGradle('app/build.gradle')
+    expect(app).not.toContain('posthog-native-symbols')
+    expect(app).not.toContain('includeNativeSymbolSources')
   })
 
   it('writes the MainActivity onNewIntent override and remains idempotent on another prebuild', async () => {

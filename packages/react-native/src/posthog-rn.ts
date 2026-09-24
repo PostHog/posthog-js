@@ -2604,11 +2604,11 @@ export class PostHog extends PostHogCore {
     // Android-only, so it must not bring up the native SDK on other platforms.
     let androidNdkCrashes = Platform.OS === 'android' && autocapture.androidNdkCrashes === true
     // Older plugins ignore the key, so it would start the native SDK with nothing to capture.
-    if (androidNdkCrashes && !this._pluginVersionAtLeast(2, 10)) {
+    if (androidNdkCrashes && !this._pluginVersionAtLeast(2, 11)) {
       if (!this._androidNdkCrashesUnsupportedWarned) {
         this._androidNdkCrashesUnsupportedWarned = true
         this._logger.warn(
-          `errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.10.0 or later ` +
+          `errorTracking.autocapture.androidNdkCrashes requires @posthog/react-native-plugin 2.11.0 or later ` +
             `(installed: ${OptionalReactNativePluginVersion ?? 'unknown'}); ignoring.`
         )
       }
