@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.13
+
+### Patch Changes
+
+- [#5098](https://github.com/PostHog/posthog-js/pull/5098) [`a7250f0`](https://github.com/PostHog/posthog-js/commit/a7250f07f10fa0d52860f3c21351051e3c2a0b63) Thanks [@Piccirello](https://github.com/Piccirello)! - Replay loads a recorded font under the replay iframe's content security policy, not the embedding page's.
+  (2026-09-24)
+
 ## 1.434.12
 
 ### Patch Changes
