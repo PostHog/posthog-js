@@ -1,7 +1,3 @@
-// The two commands that read a file: check and push. One pipeline, because check is push with
-// the write taken out, and a check that took a different path would report something a push then
-// contradicts.
-
 import { WorkflowError } from '../errors.js'
 import { Client } from './client.js'
 import type { StoredWorkflow } from './client.js'
@@ -42,7 +38,6 @@ interface Report {
     readonly version?: number
 }
 
-// `a1b2c3d on main`, or the honest shorter forms when a part did not resolve.
 function describeSource(source: Source | null): string {
     if (source === null) {
         return 'not detected: this version will not name a commit'
@@ -68,9 +63,6 @@ function printWorkflow(report: Report, source: Source | null, command: RunOption
     for (const secret of workflow.emitted.secretInputs) {
         io.out(`    secret   ${secret.actionId}.${secret.inputKey} from $${secret.envName}, sent on every push`)
     }
-    // A push that writes nothing records no version, so the commit it came from is not stored
-    // either. Saying so here is cheaper than a customer looking for it later. `check` records
-    // nothing either way, so the qualifier would only read as a claim about a write it never made.
     const trailer =
         command === 'push' && source !== null && report.outcome === 'unchanged' ? ' (not recorded: no change)' : ''
     io.out(`    source   ${describeSource(source)}${trailer}`)
@@ -123,8 +115,6 @@ function printFooter(
         io.out(`${reports.length} workflow(s), all valid.`)
     }
     if (credentials === null) {
-        // A pull request from a fork cannot read a repository secret, so check has to say which
-        // half ran. Without these two lines "all valid" reads as "nothing would change".
         io.out('diff skipped: no PostHog credentials in this environment, so the file was validated offline.')
         io.out(
             options.project === undefined
@@ -137,17 +127,12 @@ function printFooter(
     io.out(`${verb} project ${credentials.projectId} on ${credentials.host} (credentials from ${credentials.source}).`)
 }
 
-// A file that moved is a legitimate edit; a file that was copied is an accident about to overwrite
-// a live workflow. The two look identical from here, so the CLI refuses and `--allow-move` is the
-// author saying which one it is.
 function guardPath(remote: StoredWorkflow, source: Source | null, options: RunOptions): Change | null {
     const recorded = remote.source_path
     if (typeof recorded !== 'string' || recorded === '') {
         return null
     }
     if (source?.path === undefined) {
-        // The recorded path cannot be compared with anything here, and a copy looks exactly like
-        // this. The flag is how the author says the push is meant.
         if (options.allowMove) {
             return null
         }
@@ -162,8 +147,6 @@ function guardPath(remote: StoredWorkflow, source: Source | null, options: RunOp
         return null
     }
     if (options.allowMove) {
-        // The pointer is not part of the definition, so a move alone leaves the comparison empty.
-        // It still has to be written, or the next push is refused for the same reason again.
         return { kind: 'changed', what: 'the recorded path', before: recorded, after: source.path }
     }
     throw new WorkflowError({
@@ -176,8 +159,6 @@ function guardPath(remote: StoredWorkflow, source: Source | null, options: RunOp
 
 function bodyFor(workflow: LoadedWorkflow, source: Source | null, forUpdate: boolean): Record<string, unknown> {
     const definition = workflow.emitted.definition
-    // PostHog refuses a key on an update, because changing one would be a workflow claiming
-    // another workflow's identity.
     const { key, ...content } = definition
     const pointer =
         source === null
@@ -185,19 +166,12 @@ function bodyFor(workflow: LoadedWorkflow, source: Source | null, forUpdate: boo
             : {
                   ...(source.repository === undefined ? {} : { source_repository: source.repository }),
                   ...(source.path === undefined ? {} : { source_path: source.path }),
-                  // The pointer on the workflow is the newest push, so the sha is the better value
-                  // when there is one.
                   ...((source.commit ?? source.ref) ? { source_ref: source.commit ?? source.ref } : {}),
               }
-    // Sent on every write and not only on the create, so a push that changes something re-claims a
-    // workflow released in the UI. An unchanged push writes nothing, so re-claiming alone takes --force.
     const ownership = { managed_by: 'code' } as const
     return forUpdate ? { ...content, ...pointer, ...ownership } : { ...content, key, ...pointer, ...ownership }
 }
 
-// Anything a push resolved from the environment, so it can be taken out of what PostHog says back.
-// A validation error that quotes the value it refused would otherwise put a live credential into a
-// CI log that anybody on the repository can read.
 function resolvedSecrets(file: LoadedFile, env: Readonly<Record<string, string | undefined>>): string[] {
     const values = new Set<string>()
     for (const workflow of file.workflows) {
@@ -215,7 +189,6 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// `why` and `fix` both carry text PostHog sent back, so both are scrubbed.
 function redacted(error: unknown, secrets: readonly string[]): unknown {
     const fields = (error as { fields?: { why?: unknown; fix?: unknown } } | null)?.fields
     if (typeof fields?.why !== 'string' || typeof fields.fix !== 'string') {
@@ -247,8 +220,6 @@ export async function runFileCommand(options: RunOptions): Promise<number> {
         : resolveCredentials(options.env, options.homeDir, overrides)
     const client = credentials === null ? null : new Client(credentials)
 
-    // Everything that must fail is resolved before any change is detected. An empty diff skips the
-    // write, so a missing secret checked at the write would pass in silence.
     const file = await loadWorkflowFile(options.path, {
         env: isPush ? options.env : previewEnv(options.env),
     })
@@ -256,8 +227,6 @@ export async function runFileCommand(options: RunOptions): Promise<number> {
     const secrets = isPush ? resolvedSecrets(file, options.env) : []
 
     const reports: Report[] = []
-    // Each workflow prints as it finishes. A file holding several of them can fail halfway, and a
-    // customer who cannot see what already landed has to go and look in PostHog.
     options.io.out(file.path)
     const record = (report: Report): void => {
         reports.push(report)
@@ -281,7 +250,6 @@ export async function runFileCommand(options: RunOptions): Promise<number> {
                     workflow,
                     outcome: 'created',
                     changes: [],
-                    // Without the key stored, the next push cannot find this workflow again.
                     ...(created.key === undefined
                         ? {
                               warnings: [

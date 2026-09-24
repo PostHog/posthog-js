@@ -1,6 +1,3 @@
-// Ids and edges are derived here and never written by an author, which is what keeps a
-// branch index and the edge that carries it from drifting apart.
-
 import type {
     Action,
     ActionOutputVariables,
@@ -22,34 +19,24 @@ import type {
 import { WorkflowError } from './errors.js'
 import { isSecretRef, type PassThroughActionConfig, type Path, type SecretRef, type Step } from './steps.js'
 
-/** The trigger and the exit carry no author-written name, so their ids are fixed. */
 const TRIGGER_ID = 'trigger_node'
 const TRIGGER_OWNER = 'The trigger'
 const EXIT_ID = 'exit_node'
 const RESERVED_IDS = new Set([TRIGGER_ID, EXIT_ID])
 
-/** `HogFlowActionSerializer` bounds the id at 200 and the name at 400. */
 const MAX_ACTION_ID_LENGTH = 200
 const MAX_STEP_NAME_LENGTH = 400
 const EXPLICIT_ID_PATTERN = /^[A-Za-z0-9_-]+$/
 const WORKFLOW_KEY_PATTERN = /^[A-Za-z0-9_-]+$/
 const MAX_WORKFLOW_KEY_LENGTH = 400
 
-/** `HogFlowVariableSerializer` caps the whole list at this many bytes. */
 const VARIABLES_MAX_BYTES = 5120
 
-/**
- * The same alternation `nodejs/src/cdp/services/hogflows/duration.ts` uses, so the SDK
- * and the runtime cannot drift. It also matches linearly, where the obvious
- * `\d*\.?\d+` backtracks on a long value that does not match.
- */
 const DURATION_PATTERN = /^([0-9]+(?:\.[0-9]+)?|\.[0-9]+)([dhms])$/
 
-/** `MAX_VALUE_FOR_DURATION_UNIT` in `nodejs/src/cdp/services/hogflows/actions/delay.ts`. */
 const MAX_VALUE_FOR_DURATION_UNIT = { d: 30, h: 24, m: 60, s: 60 } as const
 const NEXT_LARGER_UNIT = { s: 'm', m: 'h', h: 'd' } as const
 
-/** `MAX_WORKFLOW_EMAIL_SENDERS` and `FROM_OVERRIDE_EMAIL_REGEX` in `posthog/cdp/validation.py`. */
 const MAX_EMAIL_SENDERS = 10
 const SENDER_ADDRESS_PATTERN = /^[^\s@"<>,;]+@[^\s@"<>,;]+\.[^\s@"<>,;]+$/
 
@@ -119,8 +106,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-// The types already require these options, but the CLI evaluates a file without type-checking it,
-// so a missing option must reach the author as a refusal, not as a TypeError inside the compiler.
 function checkRequiredOptions(options: CompileOptions): void {
     const given = options as Partial<Record<keyof CompileOptions, unknown>>
     if (typeof given.key !== 'string') {
@@ -183,24 +168,12 @@ function slug(name: string): string {
         .replace(/^_+|_+$/g, '')
 }
 
-/** One step at one place in the graph, with the action id it took. */
 interface Placement {
     readonly step: Step
     readonly id: string
-    /** A branch's sub-paths, already placed. Absent on every other kind. */
     readonly branches?: readonly (readonly Placement[])[]
 }
 
-/**
- * Hands out one action id per placement, in graph order.
- *
- * The id is the slug of the step name, so it survives an insertion or a reorder and
- * moves only on a rename, which a reviewer sees in the diff. PostHog keys a workflow's
- * in-flight participants and its secrets on the action id, so a shared id is refused
- * rather than made unique behind the author's back. One step value placed a second
- * time is the exception, because it is the same step, so the later placement in graph
- * order takes a numbered id.
- */
 class Ids {
     private readonly baseOwner = new Map<string, Placed>()
     private readonly idOwner = new Map<string, Placed>()
@@ -355,9 +328,6 @@ function unitName(unit: DurationUnit): string {
     return { d: 'days', h: 'hours', m: 'minutes', s: 'seconds' }[unit]
 }
 
-// The byte length the serializer measures, which is Python's `json.dumps`: a space
-// after every separator, and every non-ASCII character escaped. Counting the shorter
-// JavaScript form here would pass a file that the API then refuses.
 function serializedSize(variable: WorkflowVariable): number {
     const escape = (value: string): string =>
         JSON.stringify(value).replace(
@@ -400,8 +370,6 @@ function checkVariables(variables: readonly WorkflowVariable[]): void {
     }
 }
 
-// Walks a value rather than searching its JSON, so a string holding `__secret` is not
-// a false match.
 function secretPath(value: unknown, seen = new Set<unknown>()): string[] | undefined {
     if (isSecretRef(value)) {
         return []
@@ -423,7 +391,6 @@ function stepOwner(step: { readonly name: string }): string {
     return `Step "${step.name}"`
 }
 
-// A secret inside a value would reach PostHog as the name of the variable, not its value.
 function refuseNestedSecret(value: unknown, key: string, owner: string): void {
     if (secretPath(value) === undefined) {
         return
@@ -484,8 +451,6 @@ function resolveInputs(step: Step & { kind: 'function' }, actionId: string, cont
     return resolved
 }
 
-// The type already requires one sender id, but a cast gets past it, and PostHog refuses
-// the push or fails the send rather than reporting a clear reason.
 function checkSender(sender: EmailSender, step: Step): void {
     const ids = sender.integrationIds
     const refuse = (message: string, fix: string): never => {
@@ -502,8 +467,6 @@ function checkSender(sender: EmailSender, step: Step): void {
     if (ids.length > MAX_EMAIL_SENDERS) {
         refuse(`names ${ids.length} senders, and the limit is ${MAX_EMAIL_SENDERS}.`, 'Keep at most ten ids.')
     }
-    // findIndex rather than find, because a hole in the list is found as undefined, which
-    // find cannot tell apart from finding nothing.
     const wrongAt = ids.findIndex((id) => !Number.isSafeInteger(id) || id <= 0)
     if (wrongAt !== -1) {
         refuse(
@@ -513,7 +476,6 @@ function checkSender(sender: EmailSender, step: Step): void {
     }
 
     const address = sender.email?.trim() ?? ''
-    // A brace is hog templating, which only resolves at send time, so it is left alone.
     if (address === '' || address.includes('{') || SENDER_ADDRESS_PATTERN.test(address)) {
         return
     }
@@ -525,9 +487,6 @@ function checkSender(sender: EmailSender, step: Step): void {
     })
 }
 
-// Assigns an id to every placement, depth first, so the order matches the order a
-// reader walks the graph. Allocating a whole path before its branches would let a step
-// appended to the trunk take the id of a placement inside an earlier branch.
 function place(steps: readonly Step[], ids: Ids, inBranch: boolean): Placement[] {
     if (steps.length === 0) {
         throw new WorkflowError({
@@ -551,8 +510,6 @@ function place(steps: readonly Step[], ids: Ids, inBranch: boolean): Placement[]
     })
 }
 
-// PostHog's action serializer defaults a missing description to an empty string, so a step
-// without one leaves the key out and a second push still finds nothing changed.
 function descriptionOf(step: { readonly description?: string }): { description?: string } {
     return step.description === undefined ? {} : { description: step.description }
 }
@@ -601,7 +558,6 @@ function resolveConfigInputs(
     return { ...config, inputs: resolvedInputs }
 }
 
-// Returns the id of the path's first node, which the caller needs for the edge into it.
 function emitPath(placements: readonly Placement[], continuation: string, context: Context): string {
     placements.forEach((placement, position) => {
         const { step, id } = placement
@@ -633,7 +589,6 @@ function emitPath(placements: readonly Placement[], continuation: string, contex
         }
 
         if (step.kind === 'email') {
-            // `template-email` has no secret input, so a secret here can only be a mistake.
             refuseNestedSecret(step.email, 'the email', stepOwner(step))
             checkSender(step.email.from, step)
             context.actions.push({
@@ -660,7 +615,6 @@ function emitPath(placements: readonly Placement[], continuation: string, contex
                 config: { conditions },
             })
         } else {
-            // `step.type` is a union of action types, so the literal cannot narrow to one member of `Action`.
             const passThrough = {
                 id,
                 name: step.name,
@@ -671,11 +625,9 @@ function emitPath(placements: readonly Placement[], continuation: string, contex
             }
             context.actions.push(passThrough as Action)
         }
-        // The fall-through edge is the no-match path out of the branch.
         context.edges.push({ from: id, to: next, type: 'continue' })
 
         placement.branches?.forEach((sub, index) => {
-            // The index and its edge come from the same array position, so they agree.
             const entry = emitPath(sub, next, context)
             context.edges.push({ from: id, to: entry, type: 'branch', index })
         })
@@ -755,8 +707,6 @@ export function compile(options: CompileOptions, emitOptions: EmitOptions = {}):
     })
     context.actions.forEach(refuseUnresolvedSecret)
 
-    // Copied on the way out, so a caller that edits the definition cannot reach back into
-    // the step values the file exports and change what a second emit produces.
     const definition: WorkflowDefinition = structuredClone({
         key: options.key,
         name: options.name,

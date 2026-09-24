@@ -1,17 +1,12 @@
-// `tsc` fails this file when an `@ts-expect-error` line stops being an error, so a
-// type rule that relaxes breaks the build.
-
 import { branch, delay, email, fn, group, onSchedule, path, person, secret, step, trigger, workflow } from '../index.js'
 
 const wait = delay('1d', { name: 'Wait a day' })
 const onPaidPlan = [person('plan', 'exact', ['pro'])] as const
 
-// A duration is a number plus a unit, including where the value reaches the call through a const.
 const soon = 'soon'
 // @ts-expect-error - 'soon' is not a duration
 delay(soon, { name: 'Wait' })
 
-// A sub-path is a non-empty tuple, so an empty branch cannot compile.
 branch({
     name: 'Which plan?',
     branches: [
@@ -24,19 +19,15 @@ branch({
     ],
 })
 
-// A branch needs at least one branch.
 branch({
     name: 'Which plan?',
     // @ts-expect-error - a branch with no branches is a conditional that decides nothing
     branches: [],
 })
 
-// A path needs at least one step.
 // @ts-expect-error - an empty workflow has no first action for the trigger to point at
 path()
 
-// Email content is inline. A library template is materialized on write, so the stored
-// definition would never match the one we sent.
 email({
     name: 'Welcome',
     from: { integrationIds: [12] },
@@ -48,8 +39,6 @@ email({
     templateUuid: '0199d0c0-0000-7000-8000-000000000000',
 })
 
-// An email names its sender. PostHog refuses to save a step without one, and the runtime
-// sends from nothing else.
 // @ts-expect-error - `from` is required
 email({
     name: 'Welcome',
@@ -82,7 +71,6 @@ fn({
     },
 })
 
-// The workflow carries its own identity.
 // @ts-expect-error - `key` is how push finds the workflow again, so it is required
 workflow({
     name: 'No key',
@@ -91,8 +79,6 @@ workflow({
     exit: { reason: 'Done' },
 })
 
-// A conversion exit needs a conversion goal, and the compiler emits none, so the exit
-// would never fire.
 workflow({
     key: 'converts',
     name: 'Converts',
@@ -103,7 +89,6 @@ workflow({
     exit: { reason: 'Done' },
 })
 
-// Group conditions need the group type index PostHog uses to resolve the property.
 // @ts-expect-error - groupTypeIndex is required
 const accountTier = group('tier', 'exact', ['enterprise'])
 void accountTier

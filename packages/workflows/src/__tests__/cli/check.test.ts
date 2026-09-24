@@ -33,7 +33,6 @@ describe('check', () => {
         )
     })
 
-    // A fork's pull request gets an empty string for a secret its job maps into the environment.
     for (const [state, env] of [
         ['not set', {}],
         ['empty', { CRM_WEBHOOK_SECRET: '' }],

@@ -1,11 +1,3 @@
-// Loading the customer's file. jiti evaluates their TypeScript in this process and caches the
-// transpiled output under node_modules/.cache/jiti, so there is no build step to run and nothing
-// is written into their repository.
-//
-// Collecting the exports is a separate step from evaluating the file, because every question
-// worth a good message ("no workflow", "two with one key", "a step you never wrapped") is a
-// question about the module namespace rather than about TypeScript.
-
 import { createJiti } from 'jiti'
 import { isAbsolute, relative, resolve } from 'node:path'
 
@@ -14,19 +6,16 @@ import { WorkflowError } from '../errors.js'
 import type { Workflow } from '../workflow.js'
 
 export interface LoadedWorkflow {
-    /** The name the file exports it under, which is what the output points at. */
     readonly exportName: string
     readonly key: string
     readonly emitted: EmitResult
 }
 
 export interface LoadedFile {
-    /** Relative to the working directory, because that is what belongs in a CI log. */
     readonly path: string
     readonly workflows: readonly LoadedWorkflow[]
 }
 
-/** The key the README and `init` use in an example, which would claim a workflow nobody meant. */
 const PLACEHOLDER_KEY = /^replace[-_]me/i
 
 const STEP_KINDS = new Set(['delay', 'function', 'email', 'branch'])
@@ -46,11 +35,6 @@ function isStep(value: unknown): boolean {
     return typeof value === 'object' && value !== null && typeof kind === 'string' && STEP_KINDS.has(kind)
 }
 
-/**
- * A step or a path of steps, exported on its own, is a graph that was never made a workflow.
- *
- * @param value - One export of the file.
- */
 function isLooseGraph(value: unknown): boolean {
     if (Array.isArray(value)) {
         return value.length > 0 && value.every(isStep)
@@ -59,25 +43,11 @@ function isLooseGraph(value: unknown): boolean {
 }
 
 export interface LoadOptions {
-    /** The environment `secret()` reads. `push` passes the real one; `check` passes a preview. */
     readonly env: Readonly<Record<string, string | undefined>>
 }
 
-/**
- * Evaluates the file and emits every workflow it exports, in export order.
- *
- * Three refusals, each naming one fix: the file exports no workflow, it exports a step or a path
- * that was never wrapped in `workflow()`, or two of its workflows carry one key. The last one
- * matters because the key is the identity, so two workflows sharing one would fight over the same
- * row and the second push would overwrite the first.
- *
- * @param path - The file to load, as given on the command line.
- * @param options - The environment `secret()` reads while the file evaluates.
- */
 export async function loadWorkflowFile(path: string, options: LoadOptions): Promise<LoadedFile> {
     const absolute = isAbsolute(path) ? path : resolve(process.cwd(), path)
-    // Relative to the working directory, unless the file sits outside it, where a chain of `..`
-    // segments is harder to read than the path the user typed.
     const inside = relative(process.cwd(), absolute)
     const shown = inside === '' || inside.startsWith('..') ? path : inside
     const jiti = createJiti(import.meta.url, { interopDefault: false })
@@ -151,17 +121,6 @@ export async function loadWorkflowFile(path: string, options: LoadOptions): Prom
     return { path: shown, workflows }
 }
 
-/**
- * The environment `check` emits against.
- *
- * `check` runs on a pull request, and a pull request from a fork cannot read a repository secret,
- * so an unset variable must not fail it. A CI job that maps the secret into its environment gives
- * the fork an empty string rather than nothing, so an empty variable takes the placeholder too. The
- * placeholder never reaches PostHog: `check` writes nothing, and the diff compares a secret's
- * presence but never a placeholder value.
- *
- * @param env - The real process environment, read before the placeholder is used.
- */
 export function previewEnv(
     env: Readonly<Record<string, string | undefined>>
 ): Readonly<Record<string, string | undefined>> {

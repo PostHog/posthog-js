@@ -324,9 +324,6 @@ export interface EmailSenderOptions {
     readonly name?: string
 }
 
-// The same wrap PostHog builds in `posthog/cdp/validation.py` for an html body that
-// arrives without a design. Its ids are fixed there so the wrap is deterministic, and the
-// SDK copies them so the design it sends is the design PostHog stores.
 function htmlWrapDesign(html: string): EmailDesign {
     return {
         counters: { u_row: 1, u_column: 1, u_content_html: 1 },
@@ -417,8 +414,6 @@ export function email(options: {
     html: string
     preheader?: string
 }): Step {
-    // The CLI evaluates a file without type-checking, so a sender written for another shape,
-    // or none, arrives here. It is read loosely and passed on, so emit refuses it with a reason.
     const sender: Partial<EmailSenderOptions> = options.from ?? {}
     const ids: readonly number[] = Array.isArray(sender.integrationIds) ? sender.integrationIds : []
     const message: EmailMessage = {

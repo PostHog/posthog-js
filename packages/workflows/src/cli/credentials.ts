@@ -1,6 +1,3 @@
-// Credentials. The CLI reimplements no login: it reads the file `posthog-cli login` writes, and
-// lets the environment override it, so a developer logs in once and CI sets variables.
-
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -12,28 +9,15 @@ export interface Credentials {
     readonly apiKey: string
     readonly projectId: string
     readonly host: string
-    /** Named in the output, so a surprising project is traceable to where it came from. */
     readonly source: string
 }
 
-/**
- * The shape the Rust CLI writes, from `Token` in `cli/src/utils/auth.rs`. Reading it is the whole
- * reason `posthog-cli login` serves both tools, so a change to those three field names is a change
- * this file has to follow. Nothing checks that automatically: a test that read the Rust source
- * from here would couple two trees through a string match that a rename or a reformat breaks.
- */
 interface CredentialsFile {
     readonly host?: string | null
     readonly token?: string
     readonly env_id?: string
 }
 
-/**
- * `POSTHOG_HOME` first, then `~/.posthog`, following `cli/src/utils/homedir.rs`.
- *
- * @param env - The process environment, read for `POSTHOG_HOME`.
- * @param homeDir - The user's home directory, where `.posthog` lives by default.
- */
 function credentialsPath(env: Readonly<Record<string, string | undefined>>, homeDir: string): string {
     const home = env.POSTHOG_HOME
     return home === undefined || home === ''
@@ -88,10 +72,6 @@ function shown(path: string, homeDir: string): string {
     return path.startsWith(homeDir) ? `~${path.slice(homeDir.length)}` : path
 }
 
-/**
- * What the command line named outright. The key is never among them: a command line lands in
- * shell history and in CI logs, and a variable or the file does not.
- */
 export interface CredentialOverrides {
     readonly project?: string | undefined
     readonly host?: string | undefined
@@ -117,7 +97,6 @@ function present(value: string | null | undefined): value is string {
     return value !== undefined && value !== null && value !== ''
 }
 
-// An empty variable counts as unset, so `POSTHOG_CLI_API_KEY=` does not hide `POSTHOG_CLI_TOKEN`.
 function firstPresent(...values: readonly (string | null | undefined)[]): string | undefined {
     return values.find(present)
 }
@@ -128,14 +107,6 @@ function trimHost(host: string | null | undefined): string | undefined {
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
-/**
- * Every request carries the API key as a bearer token, so a plain-HTTP host outside the
- * machine hands the key to anyone on the path. Loopback is the one place HTTP is allowed,
- * because a local PostHog serves no TLS and the traffic never leaves the machine.
- *
- * @param host - The host after the trailing slashes are gone, from a flag, a variable or the file.
- * @param source - Where the host came from, for the message.
- */
 function assertSecureHost(host: string, source: string): string {
     let url: URL
     try {
@@ -175,31 +146,11 @@ function describeSource(base: string, overrides: CredentialOverrides): string {
     return parts.join(', ')
 }
 
-/**
- * The key and the project resolve together from one source, following the Rust CLI. Mixing them
- * would let a token from the environment write to the project id left in the file, which is how a
- * staging deploy reaches production.
- *
- * A flag is the exception, because it is the author saying the project outright: `--project` pairs
- * with the key from whichever source has one, and wins over `POSTHOG_CLI_PROJECT_ID` and the file.
- *
- * The host overrides on its own, from `--host` first and `POSTHOG_CLI_HOST` second. The Rust CLI
- * takes the host from the same source as the pair; this CLI does not, because pointing one set of
- * credentials at another instance is what the variable is for, and a push names the host it wrote to.
- *
- * Null rather than a throw when nothing is configured, which is what lets `check` degrade.
- *
- * @param env - The process environment, read for the `POSTHOG_CLI_*` variables.
- * @param homeDir - The user's home directory, where the credentials file lives by default.
- * @param overrides - The project and the host from the command line, when the flags were passed.
- */
 export function resolveCredentials(
     env: Readonly<Record<string, string | undefined>>,
     homeDir: string,
     overrides: CredentialOverrides = {}
 ): Credentials | null {
-    // Resolved only once a key is found: a host is validated when a request will carry the key
-    // to it, so an offline check does not fail on a host it never contacts.
     const host = (): string | undefined =>
         secureHost(overrides.host, '--host') ?? secureHost(env.POSTHOG_CLI_HOST, 'POSTHOG_CLI_HOST')
     const apiKey = firstPresent(env.POSTHOG_CLI_API_KEY, env.POSTHOG_CLI_TOKEN)

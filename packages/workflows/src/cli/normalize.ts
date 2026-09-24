@@ -1,11 +1,3 @@
-// How PostHog stores a workflow it was sent, written as rules that both sides of a comparison go
-// through. After the rules run the comparison is exact: a field PostHog stores as it was sent is
-// compared as the author wrote it, so removing an authored field reads as a change.
-//
-// Every rule names its field. A key PostHog adds that no rule names makes the workflow read as
-// changed on every push, which costs one needless revision. A rule that ignored every unknown key
-// would instead hide an edit that then never deploys, so the tables stay explicit.
-
 import type { Action, WorkflowDefinition } from '../definition.js'
 import type { SecretInput } from '../emit.js'
 
@@ -14,13 +6,10 @@ type Json = Record<string, unknown>
 type FieldRule =
     | 'identity'
     | 'exact'
-    /** PostHog trims surrounding whitespace from the text when it saves. */
     | 'text'
     | 'optional text'
-    /** PostHog stores null when a push leaves it out, so an empty value is the same setting. */
     | 'optional'
     | 'filters'
-    /** Compared only when the file sets it, because PostHog owns the value otherwise. */
     | 'when authored'
     | 'config'
     | 'variables'
@@ -29,8 +18,6 @@ type FieldRule =
 
 type KeysOf<T> = T extends unknown ? keyof T : never
 
-// The mapped types make a field that the definition gains and these tables do not name a type
-// error, so a new authored field cannot be left out of the comparison by accident.
 const DEFINITION_FIELDS = {
     key: 'identity',
     name: 'text',
@@ -53,25 +40,16 @@ const ACTION_FIELDS = {
     config: 'config',
 } as const satisfies { readonly [K in KeysOf<Action>]-?: FieldRule }
 
-/** Action fields the PostHog editor stamps and a file never carries. */
 export const DERIVED_ACTION_KEYS: ReadonlySet<string> = new Set(['created_at', 'updated_at'])
 
-/** The compiled forms PostHog adds to a step config, at any depth outside an input value. */
 export const COMPILED_CONFIG_KEYS: ReadonlySet<string> = new Set(['bytecode', 'bytecode_error', 'transpiled'])
 
-/** Keys PostHog adds to every `filters` object: the compiled forms, and the event source it defaults. */
 export const DERIVED_FILTER_KEYS: ReadonlySet<string> = new Set([...COMPILED_CONFIG_KEYS, 'source'])
 
-/**
- * Keys PostHog adds to a function input beside its `value`: the compiled template, the order the
- * inputs evaluate in, and the `secret` mask it reads a stored secret back as.
- */
 export const DERIVED_INPUT_KEYS: ReadonlySet<string> = new Set([...COMPILED_CONFIG_KEYS, 'order', 'secret'])
 
-/** Values PostHog writes into a function input that leaves them out, taken from the template. */
 export const INPUT_DEFAULTS: Readonly<Record<string, unknown>> = { templating: 'hog' }
 
-/** Config values PostHog writes into a step of one type when the step leaves them out. */
 export const CONFIG_DEFAULTS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
     function_email: { template_id: 'template-email' },
     function_sms: { template_id: 'template-twilio' },
@@ -94,23 +72,17 @@ export interface Comparison {
 
 export interface SecretRules {
     readonly inputs: readonly SecretInput[]
-    /** The secret inputs whose local value is real, so a value PostHog reads back can be compared. */
     readonly comparable: readonly SecretInput[]
 }
 
 type Side = 'local' | 'stored'
 
-/**
- * A secret input after normalization. PostHog reads a stored secret back as a mask, so what both
- * sides can always compare is whether the secret is there. `value` is set only where it is known.
- */
 class Secret {
     constructor(readonly value: string | undefined) {}
 }
 
 interface Context {
     readonly side: Side
-    /** Secret input keys by action id. */
     readonly secrets: ReadonlyMap<string, ReadonlySet<string>>
     readonly comparable: ReadonlyMap<string, ReadonlySet<string>>
 }
@@ -133,8 +105,6 @@ function without(value: Json, keys: ReadonlySet<string>): Json {
     return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.has(key)))
 }
 
-// Deep equality over normalized values. A key holding `undefined` counts as missing, and two
-// secrets are equal when both are present and their values do not disagree.
 function same(mine: unknown, theirs: unknown): boolean {
     if (mine instanceof Secret || theirs instanceof Secret) {
         return (
@@ -158,8 +128,6 @@ function same(mine: unknown, theirs: unknown): boolean {
     return mine === theirs
 }
 
-// `key` is the name the value sits under, because PostHog also sets the source on anything named
-// `filters`.
 function withoutCompiled(value: unknown, key?: string): unknown {
     if (Array.isArray(value)) {
         return value.map((entry) => withoutCompiled(entry))
@@ -179,9 +147,6 @@ function withoutDefaults(value: Json, defaults: Readonly<Record<string, unknown>
     )
 }
 
-// A secret the file names is always present locally, because emit refuses an unset one. PostHog
-// reads a stored one back as `{ secret: true }`, and returns the value only where it stores it in
-// the clear.
 function secretInput(input: unknown, inputKey: string, actionId: string, context: Context): Secret | undefined {
     const value = isObject(input) ? input.value : undefined
     if (context.side === 'local') {
@@ -201,7 +166,6 @@ function normalizeInputs(inputs: Json, actionId: string, context: Context): Json
             if (secretKeys?.has(key) === true) {
                 return [key, secretInput(input, key, actionId, context)]
             }
-            // The value is the customer's own, so nothing inside it is dropped.
             return [key, isObject(input) ? withoutDefaults(without(input, DERIVED_INPUT_KEYS), INPUT_DEFAULTS) : input]
         })
     )
@@ -237,7 +201,6 @@ function normalizeField(rule: FieldRule, value: unknown): unknown {
             return isEmpty(normal) ? undefined : normal
         }
         case 'variables':
-            // Each variable is a map of strings, which PostHog trims like any other text.
             return Array.isArray(value)
                 ? value.map((entry) =>
                       isObject(entry)
@@ -257,7 +220,6 @@ function normalizeAction(action: Json, context: Context): Json {
         if (rule === 'identity' || DERIVED_ACTION_KEYS.has(key)) {
             continue
         }
-        // A key no rule names is compared as stored, so a field PostHog learns to keep is seen.
         normalized[key] =
             rule === undefined
                 ? value
@@ -273,7 +235,6 @@ function actionsById(actions: unknown, context: Context): Map<string, Json> {
     return new Map(list.map((action) => [String(action.id), normalizeAction(action, context)]))
 }
 
-// An edge is identified by what it connects, so the order PostHog stores the list in means nothing.
 function edgeSet(edges: unknown): string[] {
     const list: unknown[] = Array.isArray(edges) ? edges : []
     return list
@@ -293,13 +254,6 @@ function byAction(inputs: readonly SecretInput[]): Map<string, Set<string>> {
     return map
 }
 
-/**
- * Which parts of the definition a push would change.
- *
- * @param local - The definition the file emitted.
- * @param stored - The workflow PostHog stores, as the API returned it.
- * @param secrets - The inputs the file reads from `secret()`, and which of them have a real value.
- */
 export function compareDefinitions(
     local: WorkflowDefinition,
     stored: Readonly<Record<string, unknown>>,

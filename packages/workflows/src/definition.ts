@@ -1,5 +1,3 @@
-// The create/update body that POST/PATCH /api/projects/{id}/hog_flows/ accepts.
-
 import type { PassThroughActionConfig } from './steps.js'
 
 /**
@@ -260,8 +258,6 @@ export type Action =
       })
     | (ActionBase & {
           readonly type: 'function_email'
-          // PostHog coerces `template_id` to `template-email` whatever the client sends,
-          // so the SDK sends that literal and has no route to a saved template UUID.
           readonly config: {
               readonly template_id: 'template-email'
               readonly inputs: { readonly email: { readonly value: EmailMessage } }

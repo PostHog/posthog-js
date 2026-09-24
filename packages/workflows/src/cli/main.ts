@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// The bin. It reads the arguments, runs the command, and turns a refusal into the four fields.
 
 import { homedir } from 'node:os'
 
@@ -136,15 +135,6 @@ async function main(): Promise<number> {
     })
 }
 
-/**
- * A refusal the customer's own copy of the package threw.
- *
- * `instanceof` is not enough: the file being loaded imports `@posthog/workflows` from their
- * `node_modules`, which can be a second copy of this package, and a class from another module
- * instance fails that check. The four fields are the contract, so the shape is what is read.
- *
- * @param error - Whatever the file threw while it loaded.
- */
 function refusal(error: unknown): WorkflowError | null {
     if (error instanceof WorkflowError) {
         return error

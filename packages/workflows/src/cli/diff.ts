@@ -1,15 +1,9 @@
-// What a push would change. The comparison decides whether the CLI writes at all, so it has two
-// jobs that pull in opposite directions: see a real edit, and never see a change that is not one.
-// `normalize.ts` owns the rules for both; this module turns what they find into the lines a
-// reviewer reads.
-
 import type { WorkflowDefinition } from '../definition.js'
 import type { SecretInput } from '../emit.js'
 import { compareDefinitions } from './normalize.js'
 
 export interface Change {
     readonly kind: 'added' | 'removed' | 'changed'
-    /** `status`, or `step "Wait a day"`. */
     readonly what: string
     readonly before?: string
     readonly after?: string
@@ -35,18 +29,6 @@ function short(value: unknown): string {
     return text.length > 70 ? `${text.slice(0, 67)}...` : text
 }
 
-/**
- * What a push would change, and whether it would write at all.
- *
- * Steps are matched by action id, which is the slug of the step name, so inserting a step reads as
- * one addition rather than a rewrite of everything after it.
- *
- * @param local - The workflow the file emitted.
- * @param remote - The workflow PostHog stores, as the API returned it.
- * @param secretInputs - The inputs the file reads from `secret()`. Their presence is compared, and
- * their value only where PostHog reads it back.
- * @param options - The secret inputs whose local value is real. Defaults to all of them.
- */
 export function diffWorkflow(
     local: WorkflowDefinition,
     remote: Readonly<Record<string, unknown>>,

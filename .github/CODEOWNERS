@@ -29,7 +29,6 @@ packages/react-native/                                 @PostHog/team-client-libr
 # MCP Analytics
 packages/mcp/                                          @PostHog/team-client-libraries @PostHog/mcp-analytics
 
-# Workflows
 packages/workflows/                                    @PostHog/team-client-libraries @PostHog/team-workflows
 
 # Web Analytics

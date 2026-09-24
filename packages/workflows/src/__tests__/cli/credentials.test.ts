@@ -6,7 +6,6 @@ import { describe, it } from 'vitest'
 
 import { resolveCredentials } from '../../cli/credentials.js'
 
-/** The file `posthog-cli login` writes, in the shape `Token` in `cli/src/utils/auth.rs` serializes. */
 function homeWithCredentials(contents: string): string {
     const home = mkdtempSync(join(tmpdir(), 'posthog-home-'))
     mkdirSync(join(home, '.posthog'))
