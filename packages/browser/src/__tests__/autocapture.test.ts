@@ -933,7 +933,7 @@ describe('Autocapture system', () => {
                     expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
                 })
 
-                it('rapid clicks on an arrow glyph beside link text still capture $rageclick', () => {
+                it('rapid clicks on an arrow glyph beside link text still capture $rageclick, whichever descendant is clicked', () => {
                     const link = document.createElement('a')
                     link.appendChild(document.createTextNode('Get started '))
                     const glyph = document.createElement('span')
@@ -941,6 +941,57 @@ describe('Autocapture system', () => {
                     link.appendChild(glyph)
 
                     expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
+                    expect(rageClickThreeTimes(link)).toContain('$rageclick')
+                })
+
+                describe('control label reflects the control regardless of which descendant was clicked', () => {
+                    it('rapid clicks on a link with a glyph beside bold text still capture $rageclick, whichever descendant is clicked', () => {
+                        const link = document.createElement('a')
+                        link.setAttribute('href', '#')
+                        const strong = document.createElement('strong')
+                        strong.textContent = 'Get started'
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        link.appendChild(strong)
+                        link.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
+                        expect(rageClickThreeTimes(strong, link)).toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose only content is a glyph span do not capture $rageclick, whichever descendant is clicked', () => {
+                        const button = document.createElement('button')
+                        const glyph = document.createElement('span')
+                        glyph.textContent = '→'
+                        button.appendChild(glyph)
+
+                        expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button whose only label is an svg aria-label do not capture $rageclick, whichever descendant is clicked', () => {
+                        const button = document.createElement('button')
+                        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                        svg.setAttribute('aria-label', 'Next')
+                        button.appendChild(svg)
+
+                        expect(rageClickThreeTimes(svg, button)).not.toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                    })
+
+                    it('rapid clicks on a button still capture $rageclick when the only matching keyword text sits inside a sensitive descendant', () => {
+                        const button = document.createElement('button')
+                        const sensitive = document.createElement('span')
+                        sensitive.className = 'ph-sensitive'
+                        const nested = document.createElement('em')
+                        nested.textContent = 'Next'
+                        sensitive.appendChild(nested)
+                        button.appendChild(sensitive)
+                        button.appendChild(document.createTextNode('Pay'))
+
+                        expect(rageClickThreeTimes(nested, button)).toContain('$rageclick')
+                        expect(rageClickThreeTimes(button)).toContain('$rageclick')
+                    })
                 })
 
                 it('rapid clicks on a decorative icon aria-label inside a text link still capture $rageclick', () => {

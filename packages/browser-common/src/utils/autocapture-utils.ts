@@ -307,51 +307,49 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
         }
     }
 
-    // an icon-only control often carries its label on the icon, e.g. <button><svg aria-label="Next"/></button>,
-    // so we walk from the click target up to the control, and no further so a wrapping region's label
-    // never matches, collecting aria-label and each element's text on the way
-    let ariaLabel = ''
-    const pathToControl: Element[] = []
-    for (const candidate of targetElementList) {
-        pathToControl.push(candidate)
-        ariaLabel = candidate.getAttribute('aria-label')?.toLowerCase().trim() || ariaLabel
-        if (candidate === control) {
-            break
+    // the label describes the control, not the path a click happened to take through it, so it is read
+    // entirely from the control's own subtree and never depends on which descendant was clicked
+    return controlLabelText(control)
+}
+
+// walks an element's subtree in document order, collecting each element's direct text and aria-label,
+// skipping the whole subtree of anything shouldCaptureElement/isSensitiveElement excludes
+function collectLabelParts(el: Element, texts: string[], ariaLabels: string[]): void {
+    if (!shouldCaptureElement(el) || isSensitiveElement(el)) {
+        return
+    }
+    const text = joinSafeTextNodes(el, ' ')
+    if (text) {
+        texts.push(text)
+    }
+    const ariaLabel = el.getAttribute('aria-label')
+    if (ariaLabel) {
+        ariaLabels.push(ariaLabel)
+    }
+    each(el.childNodes, (child: Node) => {
+        if (isElementNode(child)) {
+            collectLabelParts(child, texts, ariaLabels)
         }
-    }
-
-    const safeText = controlLabelText(pathToControl, control).toLowerCase()
-
-    // a control's own label (text or its own aria-label) wins over a descendant icon's aria-label
-    if (safeText && !control.getAttribute('aria-label')) {
-        ariaLabel = ''
-    }
-
-    return {
-        safeText,
-        ariaLabel,
-    }
+    })
 }
 
 // an inline icon or an interpolated value splits a label across text nodes, and getSafeText joins
 // those with nothing, so <button>Next <svg/> page</button> would read as "nextpage" and no whole-word
 // keyword could match it. we keep the words apart for matching; $el_text keeps using getSafeText
-function controlLabelText(pathToControl: Element[], control: Element): string {
-    // joinNestedSpanText(control) already reads spans reached from the control through spans only,
-    // so those are skipped on the path to avoid counting their text twice
-    let spanChain = true
-    const pathText = pathToControl
-        .slice()
-        .reverse()
-        .map((candidate) => {
-            if (candidate === control) {
-                return joinSafeTextNodes(candidate, ' ')
-            }
-            spanChain = spanChain && isTag(candidate, 'span')
-            return spanChain ? '' : joinSafeTextNodes(candidate, ' ')
-        })
-    const text = [...pathText, joinNestedSpanText(control, ' ')].join(' ').replace(/\s+/g, ' ').trim()
-    return shouldCaptureValue(text) ? text : ''
+function controlLabelText(control: Element): ElementWithText {
+    const texts: string[] = []
+    const ariaLabels: string[] = []
+    collectLabelParts(control, texts, ariaLabels)
+
+    const text = texts.join(' ').replace(/\s+/g, ' ').trim()
+    const safeText = (shouldCaptureValue(text) ? text : '').toLowerCase()
+
+    // a control's own aria-label always wins; a descendant icon's aria-label is a fallback used only
+    // when the control has no text of its own
+    const ownAriaLabel = (control.getAttribute('aria-label') || '').toLowerCase().trim()
+    const ariaLabel = ownAriaLabel || (safeText ? '' : (ariaLabels[0] || '').toLowerCase().trim())
+
+    return { safeText, ariaLabel }
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
