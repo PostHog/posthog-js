@@ -84,7 +84,11 @@ An explicit extension takes precedence over the top-level option, including `fla
 
 Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
 
-## Extension lifecycle notifications
+## Extension lifecycle
+
+Creating an extension does not initialize it. Pass it in the `extensions` option to `createPostHog()` and await the returned promise before using its controls.
+
+### Lifecycle notifications
 
 Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
