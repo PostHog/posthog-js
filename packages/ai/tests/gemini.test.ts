@@ -435,6 +435,232 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
+  describe('tool history input', () => {
+    test.each(['generateContent', 'generateContentStream'] as const)(
+      '%s captures the call and matching result without changing the Gemini request',
+      async (method) => {
+        const contents = [
+          { role: 'user', parts: [{ text: 'Describe a blue triangle.' }] },
+          {
+            role: 'model',
+            parts: [
+              { text: 'Checking the shape.' },
+              { functionCall: { id: 'call_649034', name: 'describe_shape', args: { color: 'blue', sides: 3 } } },
+            ],
+          },
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_649034',
+                  name: 'describe_shape',
+                  response: { description: 'blue triangle' },
+                },
+              },
+              { text: 'Now summarize it.' },
+            ],
+          },
+        ]
+        const originalContents = structuredClone(contents)
+        const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
+
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
+        }
+
+        expect((client as any).client.models[method]).toHaveBeenCalledWith({ model: params.model, contents })
+        expect(contents).toEqual(originalContents)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        expect(properties['$ai_input']).toEqual([
+          { role: 'user', content: [{ type: 'text', text: 'Describe a blue triangle.' }] },
+          {
+            role: 'model',
+            content: [
+              { type: 'text', text: 'Checking the shape.' },
+              {
+                type: 'function',
+                id: 'call_649034',
+                function: { name: 'describe_shape', arguments: { color: 'blue', sides: 3 } },
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'call_649034',
+                content: { description: 'blue triangle' },
+              },
+              { type: 'text', text: 'Now summarize it.' },
+            ],
+          },
+        ])
+      }
+    )
+
+    test.each(['generateContent', 'generateContentStream'] as const)(
+      '%s retains legacy tool history without inventing an ID',
+      async (method) => {
+        const contents = [
+          { role: 'model', parts: [{ functionCall: { name: 'get_weather', args: { city: 'Paris' } } }] },
+          {
+            role: 'user',
+            parts: [{ functionResponse: { name: 'get_weather', response: { temperature: 21 } } }],
+          },
+        ]
+        const params = { model: 'gemini-2.0-flash-001', contents, posthogDistinctId: 'test-id' }
+
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
+        }
+
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        expect(properties['$ai_input']).toEqual([
+          {
+            role: 'model',
+            content: [{ type: 'function', function: { name: 'get_weather', arguments: { city: 'Paris' } } }],
+          },
+          {
+            role: 'user',
+            content: [{ type: 'tool_result', content: { temperature: 21 } }],
+          },
+        ])
+      }
+    )
+
+    test.each(['generateContent', 'generateContentStream'] as const)(
+      '%s redacts binary data inside tool results by default',
+      async (method) => {
+        const binary = 'U0hPUlQgQklOQVJZ'
+        const contents = [
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_1',
+                  name: 'read_image',
+                  response: { image: { mimeType: 'image/png', data: binary } },
+                  parts: [{ inlineData: { mimeType: 'image/png', data: binary } }],
+                },
+              },
+            ],
+          },
+        ]
+        const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
+
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
+        }
+
+        expect(contents[0].parts[0].functionResponse.response.image.data).toBe(binary)
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        expect(properties['$ai_input']).toEqual([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'call_1',
+                content: {
+                  response: { image: { mimeType: 'image/png', data: '[base64 image/png redacted]' } },
+                  parts: [{ inlineData: { mimeType: 'image/png', data: '[base64 image/png redacted]' } }],
+                },
+              },
+            ],
+          },
+        ])
+      }
+    )
+
+    test.each(['generateContent', 'generateContentStream'] as const)(
+      '%s retains function response parts when there is no JSON response',
+      async (method) => {
+        const contents = [
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_2',
+                  name: 'read_image',
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'U0hPUlQgQklOQVJZ' } }],
+                },
+              },
+            ],
+          },
+        ]
+        const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
+
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
+        }
+
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        expect(properties['$ai_input']).toEqual([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'call_2',
+                content: { parts: [{ inlineData: { mimeType: 'image/png', data: '[base64 image/png redacted]' } }] },
+              },
+            ],
+          },
+        ])
+      }
+    )
+
+    test.each(['generateContent', 'generateContentStream'] as const)(
+      '%s keeps tool history private when privacy mode is enabled',
+      async (method) => {
+        const params = {
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: [
+            { role: 'model', parts: [{ functionCall: { id: 'call_1', name: 'lookup', args: { query: 'secret' } } }] },
+            {
+              role: 'user',
+              parts: [{ functionResponse: { id: 'call_1', name: 'lookup', response: { result: 'secret' } } }],
+            },
+          ],
+          posthogPrivacyMode: true,
+        }
+
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
+        }
+
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        expect(properties['$ai_input']).toBeNull()
+        expect(properties['$ai_output_choices']).toBeNull()
+      }
+    )
+  })
+
   test('object contents input', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
