@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.13.2
+
+### Patch Changes
+
+- [#5087](https://github.com/PostHog/posthog-js/pull/5087) [`2bce7b2`](https://github.com/PostHog/posthog-js/commit/2bce7b2f448868080d6a3b987df812ca7b20a22f) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool call IDs in captured generations.
+  (2026-09-24)
+
 ## 8.13.1
 
 ### Patch Changes
