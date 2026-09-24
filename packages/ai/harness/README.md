@@ -248,7 +248,8 @@ recorder tests that verify an existing file is not replaced on failure.
 The recorder supports sequential successful Anthropic SSE with text and client
 `tool_use` blocks, and the OpenAI routes above:
 up to 16 interactions, 1 MiB per request, 8 MiB of accumulated response bytes,
-16 MiB per serialized cassette, and a 15-second request deadline. It preserves
+16 MiB per serialized cassette, and a 15-second request deadline (60 seconds
+for Gemini Interactions). It preserves
 SSE content and order, not original packet boundaries, timing, or latency. It
 rejects unsupported content-block types. This does not cover every model or option
 combination, Anthropic server tools or tool-result conversations, hosted OpenAI tools,
@@ -288,18 +289,34 @@ The three instrumented methods use these Developer API routes:
 | `models.generateContentStream` | SSE from `:streamGenerateContent?alt=sse`                        |
 | `models.embedContent`          | JSON from `:batchEmbedContents`, including single-input requests |
 
+Gemini Interactions use the distinct `POST /v1beta/interactions` route. The recorder
+accepts a completed unary JSON response or a step-based SSE response ending in
+`interaction.completed` and `[DONE]`. It rejects truncated streams, unknown step
+types, and content after completion. Synthetic recorder/replay tests exercise the
+real `@google/genai` 2.x SDK, the built PostHog wrapper, and a local analytics
+collector. Four additional provider-backed fixtures were recorded with
+`@google/genai` 2.18.0 and `gemini-3.1-flash-lite`: text and function calls, each
+with and without streaming. Every request sets `store: false`. The replay tests
+check the captured response, the real provider SDK, built PostHog wrapper, and
+the emitted usage and output against independent expectations. Google's
+stateless unary response omits its interaction ID, while its stateless stream
+uses an empty ID. These recordings do not cover other models, options, or
+future provider behavior.
+
 Recorder tests also send real SDK requests to a local synthetic server, save a
 temporary cassette, stop the upstream, and replay the file. Separate wrapper
 tests cover cache and reasoning usage, stop reasons, privacy, and identity with
-handwritten expectations. Synthetic tests prove those local contracts; the five
+handwritten expectations. Synthetic tests prove those local contracts; the nine
 committed provider recordings establish compatibility with the captured live
 response shapes, not every Gemini API variant or future provider behavior.
 
-Gemini streams have JSON `data:` frames, not an OpenAI `[DONE]` sentinel. Recordings
-require each observed candidate to finish, or an explicit blocked prompt. A final
+Gemini `generateContentStream` streams have JSON `data:` frames without an OpenAI
+`[DONE]` sentinel. Interactions streams end with `event: done` and `data: [DONE]`.
+Generation recordings require each observed candidate to finish, or an explicit blocked prompt. A final
 usage-only frame is allowed. The recorder rejects incomplete responses, HTTP errors,
 redirects, query API keys, and unsupported routes without replacing an existing file.
-The same size, interaction and deadline limits apply as for Anthropic.
+The same size and interaction limits apply as for Anthropic; Gemini Interactions
+have a 60-second deadline.
 
 ### Record and review Gemini responses
 
@@ -313,6 +330,11 @@ pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette
 pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini tools-stream
 # Uses GEMINI_EMBEDDING_MODEL instead of GEMINI_MODEL:
 pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini embed
+# Interactions API (each request sets store: false):
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini interaction
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini interaction-stream
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini interaction-tools
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini interaction-tools-stream
 ```
 
 The command uses fixed artificial prompts and the official Developer API origin.

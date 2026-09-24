@@ -77,6 +77,7 @@ it.each([false, true])('validates the CLI cache sequence before saving (invalid 
       'record.mjs',
       'cassette.ts',
       'gemini-protocol.ts',
+      'gemini-interactions-protocol.ts',
       'openai-protocol.ts',
       'recording-scenarios.mjs',
       'fixtures',
@@ -161,6 +162,7 @@ it.each([false, true])('validates tool arguments before CLI publication (wrong a
       'record.mjs',
       'cassette.ts',
       'gemini-protocol.ts',
+      'gemini-interactions-protocol.ts',
       'openai-protocol.ts',
       'recording-scenarios.mjs',
     ]) {
