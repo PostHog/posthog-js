@@ -1,0 +1,70 @@
+{
+    "name": "@posthog/workflows",
+    "version": "0.0.0",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "description": "Declare a PostHog workflow in TypeScript, review it as a diff, and deploy it from CI.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/workflows"
+    },
+    "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/workflows#readme",
+    "author": {
+        "name": "PostHog",
+        "email": "engineering@posthog.com",
+        "url": "https://posthog.com"
+    },
+    "keywords": [
+        "posthog",
+        "workflows",
+        "cli",
+        "infrastructure-as-code"
+    ],
+    "type": "module",
+    "bin": {
+        "posthog-workflows": "./dist/cli/main.js"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist",
+        "src",
+        "!src/__tests__/**"
+    ],
+    "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.json",
+        "clean": "rimraf dist",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
+        "build": "rslib build",
+        "dev": "rslib build --watch",
+        "test:unit": "vitest run",
+        "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "engines": {
+        "node": ">=22.22.0"
+    },
+    "dependencies": {
+        "jiti": "2.7.0"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/node": "^22.15.23",
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
+    }
+}

@@ -149,6 +149,7 @@
                 "packages/web/**",
                 "packages/webpack-plugin/**",
                 "packages/rollup-plugin/**",
+                "packages/workflows/**",
                 "examples/**",
                 "playground/**",
                 "tooling/**"
@@ -257,6 +258,20 @@
                         "objectLiteralTypeAssertions": "never"
                     }
                 ]
+            }
+        },
+        {
+            "files": ["packages/workflows/src/**/*.ts"],
+            "excludeFiles": ["**/__tests__/**"],
+            "plugins": ["jsdoc"],
+            "rules": {
+                "jsdoc/check-tag-names": "error",
+                "jsdoc/empty-tags": "error",
+                "jsdoc/require-param": "error",
+                "jsdoc/require-param-description": "error",
+                "jsdoc/require-param-name": "error",
+                "jsdoc/require-returns-description": "error",
+                "jsdoc/require-throws-description": "error"
             }
         },
         {

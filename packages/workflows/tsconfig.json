@@ -1,0 +1,21 @@
+{
+    "extends": "@posthog-tooling/tsconfig-base",
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "dist",
+        "target": "ES2022",
+        "lib": ["ES2022"],
+        "types": ["node"],
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "isolatedModules": true,
+        "skipLibCheck": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true
+    },
+    "include": ["src/**/*", "rslib.config.ts", "vitest.config.ts"]
+}
