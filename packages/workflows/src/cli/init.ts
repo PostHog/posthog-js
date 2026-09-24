@@ -1,14 +1,9 @@
-// `init` writes the one file a customer starts from, with the key already filled in, so nobody
-// has to invent an identity by hand or copy the placeholder out of the documentation.
-
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 
 import { WorkflowError } from '../errors.js'
 import type { Io } from './run.js'
 
-// A file named after one of these would export `const class = ...`, which does not parse. The list
-// matches the one PostHog uses when it renders a stored workflow as code.
 const RESERVED_WORDS = new Set(
     (
         'break case catch class const continue debugger default delete do else enum export extends false ' +

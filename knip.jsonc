@@ -65,7 +65,6 @@
             "entry": ["src/index.ts", "rolldown.dts.config.mts"],
         },
         "packages/workflows": {
-            // The posthog-workflows bin points at the built CLI.
             "entry": ["src/index.ts", "src/cli/main.ts"],
         },
         "packages/web": {

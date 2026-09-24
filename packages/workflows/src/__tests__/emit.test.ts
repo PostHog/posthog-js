@@ -72,7 +72,6 @@ const onboarding = workflow({
 
 const env = { CRM_TOKEN: 'shhh' }
 
-/** Runs `emit` expecting a refusal, and returns the four fields it carries. */
 function refusal(run: () => unknown): WorkflowErrorFields {
     try {
         run()
@@ -83,7 +82,6 @@ function refusal(run: () => unknown): WorkflowErrorFields {
     throw new Error('expected a WorkflowError, but nothing was thrown')
 }
 
-/** A one-step workflow around `steps`, for the cases where only the refusal matters. */
 function around(steps: Path, variables?: readonly WorkflowVariable[]): { emit: () => unknown } {
     const flow = workflow({
         key: 'under-test',
@@ -120,8 +118,6 @@ function webhookAction(id: string): Action {
 }
 
 describe('@posthog/workflows', () => {
-    // Asserted whole and in order, because the push diffs this JSON against what PostHog
-    // stores. A reordered array is a spurious change in every later diff.
     test('emits the workflow definition the API accepts', () => {
         const { definition } = onboarding.emit({ env })
 
@@ -184,9 +180,6 @@ describe('@posthog/workflows', () => {
                         template_id: 'template-email',
                         inputs: {
                             email: {
-                                // The stored shape: `from` as the runtime reads it, and the html
-                                // body again inside the design PostHog would otherwise build on
-                                // write, so a second push finds nothing changed.
                                 value: {
                                     from: { integrationId: 12, integrationIds: [12], name: 'The Example team' },
                                     to: { email: '{person.properties.email}' },
@@ -280,8 +273,6 @@ describe('@posthog/workflows', () => {
         assert.strictEqual(JSON.stringify(onboarding.emit({ env }).definition), before)
     })
 
-    // The PostHog editor stores a description on every step, so a workflow that goes
-    // through the editor and back has to keep one.
     test('emits a step description onto the action', () => {
         const described = workflow({
             key: 'described',
@@ -300,8 +291,6 @@ describe('@posthog/workflows', () => {
         })
     })
 
-    // PostHog defaults the field to an empty string, so leaving the key out keeps a pushed
-    // definition equal to the one PostHog stores.
     test('leaves the description off a step that sets none', () => {
         assert.ok(!('description' in action(onboarding.emit({ env }).definition.actions, 'wait_a_day')))
     })
@@ -514,8 +503,6 @@ describe('@posthog/workflows', () => {
         )
     })
 
-    // Appending to the trunk must not renumber a placement inside an earlier branch: PostHog
-    // moves in-flight participants between steps by string equality of the action id.
     test('keeps every existing action id when a step is appended to the trunk', () => {
         const reused = delay('1d', { name: 'Cool off' })
         const steps = (extra: readonly Step[]): Path =>
@@ -673,8 +660,6 @@ describe('@posthog/workflows', () => {
     const emailFrom = (from: EmailSenderOptions): Step =>
         email({ name: 'Welcome', from, to: 'someone@example.com', subject: 'Hi', text: 'Hello', html: '<p>Hello</p>' })
 
-    // PostHog refuses these on write, or the runtime fails the send, and neither says why in
-    // terms of the file.
     for (const [label, from, status] of [
         [
             'no sender id, which the type refuses but a cast lets through',
@@ -830,8 +815,6 @@ describe('@posthog/workflows', () => {
         })
     }
 
-    // The runtime clamps the amount to the cap for its unit and reports nothing, so `90m`
-    // would silently wait an hour.
     for (const [duration, suggestion] of [
         ['90m', 'Use the larger unit: write "1.5h".'],
         ['120s', 'Use the larger unit: write "2m".'],
@@ -941,7 +924,6 @@ describe('@posthog/workflows', () => {
         ['no steps', { steps: undefined }, 'missing_steps'],
     ] as const) {
         test(`refuses a workflow with ${label}`, () => {
-            // A file the CLI loads is never type-checked, so the options can break the types.
             const options = {
                 key: 'untyped',
                 name: 'Untyped',

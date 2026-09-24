@@ -1,5 +1,3 @@
-// Talking to PostHog. Three calls: resolve the key, create, update.
-
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,18 +12,11 @@ export interface StoredWorkflow extends Record<string, unknown> {
     readonly version?: number
 }
 
-/**
- * The user agent classifies the push as the event source `api`, which the write guard allows.
- * It deliberately is not `posthog-cli`: that string maps to the event source `cli`, which the
- * revision history would label MCP.
- */
 export function userAgent(): string {
     return `posthog-workflows/${packageVersion()}`
 }
 
 function packageVersion(): string {
-    // The built CLI and the test build sit at different depths under the package, so find the
-    // manifest rather than counting directories.
     let directory = dirname(fileURLToPath(import.meta.url))
     for (let level = 0; level < 6; level += 1) {
         try {
@@ -36,9 +27,7 @@ function packageVersion(): string {
             if (manifest.name === '@posthog/workflows' && manifest.version !== undefined) {
                 return manifest.version
             }
-        } catch {
-            // Keep walking up.
-        }
+        } catch {}
         directory = dirname(directory)
     }
     return '0.0.0'
@@ -98,9 +87,7 @@ function describeFailure(status: number, body: string): { status: string; messag
                 fix: parsed.extra.fix,
             }
         }
-    } catch {
-        // Not JSON. The raw body is still the most useful thing to show.
-    }
+    } catch {}
     if (status === 401) {
         return {
             status: 'http_401',
@@ -140,11 +127,6 @@ export class Client {
         return this.credentials.host
     }
 
-    /**
-     * The workflow itself. Without the last segment this is the list of every workflow.
-     *
-     * @param id - The id PostHog gave the stored workflow.
-     */
     urlFor(id: string): string {
         return `${this.credentials.host}/project/${this.credentials.projectId}/workflows/${id}/workflow`
     }
@@ -164,11 +146,8 @@ export class Client {
                 },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 redirect: 'manual',
-                // A host that accepts the connection and never answers would otherwise hold a
-                // CI job until the runner's own timeout kills it, with no line saying why.
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             })
-            // The signal also governs the body read, so it stays inside the try.
             const text = await response.text()
             if (response.status >= 300 && response.status < 400) {
                 throw new WorkflowError(
@@ -204,15 +183,6 @@ export class Client {
         }
     }
 
-    /**
-     * The workflow this key owns, or null when the project has none.
-     *
-     * A row is a match only when it carries the key. A PostHog that does not know the filter
-     * answers with the first page of every workflow in the project instead, and adopting a row
-     * out of that would overwrite a workflow nobody meant to touch.
-     *
-     * @param key - The key the workflow file declares, which is the identity PostHog matches on.
-     */
     async resolve(key: string): Promise<StoredWorkflow | null> {
         const path = `${this.base}?key=${encodeURIComponent(key)}`
         const page = await this.request('GET', path)
@@ -220,9 +190,6 @@ export class Client {
             throw invalidResponse('GET', path, 'The list response did not include a results array.')
         }
         const rows = page.results as StoredWorkflow[]
-        // A row that carries no key at all means this PostHog does not know the field, so the
-        // filter was ignored and nothing here can be resolved. Creating would add a second live
-        // workflow on every run, silently, which is worse than stopping.
         if (rows.length > 0 && rows.every((row) => row.key === undefined)) {
             throw new WorkflowError({
                 status: 'key_not_supported',

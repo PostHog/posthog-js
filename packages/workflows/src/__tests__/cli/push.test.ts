@@ -15,7 +15,6 @@ function push(workspace: Workspace, standIn: StandIn, args: readonly string[] = 
     })
 }
 
-// A workflow with one pass-through step, whose fields each case edits or removes.
 function passThroughFile(options: { step?: string; variables?: string } = {}): string {
     const step =
         options.step ??
@@ -42,7 +41,6 @@ export const onboarding = workflow({
 `
 }
 
-// A webhook that signs its request only when the file names a secret for it.
 function webhookFile(signed: boolean): string {
     return `import { onEvent, path, secret, webhook, workflow } from '@posthog/workflows'
 
@@ -92,7 +90,6 @@ describe('push', () => {
         assert.equal(result.code, 0)
         assert.match(result.stdout, /^ {4}source {3}a1b2c3d on main$/m)
         assert.match(result.stdout, /^ {4}result {3}created$/m)
-        // The workflow itself. Without the last segment the link opens the list of every workflow.
         assert.match(result.stdout, /^ {4}url {6}http:\/\/127\.0\.0\.1:\d+\/project\/2\/workflows\/[^/]+\/workflow$/m)
         assert.match(result.stdout, /^pushed 1 workflow\(s\): 1 created, 0 updated, 0 unchanged\.$/m)
 
@@ -288,7 +285,6 @@ describe('push', () => {
 
     it('reads a secret back as unchanged, and sends it anyway under --force', async () => {
         const standIn = await startStandIn({
-            // PostHog never reads a secret input back, so what a push sees is a placeholder.
             inject: (row) => {
                 const actions = row.actions as { id: string; config: { inputs?: Record<string, unknown> } }[]
                 const webhook = actions.find((action) => action.id === 'tell_the_crm')
@@ -446,8 +442,6 @@ export const onboarding = workflow({
     })
 
     it('warns and then refuses against a PostHog that does not store the key yet', async () => {
-        // Until the key lands, the server drops it and the list filter does nothing. The push must
-        // still work once, and must not quietly create a second live workflow on every run after.
         const standIn = await startStandIn({
             drops: ['key', 'managed_by', 'source', 'source_repository', 'source_path', 'source_ref'],
             ignoreKeyFilter: true,
@@ -546,8 +540,6 @@ export const onboarding = workflow({
     })
 
     it('compares a secret only when PostHog gives one back to compare', async () => {
-        // This stand-in stores what it was sent and reads it back, which is the case where the old
-        // value would otherwise stay live after the author moved the credential into a variable.
         const standIn = await startStandIn()
         onTestFinished(() => standIn.close())
         const workspace = makeWorkspace({ 'flows/onboarding.ts': workflowFile({ secret: true }) })

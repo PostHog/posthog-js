@@ -1,7 +1,3 @@
-// What the CLI tests run against: a throwaway directory that looks like a customer repository,
-// the CLI started as its own process, and a node:http stand-in for PostHog that records what
-// reached the wire.
-
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
@@ -12,19 +8,13 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const packageRoot = resolve(here, '..', '..', '..')
-// The built artifact, not the source, so the tests run the file the bin entry points at.
 const cliEntry = join(packageRoot, 'dist', 'cli', 'main.js')
 
 export interface Workspace {
     readonly dir: string
-    /** Stands in for the user's home directory, so no test can read the developer's own credentials. */
     readonly home: string
 }
 
-/**
- * A directory holding the given files, with `@posthog/workflows` linked into `node_modules`
- * the way a package manager leaves it, so a fixture imports the package by name.
- */
 export function makeWorkspace(files: Readonly<Record<string, string>> = {}): Workspace {
     const dir = mkdtempSync(join(tmpdir(), 'posthog-workflows-'))
     const home = join(dir, 'home')
@@ -45,12 +35,6 @@ export interface RunResult {
     readonly code: number
 }
 
-/**
- * Runs the CLI with an environment holding only what the test puts in it.
- *
- * The child runs asynchronously on purpose: a synchronous spawn blocks this process's event loop,
- * and the stand-in server runs on that loop, so the CLI would wait for an answer that cannot come.
- */
 export async function runCli(
     args: readonly string[],
     options: { workspace: Workspace; env?: Readonly<Record<string, string>> }
@@ -89,31 +73,21 @@ export interface StandIn {
     readonly url: string
     readonly requests: readonly RecordedRequest[]
     readonly rows: readonly StoredRow[]
-    /** Puts a workflow in the project before the CLI runs, as PostHog would already hold it. */
     seed(row: Record<string, unknown>): StoredRow
     close(): Promise<void>
 }
 
 export interface StandInOptions {
-    /** Field names the server drops from a write, as PostHog does before the backend tickets land. */
     readonly drops?: readonly string[]
-    /** Keys the server adds to what it stores, the way it compiles bytecode into a filter. */
     readonly inject?: (row: StoredRow) => void
-    /** A PostHog that does not know `?key=` yet, and answers with every workflow in the project. */
     readonly ignoreKeyFilter?: boolean
-    /** A PostHog that refuses every write with this status and body, as a validation error does. */
     readonly refuseWrites?: { readonly status: number; readonly body: unknown }
-    /** A PostHog that sends a custom list response. */
     readonly listResponse?: unknown
-    /** A PostHog that sends a custom write response. */
     readonly writeResponse?: unknown
-    /** A PostHog that sends a 2xx response body the CLI cannot parse. */
     readonly rawWriteResponse?: string
-    /** A PostHog that redirects credentialed writes. */
     readonly redirectWritesTo?: string
 }
 
-/** A PostHog stand-in that serves the three calls `push` makes. */
 export async function startStandIn(options: StandInOptions = {}): Promise<StandIn> {
     const requests: RecordedRequest[] = []
     const rows: StoredRow[] = []
@@ -136,7 +110,6 @@ export async function startStandIn(options: StandInOptions = {}): Promise<StandI
             const raw = Buffer.concat(chunks).toString('utf8')
             const body = raw === '' ? null : (JSON.parse(raw) as Record<string, unknown>)
             const url = request.url ?? ''
-            // A copy, because what the server stores is edited afterwards and the record must not move with it.
             requests.push({
                 method: request.method ?? '',
                 url,
@@ -214,14 +187,12 @@ export async function startStandIn(options: StandInOptions = {}): Promise<StandI
         },
         close: () =>
             new Promise<void>((done) => {
-                // A keep-alive socket from the CLI's fetch would hold the close open.
                 server.closeAllConnections()
                 server.close(() => done())
             }),
     }
 }
 
-/** A workflow file in the shape a customer writes, with whatever the case needs changed. */
 export function workflowFile(
     options: { key?: string; name?: string; status?: string | null; wait?: string; secret?: boolean } = {}
 ): string {
