@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5085": {
+    "key": "PostHog/posthog-js/issue/5085",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5085",
+    "url": "https://github.com/PostHog/posthog-js/issues/5085",
+    "conclusion": "Confirmed @posthog/ai telemetry bug: Gemini function-call IDs and follow-up tool-call/result content are dropped from captured generation data.",
+    "labels": [
+      "node",
+      "team/ai-observability",
+      "bug"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5086",
+    "closed": false,
+    "updatedAt": "2026-09-24T04:48:15.165Z"
+  },
   "PostHog/posthog-js/issue/5084": {
     "key": "PostHog/posthog-js/issue/5084",
     "repo": "PostHog/posthog-js",
