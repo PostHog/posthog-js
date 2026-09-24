@@ -107,7 +107,15 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     )
     fs.writeFileSync(
       path.join(projectRoot, 'android/app/build.gradle'),
-      ['apply plugin: "com.android.application"', applyLine, '', 'android {', '    namespace "com.example"', '}', ''].join('\n')
+      [
+        'apply plugin: "com.android.application"',
+        applyLine,
+        '',
+        'android {',
+        '    namespace "com.example"',
+        '}',
+        '',
+      ].join('\n')
     )
 
     await prebuild(true, { uploadNativeSymbols: { includeSource: true } })
