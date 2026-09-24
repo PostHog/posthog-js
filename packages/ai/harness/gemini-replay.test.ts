@@ -129,7 +129,13 @@ it.each(cases)('captures provider-backed Gemini $group through the built SDKs', 
     expect(properties.$ai_output_choices).toEqual([
       {
         role: 'assistant',
-        content: [{ type: 'function', function: { name: 'describe_shape', arguments: { color: 'blue', sides: 3 } } }],
+        content: [
+          {
+            type: 'function',
+            id: testCase.toolCallId,
+            function: { name: 'describe_shape', arguments: { color: 'blue', sides: 3 } },
+          },
+        ],
       },
     ])
     if (scenario.operation === 'generateContentStream') {
