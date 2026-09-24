@@ -13,8 +13,13 @@ interface SharedState {
 
 const GLOBAL_KEY = '__POSTHOG_REACT_SHARED_STATE__'
 const globalObject: any = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : {}
-const statesByReact: WeakMap<typeof createContext, SharedState> = (globalObject[GLOBAL_KEY] =
-    globalObject[GLOBAL_KEY] || new WeakMap())
+let statesByReact: WeakMap<typeof createContext, SharedState>
+try {
+    statesByReact = globalObject[GLOBAL_KEY] = globalObject[GLOBAL_KEY] || new WeakMap()
+} catch {
+    // A non-extensible global object: entrypoints still work, but don't share state.
+    statesByReact = new WeakMap()
+}
 
 // The main, slim, and surveys entrypoints are bundled separately, so each one carries its own copy
 // of every module. State that must be shared between them lives on the global object, so that a

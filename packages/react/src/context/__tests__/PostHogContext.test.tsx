@@ -84,6 +84,23 @@ describe('PostHogContext across entrypoints', () => {
         firstDefault.setDefaultPostHogInstance(undefined)
     })
 
+    it('keeps each module copy on its own default client', async () => {
+        vi.resetModules()
+        const first = await vi.importActual<typeof import('../posthog-default')>('../posthog-default')
+        vi.resetModules()
+        const second = await vi.importActual<typeof import('../posthog-default')>('../posthog-default')
+        const firstClient = {} as unknown as PostHog
+        const secondClient = {} as unknown as PostHog
+
+        first.setDefaultPostHogInstance(firstClient)
+        second.setDefaultPostHogInstance(secondClient)
+
+        expect(first.getDefaultPostHogInstance()).toBe(firstClient)
+        expect(second.getDefaultPostHogInstance()).toBe(secondClient)
+        first.setDefaultPostHogInstance(undefined)
+        second.setDefaultPostHogInstance(undefined)
+    })
+
     it('keeps a separate context and default client for a different copy of React', async () => {
         vi.resetModules()
         const first = await vi.importActual<typeof import('../PostHogContext')>('../PostHogContext')

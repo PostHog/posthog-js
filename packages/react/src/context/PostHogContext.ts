@@ -12,7 +12,7 @@ if (!sharedState.context) {
     // will be undefined — users must always provide a <PostHogProvider client={…}>.
     sharedState.context = createContext<PostHogContextValue>({
         get client() {
-            return getDefaultPostHogInstance() as PostHog
+            return (getDefaultPostHogInstance() || sharedState.defaultPostHogInstance) as PostHog
         },
         bootstrap: undefined,
     })

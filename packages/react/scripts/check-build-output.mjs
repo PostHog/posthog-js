@@ -156,7 +156,7 @@ for (const [entry, bundle] of Object.entries(bundles)) {
 // Avoid reintroducing intermediate-transform helpers that disproportionately affect the small surveys bundles.
 const baselineSurveyBytes = {
     'esm/surveys/index.js': 4748,
-    'umd/surveys/index.js': 6321,
+    'umd/surveys/index.js': 6329,
 }
 for (const [file, baselineBytes] of Object.entries(baselineSurveyBytes)) {
     const bytes = (await readFile(resolve(packageRoot, 'dist', file))).byteLength
