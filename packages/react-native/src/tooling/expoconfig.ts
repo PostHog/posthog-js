@@ -225,9 +225,7 @@ const POSTHOG_NATIVE_SYMBOLS_MARKER = 'posthog-native-symbols'
 const POSTHOG_NATIVE_SYMBOLS_BEGIN = `// @generated begin ${POSTHOG_NATIVE_SYMBOLS_MARKER} - posthog-react-native (DO NOT MODIFY)`
 const POSTHOG_NATIVE_SYMBOLS_END = `// @generated end ${POSTHOG_NATIVE_SYMBOLS_MARKER}`
 
-// The block is inserted before the apply line's own line break, so it owns only the break in front
-// of it. The `\r?` keeps the block removable after an editor or a Windows checkout has normalized the
-// file to CRLF.
+// Owns only the line break before it (CRLF-tolerant), so removal restores the original file.
 const POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN = new RegExp(
   `\\r?\\n[ \\t]*${escapeRegExp(POSTHOG_NATIVE_SYMBOLS_BEGIN)}[\\s\\S]*?${escapeRegExp(
     POSTHOG_NATIVE_SYMBOLS_END
