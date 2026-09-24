@@ -54,7 +54,8 @@ export interface Workflow {
      * @param options - Where to read a `secret` from. Defaults to `process.env`.
      * @returns The definition, and the secret inputs it resolved.
      * @throws {WorkflowError} The first rule the workflow breaks, as a refusal carrying
-     * `status`, `message`, `why` and `fix`. The statuses are `duplicate_action_id`,
+     * `status`, `message`, `why` and `fix`. The statuses are `missing_key`, `missing_name`,
+     * `missing_trigger`, `missing_steps`, `missing_exit`, `duplicate_action_id`,
      * `reserved_action_id`, `invalid_action_id`, `action_id_too_long`,
      * `unnamed_action_id`, `step_name_too_long`, `invalid_key`, `invalid_duration`,
      * `duration_over_unit_cap`, `empty_path`, `invalid_email_sender`,
