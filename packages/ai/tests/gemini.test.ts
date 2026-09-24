@@ -631,34 +631,93 @@ describe('PostHogGemini - Jest test suite', () => {
       }
     )
 
-    test.each(['generateContent', 'generateContentStream'] as const)(
-      '%s keeps tool history private when privacy mode is enabled',
-      async (method) => {
-        const params = {
-          model: 'gemini-3.1-flash-lite-preview',
-          contents: [
-            { role: 'model', parts: [{ functionCall: { id: 'call_1', name: 'lookup', args: { query: 'secret' } } }] },
+    test.each([
+      ['generateContent', false],
+      ['generateContentStream', false],
+      ['generateContent', true],
+      ['generateContentStream', true],
+    ] as const)('%s bounds each tool result unless full capture is enabled (full=%s)', async (method, full) => {
+      const large = { text: '!'.repeat(4990) + '😀' + 'x'.repeat(100) }
+      const manyFields = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`field_${i}`, 'value']))
+      const small = { answer: 42 }
+      const contents = [
+        {
+          role: 'user',
+          parts: [
             {
-              role: 'user',
-              parts: [{ functionResponse: { id: 'call_1', name: 'lookup', response: { result: 'secret' } } }],
+              functionResponse: {
+                id: 'call_3',
+                name: 'read_document',
+                response: large,
+              },
             },
+            { functionResponse: { id: 'call_4', name: 'read_fields', response: manyFields } },
+            { functionResponse: { id: 'call_5', name: 'read_answer', response: small } },
           ],
-          posthogPrivacyMode: true,
-        }
+        },
+      ]
+      const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
+      Object.assign(mockPostHogClient, { enableFullAiCapture: full })
 
-        if (method === 'generateContent') {
-          await client.models.generateContent(params)
-        } else {
-          for await (const _chunk of client.models.generateContentStream(params)) {
-            // Consume the stream so its generation event is captured.
-          }
+      if (method === 'generateContent') {
+        await client.models.generateContent(params)
+      } else {
+        for await (const _chunk of client.models.generateContentStream(params)) {
+          // Consume the stream so its generation event is captured.
         }
-
-        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
-        expect(properties['$ai_input']).toBeNull()
-        expect(properties['$ai_output_choices']).toBeNull()
       }
-    )
+
+      expect((client as any).client.models[method]).toHaveBeenCalledWith({ model: params.model, contents })
+      expect(contents[0].parts[0].functionResponse.response).toEqual(large)
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+      const captured = properties['$ai_input'][0].content
+      expect(captured[0]).toEqual({
+        type: 'tool_result',
+        tool_use_id: 'call_3',
+        content: full ? large : `${'{"text":"'}${'!'.repeat(4990)}... [truncated]`,
+      })
+      expect(captured[1]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_4' })
+      if (full) {
+        expect(captured[1].content).toEqual(manyFields)
+      } else {
+        expect(typeof captured[1].content).toBe('string')
+        expect(captured[1].content).toMatch(/\.\.\. \[truncated\]$/)
+        expect(new TextEncoder().encode(captured[1].content).byteLength).toBeLessThanOrEqual(5015)
+      }
+      expect(captured[2]).toEqual({ type: 'tool_result', tool_use_id: 'call_5', content: small })
+    })
+
+    test.each([
+      ['generateContent', false],
+      ['generateContentStream', false],
+      ['generateContent', true],
+      ['generateContentStream', true],
+    ] as const)('%s keeps tool history private when privacy mode is enabled (full=%s)', async (method, full) => {
+      Object.assign(mockPostHogClient, { enableFullAiCapture: full })
+      const params = {
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: [
+          { role: 'model', parts: [{ functionCall: { id: 'call_1', name: 'lookup', args: { query: 'secret' } } }] },
+          {
+            role: 'user',
+            parts: [{ functionResponse: { id: 'call_1', name: 'lookup', response: { result: 'secret' } } }],
+          },
+        ],
+        posthogPrivacyMode: true,
+      }
+
+      if (method === 'generateContent') {
+        await client.models.generateContent(params)
+      } else {
+        for await (const _chunk of client.models.generateContentStream(params)) {
+          // Consume the stream so its generation event is captured.
+        }
+      }
+
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+      expect(properties['$ai_input']).toBeNull()
+      expect(properties['$ai_output_choices']).toBeNull()
+    })
   })
 
   test('object contents input', async () => {
