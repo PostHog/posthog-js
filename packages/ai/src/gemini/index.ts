@@ -18,8 +18,11 @@ import {
   withPrivacyMode,
   buildInlineDataBlock,
   getModelParams,
+  truncate,
+  utf8ByteLength,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
+import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
@@ -34,6 +37,8 @@ interface FormattedGeminiFunctionResponse {
   tool_use_id?: string
   content: unknown
 }
+
+const TOOL_RESULT_MAX_BYTES = 5000
 
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
@@ -312,22 +317,35 @@ export class WrappedModels {
       } else if (part && typeof part === 'object' && 'functionResponse' in part) {
         const functionResponse = (part as Part).functionResponse
         if (functionResponse?.name) {
+          const content =
+            functionResponse.parts !== undefined
+              ? {
+                  ...(functionResponse.response !== undefined && { response: functionResponse.response }),
+                  parts: functionResponse.parts,
+                }
+              : (functionResponse.response ?? {})
           blocks.push({
             type: 'tool_result',
             ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
-            content:
-              functionResponse.parts !== undefined
-                ? {
-                    ...(functionResponse.response !== undefined && { response: functionResponse.response }),
-                    parts: functionResponse.parts,
-                  }
-                : (functionResponse.response ?? {}),
+            content: this.boundToolResult(content),
           })
         }
       }
     }
 
     return blocks
+  }
+
+  private boundToolResult(content: unknown): unknown {
+    if (isFullAiCaptureEnabled(this.phClient)) return content
+    try {
+      const serialized = JSON.stringify(content)
+      return utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
+        ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
+        : content
+    } catch {
+      return '[Unserializable tool result]'
+    }
   }
 
   private formatInput(contents: unknown): FormattedMessage[] {
