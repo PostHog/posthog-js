@@ -228,7 +228,7 @@ export class Client {
                 status: 'key_not_supported',
                 message: 'This PostHog does not store a workflow key yet.',
                 why: 'The list came back with workflows that carry no key, so the key filter was ignored. Without it a push cannot tell which workflow the file owns, and every run would create another one.',
-                fix: 'Push to a PostHog that supports the workflow key. On PostHog Cloud this is already the case; a self-hosted instance needs the version that added it.',
+                fix: 'Push to a PostHog version that stores the workflow key. A self-hosted instance needs the version that added it.',
             })
         }
         const matches = rows.filter((row) => row.key === key)

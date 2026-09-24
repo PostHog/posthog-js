@@ -53,19 +53,6 @@ const ACTION_FIELDS = {
     config: 'config',
 } as const satisfies { readonly [K in KeysOf<Action>]-?: FieldRule }
 
-const DEFAULTED_RULES: ReadonlySet<FieldRule> = new Set(['optional text', 'optional', 'filters'])
-
-/**
- * Action fields PostHog fills when a push leaves them out: `description` becomes an empty string,
- * and `filters`, `on_error` and `output_variable` become null. Leaving one out of the file restores
- * that default, and an empty value compares equal to a missing one.
- */
-export const DEFAULTED_ACTION_KEYS: ReadonlySet<string> = new Set(
-    Object.entries(ACTION_FIELDS)
-        .filter(([, rule]) => DEFAULTED_RULES.has(rule))
-        .map(([key]) => key)
-)
-
 /** Action fields the PostHog editor stamps and a file never carries. */
 export const DERIVED_ACTION_KEYS: ReadonlySet<string> = new Set(['created_at', 'updated_at'])
 
