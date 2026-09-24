@@ -183,15 +183,11 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 export const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
-// carousels, pagers and scrollers are built to be clicked repeatedly, in words or in arrow glyphs
+// pagers and carousel controls are built to be clicked repeatedly, in words or in arrow glyphs
 const DEFAULT_CONTENT_IGNORELIST = [
     'next',
     'previous',
     'prev',
-    'carousel',
-    'slide',
-    'scroll',
-    'arrow',
     '>',
     '<',
     '→',
@@ -221,8 +217,7 @@ const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
 
 const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
 
-// our own word keywords match whole words, so "arrow" doesn't suppress "narrow results",
-// "slide" doesn't suppress "open slideshow" and "prev" doesn't suppress "preview"
+// our own word keywords match whole words, so "prev" doesn't suppress "preview"
 const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = {}
 each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
     if (isWordKeyword(keyword)) {

@@ -117,18 +117,18 @@ export interface RageclickConfig {
     css_selector_ignorelist?: string[]
     /**
      * Controls automatic exclusion of elements by text content from rageclick detection.
-     * Useful for carousel arrows, pagination buttons, scrollers, and other repeatedly-clicked UI elements.
-     * - `true`: Use the default keywords, which cover next/previous/carousel/slide/scroll/arrow wording
+     * Useful for pagination buttons and other repeatedly-clicked UI elements.
+     * - `true`: Use the default keywords, which cover next/previous/prev wording
      *   and arrow glyphs such as '>', '<', '→', '←', '»', '«'
      * - `false`: Disable content-based exclusion
-     * - `string[]`: Use custom keywords (max 33 items, otherwise use css_selector_ignorelist)
+     * - `string[]`: Use custom keywords (max 29 items, otherwise use css_selector_ignorelist)
      *
      * Checks the text and aria-label of the clicked control (the nearest button, link or other
      * interactive ancestor) against the keywords, case-insensitive. The label of a surrounding
-     * region is not checked, so a carousel wrapper does not suppress the controls inside it.
-     * The built-in word keywords (next/previous/carousel/slide/scroll/arrow/etc.) match whole words
-     * wherever they appear, even inside a list you pass yourself, so 'arrow' doesn't suppress
-     * "Narrow results". Any other word keyword you add matches as a substring. Symbol-only keywords
+     * region is not checked, so a labelled wrapper does not suppress the controls inside it.
+     * The built-in word keywords (next/previous/prev/etc.) match whole words
+     * wherever they appear, even inside a list you pass yourself, so 'prev' doesn't suppress
+     * "Preview". Any other word keyword you add matches as a substring. Symbol-only keywords
      * (e.g. '+', '-', '>') always match exactly, so they don't suppress text like "sign-up", "5 > 3",
      * or "C++".
      *
@@ -1352,7 +1352,7 @@ export interface PostHogConfig {
      *
      * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
      * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`, which also ignores repeat-click
-     * controls such as carousel arrows and pagers (see `content_ignorelist`).
+     * controls such as pagination arrows and pagers (see `content_ignorelist`).
      * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
      *
      * @default true

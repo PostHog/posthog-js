@@ -729,6 +729,12 @@ describe('Autocapture system', () => {
         })
 
         describe('rageclick suppression for intentional repeated clicks', () => {
+            const buttonWithText = (text: string): HTMLButtonElement => {
+                const el = document.createElement('button')
+                el.textContent = text
+                return el
+            }
+
             const rageClickThreeTimes = (el: Element, root: Element = el): string[] => {
                 autocapture['rageclicks'].clicks = []
                 document.body.appendChild(root)
@@ -794,12 +800,6 @@ describe('Autocapture system', () => {
                     posthog.config.rageclick = { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS }
                 })
 
-                const buttonWithText = (text: string): HTMLButtonElement => {
-                    const el = document.createElement('button')
-                    el.textContent = text
-                    return el
-                }
-
                 it.each(['+', '-', '−', '–', '>', '<'])(
                     'rapid clicks on a "%s" stepper/nav button do not capture $rageclick',
                     (text) => {
@@ -820,12 +820,6 @@ describe('Autocapture system', () => {
                     posthog.config.rageclick = { content_ignorelist: true }
                 })
 
-                const buttonWithText = (text: string): HTMLButtonElement => {
-                    const el = document.createElement('button')
-                    el.textContent = text
-                    return el
-                }
-
                 it.each(['>', '<', 'next', 'previous', 'prev'])(
                     'rapid clicks on a "%s" button do not capture $rageclick (exact symbol/word match)',
                     (text) => {
@@ -844,220 +838,205 @@ describe('Autocapture system', () => {
             describe.each([
                 { content_ignorelist: true },
                 { content_ignorelist: DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS },
-            ] as PostHogConfig['rageclick'][])(
-                'carousel and scroller controls with rageclick config %s',
-                (rageclickConfig) => {
-                    beforeEach(() => {
-                        posthog.config.rageclick = rageclickConfig
-                    })
+            ] as PostHogConfig['rageclick'][])('pager controls with rageclick config %s', (rageclickConfig) => {
+                beforeEach(() => {
+                    posthog.config.rageclick = rageclickConfig
+                })
 
-                    const buttonWithText = (text: string): HTMLButtonElement => {
-                        const el = document.createElement('button')
-                        el.textContent = text
-                        return el
+                it.each(['Previous page', 'Next page', 'Next slide', 'Prev item', 'Go to previous'])(
+                    'rapid clicks on a "%s" button do not capture $rageclick',
+                    (text) => {
+                        expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
                     }
+                )
 
-                    it.each(['Scroll left', 'Scroll right', 'Next slide', 'Carousel arrow', 'Previous arrow'])(
-                        'rapid clicks on a "%s" button do not capture $rageclick',
-                        (text) => {
-                            expect(rageClickThreeTimes(buttonWithText(text))).not.toContain('$rageclick')
-                        }
-                    )
+                it.each(['→', '←', '›', '‹', '»', '«', '▶', '◀', '❯', '❮'])(
+                    'rapid clicks on a "%s" arrow glyph button do not capture $rageclick',
+                    (glyph) => {
+                        expect(rageClickThreeTimes(buttonWithText(glyph))).not.toContain('$rageclick')
+                    }
+                )
 
-                    it.each(['→', '←', '›', '‹', '»', '«', '▶', '◀', '❯', '❮'])(
-                        'rapid clicks on a "%s" arrow glyph button do not capture $rageclick',
-                        (glyph) => {
-                            expect(rageClickThreeTimes(buttonWithText(glyph))).not.toContain('$rageclick')
-                        }
-                    )
+                it('rapid clicks on an icon-only control with a pager aria-label do not capture $rageclick', () => {
+                    const el = document.createElement('button')
+                    el.setAttribute('aria-label', 'Previous item')
 
-                    it('rapid clicks on an icon-only control with a carousel aria-label do not capture $rageclick', () => {
-                        const el = document.createElement('button')
-                        el.setAttribute('aria-label', 'Scroll left')
+                    expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(el)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a button whose label sits in a child span do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const icon = document.createElement('span')
+                    icon.setAttribute('aria-hidden', 'true')
+                    const label = document.createElement('span')
+                    label.textContent = 'Next slide'
+                    button.appendChild(icon)
+                    button.appendChild(label)
 
-                    it('rapid clicks on a button whose label sits in a child span do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const icon = document.createElement('span')
-                        icon.setAttribute('aria-hidden', 'true')
-                        const label = document.createElement('span')
-                        label.textContent = 'Next slide'
-                        button.appendChild(icon)
-                        button.appendChild(label)
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a labelled icon inside an unlabelled button do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'Next slide')
+                    button.appendChild(icon)
 
-                    it('rapid clicks on a labelled icon inside an unlabelled button do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-                        icon.setAttribute('aria-label', 'Next slide')
-                        button.appendChild(icon)
+                    expect(rageClickThreeTimes(icon, button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(icon, button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a button whose label is split by an inline icon do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.appendChild(document.createTextNode('Next '))
+                    button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    button.appendChild(document.createTextNode(' page'))
 
-                    it('rapid clicks on a button whose label is split by an inline icon do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        button.appendChild(document.createTextNode('Next '))
-                        button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
-                        button.appendChild(document.createTextNode(' page'))
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a button whose child span label is split by an inline icon do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const label = document.createElement('span')
+                    label.appendChild(document.createTextNode('Next '))
+                    label.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    label.appendChild(document.createTextNode(' page'))
+                    button.appendChild(label)
 
-                    it('rapid clicks on a button whose child span label is split by an inline icon do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const label = document.createElement('span')
-                        label.appendChild(document.createTextNode('Next '))
-                        label.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
-                        label.appendChild(document.createTextNode(' page'))
-                        button.appendChild(label)
+                    expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a button whose split label only contains a keyword as a substring still capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.appendChild(document.createTextNode('Preview '))
+                    button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+                    button.appendChild(document.createTextNode(' mode'))
 
-                    it('rapid clicks on a button whose split label only contains a keyword as a substring still capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        button.appendChild(document.createTextNode('Preview '))
-                        button.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
-                        button.appendChild(document.createTextNode(' mode'))
+                    expect(rageClickThreeTimes(button)).toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(button)).toContain('$rageclick')
-                    })
+                it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const glyph = document.createElement('span')
+                    glyph.textContent = '→'
+                    button.appendChild(glyph)
 
-                    it('rapid clicks on an arrow glyph span inside an icon-only button do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const glyph = document.createElement('span')
-                        glyph.textContent = '→'
-                        button.appendChild(glyph)
+                    expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(glyph, button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a button inside a labelled region still capture $rageclick', () => {
+                    const region = document.createElement('div')
+                    region.setAttribute('aria-label', 'Next featured items')
+                    const button = document.createElement('button')
+                    button.textContent = 'Buy now'
+                    region.appendChild(button)
 
-                    it('rapid clicks on a button inside a labelled carousel region still capture $rageclick', () => {
-                        const region = document.createElement('div')
-                        region.setAttribute('aria-label', 'Featured carousel')
-                        const button = document.createElement('button')
-                        button.textContent = 'Buy now'
-                        region.appendChild(button)
+                    expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
-                    })
+                it('rapid clicks on an arrow glyph beside link text still capture $rageclick', () => {
+                    const link = document.createElement('a')
+                    link.appendChild(document.createTextNode('Get started '))
+                    const glyph = document.createElement('span')
+                    glyph.textContent = '→'
+                    link.appendChild(glyph)
 
-                    it('rapid clicks on an arrow glyph beside link text still capture $rageclick', () => {
-                        const link = document.createElement('a')
-                        link.appendChild(document.createTextNode('Get started '))
-                        const glyph = document.createElement('span')
-                        glyph.textContent = '→'
-                        link.appendChild(glyph)
+                    expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(glyph, link)).toContain('$rageclick')
-                    })
+                it('rapid clicks on a decorative icon aria-label inside a text link still capture $rageclick', () => {
+                    const link = document.createElement('a')
+                    link.appendChild(document.createTextNode('Get started '))
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'next arrow icon')
+                    link.appendChild(icon)
 
-                    it('rapid clicks on a decorative icon aria-label inside a text link still capture $rageclick', () => {
-                        const link = document.createElement('a')
-                        link.appendChild(document.createTextNode('Get started '))
-                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-                        icon.setAttribute('aria-label', 'arrow right icon')
-                        link.appendChild(icon)
+                    expect(rageClickThreeTimes(icon, link)).toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(icon, link)).toContain('$rageclick')
-                    })
+                it('rapid clicks on an icon inside a button whose own aria-label does not match still capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    button.setAttribute('aria-label', 'Buy now')
+                    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    icon.setAttribute('aria-label', 'next')
+                    button.appendChild(icon)
 
-                    it('rapid clicks on an icon inside a button whose own aria-label does not match still capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        button.setAttribute('aria-label', 'Buy now')
-                        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-                        icon.setAttribute('aria-label', 'arrow')
-                        button.appendChild(icon)
+                    expect(rageClickThreeTimes(icon, button)).toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(icon, button)).toContain('$rageclick')
-                    })
+                it('rapid clicks on a div inside a button labelled "Next slide" do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const div = document.createElement('div')
+                    div.textContent = 'Next slide'
+                    button.appendChild(div)
 
-                    it('rapid clicks on a div inside a button labelled "Next slide" do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const div = document.createElement('div')
-                        div.textContent = 'Next slide'
-                        button.appendChild(div)
+                    expect(rageClickThreeTimes(div, button)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(div, button)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a strong tag inside an anchor labelled "Next" do not capture $rageclick', () => {
+                    const link = document.createElement('a')
+                    const strong = document.createElement('strong')
+                    strong.textContent = 'Next'
+                    link.appendChild(strong)
 
-                    it('rapid clicks on a strong tag inside an anchor labelled "Next" do not capture $rageclick', () => {
-                        const link = document.createElement('a')
-                        const strong = document.createElement('strong')
-                        strong.textContent = 'Next'
-                        link.appendChild(strong)
+                    expect(rageClickThreeTimes(strong, link)).not.toContain('$rageclick')
+                })
 
-                        expect(rageClickThreeTimes(strong, link)).not.toContain('$rageclick')
-                    })
+                it('rapid clicks on a span under a div inside a button labelled "Next" do not capture $rageclick', () => {
+                    const button = document.createElement('button')
+                    const wrapper = document.createElement('div')
+                    const label = document.createElement('span')
+                    label.textContent = 'Next'
+                    wrapper.appendChild(label)
+                    button.appendChild(wrapper)
+                    expect(rageClickThreeTimes(label, button)).not.toContain('$rageclick')
+                })
 
-                    it('rapid clicks on a span under a div inside a button labelled "Next" do not capture $rageclick', () => {
-                        const button = document.createElement('button')
-                        const wrapper = document.createElement('div')
-                        const label = document.createElement('span')
-                        label.textContent = 'Next'
-                        wrapper.appendChild(label)
-                        button.appendChild(wrapper)
-                        expect(rageClickThreeTimes(label, button)).not.toContain('$rageclick')
-                    })
-
-                    it.each([
-                        'Add to cart',
-                        'Submit',
-                        'a → b',
-                        'Narrow results',
-                        'Open slideshow',
-                        'Download slides',
-                        'Price slider',
-                        'Preview',
-                    ])('rapid clicks on a "%s" button still capture $rageclick', (text) => {
+                it.each(['Add to cart', 'Submit', 'a → b', 'Preview'])(
+                    'rapid clicks on a "%s" button still capture $rageclick',
+                    (text) => {
                         expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
-                    })
+                    }
+                )
 
-                    it('rapid clicks on an icon inside a cursor:pointer div labelled "Next slide" do not capture $rageclick', () => {
-                        const div = document.createElement('div')
-                        div.style.cursor = 'pointer'
-                        div.setAttribute('aria-label', 'Next slide')
-                        const icon = document.createElement('i')
-                        div.appendChild(icon)
+                it('rapid clicks on an icon inside a cursor:pointer div labelled "Next slide" do not capture $rageclick', () => {
+                    const div = document.createElement('div')
+                    div.style.cursor = 'pointer'
+                    div.setAttribute('aria-label', 'Next slide')
+                    const icon = document.createElement('i')
+                    div.appendChild(icon)
 
-                        expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
-                    })
+                    expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
+                })
 
-                    it("rapid clicks on a sibling span inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
-                        const div = document.createElement('div')
-                        div.style.cursor = 'pointer'
-                        const label = document.createElement('span')
-                        label.textContent = 'Next'
-                        const other = document.createElement('span')
-                        other.textContent = 'x'
-                        div.appendChild(label)
-                        div.appendChild(other)
+                it("rapid clicks on a sibling span inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
+                    const div = document.createElement('div')
+                    div.style.cursor = 'pointer'
+                    const label = document.createElement('span')
+                    label.textContent = 'Next'
+                    const other = document.createElement('span')
+                    other.textContent = 'x'
+                    div.appendChild(label)
+                    div.appendChild(other)
 
-                        expect(rageClickThreeTimes(other, div)).not.toContain('$rageclick')
-                    })
+                    expect(rageClickThreeTimes(other, div)).not.toContain('$rageclick')
+                })
 
-                    it('rapid clicks on a button inside a cursor:pointer labelled carousel region still capture $rageclick (tag control wins)', () => {
-                        const region = document.createElement('div')
-                        region.style.cursor = 'pointer'
-                        region.setAttribute('aria-label', 'Featured carousel')
-                        const button = document.createElement('button')
-                        button.textContent = 'Buy now'
-                        region.appendChild(button)
+                it('rapid clicks on a button inside a cursor:pointer labelled region still capture $rageclick (tag control wins)', () => {
+                    const region = document.createElement('div')
+                    region.style.cursor = 'pointer'
+                    region.setAttribute('aria-label', 'Next featured items')
+                    const button = document.createElement('button')
+                    button.textContent = 'Buy now'
+                    region.appendChild(button)
 
-                        expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
-                    })
-                }
-            )
+                    expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                })
+            })
 
-            it('the legacy boolean rageclick: true keeps capturing carousel controls', () => {
+            it('the legacy boolean rageclick: true keeps capturing pager controls', () => {
                 posthog.config.rageclick = true
                 const el = document.createElement('button')
-                el.textContent = 'Scroll left'
+                el.textContent = 'Previous page'
 
                 expect(rageClickThreeTimes(el)).toContain('$rageclick')
             })
@@ -1075,21 +1054,15 @@ describe('Autocapture system', () => {
                 })
 
                 it('a shipped default keyword no longer matches as a substring in a custom array', () => {
-                    posthog.config.rageclick = { content_ignorelist: ['arrow'] }
+                    posthog.config.rageclick = { content_ignorelist: ['prev'] }
                     const el = document.createElement('button')
-                    el.textContent = 'Narrow results'
+                    el.textContent = 'Preview'
 
                     expect(rageClickThreeTimes(el)).toContain('$rageclick')
                 })
             })
 
             describe('when a custom array copies the defaults and adds to them', () => {
-                const buttonWithText = (text: string): HTMLButtonElement => {
-                    const el = document.createElement('button')
-                    el.textContent = text
-                    return el
-                }
-
                 beforeEach(() => {
                     posthog.config.rageclick = {
                         content_ignorelist: [...DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, 'load more'],
@@ -1103,12 +1076,9 @@ describe('Autocapture system', () => {
                     }
                 )
 
-                it.each(['Preview', 'Narrow results', 'Open slideshow'])(
-                    'rapid clicks on a "%s" button still capture $rageclick',
-                    (text) => {
-                        expect(rageClickThreeTimes(buttonWithText(text))).toContain('$rageclick')
-                    }
-                )
+                it('rapid clicks on a "Preview" button still capture $rageclick', () => {
+                    expect(rageClickThreeTimes(buttonWithText('Preview'))).toContain('$rageclick')
+                })
 
                 it('a list past the cap still disables content filtering', () => {
                     const pastTheCap = Array.from(
