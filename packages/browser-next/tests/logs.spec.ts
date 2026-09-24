@@ -45,7 +45,7 @@ const browser = () => {
     const output = { debug: vi.fn(), log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const window = Object.assign(new EventTarget(), {
         console: output,
-        location: { host: 'example.test', href: 'https://example.test/path#secret' },
+        location: { host: 'example.test', href: 'https://example.test/path?email=private#secret' },
     })
     vi.stubGlobal('window', window)
     return { window, output }
@@ -61,6 +61,53 @@ afterEach(async () => {
 })
 
 describe('logs', () => {
+    it.each(['static', 'dynamic'] as const)(
+        'applies snapshotted URL options to %s programmatic and console logs',
+        async (mode) => {
+            const { window, output } = browser()
+            window.location.href = 'https://example.test/path?email=private#route'
+            const bodies: OtlpLogsPayload[] = []
+            const config: LogsOptions = {
+                captureConsoleLogs: true,
+                urlCapture: { path: false, search: true, hash: true },
+            }
+            const logger = logs(config)
+            const client = await create({
+                ...(mode === 'static' ? { extensions: [logger], logs: false } : { logs: config }),
+                fetch: async (_url, init) => {
+                    bodies.push(JSON.parse(String(init?.body)))
+                    return new Response('{}')
+                },
+            })
+            config.urlCapture!.search = false
+            output.log('console')
+            getLogs(client).captureLog({ body: 'programmatic' })
+            await client.flush()
+            expect(bodies.flatMap(records)).toHaveLength(2)
+            for (const record of bodies.flatMap(records)) {
+                expect(record.attributes).toContainEqual({
+                    key: 'url.full',
+                    value: { stringValue: 'https://example.test/?email=private#route' },
+                })
+            }
+        }
+    )
+
+    it('omits invalid URLs from log context', async () => {
+        const { window } = browser()
+        window.location.href = 'invalid'
+        const bodies: OtlpLogsPayload[] = []
+        const client = await create({
+            fetch: async (_url, init) => {
+                bodies.push(JSON.parse(String(init?.body)))
+                return new Response('{}')
+            },
+        })
+        getLogs(client).captureLog({ body: 'record' })
+        await client.flush()
+        expect(records(bodies[0]!)[0]!.attributes.some((attribute) => attribute.key === 'url.full')).toBe(false)
+    })
+
     it('contains caller-property errors and continues capturing through the extension reference', async () => {
         const fetch = vi.fn(async () => new Response('{}'))
         const client = await create({ fetch })

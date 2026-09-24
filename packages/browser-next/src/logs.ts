@@ -1,3 +1,4 @@
+import { sanitizeUrl } from '@posthog/browser-common/utils/sanitize-url'
 import type { Disposable } from '@posthog/browser-common'
 import type { BrowserClient } from './browser-client'
 import { PostHogLogs } from '@posthog/browser-common/logs'
@@ -8,7 +9,7 @@ import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-t
 import type { LogsExtension } from './logs-internal'
 import { snapshotLogsOptions, type LogsOptions } from './logs-options'
 
-export type { LogsOptions, CaptureLogOptions } from './logs-options'
+export type { LogsOptions, CaptureLogOptions, UrlCaptureOptions } from './logs-options'
 export type { LogsExtension } from './logs-internal'
 
 interface LogsEnvironment {
@@ -17,14 +18,14 @@ interface LogsEnvironment {
     disposed: boolean
 }
 
-const readSdkContext = (environment: LogsEnvironment) => {
+const readSdkContext = (environment: LogsEnvironment, config: LogsOptions) => {
     const client = environment.client!
     const session = client.session
     const distinctId = client.distinctId
     let currentUrl: string | undefined
     try {
         const href = environment.browserWindow?.location?.href
-        if (href) currentUrl = href.split('#')[0]!
+        if (href) currentUrl = sanitizeUrl(href, config.urlCapture ?? {})
     } catch {
         /* Unavailable location is omitted. */
     }
@@ -43,7 +44,7 @@ class BrowserNextLogs extends PostHogLogs {
         private readonly _environment: LogsEnvironment
     ) {
         super({ get: () => config, captureHintKey: 'consoleCaptureEnabled', remoteConfigWillArrive: true }, () =>
-            readSdkContext(_environment)
+            readSdkContext(_environment, config)
         )
     }
 
