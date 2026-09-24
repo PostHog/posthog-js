@@ -16,6 +16,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36028041757"
       },
       "attempts": 1
+    },
+    {
+      "id": "issue-5093-auto-none-no-comment-no-close-1790267711039",
+      "kind": "issue",
+      "number": 5093,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-09-24T16:35:11.039Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 36028366286,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36028366286"
+      },
+      "attempts": 0
     }
   ]
 }
