@@ -330,6 +330,7 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
           } else if (part.functionCall) {
             content.push({
               type: 'function',
+              ...(part.functionCall.id !== undefined ? { id: part.functionCall.id } : {}),
               function: {
                 name: part.functionCall.name,
                 arguments: part.functionCall.args,

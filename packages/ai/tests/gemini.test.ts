@@ -449,6 +449,67 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello world' }])
   })
 
+  test.each(['generateContent', 'generateContentStream'] as const)(
+    'captures function calls and results in %s input',
+    async (operation) => {
+      const request: Parameters<typeof client.models.generateContent>[0] = {
+        model: 'gemini-2.0-flash-001',
+        contents: [
+          { role: 'user', parts: [{ text: 'Describe a blue triangle.' }] },
+          {
+            role: 'model',
+            parts: [{ functionCall: { id: 'call_649034', name: 'describe_shape', args: { color: 'blue' } } }],
+          },
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_649034',
+                  name: 'describe_shape',
+                  response: { description: 'A blue triangle has three sides.' },
+                },
+              },
+            ],
+          },
+        ],
+      }
+
+      if (operation === 'generateContent') {
+        await client.models.generateContent(request)
+      } else {
+        for await (const _chunk of client.models.generateContentStream(request)) {
+          // Consume the stream so the generation is captured.
+        }
+      }
+
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_input']).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Describe a blue triangle.' }] },
+        {
+          role: 'model',
+          content: [
+            {
+              type: 'function',
+              id: 'call_649034',
+              function: { name: 'describe_shape', arguments: { color: 'blue' } },
+            },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'call_649034',
+              content: { description: 'A blue triangle has three sides.' },
+            },
+          ],
+        },
+      ])
+    }
+  )
+
   test('capture immediate', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
@@ -519,6 +580,7 @@ describe('PostHogGemini - Jest test suite', () => {
               parts: [
                 {
                   functionCall: {
+                    id: 'call_123',
                     name: 'searchWeather',
                     args: { location: 'New York', units: 'celsius' },
                   },
@@ -580,6 +642,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(accumulatedText).toBe('I can help with that. The weather is sunny.')
     expect(functionCalls).toHaveLength(1)
     expect(functionCalls[0]).toEqual({
+      id: 'call_123',
       name: 'searchWeather',
       args: { location: 'New York', units: 'celsius' },
     })
@@ -596,6 +659,7 @@ describe('PostHogGemini - Jest test suite', () => {
           { type: 'text', text: 'I can help with that. The weather is sunny.' },
           {
             type: 'function',
+            id: 'call_123',
             function: {
               name: 'searchWeather',
               arguments: { location: 'New York', units: 'celsius' },

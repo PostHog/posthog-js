@@ -24,6 +24,15 @@ export interface FormattedFunctionCall {
 }
 
 /**
+ * Formatted tool result content item
+ */
+export interface FormattedToolResult {
+  type: 'tool_result'
+  tool_use_id?: string
+  content: unknown
+}
+
+/**
  * Formatted image content item
  */
 export interface FormattedImageContent {
@@ -69,6 +78,7 @@ export interface FormattedDocumentContent {
 export type FormattedContentItem =
   | FormattedTextContent
   | FormattedFunctionCall
+  | FormattedToolResult
   | FormattedImageContent
   | FormattedAudioContent
   | FormattedDocumentContent
