@@ -282,15 +282,27 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
         }
     }
 
-    // a non-semantic control is often just a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses
+    // a non-semantic control is often a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses. cursor
+    // inherits, so we walk the contiguous pointer run from the click target up and stop at its first labelled element.
     if (!foundTagOrRoleControl && window) {
         for (const candidate of targetElementList) {
+            let cursor: string
             try {
-                if (window.getComputedStyle(candidate).getPropertyValue('cursor') === 'pointer') {
-                    control = candidate
-                    break
-                }
-            } catch {}
+                cursor = window.getComputedStyle(candidate).getPropertyValue('cursor')
+            } catch {
+                break
+            }
+            if (cursor !== 'pointer') {
+                break
+            }
+            const isLabelled =
+                !!candidate.getAttribute('aria-label') ||
+                !!joinSafeTextNodes(candidate, ' ') ||
+                !!joinNestedSpanText(candidate, ' ')
+            if (isLabelled) {
+                control = candidate
+                break
+            }
         }
     }
 

@@ -999,26 +999,29 @@ describe('Autocapture system', () => {
                 )
 
                 it('rapid clicks on an icon inside a cursor:pointer div labelled "Next slide" do not capture $rageclick', () => {
+                    // cursor inherits in a real browser, so the icon computes pointer too
                     const div = document.createElement('div')
                     div.style.cursor = 'pointer'
                     div.setAttribute('aria-label', 'Next slide')
                     const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
                     div.appendChild(icon)
 
                     expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
                 })
 
-                it("rapid clicks on a sibling span inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
+                it("rapid clicks on an unlabelled sibling icon inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
+                    // the clicked icon carries no label of its own, so the walk continues past it to the div
                     const div = document.createElement('div')
                     div.style.cursor = 'pointer'
                     const label = document.createElement('span')
                     label.textContent = 'Next'
-                    const other = document.createElement('span')
-                    other.textContent = 'x'
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
                     div.appendChild(label)
-                    div.appendChild(other)
+                    div.appendChild(icon)
 
-                    expect(rageClickThreeTimes(other, div)).not.toContain('$rageclick')
+                    expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
                 })
 
                 it('rapid clicks on a button inside a cursor:pointer labelled region still capture $rageclick (tag control wins)', () => {
@@ -1030,6 +1033,36 @@ describe('Autocapture system', () => {
                     region.appendChild(button)
 
                     expect(rageClickThreeTimes(button, region)).toContain('$rageclick')
+                })
+
+                it('rapid clicks on an icon nested under two labelled cursor:pointer wrappers match the nearest label, not the outer card', () => {
+                    const card = document.createElement('div')
+                    card.style.cursor = 'pointer'
+                    card.setAttribute('aria-label', 'Featured deals')
+                    const next = document.createElement('div')
+                    next.style.cursor = 'pointer'
+                    next.setAttribute('aria-label', 'Next slide')
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
+                    next.appendChild(icon)
+                    card.appendChild(next)
+
+                    expect(rageClickThreeTimes(icon, card)).not.toContain('$rageclick')
+                })
+
+                it('rapid clicks on an icon nested under two labelled cursor:pointer wrappers ignore the outer card label', () => {
+                    const card = document.createElement('div')
+                    card.style.cursor = 'pointer'
+                    card.setAttribute('aria-label', 'Next steps')
+                    const buyNow = document.createElement('div')
+                    buyNow.style.cursor = 'pointer'
+                    buyNow.setAttribute('aria-label', 'Buy now')
+                    const icon = document.createElement('i')
+                    icon.style.cursor = 'pointer'
+                    buyNow.appendChild(icon)
+                    card.appendChild(buyNow)
+
+                    expect(rageClickThreeTimes(icon, card)).toContain('$rageclick')
                 })
             })
 
