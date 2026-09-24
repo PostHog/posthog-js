@@ -1695,6 +1695,28 @@ importers:
         specifier: ^5
         version: 5.108.1(esbuild@0.25.10)(lightningcss@1.33.0)
 
+  packages/workflows:
+    dependencies:
+      jiti:
+        specifier: 2.7.0
+        version: 2.7.0
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@22.16.5))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@7.0.2)
+      '@types/node':
+        specifier: ^22.15.23
+        version: 22.16.5
+      typescript:
+        specifier: catalog:native
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 1.6.1(@edge-runtime/vm@5.0.0)(@types/node@22.16.5)(happy-dom@14.12.3)(jsdom@26.1.0)(lightningcss@1.33.0)(terser@5.51.2)
+
   tooling/changelog:
     dependencies:
       '@changesets/changelog-github':
