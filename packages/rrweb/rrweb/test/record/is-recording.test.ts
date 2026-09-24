@@ -11,6 +11,7 @@ describe('record.isRecording()', () => {
     stop?.();
     stop = undefined;
     vi.restoreAllMocks();
+    vi.useRealTimers();
     record.mirror.reset();
   });
 
@@ -31,6 +32,7 @@ describe('record.isRecording()', () => {
   });
 
   it('reports false while init is deferred, and true after DOMContentLoaded', () => {
+    vi.useFakeTimers();
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
 
     stop = record({ emit: () => {}, recordAfter: 'DOMContentLoaded' });
@@ -38,6 +40,11 @@ describe('record.isRecording()', () => {
     expect(record.isRecording()).toBe(false);
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
+
+    // init() now runs in a later task, after the page's own DOMContentLoaded listeners
+    expect(record.isRecording()).toBe(false);
+
+    vi.runOnlyPendingTimers();
 
     expect(record.isRecording()).toBe(true);
   });

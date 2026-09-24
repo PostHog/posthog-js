@@ -18,10 +18,12 @@ describe('stop from inside observer setup', () => {
     stop = undefined;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.useRealTimers();
     record.mirror.reset();
   });
 
   it('releases the observers when a plugin emit stops the recorder during setup', () => {
+    vi.useFakeTimers();
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
 
     const eventsAfterStop: eventWithTime[] = [];
@@ -56,6 +58,7 @@ describe('stop from inside observer setup', () => {
     });
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
+    vi.runOnlyPendingTimers();
 
     expect(pluginTornDown).toBe(true);
     expect(record.isRecording()).toBe(false);

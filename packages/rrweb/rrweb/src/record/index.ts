@@ -1134,7 +1134,9 @@ function record<T = eventWithTime>(
             type: EventType.DomContentLoaded,
             data: {},
           });
-          if (recordAfter === 'DOMContentLoaded') init();
+          // defer past this listener so the page's own non-capture DOMContentLoaded
+          // listeners (e.g. ones adding mask/block classes) run before the snapshot
+          if (recordAfter === 'DOMContentLoaded') setTimeout(init, 0);
         }),
       );
       handlers.push(

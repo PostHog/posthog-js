@@ -17,10 +17,12 @@ describe('repeated DOMContentLoaded', () => {
     stop = undefined;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.useRealTimers();
     record.mirror.reset();
   });
 
   it('initializes once when DOMContentLoaded is dispatched again', () => {
+    vi.useFakeTimers();
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
     document.body.innerHTML = '<div>content</div>';
 
@@ -33,6 +35,7 @@ describe('repeated DOMContentLoaded', () => {
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
     document.dispatchEvent(new Event('DOMContentLoaded'));
+    vi.runOnlyPendingTimers();
 
     const fullSnapshots = events.filter(
       (event) => event.type === EventType.FullSnapshot,

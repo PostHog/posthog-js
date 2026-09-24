@@ -16,10 +16,12 @@ describe('deferred init after stop', () => {
     stop?.();
     stop = undefined;
     vi.restoreAllMocks();
+    vi.useRealTimers();
     record.mirror.reset();
   });
 
   const recordAndStopOn = (stopOn: EventType) => {
+    vi.useFakeTimers();
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
 
     const eventsAfterStop: eventWithTime[] = [];
@@ -41,6 +43,7 @@ describe('deferred init after stop', () => {
     });
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
+    vi.runOnlyPendingTimers();
 
     return eventsAfterStop;
   };
@@ -69,6 +72,7 @@ describe('deferred init after stop', () => {
   // the browser SDK's session rotation stops and immediately starts a replacement
   // from inside the emit; the stale callback must not snapshot into its stream
   it('a replacement started from the DomContentLoaded emit sees exactly one full snapshot', () => {
+    vi.useFakeTimers();
     const readyState = vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
 
     const replacementEvents: eventWithTime[] = [];
@@ -88,6 +92,7 @@ describe('deferred init after stop', () => {
     });
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
+    vi.runOnlyPendingTimers();
 
     expect(replacementEvents.filter((e) => e.type === EventType.FullSnapshot)).toHaveLength(1);
     expect(record.isRecording()).toBe(true);

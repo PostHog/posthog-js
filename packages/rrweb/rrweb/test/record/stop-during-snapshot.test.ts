@@ -17,10 +17,12 @@ describe('stop from inside the serialize pass', () => {
     stop = undefined;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.useRealTimers();
     record.mirror.reset();
   });
 
   it('does not emit the full snapshot when maskTextFn stops the recorder', () => {
+    vi.useFakeTimers();
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
     document.body.innerHTML = '<div class="rr-mask">sensitive</div>';
 
@@ -43,6 +45,7 @@ describe('stop from inside the serialize pass', () => {
     });
 
     document.dispatchEvent(new Event('DOMContentLoaded'));
+    vi.runOnlyPendingTimers();
 
     expect(eventsAfterStop).toEqual([]);
     expect(record.isRecording()).toBe(false);
