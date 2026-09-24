@@ -565,7 +565,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async flush(): Promise<void> {
-        await this._captureSink?.flush()
+        await this._registry.flush()
     }
 
     optIn(): void {
@@ -717,8 +717,8 @@ class PostHogBrowserClient implements PostHog {
 
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
-            const captureFlush = this._captureSink?.flush('shutdown') ?? Promise.resolve()
             this._closing = true
+            const extensionFlush = this._registry.flush('shutdown')
             this._removePageviewListener()
             try {
                 this._consentObservation.dispose()
@@ -730,7 +730,7 @@ class PostHogBrowserClient implements PostHog {
             } catch {
                 // Shutdown remains bounded when timer cleanup is hostile.
             }
-            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, captureFlush)
+            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, extensionFlush)
         }
         return this._shutdownPromise
     }
@@ -739,7 +739,7 @@ class PostHogBrowserClient implements PostHog {
         return this.shutdown()
     }
 
-    private async _shutdown(shutdownTimeoutMs: number, captureFlush: Promise<void>): Promise<void> {
+    private async _shutdown(shutdownTimeoutMs: number, extensionFlush: Promise<void>): Promise<void> {
         const timeoutMs = Math.max(
             0,
             Math.floor(Number.isFinite(shutdownTimeoutMs) ? shutdownTimeoutMs : DEFAULT_SHUTDOWN_TIMEOUT_MS)
@@ -759,7 +759,7 @@ class PostHogBrowserClient implements PostHog {
         })
 
         try {
-            await Promise.race([captureFlush.catch((error) => this.logger.error('Event flush failed', error)), timeout])
+            await Promise.race([extensionFlush, timeout])
 
             this._disposed = true
             try {

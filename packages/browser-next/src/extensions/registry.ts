@@ -62,6 +62,18 @@ export class ExtensionRegistry {
         }
     }
 
+    async flush(reason: 'flush' | 'shutdown' = 'flush'): Promise<void> {
+        await Promise.all(
+            Array.from(this._records.values()).map(async ([extension]) => {
+                try {
+                    await extension.flush?.(reason)
+                } catch (error) {
+                    this._logger.error(`Extension "${extension.name}" flush failed`, error)
+                }
+            })
+        )
+    }
+
     async dispose(): Promise<void> {
         if (this._disposed) {
             return
