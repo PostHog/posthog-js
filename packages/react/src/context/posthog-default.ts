@@ -1,14 +1,11 @@
 import type { PostHog } from 'posthog-js'
+import { sharedState } from './shared-state'
 
-// Process-level singleton, mirroring the posthog-js default export which is
-// itself a module-level singleton. Safe because setDefaultPostHogInstance is
-// only called once at module evaluation time by src/index.ts.
-let defaultPostHogInstance: PostHog | undefined
-
+// Kept in the shared state so the context of every entrypoint reads the client set by the full entrypoint.
 export function setDefaultPostHogInstance(instance: PostHog | undefined): void {
-    defaultPostHogInstance = instance
+    sharedState.defaultPostHogInstance = instance
 }
 
 export function getDefaultPostHogInstance(): PostHog | undefined {
-    return defaultPostHogInstance
+    return sharedState.defaultPostHogInstance
 }

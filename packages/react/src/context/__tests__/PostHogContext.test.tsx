@@ -56,3 +56,52 @@ describe('PostHogContext component', () => {
         )
     })
 })
+
+describe('PostHogContext across entrypoints', () => {
+    afterEach(() => {
+        vi.doUnmock('react')
+        vi.resetModules()
+        setDefaultPostHogInstance(undefined)
+    })
+
+    it('shares one context and default client between separately loaded module copies', async () => {
+        vi.resetModules()
+        const first = await vi.importActual<typeof import('../PostHogContext')>('../PostHogContext')
+        const firstDefault = await vi.importActual<typeof import('../posthog-default')>('../posthog-default')
+        vi.resetModules()
+        const second = await vi.importActual<typeof import('../PostHogContext')>('../PostHogContext')
+
+        expect(second.PostHogContext).toBe(first.PostHogContext)
+
+        const client = {} as unknown as PostHog
+        firstDefault.setDefaultPostHogInstance(client)
+        function ClientConsumer() {
+            const { client: contextClient } = React.useContext(second.PostHogContext)
+            return <div data-testid="client">{contextClient === client ? 'match' : 'mismatch'}</div>
+        }
+        const { getByTestId } = render(<ClientConsumer />)
+        expect(getByTestId('client').textContent).toBe('match')
+        firstDefault.setDefaultPostHogInstance(undefined)
+    })
+
+    it('keeps a separate context and default client for a different copy of React', async () => {
+        vi.resetModules()
+        const first = await vi.importActual<typeof import('../PostHogContext')>('../PostHogContext')
+        const firstDefault = await vi.importActual<typeof import('../posthog-default')>('../posthog-default')
+        vi.resetModules()
+        vi.doMock('react', async () => {
+            const actual = await vi.importActual<typeof import('react')>('react')
+            return {
+                ...actual,
+                createContext: (...args: Parameters<typeof actual.createContext>) => actual.createContext(...args),
+            }
+        })
+        const second = await vi.importActual<typeof import('../PostHogContext')>('../PostHogContext')
+        const secondDefault = await vi.importActual<typeof import('../posthog-default')>('../posthog-default')
+
+        expect(second.PostHogContext).not.toBe(first.PostHogContext)
+        firstDefault.setDefaultPostHogInstance({} as unknown as PostHog)
+        expect(secondDefault.getDefaultPostHogInstance()).toBeUndefined()
+        firstDefault.setDefaultPostHogInstance(undefined)
+    })
+})
