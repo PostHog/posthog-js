@@ -20,7 +20,7 @@ function declaredProperties(schema: unknown): Record<string, unknown> | undefine
 /**
  * Describe the original arguments without reading their values.
  * Pass a server-owned JSON Schema or Zod object schema, never a schema from the caller.
- * Unknown names become `*` because an argument name can contain private data.
+ * Unknown names become `[redacted]` because an argument name can contain private data.
  */
 export function getToolInputProperties(input: unknown, inputSchema?: unknown): JsonRecord {
   try {
@@ -29,12 +29,14 @@ export function getToolInputProperties(input: unknown, inputSchema?: unknown): J
     if (prototype !== null && prototype !== Object.prototype) return {}
     const properties = declaredProperties(inputSchema)
     const known = new Set(Object.keys(properties ?? {}))
-    const keys = Object.keys(input)
-      .filter((key) => known.has(key) || !ANALYTICS_KEYS.has(key))
-      .map((key) => (known.has(key) && key.length <= MAX_KEY_LENGTH ? key : '*'))
-      .sort()
-      .slice(0, MAX_INPUT_KEYS)
-    return { [PostHogMCPAnalyticsProperty.InputKeys]: keys }
+    const keys = Object.keys(input).filter((key) => known.has(key) || !ANALYTICS_KEYS.has(key))
+    const declared = keys.filter((key) => known.has(key) && key.length <= MAX_KEY_LENGTH).sort()
+    const hasRedacted = keys.some((key) => !known.has(key) || key.length > MAX_KEY_LENGTH)
+    const visibleKeys = declared.slice(0, MAX_INPUT_KEYS)
+    if (hasRedacted && visibleKeys.length < MAX_INPUT_KEYS) {
+      visibleKeys.push('[redacted]')
+    }
+    return { [PostHogMCPAnalyticsProperty.InputKeys]: visibleKeys }
   } catch {
     return {}
   }

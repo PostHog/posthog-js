@@ -22,7 +22,7 @@ describe('getToolInputProperties', () => {
       'person@example.com': true,
     }
     expect(getToolInputProperties(input, schema)).toEqual({
-      $mcp_input_keys: ['*', '*', 'context', 'id', 'properties'],
+      $mcp_input_keys: ['context', 'id', 'properties', '[redacted]'],
     })
     expect(input.id).toBe('private-value')
   })
@@ -38,7 +38,7 @@ describe('getToolInputProperties', () => {
         throw new Error('must not read values')
       },
     })
-    expect(getToolInputProperties(input)).toEqual({ $mcp_input_keys: ['*'] })
+    expect(getToolInputProperties(input)).toEqual({ $mcp_input_keys: ['[redacted]'] })
     expect(getToolInputProperties(input, { properties: { id: {} } })).toEqual({ $mcp_input_keys: ['id'] })
   })
 
@@ -47,7 +47,7 @@ describe('getToolInputProperties', () => {
     expect(getToolInputProperties(properties, { properties }).$mcp_input_keys).toHaveLength(20)
     const longName = 'x'.repeat(65)
     expect(getToolInputProperties({ [longName]: 1 }, { properties: { [longName]: {} } })).toEqual({
-      $mcp_input_keys: ['*'],
+      $mcp_input_keys: ['[redacted]'],
     })
     const input = new Proxy(
       {},

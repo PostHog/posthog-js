@@ -515,7 +515,7 @@ export interface MCPAnalyticsData {
   toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
-  toolInputSchemas: Map<string, unknown>
+  toolInputSchemas: Map<string, Map<string, unknown>>
 }
 
 export interface CaptureEventData {
