@@ -31,6 +31,7 @@ Please see the main [PostHog docs](https://posthog.com/docs).
 - [@posthog/rollup-plugin](./packages/rollup-plugin/README.md)
 - [@posthog/types](./packages/types/README.md)
 - [@posthog/webpack-plugin](./packages/webpack-plugin/README.md)
+- [@posthog/workflows](./packages/workflows/README.md)
 
 ## Contributing
 

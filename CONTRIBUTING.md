@@ -59,6 +59,7 @@ The repository contains the following top-level packages in `./packages/`:
 | `types/`                     | `@posthog/types`                     | TypeScript type definitions for the SDK                  |
 | `rollup-plugin/`             | `@posthog/rollup-plugin`             | Rollup/Vite sourcemap upload plugin                      |
 | `webpack-plugin/`            | `@posthog/webpack-plugin`            | Webpack sourcemap upload plugin                          |
+| `workflows/`                 | `@posthog/workflows`                 | Workflows as code: TypeScript SDK and CLI                |
 
 Vendored recording/replay packages live under `packages/rrweb/`.
 

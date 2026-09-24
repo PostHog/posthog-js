@@ -14,3 +14,4 @@ PostHog JS is a mono-repo. The changelogs are in the individual packages
 - [@posthog/openfeature-node-provider](./packages/openfeature-node-provider/CHANGELOG.md)
 - [@posthog/openfeature-web-provider](./packages/openfeature-web-provider/CHANGELOG.md)
 - [@posthog/plugin-utils](./packages/plugin-utils/CHANGELOG.md)
+- [@posthog/workflows](./packages/workflows/CHANGELOG.md)

@@ -28,6 +28,7 @@
 - [ ] @posthog/openfeature-web-provider
 - [ ] @posthog/rollup-plugin
 - [ ] @posthog/webpack-plugin
+- [ ] @posthog/workflows
 - [ ] @posthog/types
 - [ ] @posthog/browser-common
 

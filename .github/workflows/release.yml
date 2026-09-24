@@ -362,6 +362,7 @@ jobs:
                     - name: '@posthog/rollup-plugin'
                     - name: '@posthog/types'
                     - name: '@posthog/webpack-plugin'
+                    - name: '@posthog/workflows'
                     # The @posthog/rrweb* packages live in `packages/rrweb/**` and
                     # are consumed as `workspace:*` devDependencies of `posthog-js`,
                     # then bundled into the browser SDK at build time (see
