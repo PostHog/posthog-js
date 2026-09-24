@@ -1655,8 +1655,15 @@ export class Replayer {
         break;
       }
       case IncrementalSource.Font: {
+        const iframeWindow = this.iframe.contentWindow as IWindow | null;
+        if (!iframeWindow) {
+          break;
+        }
         try {
-          const fontFace = new FontFace(
+          // A FontFace fetches its source under the CSP of the realm that
+          // built it. Built in the embedding page's realm, the recorded font
+          // would be judged by that page's policy instead of the iframe's.
+          const fontFace = new iframeWindow.FontFace(
             d.family,
             d.buffer
               ? new Uint8Array(JSON.parse(d.fontSource) as Iterable<number>)
