@@ -166,7 +166,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     canCaptureContextIntent
   )
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const sessionSchemas = data.toolInputSchemas.get(preparedEvent.requestAttribution.sessionId)
+    const sessionSchemas = data.toolInputSchemas.get(preparedEvent.event.sessionId)
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
@@ -833,11 +833,11 @@ async function getTracedToolsList(
 
     if (data) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
-      const sessionSchemas = data.toolInputSchemas.get(requestAttribution.sessionId) ?? new Map<string, unknown>()
+      const sessionSchemas = data.toolInputSchemas.get(event.sessionId) ?? new Map<string, unknown>()
       for (const tool of tools) {
         if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
       }
-      data.toolInputSchemas.set(requestAttribution.sessionId, sessionSchemas)
+      data.toolInputSchemas.set(event.sessionId, sessionSchemas)
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
