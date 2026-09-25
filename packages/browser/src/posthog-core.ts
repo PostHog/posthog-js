@@ -188,10 +188,10 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
-// high-volume events nobody reads to debug replay capture, so they skip its debug properties.
-// 'time to see data' and the livestream_ events are sent by the PostHog app itself
-const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap', 'time to see data']
-const EVENT_PREFIXES_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['livestream_']
+// replay capture is debugged from SDK events only, minus the high-volume ones nobody reads for it
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
+// the diagnostics read the latest event that carries them, so a sample per session every 30s is enough
+const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
 const REPLAY_DEBUG_PROPERTY_PREFIX = '$sdk_debug_replay_'
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
@@ -533,6 +533,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _lastReplayDebugProperties: { sessionId: string | undefined; at: number } | undefined
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
@@ -2149,8 +2150,9 @@ export class PostHog implements PostHogInterface {
         }
 
         const withReplayDebugProperties =
+            eventName.startsWith('$') &&
             !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName) &&
-            !EVENT_PREFIXES_WITHOUT_REPLAY_DEBUG_PROPERTIES.some((prefix) => eventName.startsWith(prefix))
+            this._takeReplayDebugPropertiesSlot(properties['$session_id'], readOnly)
         try {
             if (this.sessionRecording && withReplayDebugProperties) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
@@ -2275,6 +2277,18 @@ export class PostHog implements PostHogInterface {
         }
 
         return properties
+    }
+
+    private _takeReplayDebugPropertiesSlot(sessionId: string | undefined, readOnly?: boolean): boolean {
+        const now = Date.now()
+        const last = this._lastReplayDebugProperties
+        if (last && last.sessionId === sessionId && now - last.at < REPLAY_DEBUG_PROPERTIES_INTERVAL_MS) {
+            return false
+        }
+        if (!readOnly) {
+            this._lastReplayDebugProperties = { sessionId, at: now }
+        }
+        return true
     }
 
     /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */

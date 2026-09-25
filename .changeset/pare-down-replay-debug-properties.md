@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Session replay adds fewer `$sdk_debug_*` properties to captured events: only the ones the replay capture diagnostics read. `$feature_flag_called`, `$$heatmap`, `time to see data`, and `livestream_*` events no longer get replay debug properties.
+Session replay adds fewer `$sdk_debug_*` properties to captured events: only the ones the replay capture diagnostics read. Only SDK events (names that start with `$`) get replay debug properties, `$feature_flag_called` and `$$heatmap` events no longer get them, and they are added at most once every 30 seconds per session.
