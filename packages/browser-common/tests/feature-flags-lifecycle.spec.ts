@@ -327,15 +327,11 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const addDocumentListener = vi.spyOn(document, 'addEventListener')
             setRefreshInterval.mockClear()
             addDocumentListener.mockClear()
-            vi.doMock('../src/utils/globals', async (importOriginal) => ({
-                ...(await importOriginal<typeof import('../src/utils/globals')>()),
-                document: undefined,
-            }))
+            const originalDocument = globalThis.document
+            vi.stubGlobal('document', undefined)
 
             try {
-                vi.resetModules()
-                const { PostHogFeatureFlags: NoDocumentFeatureFlags } = await import('../src/feature-flags')
-                const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
+                const noDocumentFeatureFlags = new PostHogFeatureFlags({
                     get: () => ({ ...config, refreshIntervalMs }),
                 })
 
@@ -344,8 +340,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
                 noDocumentFeatureFlags.dispose()
             } finally {
-                vi.doUnmock('../src/utils/globals')
-                vi.resetModules()
+                vi.stubGlobal('document', originalDocument)
             }
 
             expect(setRefreshInterval).not.toHaveBeenCalled()
