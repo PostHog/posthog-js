@@ -12,7 +12,7 @@ import {
 import { createPostHog, FeatureFlagsExtension } from '../src'
 import { createPostHog as createCore } from '../src/core'
 import { createSurveys } from '../src/surveys-extension'
-import { surveys } from '../src/surveys'
+import { surveys, type SurveysExtension } from '../src/surveys'
 import { generateSurveys } from '@posthog/browser-common/surveys-renderer'
 import type { PostHog, PostHogOptions } from '../src/types'
 import type { Survey, SurveyCallback } from '../src/surveys-options'
@@ -62,8 +62,9 @@ const create = async (options: Partial<PostHogOptions> = {}) => {
     clients.push(client)
     return client
 }
+const getExtension = (client: PostHog) => client.getExtension<SurveysExtension>('surveys')!
 const getSurveys = (client: PostHog, forceReload = false) =>
-    new Promise<Survey[]>((resolve) => client.getSurveys(resolve, forceReload))
+    new Promise<Survey[]>((resolve) => getExtension(client).getSurveys(resolve, forceReload))
 const renderer = () => {
     const dispose = vi.fn()
     const generateSurveys = vi.fn((_host: SurveyRenderContext, _enabled: boolean | undefined) => ({
@@ -172,17 +173,12 @@ describe('surveys', () => {
         expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('keeps disabled and manual-core operations safe without installing surveys', async () => {
+    it('omits surveys when disabled or using the manual core without an explicit instance', async () => {
         const client = await create({ surveys: false })
         const core = await createCore({ ...base, fetch: false })
         clients.push(core)
         for (const instance of [client, core]) {
             expect(instance.getExtension('surveys')).toBeUndefined()
-            expect(await getSurveys(instance)).toEqual([])
-            expect(await instance.canRenderSurvey('missing')).toMatchObject({ visible: false })
-            instance.displaySurvey('missing')
-            instance.cancelPendingSurvey('missing')
-            instance.onSurveysLoaded(vi.fn()).dispose()
         }
     })
 
@@ -260,7 +256,7 @@ describe('surveys', () => {
         const module = renderer()
         const client = await create({ extensions: [createSurveys({}, load)] })
         const callback = vi.fn()
-        client.getSurveys(callback)
+        getExtension(client).getSurveys(callback)
         await client.shutdown(0)
         resolve(module)
         await Promise.resolve()
@@ -277,7 +273,7 @@ describe('surveys', () => {
         const callback = vi.fn(() => {
             throw new Error('application callback')
         })
-        const subscription = client.onSurveysLoaded(callback)
+        const subscription = getExtension(client).onSurveysLoaded(callback)
         await vi.waitFor(() => expect(callback).toHaveBeenCalled())
         subscription.dispose()
         window.dispatchEvent(new Event('pagehide'))
@@ -301,8 +297,8 @@ describe('surveys', () => {
                 fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
             })
             expect(await getSurveys(client)).toEqual([definition])
-            expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: true })
-            expect(await client.canRenderSurvey('missing')).toMatchObject({ visible: false })
+            expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
+            expect(await getExtension(client).canRenderSurvey('missing')).toMatchObject({ visible: false })
             expect(document.querySelector('.PostHogSurvey')).toBeNull()
         }
     )
@@ -318,7 +314,7 @@ describe('surveys', () => {
         })
         await getSurveys(first)
         first.kv.set('unrelated', true)
-        expect(storage.getItem('custom_surveys')).toContain('survey-test')
+        expect(JSON.parse(storage.getItem('custom')!).extensionData.surveys.$surveys).toEqual([definition])
         const second = await create({
             storage,
             persistenceKey: 'custom',
@@ -328,7 +324,7 @@ describe('surveys', () => {
         expect(await getSurveys(second)).toEqual([definition])
         expect(fetch).toHaveBeenCalledOnce()
         second.reset()
-        expect(storage.getItem('custom_surveys')).toBe('{}')
+        expect(JSON.parse(storage.getItem('custom')!).extensionData.surveys).toEqual({})
     })
 
     it.each(['enabled', 'disabled', 'disposed'] as const)(
@@ -370,7 +366,7 @@ describe('surveys', () => {
             extensions: [surveys({ automaticDisplay: false })],
             fetch: () => new Promise<Response>(() => {}),
         })
-        const eligibility = client.canRenderSurvey(definition.id)
+        const eligibility = getExtension(client).canRenderSurvey(definition.id)
         await Promise.resolve()
         await client.shutdown(0)
         expect(await eligibility).toMatchObject({ visible: false })
@@ -386,9 +382,9 @@ describe('surveys', () => {
         const captured = vi.fn()
         client.onEvent(captured)
         client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': false })
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: false })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
         client.getExtension(FeatureFlagsExtension)!.updateFlags({ 'survey-targeting-gate': true })
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: true })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
         expect(captured.mock.calls.some(([event]) => event.event === '$feature_flag_called')).toBe(false)
     })
 
@@ -410,12 +406,12 @@ describe('surveys', () => {
             extensions: [autocapture],
             fetch: async () => new Response(JSON.stringify({ surveys: [actionable] })),
         })
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: false })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
         expect(setElementSelectors).toHaveBeenCalledWith(new Set(['.trigger']))
         client.capture('$autocapture', { $element_selectors: ['.trigger'] })
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: true })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
         client.reset()
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: false })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
     })
 
     it('respects consent in definition requests and manual eligibility', async () => {
@@ -430,6 +426,6 @@ describe('surveys', () => {
         client.optIn()
         expect(await getSurveys(client)).toEqual([definition])
         client.optOut()
-        expect(await client.canRenderSurvey(definition.id)).toMatchObject({ visible: false })
+        expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
     })
 })

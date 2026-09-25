@@ -5,7 +5,9 @@ import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
 import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
 import type { AnalyticsExtension, AnalyticsTeardownSubscription } from './analytics-internal'
-import type { SurveysExtension, SurveysHost } from './surveys-internal'
+import type { SurveysExtension } from './surveys-internal'
+import type { BrowserClient } from './browser-client'
+import type { FlagsExtension } from './flags-internal'
 import {
     snapshotSurveysOptions,
     type SurveysOptions,
@@ -18,8 +20,7 @@ type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): 
 
 export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
     const config = snapshotSurveysOptions(options)
-    let host: SurveysHost | undefined
-    let client: Client | undefined
+    let client: BrowserClient | undefined
     let storage: SurveysStorage | undefined
     let runtimeHost: SurveyRenderContext | undefined
     let remoteEnabled = false
@@ -33,6 +34,12 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let renderer: Renderer | undefined
     let loading: Promise<Renderer> | undefined
     let remoteSubscription: Disposable | undefined
+    let resetSubscription: Disposable | undefined
+    const getFlagsContext = () => client?.getExtension<FlagsExtension>('featureFlags')?.getSurveyContext?.()
+    const reset = () => {
+        manager?.clearInMemoryInProgressSurveyState?.()
+        shared._surveyEventReceiver?.reset()
+    }
     const loadRenderer = () => (loading ??= load().then((value) => (renderer = value)))
     const source: SurveysConfigSource = {
         get: () => ({
@@ -42,7 +49,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             requestTimeoutMs: config.requestTimeoutMs ?? 10000,
             prefillFromUrl: config.prefillFromUrl ?? false,
             automaticDisplay: config.automaticDisplay ?? true,
-            featureFlagEvaluation: host?.getFlagsContext?.()?.remoteEvaluation ?? false,
+            featureFlagEvaluation: getFlagsContext()?.remoteEvaluation ?? false,
             overrideLanguage: config.overrideDisplayLanguage,
             get_current_url: config.getCurrentUrl,
             prepareStylesheet: config.prepareStylesheet,
@@ -115,23 +122,17 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     }
     return {
         name: 'surveys',
-        initialize: (value) => {
-            host = value
-        },
-        setup: async (value) => {
+        setup: async (value: BrowserClient) => {
             client = value
-            storage = new SurveysStorage(host)
-            await storage.kv.initialize()
+            storage = new SurveysStorage(value.kv)
+            await value.kv.initialize()
             if (disposed) return
-            const scoped = Object.create(value) as Client
-            Object.defineProperty(scoped, 'kv', { value: storage.kv })
-            const renderClient = Object.create(scoped) as Client
+            resetSubscription = value.onReset(reset)
+            const renderClient = Object.create(value) as Client
             const read = (key: string) =>
-                key === STORED_PERSON_PROPERTIES_KEY
-                    ? host?.getFlagsContext?.()?.personProperties
-                    : storage!.kv.get(key)
+                key === STORED_PERSON_PROPERTIES_KEY ? getFlagsContext()?.personProperties : value.kv.get(key)
             const renderKv: KeyValueStore = {
-                ...storage.kv,
+                ...value.kv,
                 get: ((keys: string | readonly string[]) =>
                     typeof keys === 'string'
                         ? read(keys)
@@ -153,7 +154,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     if (remoteEnabled && !disposed) manager?.startAutomaticDisplay?.()
                 }
             })
-            await shared.setup(scoped)
+            await shared.setup(value)
             if (disposed) {
                 shared.dispose()
                 return
@@ -201,19 +202,15 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
         cancelPendingSurvey: (id) => {
             if (!disposed) shared.cancelPendingSurvey(id)
         },
-        reset: () => {
-            manager?.clearInMemoryInProgressSurveyState?.()
-            shared._surveyEventReceiver?.reset()
-            storage?.reset()
-        },
+        reset,
         dispose: () => {
             disposed = true
             finishDisposal()
             remoteSubscription?.dispose()
+            resetSubscription?.dispose()
             if (typeof window !== 'undefined') window.removeEventListener('pagehide', pagehide)
             teardownSubscription?.dispose()
             shared.dispose()
-            storage?.dispose()
         },
     }
 }

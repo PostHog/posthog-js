@@ -283,8 +283,9 @@ for (const factory of [surveys, commonJsSurveys]) {
         capturePageview: false,
         extensions: [factory({ automaticDisplay: false })],
     })
-    const result = await new Promise((resolve) => client.getSurveys(resolve))
-    if (result.length !== 0 || (await client.canRenderSurvey('missing')).visible) {
+    const extension = client.getExtension('surveys')
+    const result = await new Promise((resolve) => extension.getSurveys(resolve))
+    if (result.length !== 0 || (await extension.canRenderSurvey('missing')).visible) {
         throw new Error('Mixed-module surveys must return unavailable results without a document')
     }
     await client.dispose()
