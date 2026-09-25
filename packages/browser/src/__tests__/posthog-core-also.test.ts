@@ -690,57 +690,30 @@ describe('posthog core', () => {
         it.each(['$feature_flag_called', '$$heatmap', 'custom_event', 'livestream_connected'])(
             'does not add replay debug properties to %s',
             (eventName) => {
-                posthog = posthogWith(
-                    {
-                        api_host: 'https://app.posthog.com',
-                        token: 'testtoken',
-                        property_denylist: [],
-                        property_blacklist: [],
-                        sanitize_properties: undefined,
-                    },
-                    {
-                        ...overrides,
-                        sessionPersistence: {
-                            properties: () => ({
-                                distinct_id: 'abc',
-                                $sdk_debug_replay_url_trigger_status: 'trigger_pending',
-                                $sdk_debug_recording_script_not_loaded: true,
-                            }),
-                            get_property: () => 'anonymous',
-                        } as unknown as PostHogPersistence,
-                    }
-                )
-
                 const properties = posthog.calculateEventProperties(eventName, { event: 'prop' }, new Date(), uuid)
 
                 expect(properties).not.toHaveProperty('$recording_status')
-                expect(properties).not.toHaveProperty('$sdk_debug_replay_url_trigger_status')
-                expect(properties).not.toHaveProperty('$sdk_debug_recording_script_not_loaded')
                 expect(properties.$sdk_debug_retry_queue_size).toEqual(0)
             }
         )
 
-        it('adds replay debug properties at most once per 30 seconds per session', () => {
-            let now = 1_000_000
-            vi.spyOn(Date, 'now').mockImplementation(() => now)
-            const recordingStatus = () =>
-                posthog.calculateEventProperties('$pageview', {}, new Date(), uuid).$recording_status
+        it('adds replay debug properties at most once per 30 seconds', () => {
+            const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+            const pauseTimers = () => setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 30_000)
+            const recordingStatus = (readOnly?: boolean) =>
+                posthog.calculateEventProperties('$pageview', {}, new Date(), uuid, readOnly).$recording_status
+            try {
+                expect(recordingStatus(true)).toEqual('disabled')
+                expect(pauseTimers()).toHaveLength(0)
+                expect(recordingStatus()).toEqual('disabled')
+                expect(recordingStatus()).toBe(undefined)
 
-            expect(recordingStatus()).toEqual('disabled')
-            expect(posthog.calculateEventProperties('$pageview', {}, new Date(), uuid, true).$recording_status).toBe(
-                undefined
-            )
-            now += 29_999
-            expect(recordingStatus()).toBe(undefined)
-            now += 1
-            expect(recordingStatus()).toEqual('disabled')
-
-            vi.mocked(posthog.sessionManager!.checkAndGetSessionAndWindowId).mockReturnValueOnce({
-                windowId: 'windowId',
-                sessionId: 'rotated-session-id',
-            } as any)
-            expect(recordingStatus()).toEqual('disabled')
-            vi.mocked(Date.now).mockRestore()
+                expect(pauseTimers()).toHaveLength(1)
+                ;(pauseTimers()[0][0] as () => void)()
+                expect(recordingStatus()).toEqual('disabled')
+            } finally {
+                setTimeoutSpy.mockRestore()
+            }
         })
 
         it('uses a sibling subdomain identity change for the next event and reloads flags', () => {

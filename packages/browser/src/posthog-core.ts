@@ -25,7 +25,6 @@ import {
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
-    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
@@ -190,9 +189,8 @@ const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 // replay capture is debugged from SDK events only, minus the high-volume ones nobody reads for it
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
-// the diagnostics read the latest event that carries them, so a sample per session every 30s is enough
+// the diagnostics read the latest event that carries them, so one every 30s is enough
 const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
-const REPLAY_DEBUG_PROPERTY_PREFIX = '$sdk_debug_replay_'
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
@@ -533,7 +531,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
-    private _lastReplayDebugProperties: { sessionId: string | undefined; at: number } | undefined
+    private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
@@ -2149,13 +2147,18 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
-        const withReplayDebugProperties =
-            eventName.startsWith('$') &&
-            !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName) &&
-            this._takeReplayDebugPropertiesSlot(properties['$session_id'], readOnly)
         try {
-            if (this.sessionRecording && withReplayDebugProperties) {
+            if (
+                this.sessionRecording &&
+                !this._replayDebugPropertiesPaused &&
+                eventName.startsWith('$') &&
+                !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+            ) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
+                if (!readOnly) {
+                    this._replayDebugPropertiesPaused = true
+                    setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+                }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {
@@ -2239,16 +2242,6 @@ export class PostHog implements PostHogInterface {
 
         properties['$is_identified'] = this._isIdentified()
 
-        if (!withReplayDebugProperties) {
-            // the recorder also registers trigger state for the session, which the merge above adds back
-            delete properties[SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]
-            for (const key of Object.keys(properties)) {
-                if (key.startsWith(REPLAY_DEBUG_PROPERTY_PREFIX)) {
-                    delete properties[key]
-                }
-            }
-        }
-
         if (isArray(this.config.property_denylist)) {
             each(this.config.property_denylist, function (denylisted_prop) {
                 delete properties[denylisted_prop]
@@ -2277,18 +2270,6 @@ export class PostHog implements PostHogInterface {
         }
 
         return properties
-    }
-
-    private _takeReplayDebugPropertiesSlot(sessionId: string | undefined, readOnly?: boolean): boolean {
-        const now = Date.now()
-        const last = this._lastReplayDebugProperties
-        if (last && last.sessionId === sessionId && now - last.at < REPLAY_DEBUG_PROPERTIES_INTERVAL_MS) {
-            return false
-        }
-        if (!readOnly) {
-            this._lastReplayDebugProperties = { sessionId, at: now }
-        }
-        return true
     }
 
     /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */
