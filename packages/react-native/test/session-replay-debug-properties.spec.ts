@@ -813,6 +813,46 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 
+  it('a refresh that was in flight when recording stopped cannot write its stale map back', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('active')
+
+    // Park one refresh on the bridge holding a pre-stop `buffering` map, then park the refresh
+    // the stop enqueues behind it, so a capture can land after the stale map returns but before
+    // the post-stop one does.
+    const gates: Array<() => void> = []
+    pluginMock.getSessionReplayDebugProperties
+      .mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => gates.push(resolve))
+        return { $recording_status: 'buffering', $sdk_debug_replay_flush_hold_reason: 'below_minimum_duration' }
+      })
+      .mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => gates.push(resolve))
+        return { $recording_status: 'disabled' }
+      })
+    ;(client as any)._nativeSessionReplayDebugRefreshedAt = 0
+    ;(client as any)._nativeSessionReplayDebugProperties = { $recording_status: 'buffering' }
+    captureOne(client, 'kicks the stale re-read')
+    await wait(10)
+    expect(gates).toHaveLength(1)
+
+    const stopping = client.stopSessionRecording()
+    await wait(10)
+    gates[0]()
+    await wait(10)
+
+    const racing = captureOne(client, 'after the stale map returned').properties
+    expect(racing.$recording_status).not.toBe('buffering')
+    expect(racing.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+
+    expect(gates).toHaveLength(2)
+    gates[1]()
+    await stopping
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'settled').properties.$recording_status).toBe('disabled')
+  })
+
   it('Stopping recording clears the hold reason (native)', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
