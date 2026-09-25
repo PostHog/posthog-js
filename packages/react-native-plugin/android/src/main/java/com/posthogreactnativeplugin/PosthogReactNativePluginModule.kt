@@ -37,13 +37,10 @@ class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext),
   ActivityEventListener {
-  // Built on the UI thread in setupNativeSdk, read on the module thread by
-  // getSessionReplayDebugProperties.
+  // The native SDK ignores a second setup(), so the config this module built may be dead; the
+  // cache is keyed on the config the SDK actually runs.
   @Volatile
-  private var currentConfig: PostHogAndroidConfig? = null
-
-  @Volatile
-  private var cachedReplayIntegration: PostHogReplayIntegration? = null
+  private var cachedReplayIntegration: Pair<PostHogAndroidConfig, PostHogReplayIntegration?>? = null
 
   override fun getName(): String = NAME
 
@@ -237,8 +234,6 @@ class PosthogReactNativePluginModule(
               }
             }
           PostHogAndroid.setup(context, config)
-          currentConfig = config
-          cachedReplayIntegration = null
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
 
@@ -296,12 +291,12 @@ class PosthogReactNativePluginModule(
   }
 
   private fun replayIntegration(): PostHogReplayIntegration? {
-    cachedReplayIntegration?.let { return it }
-    return currentConfig
-      ?.integrations
-      ?.filterIsInstance<PostHogReplayIntegration>()
-      ?.firstOrNull()
-      .also { cachedReplayIntegration = it }
+    val config = PostHog.getConfig<PostHogAndroidConfig>() ?: return null
+    cachedReplayIntegration?.takeIf { it.first === config }?.let { return it.second }
+    return config.integrations
+      .filterIsInstance<PostHogReplayIntegration>()
+      .firstOrNull()
+      .also { cachedReplayIntegration = config to it }
   }
 
   @ReactMethod
