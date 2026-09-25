@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5114](https://github.com/PostHog/posthog-js/issues/5114) | Confirmed replay-player regression introduced by the large-add detached-subtree optimization. | feature/replay, javascript, bug |  | no | 2026-09-25T17:44:18.044Z |
 | PostHog/posthog-js | [issue 5109](https://github.com/PostHog/posthog-js/issues/5109) | Confirmed browser SDK bug: history-based SPA pageviews are captured before frameworks such as Next.js update document.title. | javascript, web, team/client-libraries, bug |  | no | 2026-09-25T10:38:55.880Z |
 | PostHog/posthog-js | [issue 5106](https://github.com/PostHog/posthog-js/issues/5106) | Confirmed React Native survey-response regression: shuffled multiple-choice options are submitted using their displayed index against the original choice order. | react-native, feature/mobile, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5107 | no | 2026-09-25T09:46:41.505Z |
 | PostHog/posthog-js | [issue 2158](https://github.com/PostHog/posthog-js/issues/2158) | Valid Node SDK enhancement: current APIs cannot reliably distinguish an invalid project API key from an empty flag result or a transient request failure. | feature, enhancement, node, team/client-libraries |  | no | 2026-09-25T08:44:00.894Z |
