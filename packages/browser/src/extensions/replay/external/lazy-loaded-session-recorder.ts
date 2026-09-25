@@ -1614,6 +1614,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._lastSeenSnapshotCost = undefined
             // the drop count is per-session too, so the new session starts at zero
             this._unstringifiableEventsDropped = 0
+            this._hasLoggedOversizedMutationDrop = false
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
