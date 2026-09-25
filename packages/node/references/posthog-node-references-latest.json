@@ -2452,6 +2452,16 @@
         {
           "type": "JsonType",
           "name": "payload"
+        },
+        {
+          "description": "PostHog's evaluation explanation, when available.",
+          "type": "string",
+          "name": "reason"
+        },
+        {
+          "description": "Stable evaluation reason code, when available (for example, `flag_disabled`).",
+          "type": "string",
+          "name": "reasonCode"
         }
       ],
       "path": "src/types.ts"

@@ -466,6 +466,10 @@ export type FeatureFlagResult = {
   enabled: boolean
   variant: string | undefined
   payload: JsonType | undefined
+  /** PostHog's evaluation explanation, when available. */
+  reason?: string
+  /** Stable evaluation reason code, when available (for example, `flag_disabled`). */
+  reasonCode?: string
 }
 
 export interface IPostHog {
