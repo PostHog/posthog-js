@@ -1,6 +1,6 @@
 import type { JsonRecord } from '../types'
 import { PostHogMCPAnalyticsProperty } from './constants'
-import { getObjectShape, isZodRawShapeCompat } from './mcp-sdk-compat'
+import { getObjectShape, isZodRawShapeCompat, unwrapInputSchema } from './mcp-sdk-compat'
 
 const MAX_INPUT_KEYS = 20
 const MAX_KEY_LENGTH = 64
@@ -14,7 +14,7 @@ function declaredProperties(schema: unknown): Record<string, unknown> | undefine
   if (!isRecord(schema)) return undefined
   const properties = schema.properties
   if (isZodRawShapeCompat(schema)) return schema
-  return getObjectShape(schema) ?? (isRecord(properties) ? properties : undefined)
+  return getObjectShape(unwrapInputSchema(schema)) ?? (isRecord(properties) ? properties : undefined)
 }
 
 /**

@@ -80,15 +80,17 @@ Automatic tool-call events include `$mcp_input_keys` on success and failure.
 The SDK reads the original arguments before validation can remove unknown fields.
 It records up to 20 top-level field names, sorted, without their values.
 Only names declared by the server's input schema remain visible.
-Unknown names and names longer than 64 characters become `*`.
+Unknown names and names longer than 64 characters are replaced by one `[redacted]` entry, the same marker the SDK uses for other hidden data.
+Declared names come first, so `[redacted]` appears only when the 20-name limit leaves space.
 SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
 Non-object arguments do not produce this property.
 
 High-level servers use the registered tool's schema.
 Low-level servers use schemas from prior `tools/list` responses on the same server instance.
-Before a listing, or when a schema cannot be inspected, names become `*`.
-The helper supports top-level JSON Schema properties, Zod object schemas, and Zod raw shapes.
-It does not resolve JSON Schema references or inspect fields inside unions and transforms.
+Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]`.
+The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod object schemas, including objects wrapped by refinements, transforms, preprocessors, pipes, and optional, nullable, default, catch, or readonly wrappers.
+A pipe reports the names of its input schema.
+It does not resolve JSON Schema references or inspect fields inside unions.
 
 Custom dispatchers use the same helper through the existing `properties` argument:
 

@@ -11,6 +11,18 @@ describe('getToolInputProperties', () => {
     { id: z.string(), context: z.string(), properties: z.string() },
     z.object({ id: z.string(), context: z.string(), properties: z.string() }),
     z4.object({ id: z4.string(), context: z4.string(), properties: z4.string() }),
+    z
+      .object({ id: z.string(), context: z.string(), properties: z.string() })
+      .refine(() => true)
+      .transform((value) => value),
+    z.preprocess((value) => value, z.object({ id: z.string(), context: z.string(), properties: z.string() })),
+    z.object({ id: z.string(), context: z.string(), properties: z.string() }).pipe(z.any()),
+    z.object({ id: z.string(), context: z.string(), properties: z.string() }).optional(),
+    z4.object({ id: z4.string(), context: z4.string(), properties: z4.string() }).transform((value) => value),
+    z4
+      .object({ id: z4.string(), context: z4.string(), properties: z4.string() })
+      .pipe(z4.any())
+      .default({ id: '', context: '', properties: '' }),
   ])('keeps declared names and masks unknown names with schema %j', (schema) => {
     const input = {
       id: 'private-value',
