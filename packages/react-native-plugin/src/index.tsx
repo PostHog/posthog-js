@@ -145,6 +145,11 @@ export function captureFatalException(
  * @internal Used by `posthog-react-native`'s debug properties. Not part of the public API.
  */
 export function getSessionReplayDebugProperties(): Promise<PostHogReactNativePluginMap> {
+  // An OTA-updated JS bundle can run on a native build that predates this method; an empty
+  // map keeps the JS-only fallback instead of a warning on every refresh.
+  if (typeof PosthogReactNativePlugin.getSessionReplayDebugProperties !== 'function') {
+    return Promise.resolve({})
+  }
   return PosthogReactNativePlugin.getSessionReplayDebugProperties()
 }
 

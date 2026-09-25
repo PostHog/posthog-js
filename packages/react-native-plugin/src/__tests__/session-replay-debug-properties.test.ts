@@ -30,6 +30,15 @@ describe('getSessionReplayDebugProperties', () => {
     expect(result).toEqual({ $recording_status: 'active' })
   })
 
+  it('resolves an empty map when the native build lacks the method', async () => {
+    const original = nativeModule.getSessionReplayDebugProperties
+    ;(nativeModule as any).getSessionReplayDebugProperties = undefined
+
+    await expect(getSessionReplayDebugProperties()).resolves.toEqual({})
+
+    ;(nativeModule as any).getSessionReplayDebugProperties = original
+  })
+
   it('the default export exposes it', async () => {
     const result = await PostHogReactNativePlugin.getSessionReplayDebugProperties()
 
