@@ -12,6 +12,11 @@ beforeEach(() => {
   __resetBotDetectionCacheForTests()
 })
 
+// Real Chrome UAs including current stable builds. Chrome's build number
+// grows monotonically (see https://versionhistory.googleapis.com/v1/chrome/
+// platforms/win/channels/stable/versions?pageSize=5), so this list must
+// contain the currently released builds so the default configuration proves
+// it does not block them.
 const REAL_CHROME_UAS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.193 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.199 Safari/537.36',
@@ -21,6 +26,10 @@ const REAL_CHROME_UAS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.999 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/250.0.1234.56 Safari/537.36',
+  // Chrome 154 stable (build 8037) — released 2026-09 per Google's version-history API.
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.58 Safari/537.36',
+  // Chrome 155 stable (build 8059) — released 2026-09 per Google's version-history API.
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.8059.12 Safari/537.36',
 ];
 
 const FAKE_BOT_UAS = [
@@ -72,6 +81,17 @@ describe('isImpossibleChromeVersion', () => {
     expect(isImpossibleChromeVersion(REAL_CHROME_UAS[0])).toBe(false); // Chrome/143.0.7499.193
     expect(isImpossibleChromeVersion(REAL_CHROME_UAS[1])).toBe(false); // Chrome/120.0.6099.199
     expect(isImpossibleChromeVersion(REAL_CHROME_UAS[5])).toBe(false); // Chrome/40.0.2214.115
+  });
+
+  // Regression test for review feedback on PR #5083: Chrome's build number
+  // grows monotonically. The default configuration must NOT flag any
+  // Chrome release Google is currently serving from its stable channel.
+  it('never flags a currently-released Chrome stable build under the default configuration', () => {
+    // Build 8037 (Chrome 154) and 8059 (Chrome 155) are Google's current
+    // Windows stable builds per versionhistory.googleapis.com. Both must
+    // be accepted with no options.
+    expect(isImpossibleChromeVersion(REAL_CHROME_UAS[8])).toBe(false); // 154.0.8037.58
+    expect(isImpossibleChromeVersion(REAL_CHROME_UAS[9])).toBe(false); // 155.0.8059.12
   });
 
   it('returns true for fake bot from #2921', () => {

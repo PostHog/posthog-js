@@ -121,9 +121,20 @@ export interface HeuristicBotDetectionOptions {
   heuristics?: 'off' | 'balanced' | 'strict'
   /** Custom Chrome version thresholds for impossible version detection */
   extraChromeVersionRules?: {
-    /** Maximum known Chrome build number (default: 8000, Chrome 143 build is 7499) */
+    /**
+     * Optional maximum known Chrome build number. When set, any UA whose build
+     * exceeds this value is flagged as impossible. Not set by default because
+     * Chrome's build number grows continuously (Chrome 154 = 8037, Chrome 155
+     * = 8059); a hard-coded ceiling would block real users. Intended for
+     * enterprises that ship this value from a remote/managed config.
+     */
     maxKnownBuild?: number
-    /** Maximum known Chrome patch number (default: 1000, legitimate patches observed <= 500) */
+    /**
+     * Maximum known Chrome patch number (default: 1000). Real Chrome has never
+     * released a patch >= 1000 (max observed ~500); the #2921 botnet range was
+     * 1037-1991. Raising this only postpones detection, so callers rarely need
+     * to override.
+     */
     maxKnownPatch?: number
   }
 }
@@ -213,7 +224,7 @@ function buildCacheKey(
  */
 export function isImpossibleChromeVersion(
   ua: string,
-  maxKnownBuild: number = 8000,
+  maxKnownBuild?: number,
   maxKnownPatch: number = 1000
 ): boolean {
   if (!ua) {
@@ -240,8 +251,14 @@ export function isImpossibleChromeVersion(
   if (patch >= maxKnownPatch) {
     return true
   }
-  // Rule 2: build > maxKnownBuild — Chrome 143 tops out at build 7499.
-  if (build > maxKnownBuild) {
+  // Rule 2: build > maxKnownBuild — OPT-IN ONLY. We do not ship a default
+  // ceiling here because Chrome's build number is monotonically increasing
+  // (Chrome 154 = 8037, Chrome 155 = 8059, and it will keep climbing). Any
+  // hard-coded default would eventually block legitimate users, which is
+  // the exact failure mode the reporter in #2921 warned against. Enterprises
+  // that maintain their own build allow-list can pass `maxKnownBuild` from a
+  // remote config; the default is undefined and the rule is skipped.
+  if (maxKnownBuild !== undefined && build > maxKnownBuild) {
     return true
   }
   // Rule 3: both build AND patch are 4-digit — never seen in real Chrome.
@@ -281,7 +298,7 @@ export function heuristicBotScore(
   }
 
   const { heuristics = 'off', extraChromeVersionRules = {} } = opts
-  const maxKnownBuild = extraChromeVersionRules.maxKnownBuild ?? 8000
+  const maxKnownBuild = extraChromeVersionRules.maxKnownBuild
   const maxKnownPatch = extraChromeVersionRules.maxKnownPatch ?? 1000
 
   // Heuristics disabled by default (backwards compatible)
@@ -306,12 +323,14 @@ export function heuristicBotScore(
       major < 1 ||
       major > 300 ||
       patch >= maxKnownPatch ||
-      build > maxKnownBuild ||
+      (maxKnownBuild !== undefined && build > maxKnownBuild) ||
       (build >= 1000 && patch >= 1000)
     if (impossibleChrome) {
+      const buildBudget =
+        maxKnownBuild !== undefined ? `, max known build=${maxKnownBuild}` : ''
       reasons.push(
         `Impossible Chrome version: build=${build}, patch=${patch}` +
-          ` (max known build=${maxKnownBuild}, patch=${maxKnownPatch})`
+          ` (max known patch=${maxKnownPatch}${buildBudget})`
       )
       score += heuristics === 'strict' ? 90 : 70
     }
