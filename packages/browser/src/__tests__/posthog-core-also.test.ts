@@ -688,7 +688,7 @@ describe('posthog core', () => {
             })
         })
 
-        it.each(['$feature_flag_called', '$$heatmap', 'time to see data'])(
+        it.each(['$feature_flag_called', '$$heatmap', 'time to see data', 'livestream_connected'])(
             'does not add replay debug properties to %s',
             (eventName) => {
                 posthog = posthogWith(

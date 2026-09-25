@@ -189,8 +189,9 @@ const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send 
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 // high-volume events nobody reads to debug replay capture, so they skip its debug properties.
-// 'time to see data' is sent by the PostHog app itself
+// 'time to see data' and the livestream_ events are sent by the PostHog app itself
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap', 'time to see data']
+const EVENT_PREFIXES_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['livestream_']
 const REPLAY_DEBUG_PROPERTY_PREFIX = '$sdk_debug_replay_'
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
@@ -2147,7 +2148,9 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
-        const withReplayDebugProperties = !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+        const withReplayDebugProperties =
+            !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName) &&
+            !EVENT_PREFIXES_WITHOUT_REPLAY_DEBUG_PROPERTIES.some((prefix) => eventName.startsWith(prefix))
         try {
             if (this.sessionRecording && withReplayDebugProperties) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
