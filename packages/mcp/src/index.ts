@@ -7,7 +7,7 @@ import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
@@ -161,7 +161,7 @@ function buildTrackingData(
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
-    toolInputSchemas: new Map(),
+    toolInputSchemas: new BoundedCache(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: {
       ...DEFAULT_OPTIONS,

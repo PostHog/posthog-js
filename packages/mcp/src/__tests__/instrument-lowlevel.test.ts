@@ -477,7 +477,7 @@ describe('Low-level Server tracing (e2e)', () => {
       expect(toolCalls).toHaveLength(1)
       const props = toolCalls[0].properties
       expect(props.$mcp_tool_name).toBe('echo')
-      expect(props.$mcp_input_keys).toEqual(listed ? ['*', 'text'] : ['*', '*'])
+      expect(props.$mcp_input_keys).toEqual(listed ? ['text', '[redacted]'] : ['[redacted]'])
       expect(props.$mcp_resource_name).toBe('echo')
       expect(props.$mcp_is_error).toBe(false)
       expect(props.$mcp_duration_ms).toEqual(expect.any(Number))

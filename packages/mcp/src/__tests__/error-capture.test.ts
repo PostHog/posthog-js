@@ -154,7 +154,7 @@ describe('error capture on the tool-call path', () => {
     await new Promise((r) => setTimeout(r, 50))
     const event = capture.findEventsByResourceName(toolName).find((e) => e.isError)
     const exception = event?.error?.$exception_list?.[0]
-    expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['*', 'a', 'b', 'op'] : [])
+    expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['a', 'b', 'op', '[redacted]'] : [])
     expect(exception?.value).toMatch(/Invalid|required/i)
     expect(['McpError', 'Error', undefined]).toContain(exception?.type)
   })

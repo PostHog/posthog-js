@@ -167,7 +167,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
     const sessionSchemas = preparedEvent.event.sessionId
-      ? data.toolInputSchemas.get(preparedEvent.event.sessionId)
+      ? (data.toolInputSchemas.get(preparedEvent.event.sessionId) ?? data.toolInputSchemas.get(data.sessionId))
       : undefined
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
@@ -841,6 +841,9 @@ async function getTracedToolsList(
           if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
         }
         data.toolInputSchemas.set(event.sessionId, sessionSchemas)
+        if (data.sessionId !== event.sessionId) {
+          data.toolInputSchemas.set(data.sessionId, sessionSchemas)
+        }
       }
     }
     if (data && isContextEnabled(data.options.context)) {

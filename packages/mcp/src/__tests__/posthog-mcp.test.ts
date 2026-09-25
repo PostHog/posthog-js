@@ -77,7 +77,7 @@ describe('PostHogMCP', () => {
       expect(p.$groups).toEqual({ organization: 'org-1', project: 'proj-1' })
       expect(p.$mcp_client_name).toBe('claude-code')
       expect(p.custom_flag).toBe(true)
-      expect(p.$mcp_input_keys).toEqual(['*', 'query'])
+      expect(p.$mcp_input_keys).toEqual(['query', '[redacted]'])
       expect(p).not.toHaveProperty('$mcp_parameters')
       expect(JSON.stringify(p)).not.toContain('example-value')
       // A resolved identity keeps person processing on.

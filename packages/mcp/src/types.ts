@@ -6,7 +6,7 @@
 import type { ErrorTracking } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
-import type { IdentityCache } from './extensions/internal'
+import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
@@ -515,7 +515,7 @@ export interface MCPAnalyticsData {
   toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
-  toolInputSchemas: Map<string, Map<string, unknown>>
+  toolInputSchemas: BoundedCache<Map<string, unknown>>
 }
 
 export interface CaptureEventData {
