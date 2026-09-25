@@ -4,6 +4,10 @@ This private harness replays recorded provider responses through the real Anthro
 the built `@posthog/ai` wrappers, and `posthog-node` HTTP transport.
 It complements the existing unit and live tests; it does not replace them.
 
+Gemini has five reviewed Developer API recordings. Its real SDK and built wrapper
+run through the same HTTP boundary described below. See [Gemini](#gemini) for
+the covered methods and remaining limits.
+
 ```text
 Scenario process
   → built @posthog/ai wrapper
@@ -257,3 +261,75 @@ has not changed since recording.
 Tool arguments must complete as a JSON object. Fine-grained streams stopped with
 partial JSON are not successful tool fixtures. The zero-argument recorder test
 exercises the unwrapped Anthropic SDK, not the built PostHog wrapper.
+
+## Gemini
+
+The five Gemini fixtures were recorded from the Developer API with `@google/genai`
+`1.52.0`, using `gemini-3.1-flash-lite` for generation and tools and
+`gemini-embedding-001` for embeddings. The tests replay them through the real
+provider SDK, built `@posthog/ai/gemini` wrapper, and `posthog-node` HTTP client.
+Independent analytics assertions live in `gemini-replay.test.ts`. No new dependency
+or published SDK code is added. The offline tests need no credentials.
+The five recordings total 12,396 bytes. On one local Node 24 run, the complete
+offline cassette suite passed 275 tests in 19.99 seconds, including 5 Gemini
+provider-backed replay cases. Refreshing these fixtures requires a manual,
+billable provider run and separate review of the recording and analytics assertions;
+CI never updates them automatically.
+As a check on the analytics oracle, locally changing Gemini output-token mapping
+to zero made all four generation replay cases fail on `$ai_output_tokens` while
+the embedding case still passed. Restoring the mapping returned all five to green;
+the mutation is not part of this change.
+
+The three instrumented methods use these Developer API routes:
+
+| Method                         | Recorded HTTP response                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `models.generateContent`       | JSON from `:generateContent`                                     |
+| `models.generateContentStream` | SSE from `:streamGenerateContent?alt=sse`                        |
+| `models.embedContent`          | JSON from `:batchEmbedContents`, including single-input requests |
+
+Recorder tests also send real SDK requests to a local synthetic server, save a
+temporary cassette, stop the upstream, and replay the file. Separate wrapper
+tests cover cache and reasoning usage, stop reasons, privacy, and identity with
+handwritten expectations. Synthetic tests prove those local contracts; the five
+committed provider recordings establish compatibility with the captured live
+response shapes, not every Gemini API variant or future provider behavior.
+
+Gemini streams have JSON `data:` frames, not an OpenAI `[DONE]` sentinel. Recordings
+require each observed candidate to finish, or an explicit blocked prompt. A final
+usage-only frame is allowed. The recorder rejects incomplete responses, HTTP errors,
+redirects, query API keys, and unsupported routes without replacing an existing file.
+The same size, interaction and deadline limits apply as for Anthropic.
+
+### Record and review Gemini responses
+
+Live recording is a manual, billable operation, never part of CI. Set
+`GEMINI_API_KEY` and `GEMINI_MODEL` in the environment, then choose one scenario:
+
+```sh
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini generate
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini stream
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini tools
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini tools-stream
+# Uses GEMINI_EMBEDDING_MODEL instead of GEMINI_MODEL:
+pnpm_config_enable_global_virtual_store=false pnpm --filter @posthog/ai cassette:record:gemini embed
+```
+
+The command uses fixed artificial prompts and the official Developer API origin.
+It checks scenario completion, writes an ignored `gemini-<scenario>.live.json`, then
+compares the real SDK result against local replay using a fake key. Tool scenarios
+request a declarative function call; they do not execute tools. Credentials are used
+only for the live request and omitted from the cassette. Known secret values and
+suspicious fields are rejected. This is not a general PII scrubber: inspect the entire
+file before promotion, including prompts, function arguments and thought signatures.
+
+To refresh a fixture, review every saved file and update independent analytics
+expectations only when the provider behavior warrants it. Then rerun offline tests.
+Do not treat transport equality as proof that analytics are correct, or regenerate
+expectations just to make a failing test pass.
+
+This first Gemini extension does not cover Vertex AI, Live/WebSocket, media, files,
+cache creation APIs, automatic function execution, or SDK chat helpers. Synthetic
+cache/reasoning metadata checks field mapping, not a real cache hit. Developer API
+embeddings without token statistics remain zero-token events in the current wrapper;
+these tests do not estimate usage or verify backend pricing.

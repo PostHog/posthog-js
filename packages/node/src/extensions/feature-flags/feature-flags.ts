@@ -1,8 +1,16 @@
-import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
+import {
+  FeatureFlagCondition,
+  FeatureFlagEvaluationRuntime,
+  FlagProperty,
+  FlagPropertyValue,
+  PostHogFeatureFlag,
+  PropertyGroup,
+} from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import {
   getFeatureFlagHash,
   getFeatureFlagVariant,
+  getHoldoutVariant,
   getFeatureFlagVariantLookupTable,
   InconclusiveMatchError,
   matchFeatureFlagProperty,
@@ -15,6 +23,17 @@ import {
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData, FlagDefinitionCacheInput } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
+
+// A definition with no runtime, or one from a server that does not know the field, reports the
+// default PostHog applies rather than a third "unknown" state callers would have to handle.
+function normalizeEvaluationRuntime(value: unknown): FeatureFlagEvaluationRuntime {
+  return value === 'client' || value === 'server' ? value : 'all'
+}
+
+// `all` matches every runtime, so the check is symmetric.
+function evaluationRuntimesMatch(a: FeatureFlagEvaluationRuntime, b: FeatureFlagEvaluationRuntime): boolean {
+  return a === b || a === 'all' || b === 'all'
+}
 
 // Outcome of evaluating a single condition group. `out_of_rollout_bound` means the group's property
 // filters matched (or there were none) but the rollout percentage excluded the user — the only case
@@ -521,6 +540,14 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+
+    // Holdouts are resolved before the release conditions, so a held-out value is excluded
+    // from the flag's targeting rather than being bucketed into a variant.
+    const holdoutVariant = await getHoldoutVariant(flagFilters.holdout, bucketingValue)
+    if (holdoutVariant !== undefined) {
+      return holdoutVariant
+    }
+
     const flagConditions = flagFilters.groups || []
     const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
@@ -706,6 +733,17 @@ class FeatureFlagsPoller {
       }
       return tags.some((tag) => contexts.has(tag))
     })
+  }
+
+  getEvaluationRuntimeForFlag(key: string): FeatureFlagEvaluationRuntime | undefined {
+    const flag = this.featureFlagsByKey[key]
+    return flag ? normalizeEvaluationRuntime(flag.evaluation_runtime) : undefined
+  }
+
+  getFlagKeysByEvaluationRuntime(runtime: FeatureFlagEvaluationRuntime): string[] {
+    return this.featureFlags
+      .filter((flag) => evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), runtime))
+      .map((flag) => flag.key)
   }
 
   private updateFlagState(flagData: FlagDefinitionCacheInput): void {

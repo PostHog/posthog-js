@@ -58,6 +58,11 @@ export interface PostHogServerProviderOptions {
  *   - string  -> the multivariate `variant` key
  *   - number  -> the `variant` parsed as a number
  *   - object  -> the flag's JSON `payload`
+ *
+ * Resolution details include `flagMetadata.posthog_reason` when the client
+ * supplies an evaluation explanation. Off results with the stable
+ * `flag_disabled` reason code use `DISABLED`; other off results use `DEFAULT`.
+ * Older posthog-node versions without reason metadata retain the latter behavior.
  */
 export class PostHogServerProvider implements Provider {
   public readonly runsOn = 'server'

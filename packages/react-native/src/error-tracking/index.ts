@@ -8,11 +8,13 @@ import {
   isObject,
   isString,
   PostHogEventProperties,
+  uuidv7,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
 import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
+import { buildFatalExceptionPayload } from './fatal-payload'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -63,6 +65,31 @@ interface ResolvedErrorTrackingOptions {
   autocapture: ResolvedAutocaptureOptions
 }
 
+// Hooks supplied by PostHogRN for coordinating the fatal capture with its event storage.
+// Storage readiness is explicit so unknown persisted consent fails closed rather than being
+// mistaken for the in-memory default.
+interface FatalCaptureHooks {
+  // `prepareNativeCapture` is offered the final, before_send-accepted message at the moment
+  // it would be enqueued. Returning a thunk transfers ownership of the exception to the
+  // native SDK and the JS queue copy is dropped; returning undefined leaves the event in the
+  // JS queue as usual. The choice has to be made there, in one step, so a payload that fails
+  // to build cannot leave the exception dropped from both queues.
+  captureFatalException: (
+    error: unknown,
+    hint: CoreErrorTracking.EventHint,
+    eventUuid: string,
+    timestamp: Date,
+    prepareNativeCapture: (queued: PostHogEventProperties) => (() => Promise<void>) | undefined
+  ) => { queued: boolean; nativeCapture?: () => Promise<void> }
+  waitForJSPersist: () => Promise<boolean>
+  waitForStorageReady: () => Promise<boolean>
+  getPersistenceMode: () => 'memory' | 'file' | undefined
+  // Both native SDKs silently no-op a capture before setup() has run. Native init is async
+  // and happens after the storage preload, so an early-startup crash can arrive first —
+  // exactly the crashes this path exists for. Ownership only transfers once native is up.
+  isNativeCaptureReady: () => boolean
+}
+
 export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
@@ -83,7 +110,7 @@ export class ErrorTracking {
     private instance: PostHog,
     options: ErrorTrackingOptions = {},
     logger: Logger,
-    private readonly persistFatalException?: () => Promise<void>
+    private readonly fatalCaptureHooks?: FatalCaptureHooks
   ) {
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
@@ -228,6 +255,16 @@ export class ErrorTracking {
     )
   }
 
+  /**
+   * Whether the app asked for fatal JavaScript exceptions to be autocaptured. This is the
+   * locally configured value, deliberately not gated on the remote kill-switch: it decides
+   * whether the native SDK is worth initializing, and that happens before remote config has
+   * been fetched.
+   */
+  isUncaughtExceptionAutocaptureEnabled(): boolean {
+    return this.options.autocapture.uncaughtExceptions
+  }
+
   private resolveOptions(options: ErrorTrackingOptions): ResolvedErrorTrackingOptions {
     const autocaptureOptions = this.resolveAutocaptureOptions(options.autocapture)
     return {
@@ -258,44 +295,123 @@ export class ErrorTracking {
   }
 
   private autocaptureUncaughtErrors() {
-    const onUncaughtException = (error: unknown, isFatal: boolean) => {
-      // Gate on remote config — if remotely disabled, don't capture
-      if (!this._autocaptureEnabled) {
+    const onUncaughtException = (error: unknown, isFatal: boolean): void | Promise<void> => {
+      if (!this._autocaptureEnabled || isPostHogFetchNetworkError(error)) {
         return
       }
-
-      // Offline/timeout failures are expected, not application errors.
-      if (isPostHogFetchNetworkError(error)) {
-        return
-      }
-
       const hint: CoreErrorTracking.EventHint = {
-        mechanism: {
-          type: 'onuncaughtexception',
-          handled: false,
-        },
+        mechanism: { type: 'onuncaughtexception', handled: false },
       }
-      const additionalProperties: any = {}
-
-      if (isFatal) {
-        additionalProperties['$exception_level'] = 'fatal' as CoreErrorTracking.SeverityLevel
+      if (!isFatal) {
+        this.instance.captureException(error, {}, hint)
+        return
       }
-
-      this.instance.captureException(error, additionalProperties, hint)
-
-      if (isFatal) {
-        const persisted = this.persistFatalException?.()
-        void this.instance.flush().catch(() => {
-          this.logger.critical('Failed to flush events')
-        })
-        return persisted
-      }
+      return this.handleFatalException(error, hint, uuidv7(), new Date())
     }
     try {
       this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
     } catch (err) {
       this.logger.warn('Failed to track uncaught exceptions: ', err)
     }
+  }
+
+  private async handleFatalException(
+    error: unknown,
+    hint: CoreErrorTracking.EventHint,
+    eventUuid: string,
+    timestamp: Date
+  ): Promise<void> {
+    let storageReady = !this.fatalCaptureHooks
+    if (this.fatalCaptureHooks) {
+      try {
+        storageReady = (await this.fatalCaptureHooks.waitForStorageReady()) === true
+      } catch (e) {
+        this.logger.warn('Fatal capture skipped because events storage did not initialize.', e)
+      }
+    }
+    // Unknown consent must fail closed. A crash is less important than persisting data
+    // for a user whose opt-out state could not be loaded.
+    if (!storageReady || !this._autocaptureEnabled || this.instance.isDisabled || this.instance.optedOut) {
+      return
+    }
+
+    if (!this.fatalCaptureHooks) {
+      this.instance.captureException(error, { $exception_level: 'fatal' as CoreErrorTracking.SeverityLevel }, hint)
+      return
+    }
+
+    // Hand the final payload to the native SDK. Both native SDKs recognise a `$exception`
+    // with `$exception_level: 'fatal'` and write it to their own disk queue synchronously
+    // before returning, which is the durability the JS queue cannot promise while
+    // AsyncStorage is still draining. Native owns delivery from there, including retry
+    // across the relaunch, so there is nothing for the next launch to recover — and the JS
+    // queue copy is dropped so the exception is not sent twice.
+    let result: { queued: boolean; nativeCapture?: () => Promise<void> }
+    try {
+      result = this.fatalCaptureHooks.captureFatalException(error, hint, eventUuid, timestamp, (queued) =>
+        this.prepareFatalNativeCapture(queued)
+      )
+    } catch (e) {
+      // Without the final queued event we cannot know whether before_send accepted or
+      // redacted the exception, so sending a raw fallback would bypass filtering.
+      this.logger.error('Fatal exception capture failed before enqueue.', e)
+      return
+    }
+    const { queued, nativeCapture } = result
+    if (!queued && !nativeCapture) {
+      // before_send dropped it.
+      return
+    }
+
+    void this.instance.flush().catch(() => {
+      this.logger.critical('Failed to flush events')
+    })
+    // Other events may still be queued behind this one, so the JS store is still worth
+    // draining even when native owns the exception itself.
+    const persisted = this.fatalCaptureHooks.waitForJSPersist()
+    let nativeWrite: Promise<void> | undefined
+    if (nativeCapture) {
+      try {
+        nativeWrite = nativeCapture().catch((e) => {
+          this.logger.warn(`Fatal exception native capture failed: ${e}`)
+        })
+      } catch (e) {
+        this.logger.warn(`Fatal exception native capture failed: ${e}`)
+      }
+    }
+    const [persistedOk] = await Promise.all([persisted, nativeWrite])
+    if (!persistedOk && !nativeCapture) {
+      this.logger.warn('Fatal exception JS persist failed and no native capture path was available.')
+    }
+  }
+
+  private prepareFatalNativeCapture(queuedEvent: PostHogEventProperties): (() => Promise<void>) | undefined {
+    const bridge = OptionalReactNativePlugin?.captureFatalException
+    if (!bridge) {
+      return undefined
+    }
+    // Handing the event to a native SDK that is not set up yet would drop it: native
+    // no-ops the capture, and the JS queue copy has already been given up.
+    if (!this.fatalCaptureHooks?.isNativeCaptureReady()) {
+      return undefined
+    }
+    // Memory-persistence apps asked for nothing on disk. The native queue is disk-backed,
+    // so honour that here rather than routing around it.
+    if (this.fatalCaptureHooks?.getPersistenceMode() === 'memory') {
+      return undefined
+    }
+    if (this.instance.isDisabled || this.instance.optedOut) {
+      return undefined
+    }
+
+    const properties = isObject(queuedEvent.properties) ? (queuedEvent.properties as PostHogEventProperties) : {}
+    const payload = buildFatalExceptionPayload({
+      timestamp: isString(queuedEvent.timestamp) ? queuedEvent.timestamp : new Date().toISOString(),
+      distinctId: isString(queuedEvent.distinct_id) ? queuedEvent.distinct_id : '',
+      // The event was normalized and emitted only after before_send accepted it.
+      properties,
+    })
+    return () => bridge(payload.distinctId, payload.timestamp, payload.properties)
   }
 
   private autocaptureUnhandledRejections() {

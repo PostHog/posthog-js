@@ -5205,7 +5205,7 @@ export function init_from_snippet(): void {
     // The snippet stub always has an _i initialization queue, while a materialized SDK instance does not.
     // Multiple snippet init() calls can insert array.js more than once, so do not let a later execution replace
     // the live global instance (including an unloaded primary with loaded named instances).
-    if (snippetPostHog && !isArray(snippetPostHog['_i'])) {
+    if (snippetPostHog && !isArray(snippetPostHog['_i']) && isFunction(snippetPostHog['init'])) {
         return
     }
 
