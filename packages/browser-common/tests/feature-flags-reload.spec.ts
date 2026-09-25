@@ -129,6 +129,25 @@ describe('awaitable feature flag reloads', () => {
         expect(client.sentRequests).toEqual([])
     })
 
+    it('settles reloads when requests are disabled during retry backoff', async () => {
+        const { flags, client, config } = await setup()
+        const request = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 502 })
+        const settled = vi.fn()
+        const reload = flags.reloadFeatureFlagsAsync().then(settled)
+        await vi.advanceTimersByTimeAsync(5)
+        expect(request).toHaveBeenCalledTimes(1)
+        config.remoteRequestsDisabled = true
+        await vi.advanceTimersByTimeAsync(500)
+        expect(settled).toHaveBeenCalledWith({ status: 'skipped' })
+        await reload
+        expect(request).toHaveBeenCalledTimes(1)
+        config.remoteRequestsDisabled = false
+        request.mockResolvedValue({ statusCode: 200, json: { featureFlags: {} } })
+        const next = flags.reloadFeatureFlagsAsync()
+        await vi.advanceTimersByTimeAsync(5)
+        expect(await next).toEqual({ status: 'loaded' })
+    })
+
     it('skips new callers after the reachability circuit breaker trips', async () => {
         const { flags, client } = await setup()
         vi.stubGlobal('window', { navigator: { onLine: true } })
