@@ -108,7 +108,8 @@ Compute these properties before argument normalization, and include them in both
 Pass a schema owned by the server, never one supplied by the caller.
 Custom command formats must extract the actual tool arguments and schema before calling the helper.
 Alternative field names must appear in the supplied schema to remain visible.
-The server can report the alternative names it actually used through the existing event `properties` argument.
+Do not report which alternative names a call used through server-specific `$mcp_*` properties.
+Alias telemetry is planned SDK follow-up work: the server will pass its own alias map to the helper, and the helper will add `$mcp_input_aliases_used` (for example `["experimentId:id"]`) without exposing unknown names.
 The SDK does not normalize arguments or infer which alternative a server accepted.
 
 The helper adds no request values to the event.
