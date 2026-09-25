@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.77.1
+
+### Patch Changes
+
+- [#5108](https://github.com/PostHog/posthog-js/pull/5108) [`de59de0`](https://github.com/PostHog/posthog-js/commit/de59de08edcf9695d00666362411d247c27a78bc) Thanks [@kristian240](https://github.com/kristian240)! - fix(react-native): record the tapped option for shuffled choice questions
+  (2026-09-25)
+
 ## 4.77.0
 
 ### Minor Changes
