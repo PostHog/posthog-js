@@ -370,10 +370,28 @@ describe('posthogRollupPlugin', () => {
         })
 
         it('scans a long run of comments in linear time', async () => {
-            const comments = `/*${'*//*'.repeat(20_000)}*/`
-            const { code: final } = await renderUnderRolldown(testPlugin(options), {}, `${comments}console.log("app");`)
+            // The fastest of up to five renders keeps scheduler and GC noise out of the timing. A slow
+            // scan stops early, so a regression fails in seconds rather than hanging the suite.
+            async function fastestRender(segments: number) {
+                const code = `/*${'*//*'.repeat(segments)}*/console.log("app");`
+                let fastest = Infinity
+                const deadline = performance.now() + 500
+                for (let run = 0; run < 5 && performance.now() < deadline; run++) {
+                    const start = performance.now()
+                    const { code: final } = await renderUnderRolldown(testPlugin(options), {}, code)
+                    fastest = Math.min(fastest, performance.now() - start)
+                    expect(final.startsWith('!function(){try{')).toBe(true)
+                }
+                return fastest
+            }
 
-            expect(final.startsWith('!function(){try{')).toBe(true)
+            // A scaling criterion rather than an absolute duration, which would depend on the CI
+            // machine: four times the comments takes about four times as long in a linear scan, and
+            // about sixteen times as long in a quadratic one. The first render only warms up the JIT.
+            await fastestRender(10_000)
+            const small = await fastestRender(10_000)
+            const large = await fastestRender(40_000)
+            expect(large / small).toBeLessThan(10)
         })
 
         describe('when two outputs render the same file name', () => {
