@@ -1148,6 +1148,7 @@ export class PostHogFeatureFlags implements Extension {
         const attempt = (): void => {
             if (requestGeneration !== this._requestGeneration || !this._client || this._config.remoteRequestsDisabled) {
                 this._requestInFlight = false
+                this._settleReloads(completions, 'skipped')
                 requestAdditionalReload()
                 return
             }
