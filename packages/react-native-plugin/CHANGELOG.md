@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.11.0
+
+### Minor Changes
+
+- [#5100](https://github.com/PostHog/posthog-js/pull/5100) [`17fb79b`](https://github.com/PostHog/posthog-js/commit/17fb79b4b5cb5c06460b7d4ac6c693547e9ecf1f) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach the native session replay debug properties to native crash `$exception` events; requires posthog-ios 3.83.0 and posthog-android 3.70.0.
+  (2026-09-25)
+
 ## 2.10.0
 
 ### Minor Changes
