@@ -98,8 +98,16 @@ export const sendRequest = async (
         return createFailedResponse(new Error('Fetch is not available'))
     }
 
-    const controller =
-        !signal && typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+    const controller = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+    const abort = () => controller?.abort(signal?.reason)
+    if (controller && signal) {
+        if (signal.aborted) {
+            abort()
+        } else {
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            signal.addEventListener('abort', abort, { once: true })
+        }
+    }
     const timeout =
         controller && init.timeoutMs ? globalThis.setTimeout(() => controller.abort(), init.timeoutMs) : undefined
 
@@ -112,7 +120,7 @@ export const sendRequest = async (
         if (init.transport === 'sendBeacon') {
             requestInit.keepalive = true
         }
-        const requestSignal = signal ?? controller?.signal
+        const requestSignal = controller?.signal ?? signal
         if (requestSignal) {
             requestInit.signal = requestSignal
         }
@@ -124,6 +132,9 @@ export const sendRequest = async (
     } catch (error) {
         return createFailedResponse(error)
     } finally {
+        if (controller && signal) {
+            signal.removeEventListener('abort', abort)
+        }
         if (timeout !== undefined) {
             globalThis.clearTimeout(timeout)
         }
