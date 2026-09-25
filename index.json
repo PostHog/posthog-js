@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/2488": {
+    "key": "PostHog/posthog-js/issue/2488",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2488",
+    "url": "https://github.com/PostHog/posthog-js/issues/2488",
+    "conclusion": "Valid documentation clarification request: importing the default client is safe outside React only when it is the same initialized instance supplied to the provider.",
+    "labels": [
+      "documentation",
+      "web"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5104",
+    "closed": false,
+    "updatedAt": "2026-09-25T08:41:36.018Z"
+  },
   "PostHog/posthog-js/issue/2921": {
     "key": "PostHog/posthog-js/issue/2921",
     "repo": "PostHog/posthog-js",
