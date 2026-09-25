@@ -688,35 +688,38 @@ describe('posthog core', () => {
             })
         })
 
-        it.each(['$feature_flag_called', '$$heatmap'])('does not add replay debug properties to %s', (eventName) => {
-            posthog = posthogWith(
-                {
-                    api_host: 'https://app.posthog.com',
-                    token: 'testtoken',
-                    property_denylist: [],
-                    property_blacklist: [],
-                    sanitize_properties: undefined,
-                },
-                {
-                    ...overrides,
-                    sessionPersistence: {
-                        properties: () => ({
-                            distinct_id: 'abc',
-                            $sdk_debug_replay_url_trigger_status: 'trigger_pending',
-                            $sdk_debug_recording_script_not_loaded: true,
-                        }),
-                        get_property: () => 'anonymous',
-                    } as unknown as PostHogPersistence,
-                }
-            )
+        it.each(['$feature_flag_called', '$$heatmap', 'time to see data'])(
+            'does not add replay debug properties to %s',
+            (eventName) => {
+                posthog = posthogWith(
+                    {
+                        api_host: 'https://app.posthog.com',
+                        token: 'testtoken',
+                        property_denylist: [],
+                        property_blacklist: [],
+                        sanitize_properties: undefined,
+                    },
+                    {
+                        ...overrides,
+                        sessionPersistence: {
+                            properties: () => ({
+                                distinct_id: 'abc',
+                                $sdk_debug_replay_url_trigger_status: 'trigger_pending',
+                                $sdk_debug_recording_script_not_loaded: true,
+                            }),
+                            get_property: () => 'anonymous',
+                        } as unknown as PostHogPersistence,
+                    }
+                )
 
-            const properties = posthog.calculateEventProperties(eventName, { event: 'prop' }, new Date(), uuid)
+                const properties = posthog.calculateEventProperties(eventName, { event: 'prop' }, new Date(), uuid)
 
-            expect(properties).not.toHaveProperty('$recording_status')
-            expect(properties).not.toHaveProperty('$sdk_debug_replay_url_trigger_status')
-            expect(properties).not.toHaveProperty('$sdk_debug_recording_script_not_loaded')
-            expect(properties.$sdk_debug_retry_queue_size).toEqual(0)
-        })
+                expect(properties).not.toHaveProperty('$recording_status')
+                expect(properties).not.toHaveProperty('$sdk_debug_replay_url_trigger_status')
+                expect(properties).not.toHaveProperty('$sdk_debug_recording_script_not_loaded')
+                expect(properties.$sdk_debug_retry_queue_size).toEqual(0)
+            }
+        )
 
         it('uses a sibling subdomain identity change for the next event and reloads flags', () => {
             const props = { distinct_id: 'anonymous', $user_state: 'anonymous' }
