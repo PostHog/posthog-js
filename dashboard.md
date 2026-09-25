@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2488](https://github.com/PostHog/posthog-js/issues/2488) | Valid documentation clarification request: importing the default client is safe outside React only when it is the same initialized instance supplied to the provider. | documentation, web | https://github.com/PostHog/posthog-js/pull/5104 | no | 2026-09-25T08:41:36.018Z |
 | PostHog/posthog-js | [issue 2921](https://github.com/PostHog/posthog-js/issues/2921) | Valid bot-traffic report, but the proposed global user-agent version heuristic is not sufficiently safe for default blocking. | enhancement, feature, feature/web-analytics, web, team/web-analytics |  | no | 2026-09-25T08:38:55.569Z |
 | PostHog/posthog-js | [issue 5096](https://github.com/PostHog/posthog-js/issues/5096) | Confirmed regression: the separately built surveys entrypoint uses a different React context from the main entrypoint, so useThumbSurvey cannot receive the client supplied by PostHogProvider. | javascript, web, team/client-libraries, bug |  | no | 2026-09-24T19:34:58.767Z |
 | PostHog/posthog-js | [issue 5089](https://github.com/PostHog/posthog-js/issues/5089) | Well-scoped new SDK and CLI proposal, but it is a substantial public API and deployment surface that should be reviewed through the linked draft implementation before approval. | feature, node, javascript, enhancement |  | no | 2026-09-24T07:03:41.160Z |
