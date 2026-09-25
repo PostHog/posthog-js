@@ -890,7 +890,8 @@ export class PostHog extends PostHogCore {
   }
 
   // Older plugins without this method leave JS-derived values standing (no cache ever set).
-  // A refresh already in flight covers any request made meanwhile.
+  // A refresh still waiting its turn on the native chain covers any request made meanwhile;
+  // one already in flight does not, since a state change during the call must be re-read.
   private _refreshNativeSessionReplayDebugProperties(): void {
     if (!OptionalReactNativePlugin?.getSessionReplayDebugProperties || this._nativeSessionReplayDebugRefreshQueued) {
       return
