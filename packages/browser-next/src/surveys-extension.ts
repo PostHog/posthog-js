@@ -14,14 +14,12 @@ import {
     type SurveyCallback,
     type SurveyRenderReason,
 } from './surveys-options'
-import { SurveysStorage } from './surveys-storage'
 
 type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): SurveysManager | undefined }
 
 export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
     const config = snapshotSurveysOptions(options)
     let client: BrowserClient | undefined
-    let storage: SurveysStorage | undefined
     let runtimeHost: SurveyRenderContext | undefined
     let remoteEnabled = false
     let manual = false
@@ -124,7 +122,6 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
         name: 'surveys',
         setup: async (value: BrowserClient) => {
             client = value
-            storage = new SurveysStorage(value.kv)
             await value.kv.initialize()
             if (disposed) return
             resetSubscription = value.onReset(reset)
@@ -145,7 +142,6 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                     return source.get()
                 },
                 surveys: shared,
-                storage,
             }
             remoteSubscription = value.onRemoteConfig((result) => {
                 if (result.ok) {
