@@ -9,6 +9,11 @@ describe('tracing headers', () => {
       ['returns undefined for empty string', '', undefined],
       ['returns undefined when only whitespace/control chars remain', ' \n\t\x00 ', undefined],
       ['uses the first valid array item', [' \x00 session-123\t ', 'ignored'], 'session-123'],
+      [
+        'skips invalid array items before the first valid value',
+        [' \x00\t ', ' session-456 ', 'ignored'],
+        'session-456',
+      ],
       ['returns undefined when array has no valid string item', [' \x00\t '], undefined],
       ['caps values at 1000 chars', ` ${'x'.repeat(1105)} `, 'x'.repeat(1000)],
     ])('%s', (_name, value, expected) => {

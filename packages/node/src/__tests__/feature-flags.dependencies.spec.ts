@@ -1,4 +1,4 @@
-import { PostHogOptions } from '@/types'
+import { FlagProperty, PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
 
@@ -740,6 +740,12 @@ describe('feature flag dependencies', () => {
     })
 
     it('should return undefined when flag dependencies are missing dependency_chain', async () => {
+      const dependency: FlagProperty = {
+        key: 'parent-flag',
+        type: 'flag',
+        value: true,
+        operator: 'flag_evaluates_to',
+      }
       const flags = {
         flags: [
           {
@@ -750,30 +756,33 @@ describe('feature flag dependencies', () => {
             filters: {
               groups: [
                 {
-                  properties: [
-                    {
-                      key: 'parent-flag',
-                      type: 'flag',
-                      value: true,
-                      operator: 'flag_evaluates_to',
-                      // Missing dependency_chain - this makes it an invalid flag dependency
-                    },
-                  ],
+                  properties: [dependency],
                   rollout_percentage: 100,
                 },
               ],
             },
+          },
+          {
+            id: 2,
+            name: 'Parent Feature',
+            key: 'parent-flag',
+            active: true,
+            filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
           },
         ],
       }
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      const posthog = buildClient()
+      posthog = buildClient()
+      const options = { onlyEvaluateLocally: true, sendFeatureFlagEvents: false }
+      expect(await posthog.getFeatureFlag('parent-flag', 'some-distinct-id', options)).toBe(true)
+      expect(await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id', options)).toBeUndefined()
 
-      // Should return undefined since the dependency chain is missing (InconclusiveMatchError)
-      const result = await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id')
-      expect(result).toBe(undefined)
+      dependency.dependency_chain = ['parent-flag']
+      await posthog.reloadFeatureFlags()
+      expect(await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id', options)).toBe(true)
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
     })
 
     it('evaluates production-style multivariate dependency chain', async () => {

@@ -47,6 +47,18 @@ describe('url-utils', () => {
         expected: '/api/items',
       },
       {
+        name: 'strips search without a hash by default',
+        input: '/api/items?token=secret',
+        disableCaptureUrlHashes: false,
+        expected: '/api/items',
+      },
+      {
+        name: 'strips search without a hash when disable_capture_url_hashes is enabled',
+        input: '/api/items?token=secret',
+        disableCaptureUrlHashes: true,
+        expected: '/api/items',
+      },
+      {
         name: 'does not treat hashes before question marks as search params by default',
         input: '/api/items#details?token=secret',
         disableCaptureUrlHashes: false,

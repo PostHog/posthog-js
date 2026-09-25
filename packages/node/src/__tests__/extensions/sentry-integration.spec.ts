@@ -31,7 +31,7 @@ const createMockSentryException = (): any => ({
         type: 'Error',
         value: 'example error',
         stacktrace: {
-          frames: [],
+          frames: [{ filename: '/app/server.js', function: 'handleRequest', lineno: 42, colno: 7, in_app: true }],
         },
         mechanism: { type: 'generic', handled: true },
       },
@@ -129,7 +129,19 @@ describe('PostHogSentryIntegration', () => {
           $exception_list: [
             {
               mechanism: { handled: true, type: 'generic' },
-              stacktrace: { frames: [], type: 'raw' },
+              stacktrace: {
+                frames: [
+                  {
+                    filename: '/app/server.js',
+                    function: 'handleRequest',
+                    lineno: 42,
+                    colno: 7,
+                    in_app: true,
+                    platform: 'node:javascript',
+                  },
+                ],
+                type: 'raw',
+              },
               type: 'Error',
               value: 'example error',
             },
@@ -142,7 +154,11 @@ describe('PostHogSentryIntegration', () => {
               {
                 type: 'Error',
                 value: 'example error',
-                stacktrace: { frames: [] },
+                stacktrace: {
+                  frames: [
+                    { filename: '/app/server.js', function: 'handleRequest', lineno: 42, colno: 7, in_app: true },
+                  ],
+                },
                 mechanism: { type: 'generic', handled: true },
               },
             ],

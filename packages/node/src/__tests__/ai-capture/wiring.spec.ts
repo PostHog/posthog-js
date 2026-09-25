@@ -78,10 +78,11 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_span'])
   })
 
-  it('captureAiImmediate awaits a single AI endpoint delivery', async () => {
+  it('captureAiImmediate sends a single event only to the AI endpoint', async () => {
     const posthog = harness.makeClient()
     await posthog.captureAiImmediate({ distinctId: 'u', event: '$ai_embedding', properties: {} })
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_embedding'])
+    expect(harness.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('drops events over 8MiB with a name-and-size-only error log, delivering the rest', async () => {
@@ -126,13 +127,26 @@ describe('AI capture lane wiring (Node SDK)', () => {
     harness.fetch.mockImplementationOnce(() => Promise.resolve(v413Response()))
     harness.fetch.mockImplementation(() => Promise.resolve(v0Response()))
 
-    for (const event of ['$ai_a', '$ai_b', '$ai_c'] as const) {
-      posthog.captureAi({ distinctId: 'u', event, properties: {} })
+    const envelopes = ['$ai_a', '$ai_b', '$ai_c'].map((event, index) => ({
+      event,
+      distinct_id: `user-${index}`,
+      timestamp: `2024-01-0${index + 1}T00:00:00.000Z`,
+      uuid: `0198c0de-0000-7000-8000-00000000000${index}`,
+    }))
+    for (const { event, distinct_id, timestamp, uuid } of envelopes) {
+      posthog.captureAi({ distinctId: distinct_id, event, timestamp: new Date(timestamp), uuid, properties: {} })
     }
     await expect(posthog.flush()).resolves.not.toThrow()
 
-    expect((await deliveredEventsIn('/i/v0/ai/batch/')).sort()).toEqual(['$ai_a', '$ai_b', '$ai_c'])
-    expect(harness.callsTo('/i/v0/ai/batch/').length).toBeGreaterThan(1)
+    const batches = harness.callsTo('/i/v0/ai/batch/').map(([, options]) => JSON.parse(options.body).batch)
+    expect(batches.map((batch) => batch.map((event: any) => event.event))).toEqual([
+      ['$ai_a', '$ai_b', '$ai_c'],
+      ['$ai_a', '$ai_b'],
+      ['$ai_c'],
+    ])
+    expect(batches[0]).toMatchObject(envelopes)
+    expect(batches.slice(1).flat()).toEqual(batches[0])
+    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual(['$ai_a', '$ai_b', '$ai_c'])
 
     harness.useDefaultRouting()
     for (const event of ['custom_1', 'custom_2', 'custom_3'] as const) {
@@ -218,6 +232,10 @@ describe('AI capture lane wiring (Node SDK)', () => {
     const posthog = harness.makeClient()
     const supplied = '0198c0de-0000-7000-8000-000000000abc'
     expect(posthog.captureAi({ distinctId: 'u', event: '$ai_generation', uuid: supplied })).toBe(supplied)
+    await posthog.flush()
+    const calls = harness.callsTo('/i/v0/ai/batch/')
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0][1].body).batch[0].uuid).toBe(supplied)
   })
 
   it('captureAi returns undefined when the client is disabled', () => {
@@ -227,7 +245,31 @@ describe('AI capture lane wiring (Node SDK)', () => {
 
   it('captureAiImmediate resolves with the uuid after the send completes', async () => {
     const posthog = harness.makeClient()
-    const uuid = await posthog.captureAiImmediate({ distinctId: 'u', event: '$ai_generation' })
+    let startFetch!: () => void
+    const started = new Promise<void>((resolve) => {
+      startFetch = resolve
+    })
+    let completeFetch!: (response: ReturnType<typeof v0Response>) => void
+    const response = new Promise<ReturnType<typeof v0Response>>((resolve) => {
+      completeFetch = resolve
+    })
+    harness.fetch.mockImplementation(() => {
+      startFetch()
+      return response
+    })
+    const settled = vi.fn()
+    const capture = posthog.captureAiImmediate({ distinctId: 'u', event: '$ai_generation' })
+    void capture.then(settled)
+    try {
+      await started
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).not.toHaveBeenCalled()
+    } finally {
+      completeFetch(v0Response())
+      await capture
+    }
+    const uuid = await capture
+    expect(settled).toHaveBeenCalledWith(uuid)
     const calls = harness.callsTo('/i/v0/ai/batch/')
     expect(calls).toHaveLength(1)
     expect(JSON.parse(calls[0][1].body).batch[0].uuid).toBe(uuid)

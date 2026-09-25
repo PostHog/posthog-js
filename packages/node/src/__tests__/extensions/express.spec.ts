@@ -377,6 +377,7 @@ describe('Express extension', () => {
       setupExpressErrorHandler(posthog, app)
 
       expect(app.use).toHaveBeenCalledWith(expect.any(Function))
+      expect(app.use.mock.calls[0][0].length).toBe(4)
     })
 
     it('should capture exceptions with sanitized session and distinct headers', async () => {

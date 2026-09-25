@@ -166,21 +166,34 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
   describe('Fetch Coordination', () => {
     it('calls shouldFetchFlagDefinitions before each poll', async () => {
-      mockCacheProvider.getFlagDefinitions.mockReturnValue(undefined)
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
-
       mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
 
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         personalApiKey: 'TEST_PERSONAL_API_KEY',
         flagDefinitionCacheProvider: mockCacheProvider,
+        featureFlagsPollingInterval: 1000,
         fetchRetryCount: 0,
       })
 
-      await vi.runOnlyPendingTimersAsync()
+      await posthog.waitForLocalEvaluationReady()
+      mockCacheProvider.shouldFetchFlagDefinitions.mockClear()
+      mockedFetch.mockClear()
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
 
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).not.toHaveBeenCalled()
+
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
     it('fetches and calls onFlagDefinitionsReceived when shouldFetch returns true', async () => {
@@ -203,9 +216,13 @@ describe('FlagDefinitionCacheProvider Integration', () => {
     })
 
     it('skips fetch and reloads from cache when shouldFetch returns false', async () => {
-      // First call returns undefined (initial state)
-      // Subsequent calls return cached data (after another worker fetched)
-      mockCacheProvider.getFlagDefinitions.mockReturnValueOnce(undefined).mockReturnValue(testFlagData)
+      mockCacheProvider.getFlagDefinitions.mockReturnValueOnce(undefined).mockReturnValue({
+        ...testFlagData,
+        flags: testFlagData.flags.map((flag) => ({
+          ...flag,
+          filters: { groups: [{ rollout_percentage: 100 }] },
+        })),
+      })
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
@@ -215,14 +232,33 @@ describe('FlagDefinitionCacheProvider Integration', () => {
         personalApiKey: 'TEST_PERSONAL_API_KEY',
         flagDefinitionCacheProvider: mockCacheProvider,
         fetchRetryCount: 0,
+        featureFlagsPollingInterval: 1000,
       })
 
-      await vi.runOnlyPendingTimersAsync()
+      await posthog.waitForLocalEvaluationReady()
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(
+        await posthog.getFeatureFlag('test-flag', 'user-123', {
+          onlyEvaluateLocally: true,
+          sendFeatureFlagEvents: false,
+        })
+      ).toBe(false)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockClear()
+      mockCacheProvider.getFlagDefinitions.mockClear()
+      mockedFetch.mockClear()
 
-      // Should not fetch from API when shouldFetch is false and we have flags from cache
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalled()
-      // getFlagDefinitions called multiple times to reload from cache
-      expect(mockCacheProvider.getFlagDefinitions.mock.calls.length).toBeGreaterThanOrEqual(2)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(
+        await posthog.getFeatureFlag('test-flag', 'user-123', {
+          onlyEvaluateLocally: true,
+          sendFeatureFlagEvents: false,
+        })
+      ).toBe(true)
+      expect(mockedFetch).not.toHaveBeenCalled()
     })
 
     it('emergency fallback: fetches when shouldFetch is false, cache is empty, AND no flags loaded', async () => {
@@ -267,7 +303,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       mockCacheProvider.getFlagDefinitions.mockImplementation(() => {
         throw error
       })
-      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: testFlagDataApiResponse }))
 
@@ -280,10 +316,10 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       posthog.on('error', onErrorMock)
 
-      await vi.runOnlyPendingTimersAsync()
+      await posthog.waitForLocalEvaluationReady()
 
-      // Error might be emitted, but the key is that initialization continues
-      // Should still fetch from API despite cache error
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(onErrorMock).toHaveBeenCalledWith(new Error('Failed to load from cache: Error: Cache read failed'))
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
       expect(posthog.isLocalEvaluationReady()).toBe(true)
     })

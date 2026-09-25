@@ -1,7 +1,7 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
+import { anyFlagsCall, anyLocalEvalCall, apiImplementation, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 import { UUID_REGEX } from '@posthog/core'
 
@@ -42,8 +42,6 @@ const getLastBatchEvents = (): any[] | undefined => {
   }
   return JSON.parse((call[1] as any).body as any).batch
 }
-
-vi.setConfig({ retry: 3 })
 
 describe('PostHog Node.js', () => {
   let posthog: PostHog
@@ -95,7 +93,7 @@ describe('PostHog Node.js', () => {
   })
 
   describe('core methods', () => {
-    it('exposes exception capture methods through IPostHog', () => {
+    it('exposes exception capture methods at runtime', () => {
       const client: IPostHog = posthog
 
       expect(typeof client.captureException).toBe('function')
@@ -324,10 +322,22 @@ describe('PostHog Node.js', () => {
     it('should await the network request when identifyImmediate is awaited', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
 
-      await posthog.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } })
+      let finishRequest!: (response: Response) => void
+      mockedFetch.mockImplementationOnce(() => new Promise<Response>((resolve) => (finishRequest = resolve)))
+      let settled = false
+      const identify = posthog.identifyImmediate({ distinctId: '123', properties: { foo: 'bar' } }).then(() => {
+        settled = true
+      })
 
-      // Without awaiting the underlying request, the batch endpoint would not have been hit yet
-      // (regression guard for the missing-await bug in identifyImmediate).
+      try {
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(1)
+        expect(settled).toBe(false)
+      } finally {
+        finishRequest(new Response('{}', { status: 200 }))
+      }
+      await identify
+      expect(settled).toBe(true)
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
@@ -1024,14 +1034,6 @@ describe('PostHog Node.js', () => {
   })
 
   describe('flush coalescing', () => {
-    beforeEach(() => {
-      vi.useRealTimers()
-    })
-
-    afterEach(() => {
-      vi.useFakeTimers()
-    })
-
     it('coalesces threshold-triggered flushes while fetch is failing', async () => {
       const rejectFetch: Array<(err: Error) => void> = []
       mockedFetch.mockImplementation(() => new Promise((_, reject) => rejectFetch.push(reject)) as any)
@@ -1043,32 +1045,29 @@ describe('PostHog Node.js', () => {
         disableCompression: true,
       })
 
-      for (let i = 0; i < 20; i++) {
-        ph.capture({ event: `offline-event-${i}`, distinctId: '123' })
+      try {
+        for (let i = 0; i < 20; i++) {
+          ph.capture({ event: `offline-event-${i}`, distinctId: '123' })
+        }
+
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(1)
+        rejectFetch.shift()!(new Error('network down'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(1)
+
+        ph.capture({ event: 'offline-event-20', distinctId: '123' })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(2)
+        rejectFetch.shift()!(new Error('network down'))
+        await vi.advanceTimersByTimeAsync(0)
+      } finally {
+        mockedFetch.mockResolvedValue(new Response('{}', { status: 200 }))
+        for (const reject of rejectFetch) {
+          reject(new Error('network down'))
+        }
+        await ph.shutdown()
       }
-
-      // all 20 captures coalesced into a single flush — not one flush per capture
-      await wait(10)
-      expect(mockedFetch).toHaveBeenCalledTimes(1)
-
-      rejectFetch.shift()!(new Error('network down'))
-      await wait(10)
-      expect(mockedFetch).toHaveBeenCalledTimes(1)
-
-      // coalescing doesn't leave flushing permanently stuck
-      ph.capture({ event: 'offline-event-20', distinctId: '123' })
-      await wait(10)
-      expect(mockedFetch).toHaveBeenCalledTimes(2)
-
-      rejectFetch.shift()!(new Error('network down'))
-      await wait(10)
-
-      mockedFetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      } as any)
-      await ph.shutdown()
     })
   })
 
@@ -1110,33 +1109,43 @@ describe('PostHog Node.js', () => {
     })
 
     it('should shutdown cleanly', async () => {
+      vi.useFakeTimers()
+      let finishRequest!: (response: Response) => void
+      mockedFetch.mockImplementationOnce(() => new Promise<Response>((resolve) => (finishRequest = resolve)))
+      mockedFetch.mockResolvedValue(new Response('{}', { status: 200 }))
       const ph = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         fetchRetryCount: 0,
         flushAt: 1,
         disableCompression: true,
       })
-      ph.debug(true)
-
+      let flushSettled = false
+      let shutdownSettled = false
       ph.capture({ event: 'test-event-1', distinctId: '123' })
-
-      // start flushing, but don't wait for promise to resolve before resuming events
-      const flushPromise = ph.flush()
-      expect(isPending(flushPromise)).toEqual(true)
-
+      const flushPromise = ph.flush().then(() => {
+        flushSettled = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
       ph.capture({ event: 'test-event-2', distinctId: '123' })
-
-      // start shutdown, but don't wait for promise to resolve before resuming events
-      const shutdownPromise = ph.shutdown()
-
+      const shutdownPromise = ph.shutdown().then(() => {
+        shutdownSettled = true
+      })
       ph.capture({ event: 'test-event-3', distinctId: '123' })
 
-      // wait for shutdown to finish
-      await shutdownPromise
-      expect(isPending(flushPromise)).toEqual(false)
-
-      expect(3).toEqual(logSpy.mock.calls.filter((call) => call[1].includes('capture')).length)
-      const flushedEvents = logSpy.mock.calls.filter((call) => call[1].includes('flush')).flatMap((flush) => flush[2])
+      try {
+        await vi.advanceTimersByTimeAsync(0)
+        expect(mockedFetch).toHaveBeenCalledTimes(1)
+        expect(flushSettled).toBe(false)
+        expect(shutdownSettled).toBe(false)
+      } finally {
+        finishRequest(new Response('{}', { status: 200 }))
+        await Promise.all([flushPromise, shutdownPromise])
+      }
+      expect(flushSettled).toBe(true)
+      expect(shutdownSettled).toBe(true)
+      const flushedEvents = mockedFetch.mock.calls
+        .filter(([url]) => String(url).endsWith('/batch/'))
+        .flatMap(([, options]) => JSON.parse(options!.body as string).batch)
       expect(flushedEvents).toMatchObject([
         { event: 'test-event-1' },
         { event: 'test-event-2' },
@@ -1283,12 +1292,29 @@ describe('PostHog Node.js', () => {
       async (_, distinctId, expectedDistinctId) => {
         expect(mockedFetch).toHaveBeenCalledTimes(0)
 
-        await posthog.groupIdentifyImmediate({
-          groupType: 'posthog',
-          groupKey: 'team-1',
-          properties: { analytics: true },
-          ...(distinctId ? { distinctId } : {}),
-        })
+        let finishRequest!: (response: Response) => void
+        mockedFetch.mockImplementationOnce(() => new Promise<Response>((resolve) => (finishRequest = resolve)))
+        let settled = false
+        const identify = posthog
+          .groupIdentifyImmediate({
+            groupType: 'posthog',
+            groupKey: 'team-1',
+            properties: { analytics: true },
+            ...(distinctId ? { distinctId } : {}),
+          })
+          .then(() => {
+            settled = true
+          })
+
+        try {
+          await vi.advanceTimersByTimeAsync(0)
+          expect(mockedFetch).toHaveBeenCalledTimes(1)
+          expect(settled).toBe(false)
+        } finally {
+          finishRequest(new Response('{}', { status: 200 }))
+        }
+        await identify
+        expect(settled).toBe(true)
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]?.distinct_id).toBe(expectedDistinctId)
@@ -1605,114 +1631,65 @@ describe('PostHog Node.js', () => {
       }).toThrow(Error)
     })
 
-    it('does not automatically enrich capture events with flags unless sendFeatureFlags=true', async () => {
-      mockedFetch.mockClear()
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
+    it.each(['loaded', 'empty'])(
+      'does not automatically enrich capture events with %s local definitions',
+      async (definitions) => {
+        if (definitions === 'empty') {
+          mockedFetch.mockImplementation(
+            apiImplementation({ decideFlags: { a: false, b: 'true' }, flagsPayloads: {}, localFlags: { flags: [] } })
+          )
+        }
+        mockedFetch.mockClear()
+        expect(mockedFetch).toHaveBeenCalledTimes(0)
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        flushAt: 1,
-        fetchRetryCount: 0,
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        disableCompression: true,
-      })
-
-      vi.runOnlyPendingTimers()
-      await waitForPromises()
-
-      posthog.capture({
-        distinctId: 'distinct_id',
-        event: 'node test event',
-      })
-
-      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-      // no flags call
-      expect(mockedFetch).not.toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST' })
-      )
-
-      vi.runOnlyPendingTimers()
-
-      await waitForPromises()
-
-      expect(getLastBatchEvents()?.[0]).toEqual(
-        expect.objectContaining({
-          distinct_id: 'distinct_id',
-          event: 'node test event',
-          properties: expect.objectContaining({
-            $lib: 'posthog-node',
-            $lib_version: '1.2.3',
-            $geoip_disable: true,
-          }),
+        posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          flushAt: 1,
+          fetchRetryCount: 0,
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          disableCompression: true,
         })
-      )
-      // Should NOT have automatic flag enrichment
-      expect(
-        Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature-local')
-      ).toBe(false)
-      expect(Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature')).toBe(
-        false
-      )
-      expect(Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$active_feature_flags')).toBe(
-        false
-      )
 
-      await posthog.shutdown()
-    })
+        vi.runOnlyPendingTimers()
+        await waitForPromises()
 
-    it('doesnt add flag properties when locally evaluated flags are empty', async () => {
-      mockedFetch.mockClear()
-      expect(mockedFetch).toHaveBeenCalledTimes(0)
-      mockedFetch.mockImplementation(
-        apiImplementation({ decideFlags: { a: false, b: 'true' }, flagsPayloads: {}, localFlags: { flags: [] } })
-      )
-
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        flushAt: 1,
-        fetchRetryCount: 0,
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        disableCompression: true,
-      })
-
-      posthog.capture({
-        distinctId: 'distinct_id',
-        event: 'node test event',
-      })
-
-      vi.runOnlyPendingTimers()
-      await waitForPromises()
-
-      expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-      // no flags call
-      expect(mockedFetch).not.toHaveBeenCalledWith(
-        'http://example.com/flags/?v=2',
-        expect.objectContaining({ method: 'POST' })
-      )
-
-      vi.runOnlyPendingTimers()
-
-      await waitForPromises()
-
-      expect(getLastBatchEvents()?.[0]).toEqual(
-        expect.objectContaining({
-          distinct_id: 'distinct_id',
+        posthog.capture({
+          distinctId: 'distinct_id',
           event: 'node test event',
-          properties: expect.objectContaining({
-            $lib: 'posthog-node',
-            $lib_version: '1.2.3',
-            $geoip_disable: true,
-          }),
         })
-      )
-      expect(
-        Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature-local')
-      ).toBe(false)
-      expect(Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature')).toBe(
-        false
-      )
-    })
+
+        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+
+        vi.runOnlyPendingTimers()
+
+        await waitForPromises()
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+
+        expect(getLastBatchEvents()?.[0]).toEqual(
+          expect.objectContaining({
+            distinct_id: 'distinct_id',
+            event: 'node test event',
+            properties: expect.objectContaining({
+              $lib: 'posthog-node',
+              $lib_version: '1.2.3',
+              $geoip_disable: true,
+            }),
+          })
+        )
+        // Should NOT have automatic flag enrichment
+        expect(
+          Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature-local')
+        ).toBe(false)
+        expect(
+          Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$feature/beta-feature')
+        ).toBe(false)
+        expect(
+          Object.prototype.hasOwnProperty.call(getLastBatchEvents()?.[0].properties, '$active_feature_flags')
+        ).toBe(false)
+
+        await posthog.shutdown()
+      }
+    )
 
     it('captures feature flags with same geoip setting as capture', async () => {
       mockedFetch.mockClear()
@@ -2061,7 +2038,7 @@ describe('PostHog Node.js', () => {
         )
       })
 
-      it('should not call _getFlags for $feature_flag_called events even with sendFeatureFlags=true', async () => {
+      it('preserves supplied flag-call metadata when explicitly enriching the event', async () => {
         mockedFetch.mockClear()
 
         posthog = new PostHog('TEST_API_KEY', {
@@ -2097,12 +2074,15 @@ describe('PostHog Node.js', () => {
               plan: 'premium',
               $feature_flag: 'test-flag',
               $feature_flag_response: true,
+              '$feature/basic-flag': true,
             }),
           })
         )
+        expect(batchEvents).toHaveLength(1)
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       })
 
-      it('should not call _getFlags when sendFeatureFlags is false', async () => {
+      it('does not enrich events when sendFeatureFlags is false', async () => {
         mockedFetch.mockClear()
 
         posthog = new PostHog('TEST_API_KEY', {
@@ -2143,10 +2123,14 @@ describe('PostHog Node.js', () => {
             event: 'test event',
             properties: expect.objectContaining({
               plan: 'premium',
-              // No additional enrichment since sendFeatureFlags is false
             }),
           })
         )
+        expect(
+          Object.keys(batchEvents![0].properties).filter(
+            (key) => key.startsWith('$feature/') || key === '$active_feature_flags'
+          )
+        ).toEqual([])
       })
 
       it('should work with captureImmediate', async () => {
@@ -2312,6 +2296,7 @@ describe('PostHog Node.js', () => {
           key: 'group-property-flag',
           active: true,
           filters: {
+            aggregation_group_type_index: 0,
             groups: [
               {
                 properties: [
@@ -2320,7 +2305,6 @@ describe('PostHog Node.js', () => {
                     operator: 'exact',
                     value: 'enterprise',
                     type: 'group',
-                    group_type_index: 0,
                   },
                 ],
                 rollout_percentage: 100,
@@ -2334,6 +2318,7 @@ describe('PostHog Node.js', () => {
             decideFlags: mockDecideFlags,
             localFlags: {
               flags: [basicFlag, personPropertyFlag, groupPropertyFlag],
+              group_type_mapping: { 0: 'organization' },
             },
           })
         )
@@ -2421,10 +2406,12 @@ describe('PostHog Node.js', () => {
             properties: expect.objectContaining({
               foo: 'bar',
               '$feature/basic-flag': true,
-              $active_feature_flags: ['basic-flag'],
+              '$feature/group-property-flag': true,
+              $active_feature_flags: ['basic-flag', 'group-property-flag'],
             }),
           })
         )
+        expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
       })
 
       it('should work with onlyEvaluateLocally=true', async () => {
