@@ -176,9 +176,11 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
         // before `generateBundle` — where SRI plugins (e.g. vite-plugin-sri3)
         // compute integrity hashes and rollup resolves [hash] file names. The
         // written files are final; nothing may rewrite them afterwards. Under
-        // rolldown the snippet lands at the start of generateBundle instead (see
-        // SNIPPET_PLACEHOLDER), still ahead of SRI plugins and already counted
-        // in the file name hash by augmentChunkHash.
+        // rolldown the snippet lands in an `order: 'pre'` generateBundle instead
+        // (see SNIPPET_PLACEHOLDER), already counted in the file name hash by
+        // augmentChunkHash. It is still ahead of SRI plugins that hash in a
+        // normal or `post` generateBundle, as vite-plugin-sri3 does, but not of
+        // another `order: 'pre'` hook registered before this plugin.
         renderChunk: {
             order: 'post',
             handler(code: string, chunk: RenderedChunk, outputOptions?: NormalizedOutputOptions) {
@@ -251,7 +253,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
         // minifier removes and which the snippet itself doesn't carry. preliminaryFileName links the
         // final OutputChunk back to its RenderedChunk even when Rollup replaces a [hash] placeholder.
         // Matching against the tracked id avoids treating unrelated bundled `_posthogChunkIds`
-        // strings as injected chunks.
+        // strings as injected chunks. Hooks of the same order run in plugin order, so a plugin
+        // that reads chunk code in its own `order: 'pre'` generateBundle and is registered before
+        // this one still sees the placeholder. Every normal and `post` hook sees the final code.
         generateBundle: {
             order: 'pre',
             handler(options, bundle) {

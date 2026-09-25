@@ -210,3 +210,50 @@ test('keeps a "use client" directive first, ahead of the snippet', async (t) => 
     )
     assert.equal(withPlugin.map.mappings, `;${withoutPlugin.map.mappings}`)
 })
+
+test('lets generateBundle hooks that run after the swap read the final snippet, as SRI plugins do', async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-rollup-plugin-vite-'))
+    t.after(() => fs.rm(root, { recursive: true, force: true }))
+
+    const cliPath = path.join(root, 'posthog-cli.mjs')
+    await fs.writeFile(cliPath, `#!/usr/bin/env node\nprocess.stdout.write('release-a\\n')\n`)
+    await fs.chmod(cliPath, 0o755)
+    await fs.writeFile(path.join(root, 'index.html'), '<script type="module" src="/src.ts"></script>')
+    await fs.writeFile(path.join(root, 'src.ts'), 'export function boom() { throw new Error("boom") }\nboom()')
+
+    // Each reader records the chunk's first line when its generateBundle runs. A normal hook runs
+    // after every `pre` hook, wherever it is registered, and a `pre` hook registered after this
+    // plugin runs after the swap.
+    const seen = {}
+    const reader = (name, order) => ({
+        name,
+        generateBundle: {
+            order,
+            handler(_options, bundle) {
+                const chunk = Object.values(bundle).find((item) => item.type === 'chunk')
+                seen[name] = chunk.code.split('\n')[0]
+            },
+        },
+    })
+
+    const { output } = await build({
+        configFile: false,
+        root,
+        logLevel: 'silent',
+        plugins: [
+            reader('normal-before', undefined),
+            posthogRollupPlugin({
+                personalApiKey: 'phx_test',
+                projectId: '1',
+                cliBinaryPath: cliPath,
+                sourcemaps: { deleteAfterUpload: false, releaseMode: 'event' },
+            }),
+            reader('pre-after', 'pre'),
+        ],
+        build: { outDir: 'dist', minify: 'oxc', sourcemap: true, write: false },
+    })
+
+    const chunk = output.find((item) => item.type === 'chunk')
+    const snippet = createChunkIdSnippet(CHUNK_ID_COMMENT.exec(chunk.code)?.[1], 'release-a')
+    assert.deepEqual(seen, { 'normal-before': snippet, 'pre-after': snippet })
+})
