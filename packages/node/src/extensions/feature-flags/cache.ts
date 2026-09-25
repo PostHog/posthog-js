@@ -58,12 +58,12 @@ export type FlagDefinitionCacheInput =
  *
  * @example
  * ```typescript
- * import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'
+ * import type { FlagDefinitionCacheData, FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from 'posthog-node'
  *
- * class RedisFlagCache implements FlagDefinitionCacheProvider {
+ * class RedisFlagCache implements FlagDefinitionCacheProvider<FlagDefinitionCacheInput> {
  *   constructor(private redis: Redis, private teamKey: string) { }
  *
- *   async getFlagDefinitions(): Promise<FlagDefinitionCacheData | undefined> {
+ *   async getFlagDefinitions(): Promise<FlagDefinitionCacheInput | undefined> {
  *     const cached = await this.redis.get(`posthog:flags:${this.teamKey}`)
  *     return cached ? JSON.parse(cached) : undefined
  *   }
