@@ -54,6 +54,20 @@ const normalizeHost = (host: string): string => {
     }
     return end === host.length ? host : host.slice(0, end)
 }
+const getAssetsHost = (apiHost: string): string => {
+    try {
+        const url = new URL(apiHost)
+        if (url.protocol === 'https:') {
+            const region = /^(app|us|us-assets|eu|eu-assets)(\.i)?\.posthog\.com$/.exec(url.hostname)?.[1]
+            if (region) {
+                return `https://${region.startsWith('eu') ? 'eu' : 'us'}-assets.i.posthog.com`
+            }
+        }
+    } catch {
+        // Invalid hosts are reported by the request sender.
+    }
+    return apiHost
+}
 const isValidDistinctId = (value: unknown): value is string =>
     isNonEmptyString(value) &&
     !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
@@ -210,6 +224,7 @@ class PostHogBrowserClient implements PostHog {
             {
                 api: apiHost,
                 flags: normalizeHost(options.flagsHost ?? apiHost),
+                assets: getAssetsHost(apiHost),
             },
             projectToken,
             browserFetch,

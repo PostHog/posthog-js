@@ -22,11 +22,18 @@ describe.each([
     })
 
     it.each([
-        [undefined, 'https://us.i.posthog.com'],
-        ['https://eu.i.posthog.com/', 'https://eu.i.posthog.com'],
-        ['https://app.posthog.com', 'https://app.posthog.com'],
+        [undefined, 'https://us-assets.i.posthog.com'],
+        ...['app', 'us', 'us-assets', 'eu', 'eu-assets'].flatMap((region) =>
+            ['', '.i'].map((ingestion): [string, string] => [
+                `https://${region}${ingestion}.posthog.com/`,
+                `https://${region.startsWith('eu') ? 'eu' : 'us'}-assets.i.posthog.com`,
+            ])
+        ),
+        ['https://EU.I.POSTHOG.COM/', 'https://eu-assets.i.posthog.com'],
         ['https://proxy.example.com', 'https://proxy.example.com'],
-    ])('routes the JSON GET through the configured API host (%s)', async (apiHost, host) => {
+        ['https://proxy.example.com/posthog/', 'https://proxy.example.com/posthog'],
+        ['https://us.i.posthog.com.example.org', 'https://us.i.posthog.com.example.org'],
+    ])('routes the JSON GET through the resolved assets host (%s)', async (apiHost, host) => {
         const fetch = vi.fn(async () => response())
         const posthog = await create({
             ...options,
