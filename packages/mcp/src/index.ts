@@ -251,6 +251,7 @@ export type {
   CaptureEventData,
   CollectFeedbackConfig,
   InitializeCaptureData,
+  InputAliasMap,
   McpAnalytics,
   McpCaptureCommon,
   MCPAnalyticsContextOptions,

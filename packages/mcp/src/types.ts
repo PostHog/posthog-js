@@ -323,7 +323,16 @@ export interface ToolInputOptions {
    * drops names longer than 64 characters and records at most 20 names.
    */
   shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * The alternative argument names the server accepts, as canonical name to aliases in the
+   * order the server tries them, for example `{ id: ['experimentId'] }`. Must be owned by the
+   * server, never taken from the caller. Alias names count as declared in `$mcp_input_keys`,
+   * and `$mcp_input_aliases_used` records each alias the server needed, as `alias:canonical`.
+   */
+  inputAliases?: InputAliasMap
 }
+
+export type InputAliasMap = Readonly<Record<string, readonly string[]>>
 
 export interface Event {
   actorId?: string

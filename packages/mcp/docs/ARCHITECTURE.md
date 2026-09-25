@@ -118,10 +118,20 @@ posthog.captureToolCall({ toolName, isError: false, properties })
 Compute these properties before argument normalization, and include them in both success and error events.
 Pass a schema owned by the server, never one supplied by the caller.
 Custom command formats must extract the actual tool arguments and schema before calling the helper.
-Alternative field names must appear in the supplied schema, or pass `shouldRecordInputKey`, to remain visible.
-Do not report which alternative names a call used through server-specific `$mcp_*` properties.
-Alias telemetry is planned SDK follow-up work: the server will pass its own alias map to the helper, and the helper will add `$mcp_input_aliases_used` (for example `["experimentId:id"]`) without exposing unknown names.
-The SDK does not normalize arguments or infer which alternative a server accepted.
+A server that accepts alternative field names passes its own alias map as `inputAliases`, canonical name to aliases in the order the server tries them:
+
+```ts
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema, {
+  inputAliases: { id: ['experimentId', 'experiment_id'] },
+})
+// { experimentId: 30 } → $mcp_input_keys: ['experimentId'], $mcp_input_aliases_used: ['experimentId:id']
+```
+
+Alias names count as declared, so they stay visible in `$mcp_input_keys`.
+`$mcp_input_aliases_used` records `alias:canonical` for each canonical name the call did not send, using the first of its aliases that the call did send.
+It is omitted when no alias was needed, and it holds at most 20 entries.
+Do not report alias use through server-specific `$mcp_*` properties.
+The SDK does not normalize arguments; the map only describes what the server's own normalizer does.
 
 The helper adds no request values to the event.
 Existing parameter and response capture remains unchanged.
