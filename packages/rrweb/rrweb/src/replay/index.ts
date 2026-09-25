@@ -241,6 +241,7 @@ export class Replayer {
   private styleMirror: StyleSheetMirror = new StyleSheetMirror();
   // <style> elements whose sheet no longer matches their text.
   private cssomStyles: Set<HTMLStyleElement> = new Set();
+  private cssomStylesPruneAt = 64;
 
   // Hosts whose AdoptedStyleSheet event was applied before their shadow root
   // was attached, keyed by node id; adopted when the shadow root appears.
@@ -2501,8 +2502,14 @@ export class Replayer {
 
   private trackCssomStyle(styleSheet: CSSStyleSheet) {
     const owner = styleSheet.ownerNode;
-    if (owner && owner.nodeName === 'STYLE') {
-      this.cssomStyles.add(owner as HTMLStyleElement);
+    if (!owner || owner.nodeName !== 'STYLE') return;
+    this.cssomStyles.add(owner as HTMLStyleElement);
+    // Removed styles would otherwise stay referenced until the next reset.
+    if (this.cssomStyles.size > this.cssomStylesPruneAt) {
+      this.cssomStyles.forEach((style) => {
+        if (!style.isConnected) this.cssomStyles.delete(style);
+      });
+      this.cssomStylesPruneAt = Math.max(64, this.cssomStyles.size * 2);
     }
   }
 
