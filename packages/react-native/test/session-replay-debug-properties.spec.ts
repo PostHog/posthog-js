@@ -853,6 +853,34 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'settled').properties.$recording_status).toBe('disabled')
   })
 
+  it('a manual stop reports disabled before the native refresh lands', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('active')
+
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    nativeDebugMap = { $recording_status: 'disabled' }
+    pluginMock.getSessionReplayDebugProperties.mockImplementation(async () => {
+      await gate
+      return nativeDebugMap
+    })
+    await client.stopSessionRecording()
+
+    // The post-stop refresh is still parked on the bridge; the JS recording flag is untouched
+    // by a manual stop, so only the provisional map keeps this from reading `active`.
+    expect(captureOne(client, 'after stop').properties.$recording_status).toBe('disabled')
+
+    release?.()
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'settled').properties.$recording_status).toBe('disabled')
+  })
+
   it('Stopping recording clears the hold reason (native)', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }

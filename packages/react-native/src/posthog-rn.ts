@@ -929,8 +929,10 @@ export class PostHog extends PostHogCore {
   }
 
   // A capture between the state change and the refresh landing must not see the stale map.
-  private _invalidateNativeSessionReplayDebugProperties(): void {
-    this._nativeSessionReplayDebugProperties = undefined
+  // `provisional` stands in until the refresh lands, for a state the caller already knows
+  // (a stop that succeeded is `disabled`); without it JS-derived values fill the gap.
+  private _invalidateNativeSessionReplayDebugProperties(provisional?: { [key: string]: JsonType }): void {
+    this._nativeSessionReplayDebugProperties = provisional
     this._nativeSessionReplayDebugGeneration++
     this._refreshNativeSessionReplayDebugProperties()
   }
@@ -2141,7 +2143,7 @@ export class PostHog extends PostHogCore {
       }
 
       await OptionalReactNativePlugin.stopRecording()
-      this._invalidateNativeSessionReplayDebugProperties()
+      this._invalidateNativeSessionReplayDebugProperties({ $recording_status: 'disabled' })
       this._logger.info('Session recording stopped.')
       return true
     } catch (e) {
