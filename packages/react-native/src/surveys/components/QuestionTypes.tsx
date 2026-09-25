@@ -359,7 +359,7 @@ export function MultipleChoiceQuestion({
           appearance={appearance}
           onSubmit={() => {
             const result = selectedChoiceIndices.map((index) =>
-              index === openChoiceIndex ? openEndedInput : question.choices[index]
+              index === openChoiceIndex ? openEndedInput : choices[index]
             )
             onSubmit(allowMultiple ? result : result[0])
           }}
