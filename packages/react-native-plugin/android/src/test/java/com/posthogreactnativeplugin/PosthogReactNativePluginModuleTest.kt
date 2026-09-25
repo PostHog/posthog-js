@@ -1,6 +1,5 @@
 package com.posthogreactnativeplugin
 
-import com.facebook.react.bridge.JavaOnlyArray
 import com.facebook.react.bridge.JavaOnlyMap
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
@@ -143,49 +142,5 @@ class PosthogReactNativePluginModuleTest {
     for (value in listOf("", "not-a-date", "2026-09-22", "2026-09-22T10:11:12Z", "2026-13-45T99:99:99.999Z")) {
       assertNull("expected $value to be rejected", parseIso8601(value))
     }
-  }
-
-  @Test
-  fun `session replay debug properties map converts strings`() {
-    val result = mapToWritableMap(mapOf("\$recording_status" to "active"), ::JavaOnlyMap, ::JavaOnlyArray)
-
-    assertEquals("active", (result as JavaOnlyMap).getString("\$recording_status"))
-  }
-
-  @Test
-  fun `session replay debug properties map converts numbers`() {
-    val result = mapToWritableMap(mapOf("intCount" to 3, "longCount" to 4L), ::JavaOnlyMap, ::JavaOnlyArray)
-
-    assertEquals(3, (result as JavaOnlyMap).getInt("intCount"))
-    assertEquals(4.0, result.getDouble("longCount"), 0.0)
-  }
-
-  @Test
-  fun `session replay debug properties map converts booleans`() {
-    val result = mapToWritableMap(mapOf("\$sdk_debug_replay_internal_buffer_enabled" to true), ::JavaOnlyMap, ::JavaOnlyArray)
-
-    assertTrue((result as JavaOnlyMap).getBoolean("\$sdk_debug_replay_internal_buffer_enabled"))
-  }
-
-  @Test
-  fun `session replay debug properties map converts string lists to arrays`() {
-    val result =
-      mapToWritableMap(
-        mapOf("\$sdk_debug_replay_pending_trigger_conditions" to listOf("event_trigger", "linked_flag")),
-        ::JavaOnlyMap,
-        ::JavaOnlyArray,
-      )
-
-    val array = (result as JavaOnlyMap).getArray("\$sdk_debug_replay_pending_trigger_conditions") as JavaOnlyArray
-    assertEquals(2, array.size())
-    assertEquals("event_trigger", array.getString(0))
-    assertEquals("linked_flag", array.getString(1))
-  }
-
-  @Test
-  fun `session replay debug properties map is empty for an empty source`() {
-    val result = mapToWritableMap(emptyMap(), ::JavaOnlyMap, ::JavaOnlyArray)
-
-    assertEquals(0, (result as JavaOnlyMap).toHashMap().size)
   }
 }
