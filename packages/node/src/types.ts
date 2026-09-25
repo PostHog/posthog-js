@@ -16,7 +16,7 @@ import type {
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
-import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
   distinctId: string
@@ -261,7 +261,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * })
    * ```
    */
-  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
@@ -466,6 +466,10 @@ export type FeatureFlagResult = {
   enabled: boolean
   variant: string | undefined
   payload: JsonType | undefined
+  /** PostHog's evaluation explanation, when available. */
+  reason?: string
+  /** Stable evaluation reason code, when available (for example, `flag_disabled`). */
+  reasonCode?: string
 }
 
 export interface IPostHog {

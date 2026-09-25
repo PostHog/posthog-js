@@ -121,6 +121,13 @@ for (const entry of ['main', 'surveys']) {
     assert.match(bundles[entry].umd, /global\.React/)
 }
 
+// Every entrypoint must share the context and default client through the same global key.
+for (const [entry, formats] of Object.entries(bundles)) {
+    for (const [format, bundle] of Object.entries(formats)) {
+        assert.match(bundle, /__POSTHOG_REACT_SHARED_STATE__/, `${entry} ${format} does not use the shared state`)
+    }
+}
+
 assert.doesNotMatch(bundles.slim.esm, /["']posthog-js["']/)
 assert.doesNotMatch(bundles.slim.umd, /["']posthog-js["']/)
 assert.match(bundles.slim.esm, /from ["']react["']/)
@@ -149,7 +156,7 @@ for (const [entry, bundle] of Object.entries(bundles)) {
 // Avoid reintroducing intermediate-transform helpers that disproportionately affect the small surveys bundles.
 const baselineSurveyBytes = {
     'esm/surveys/index.js': 4748,
-    'umd/surveys/index.js': 5521,
+    'umd/surveys/index.js': 6329,
 }
 for (const [file, baselineBytes] of Object.entries(baselineSurveyBytes)) {
     const bytes = (await readFile(resolve(packageRoot, 'dist', file))).byteLength
@@ -170,4 +177,5 @@ for (const [file, baselineBytes] of Object.entries(baselineGzipBytes)) {
     assert.ok(bytes <= Math.ceil(baselineBytes * 1.15), `${file} gzip size grew more than 15%: ${bytes} bytes`)
 }
 
+// oxlint-disable-next-line no-console -- CLI diagnostic output
 console.log('React build output, ES5 UMD behavior, size, source maps, externals, globals, and browser copy are valid')

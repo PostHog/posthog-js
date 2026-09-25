@@ -1506,7 +1506,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
     let featureFlagError: FeatureFlagErrorType | undefined = undefined
-    // Track metadata for event tracking (not exposed in FeatureFlagResult)
+    // Track metadata for feature-flag-called events.
     let flagId: number | undefined = undefined
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
@@ -1534,6 +1534,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               enabled: value !== false,
               variant: typeof value === 'string' ? value : undefined,
               payload: localResult.payload ?? undefined,
+              reason: flagReason,
+              reasonCode: flag.active === false ? 'flag_disabled' : undefined,
             }
           }
         } catch (e) {
@@ -1603,6 +1605,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             // The flags API serializes missing variants as null
             variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
+            reason: flagReason,
+            reasonCode: flagDetail.reason?.code,
           }
         }
 

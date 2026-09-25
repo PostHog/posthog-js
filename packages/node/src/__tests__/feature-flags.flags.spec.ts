@@ -631,6 +631,8 @@ describe('getFeatureFlagResult', () => {
       enabled: true,
       variant: 'variant-a',
       payload: { discount: 20 },
+      reason: 'Matched condition set 3',
+      reasonCode: 'variant',
     })
   })
 
@@ -763,6 +765,22 @@ describe('getFeatureFlagResult', () => {
     })
   })
 
+  it.each([
+    { code: 'flag_disabled', condition_index: undefined, description: 'Flag switched off' },
+    { code: 'flag_disabled', condition_index: undefined, description: undefined },
+  ])('exposes remote evaluation reason $code / $description', async (reason) => {
+    mockedFetch.mockImplementation(
+      apiImplementationV4({
+        flags: { 'test-flag': { key: 'test-flag', enabled: false, variant: undefined, metadata: undefined, reason } },
+        errorsWhileComputingFlags: false,
+      })
+    )
+    const posthog = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...posthogImmediateResolveOptions })
+    const result = await posthog.getFeatureFlagResult('test-flag', 'user', { sendFeatureFlagEvents: false })
+    expect(result).toMatchObject({ enabled: false, reason: reason.description ?? reason.code, reasonCode: reason.code })
+    await posthog.shutdown()
+  })
+
   it('returns disabled result when conditions do not match', async () => {
     const flagsResponse: PostHogV2FlagsResponse = {
       flags: {
@@ -801,6 +819,8 @@ describe('getFeatureFlagResult', () => {
       enabled: false,
       variant: undefined,
       payload: undefined,
+      reason: 'No conditions matched',
+      reasonCode: 'no_condition_match',
     })
   })
 
@@ -1006,6 +1026,39 @@ describe('getFeatureFlagResult', () => {
   })
 
   describe('local evaluation', () => {
+    it.each([true, false])(
+      'exposes local reason without treating every off result as disabled (active=%s)',
+      async (active) => {
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: {
+              flags: [
+                {
+                  id: 42,
+                  name: 'Local Feature',
+                  key: 'local-flag',
+                  active,
+                  filters: { groups: [{ rollout_percentage: 0 }] },
+                },
+              ],
+            },
+          })
+        )
+        const posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          ...posthogImmediateResolveOptions,
+        })
+        const result = await posthog.getFeatureFlagResult('local-flag', 'user', {
+          onlyEvaluateLocally: true,
+          sendFeatureFlagEvents: false,
+        })
+        expect(result).toMatchObject({ enabled: false, reason: 'Evaluated locally' })
+        expect(result).toHaveProperty('reasonCode', active ? undefined : 'flag_disabled')
+        await posthog.shutdown()
+      }
+    )
+
     it('returns flag result with parsed payload when evaluated locally', async () => {
       const localFlags = {
         flags: [
