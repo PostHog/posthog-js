@@ -1064,15 +1064,18 @@ describe('replayer', function () {
           Array.from(doc.getElementById(id).sheet.cssRules, (r) => r.cssText);
         return {
           metaCount: doc.getElementsByTagName('meta').length,
-          head: rules('head-style'),
+          head: rules('head-style').map((r) => r.split(' ')[0]),
           div: rules('div-style'),
+          paddingLeft: getComputedStyle(doc.getElementById('padded'))
+            .paddingLeft,
         };
       })()
     `);
       expect(result).toEqual({
         metaCount: 1100,
-        head: ['.from-6 { color: red; }'],
+        head: ['.from-6', '.padded'],
         div: ['.from-11 { color: red; }'],
+        paddingLeft: '7px',
       });
     },
   );

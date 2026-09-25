@@ -21,8 +21,8 @@ const metaAdds = (parentId: number, count: number): addedNodeMutation[] =>
   }));
 
 /**
- * Rules reach both <style> elements only through the CSSOM, then one batch
- * large enough for the detached-subtree path lands in `batchParentId`.
+ * Rules reach both <style> elements through the CSSOM, then one batch large
+ * enough for the detached-subtree path lands in `batchParentId`.
  */
 const hugeAddCssomRulesEvents = (batchParentId: number): eventWithTime[] => [
   { type: EventType.DomContentLoaded, data: {}, timestamp: now },
@@ -57,7 +57,16 @@ const hugeAddCssomRulesEvents = (batchParentId: number): eventWithTime[] => [
                     type: 2,
                     tagName: 'style',
                     attributes: { id: 'head-style' },
-                    childNodes: [],
+                    childNodes: [
+                      {
+                        id: 7,
+                        type: 3,
+                        // cssText of this rule round-trips lossily
+                        textContent:
+                          '.padded { padding: var(--a); padding-top: var(--b); }',
+                        isStyle: true,
+                      },
+                    ],
                   },
                 ],
               },
@@ -81,6 +90,17 @@ const hugeAddCssomRulesEvents = (batchParentId: number): eventWithTime[] => [
                         childNodes: [],
                       },
                     ],
+                  },
+                  {
+                    id: 12,
+                    type: 2,
+                    tagName: 'div',
+                    attributes: {
+                      id: 'padded',
+                      class: 'padded',
+                      style: '--a: 7px; --b: 3px',
+                    },
+                    childNodes: [],
                   },
                 ],
               },

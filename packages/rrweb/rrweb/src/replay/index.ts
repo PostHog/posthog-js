@@ -115,17 +115,21 @@ type DetachedStyleRules = {
 };
 
 // A reconnected <style> rebuilds its sheet from text, which drops rules the
-// player added through insertRule. Cross-origin <link> sheets are skipped: the
+// player added through the CSSOM. Cross-origin <link> sheets are skipped: the
 // player cannot insert rules into them.
-function captureStyleRules(root: Element): DetachedStyleRules[] {
-  const styles =
-    root.tagName === 'STYLE'
-      ? [root as HTMLStyleElement]
-      : Array.from(root.getElementsByTagName('style'));
+function captureStyleRules(
+  root: Node,
+  cssomStyles: Set<HTMLStyleElement>,
+): DetachedStyleRules[] {
   const captured: DetachedStyleRules[] = [];
-  for (const style of styles) {
+  for (const style of cssomStyles) {
+    // A disconnected style rebuilds from text when it comes back.
+    if (!style.isConnected) {
+      cssomStyles.delete(style);
+      continue;
+    }
     const sheet = style.sheet;
-    if (!sheet) continue;
+    if (!sheet || !isInSubtree(root, style)) continue;
     captured.push({
       style,
       text: style.textContent,
@@ -135,19 +139,51 @@ function captureStyleRules(root: Element): DetachedStyleRules[] {
   return captured;
 }
 
+// Detaching a shadow host also reconnects the styles in its shadow root.
+function isInSubtree(root: Node, node: Node): boolean {
+  let current: Node | null = node;
+  while (current) {
+    if (root.contains(current)) return true;
+    const rootNode = current.getRootNode();
+    current = rootNode !== current ? (rootNode as ShadowRoot).host || null : null;
+  }
+  return false;
+}
+
 function restoreStyleRules(captured: DetachedStyleRules[]): void {
   for (const { style, text, rules } of captured) {
     const sheet = style.sheet;
     // Changed text means the live path would also have rebuilt the sheet.
     if (!sheet || style.textContent !== text) continue;
-    while (sheet.cssRules.length) sheet.deleteRule(0);
-    rules.forEach((rule) => {
-      try {
-        sheet.insertRule(rule, sheet.cssRules.length);
-      } catch (e) {
-        // The rule parsed once, so a failure here is a browser quirk. Skip it.
+    // Keep rebuilt rules that still match: a cssText round-trip is lossy, for
+    // example for var() shorthands with an overridden longhand.
+    const remaining = new Map<string, number>();
+    for (const rule of rules) {
+      remaining.set(rule, (remaining.get(rule) || 0) + 1);
+    }
+    let index = 0;
+    for (const rule of rules) {
+      while (
+        index < sheet.cssRules.length &&
+        sheet.cssRules[index].cssText !== rule &&
+        !remaining.get(sheet.cssRules[index].cssText)
+      ) {
+        sheet.deleteRule(index);
       }
-    });
+      remaining.set(rule, (remaining.get(rule) || 0) - 1);
+      if (sheet.cssRules[index]?.cssText === rule) {
+        index++;
+        continue;
+      }
+      try {
+        sheet.insertRule(rule, index);
+      } catch (e) {
+        // A placeholder keeps later recorded rule indexes aligned.
+        sheet.insertRule('@media not all {}', index);
+      }
+      index++;
+    }
+    while (sheet.cssRules.length > index) sheet.deleteRule(index);
   }
 }
 
@@ -203,6 +239,8 @@ export class Replayer {
 
   // Used to track StyleSheetObjects adopted on multiple document hosts.
   private styleMirror: StyleSheetMirror = new StyleSheetMirror();
+  // <style> elements whose sheet no longer matches their text.
+  private cssomStyles: Set<HTMLStyleElement> = new Set();
 
   // Hosts whose AdoptedStyleSheet event was applied before their shadow root
   // was attached, keyed by node id; adopted when the shadow root appears.
@@ -439,6 +477,7 @@ export class Replayer {
       this.firstFullSnapshot = null;
       this.mirror.reset();
       this.styleMirror.reset();
+      this.cssomStyles.clear();
       this.pendingAdoptedStyleSheets.clear();
       this.lastAdoptedStyleIds.clear();
       this.adoptedStyleSheetTokens.clear();
@@ -732,6 +771,7 @@ export class Replayer {
     // Reset caches and mirrors
     this.mirror.reset();
     this.styleMirror.reset();
+    this.cssomStyles.clear();
     this.pendingAdoptedStyleSheets.clear();
     this.lastAdoptedStyleIds.clear();
     this.adoptedStyleSheetTokens.clear();
@@ -1006,6 +1046,7 @@ export class Replayer {
           }
           this.mediaManager.reset();
           this.styleMirror.reset();
+          this.cssomStyles.clear();
           this.pendingAdoptedStyleSheets.clear();
           this.lastAdoptedStyleIds.clear();
           this.adoptedStyleSheetTokens.clear();
@@ -1785,7 +1826,7 @@ export class Replayer {
         return null;
       }
     }
-    const styleRules = captureStyleRules(node as Element);
+    const styleRules = captureStyleRules(node, this.cssomStyles);
     const nextSibling = node.nextSibling;
     parent.removeChild(node);
     return { node, parent, nextSibling, styleRules };
@@ -2458,10 +2499,18 @@ export class Replayer {
       this.applyStyleDeclaration(data, styleSheet);
   }
 
+  private trackCssomStyle(styleSheet: CSSStyleSheet) {
+    const owner = styleSheet.ownerNode;
+    if (owner && owner.nodeName === 'STYLE') {
+      this.cssomStyles.add(owner as HTMLStyleElement);
+    }
+  }
+
   private applyStyleSheetRule(
     data: styleSheetRuleData,
     styleSheet: CSSStyleSheet,
   ) {
+    this.trackCssomStyle(styleSheet);
     data.adds?.forEach(({ rule, index: nestedIndex }) => {
       try {
         if (Array.isArray(nestedIndex)) {
@@ -2522,6 +2571,7 @@ export class Replayer {
     data: styleDeclarationData,
     styleSheet: CSSStyleSheet,
   ) {
+    this.trackCssomStyle(styleSheet);
     if (data.set) {
       const rule = getNestedRule(
         styleSheet.rules,
