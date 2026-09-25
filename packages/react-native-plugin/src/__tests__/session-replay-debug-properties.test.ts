@@ -17,10 +17,7 @@ const { nativeModule } = mock
 
 describe('getSessionReplayDebugProperties', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    nativeModule.getSessionReplayDebugProperties.mockImplementation(() =>
-      Promise.resolve({ $recording_status: 'active' })
-    )
+    nativeModule.getSessionReplayDebugProperties = vi.fn(() => Promise.resolve({ $recording_status: 'active' }))
   })
 
   it('forwards to the native module and resolves its map', async () => {
@@ -31,12 +28,9 @@ describe('getSessionReplayDebugProperties', () => {
   })
 
   it('resolves an empty map when the native build lacks the method', async () => {
-    const original = nativeModule.getSessionReplayDebugProperties
     ;(nativeModule as any).getSessionReplayDebugProperties = undefined
 
     await expect(getSessionReplayDebugProperties()).resolves.toEqual({})
-
-    ;(nativeModule as any).getSessionReplayDebugProperties = original
   })
 
   it('the default export exposes it', async () => {
