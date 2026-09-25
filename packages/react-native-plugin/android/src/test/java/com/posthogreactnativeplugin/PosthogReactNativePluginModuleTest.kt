@@ -1,6 +1,7 @@
 package com.posthogreactnativeplugin
 
 import com.facebook.react.bridge.JavaOnlyMap
+import com.posthog.android.PostHogAndroidConfig
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import org.junit.Assert.assertEquals
@@ -11,6 +12,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PosthogReactNativePluginModuleTest {
+
+  @Test
+  fun `JVM and NDK crash capture are configured independently`() {
+    for (nativeAutocapture in listOf(true, false)) {
+      for (androidNdkCrashes in listOf(true, false)) {
+        val config = PostHogAndroidConfig("api-key", "https://us.i.posthog.com")
+        config.errorTrackingConfig.autoCapture = !nativeAutocapture
+        config.errorTrackingConfig.captureNativeCrashes = !androidNdkCrashes
+
+        config.applyErrorTrackingConfig(nativeAutocapture, androidNdkCrashes)
+
+        assertEquals(nativeAutocapture, config.errorTrackingConfig.autoCapture)
+        assertEquals(androidNdkCrashes, config.errorTrackingConfig.captureNativeCrashes)
+      }
+    }
+  }
 
   @Test
   fun `touch capture defaults to true when omitted or malformed`() {

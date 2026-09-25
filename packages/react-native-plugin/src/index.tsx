@@ -33,6 +33,7 @@ export interface PostHogReactNativePluginExceptionStepsConfig {
 
 export interface PostHogReactNativePluginErrorTrackingConfig {
   nativeAutocapture?: boolean
+  androidNdkCrashes?: boolean
   exceptionSteps?: PostHogReactNativePluginExceptionStepsConfig
 }
 
