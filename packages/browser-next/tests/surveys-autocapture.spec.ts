@@ -50,7 +50,8 @@ afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.dispose()))
     vi.restoreAllMocks()
 })
-const fetchDefinitions = (client: PostHog) => new Promise<void>((resolve) => client.getSurveys(() => resolve(), true))
+const fetchDefinitions = (client: PostHog) =>
+    new Promise<void>((resolve) => client.getExtension<SurveysExtension>('surveys')!.getSurveys(() => resolve(), true))
 
 describe('survey autocapture selectors', () => {
     it('retains real survey selectors registered before autocapture setup', async () => {
@@ -85,7 +86,9 @@ describe('survey autocapture selectors', () => {
         expect(captured).toHaveBeenCalledWith(
             expect.objectContaining({ properties: expect.objectContaining({ $element_selectors: ['.first'] }) })
         )
-        expect(await client.canRenderSurvey('action')).toMatchObject({ visible: true })
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+            visible: true,
+        })
         const exposed = surveyExtension.getElementSelectors()
         exposed.clear()
         expect(surveyExtension.getElementSelectors()).toEqual(new Set(['.first']))
@@ -130,13 +133,17 @@ describe('survey autocapture selectors', () => {
             }
             const second = await createPostHog({ ...base, storage, surveys: { automaticDisplay: false }, fetch })
             clients.push(second)
-            expect(await second.canRenderSurvey('action')).toMatchObject({ visible: false })
+            expect(await second.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+                visible: false,
+            })
             expect(second.getExtension<SurveysExtension>('surveys')?.getElementSelectors()).toEqual(new Set(['.first']))
             const captured = vi.fn()
             second.onEvent(captured)
             document.querySelector('button')!.click()
             expect(captured.mock.calls[0]![0].properties.$element_selectors).toEqual(['.first'])
-            expect(await second.canRenderSurvey('action')).toMatchObject({ visible: true })
+            expect(await second.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+                visible: true,
+            })
             expect(fetch).toHaveBeenCalledTimes(age === 'stale' ? 1 : 0)
         }
     )
@@ -180,7 +187,9 @@ describe('survey autocapture selectors', () => {
             $element_selectors: ['.first'],
             ...(url === undefined ? {} : { $current_url: url }),
         })
-        expect(await client.canRenderSurvey('action')).toMatchObject({ visible: matches })
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+            visible: matches,
+        })
         const properties = captured.mock.calls[0]![0].properties
         if (url === undefined) expect(properties).not.toHaveProperty('$current_url')
         else expect(properties.$current_url).toBe(url)
@@ -224,10 +233,16 @@ describe('survey autocapture selectors', () => {
         await fetchDefinitions(client)
         client.capture('arm')
         client.capture('purchase')
-        expect(await client.canRenderSurvey('event')).toMatchObject({ visible: false })
-        expect(await client.canRenderSurvey('cancel')).toMatchObject({ visible: true })
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('event')).toMatchObject({
+            visible: false,
+        })
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('cancel')).toMatchObject({
+            visible: true,
+        })
         client.capture('action')
-        expect(await client.canRenderSurvey('action')).toMatchObject({ visible: true })
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+            visible: true,
+        })
     })
 
     it('reconciles successful snapshots while preserving armed delays and failure state', async () => {
@@ -249,14 +264,20 @@ describe('survey autocapture selectors', () => {
         const captured = vi.fn()
         client.onEvent(captured)
         document.querySelector<HTMLElement>('.first')!.click()
-        expect(await client.canRenderSurvey('action')).toMatchObject({ visible: true })
-        const activation = JSON.parse(storage.getItem('survey-merge_surveys')!)['$surveys_activated_timestamps']
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+            visible: true,
+        })
+        const activation = JSON.parse(storage.getItem('survey-merge')!).extensionData.surveys[
+            '$surveys_activated_timestamps'
+        ]
         expect(activation).toBeTruthy()
         await fetchDefinitions(client)
-        expect(await client.canRenderSurvey('action')).toMatchObject({ visible: true })
-        expect(JSON.parse(storage.getItem('survey-merge_surveys')!)['$surveys_activated_timestamps']).toEqual(
-            activation
-        )
+        expect(await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey('action')).toMatchObject({
+            visible: true,
+        })
+        expect(
+            JSON.parse(storage.getItem('survey-merge')!).extensionData.surveys['$surveys_activated_timestamps']
+        ).toEqual(activation)
         fail = true
         await fetchDefinitions(client)
         captured.mockClear()
