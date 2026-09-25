@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/2162": {
+    "key": "PostHog/posthog-js/issue/2162",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2162",
+    "url": "https://github.com/PostHog/posthog-js/issues/2162",
+    "conclusion": "Confirmed React Native feature gap: the SDK supports ordinary feature flags but does not expose early-access feature discovery or enrollment APIs.",
+    "labels": [
+      "enhancement",
+      "help wanted",
+      "feature/flags",
+      "team/feature-flags",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-25T08:42:53.503Z"
+  },
   "PostHog/posthog-js/issue/2488": {
     "key": "PostHog/posthog-js/issue/2488",
     "repo": "PostHog/posthog-js",
