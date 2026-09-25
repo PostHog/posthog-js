@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.54.1
+
+### Patch Changes
+
+- [#4832](https://github.com/PostHog/posthog-js/pull/4832) [`ac479db`](https://github.com/PostHog/posthog-js/commit/ac479db0b3542ec9ec4ef991470be3450e2bad2e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Support snake_case feature flag cache payloads while preserving compatibility with camelCase providers and cached data.
+  (2026-09-25)
+
 ## 5.54.0
 
 ### Minor Changes
