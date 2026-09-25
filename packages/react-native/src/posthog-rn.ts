@@ -885,9 +885,8 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  // Fire-and-forget: refreshes the native replay debug-map cache used by the merge rule above.
-  // Older plugins without the method leave JS-derived values standing (no cache ever set).
-  // A refresh still waiting its turn on the native chain covers any request made meanwhile.
+  // Older plugins without this method leave JS-derived values standing (no cache ever set).
+  // A refresh already in flight covers any request made meanwhile.
   private _refreshNativeSessionReplayDebugProperties(): void {
     if (!OptionalReactNativePlugin?.getSessionReplayDebugProperties || this._nativeSessionReplayDebugRefreshQueued) {
       return

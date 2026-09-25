@@ -163,7 +163,7 @@ describe('PostHog RN session replay debug properties', () => {
   // Caches the remote replay config so the next launch evaluates its gates at startup instead
   // of starting optimistically before /flags returns.
   const warmup = async (): Promise<void> => {
-    const w = new PostHog('test-token', { customStorage: mockStorage, enableSessionReplay: true, flushInterval: 0 })
+    const w = newPostHog({ enableSessionReplay: true })
     await w.ready()
     await w.reloadFeatureFlagsAsync()
     await waitForNativePluginEvaluation(w)
@@ -604,9 +604,6 @@ describe('PostHog RN session replay debug properties', () => {
     expect(active.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 
-  // Flags-driven pause is the stop path that owns the JS recording flag (see `pauseViaLinkedFlag`
-  // below), so it's used here too rather than the public `stopSessionRecording()`, which doesn't
-  // update `_sessionReplayRecordingActive` and would leave the JS-derived fallback ambiguous.
   it('Capture racing stop() yields a consistent status, never a torn read (native)', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
