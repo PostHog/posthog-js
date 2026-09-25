@@ -109,6 +109,20 @@ const withoutDebugProperties = (properties: JsonType): JsonType => {
 
 type SessionReplayTriggerStatus = 'trigger_disabled' | 'trigger_pending' | 'trigger_activated'
 
+// Every key the JS debug block owns; a build failure resets all of them alongside the error key.
+const EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES: { [key: string]: JsonType | undefined } = {
+  $recording_status: undefined,
+  $sdk_debug_session_start: undefined,
+  $sdk_debug_current_session_duration: undefined,
+  $sdk_debug_pending_queue_size: undefined,
+  $sdk_debug_replay_capture_mode: undefined,
+  $sdk_debug_replay_throttle_delay_ms: undefined,
+  $sdk_debug_replay_event_trigger_status: undefined,
+  $sdk_debug_replay_linked_flag_trigger_status: undefined,
+  $sdk_debug_replay_pending_trigger_conditions: undefined,
+  $sdk_debug_error_capturing_properties: undefined,
+}
+
 type ManualRecordingStartRequest = {
   pending: boolean
   retryCount: number
@@ -826,6 +840,7 @@ export class PostHog extends PostHogCore {
       }
 
       return {
+        ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES,
         $recording_status: this._sessionReplayRecordingActive === true ? 'active' : 'disabled',
         $sdk_debug_session_start: hasSessionStart ? sessionStart : undefined,
         $sdk_debug_current_session_duration: hasSessionStart ? Date.now() - sessionStart : undefined,
@@ -837,38 +852,25 @@ export class PostHog extends PostHogCore {
         $sdk_debug_replay_event_trigger_status: eventTriggerStatus,
         $sdk_debug_replay_linked_flag_trigger_status: linkedFlagTriggerStatus,
         $sdk_debug_replay_pending_trigger_conditions: pendingTriggerConditions,
-        $sdk_debug_error_capturing_properties: undefined,
       }
     } catch (e) {
-      return {
-        $recording_status: undefined,
-        $sdk_debug_session_start: undefined,
-        $sdk_debug_current_session_duration: undefined,
-        $sdk_debug_pending_queue_size: undefined,
-        $sdk_debug_replay_capture_mode: undefined,
-        $sdk_debug_replay_throttle_delay_ms: undefined,
-        $sdk_debug_replay_event_trigger_status: undefined,
-        $sdk_debug_replay_linked_flag_trigger_status: undefined,
-        $sdk_debug_replay_pending_trigger_conditions: undefined,
-        $sdk_debug_error_capturing_properties: String(e),
-      }
+      return { ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES, $sdk_debug_error_capturing_properties: String(e) }
     }
   }
 
   private _resolveThrottleDelayMs(options?: PostHogOptions): number {
-    const defaultThrottleDelayMs = DEFAULT_THROTTLE_DELAY_MS
     const {
       throttleDelayMs: configuredThrottleDelayMs,
-      iOSdebouncerDelayMs = defaultThrottleDelayMs,
-      androidDebouncerDelayMs = defaultThrottleDelayMs,
+      iOSdebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
+      androidDebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
     } = options?.sessionReplayConfig ?? {}
 
-    let throttleDelayMs = configuredThrottleDelayMs ?? defaultThrottleDelayMs
+    let throttleDelayMs = configuredThrottleDelayMs ?? DEFAULT_THROTTLE_DELAY_MS
 
     // if deprecated values are set, we use the higher one for back compatibility
     if (
-      throttleDelayMs === defaultThrottleDelayMs &&
-      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
+      throttleDelayMs === DEFAULT_THROTTLE_DELAY_MS &&
+      (iOSdebouncerDelayMs !== DEFAULT_THROTTLE_DELAY_MS || androidDebouncerDelayMs !== DEFAULT_THROTTLE_DELAY_MS)
     ) {
       throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
     }
@@ -3140,7 +3142,6 @@ export class PostHog extends PostHogCore {
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
-    this._sessionReplayOptions = options
 
     await this._evaluateAndStartSessionReplay(cachedRemoteConfig)
   }
@@ -3330,13 +3331,7 @@ export class PostHog extends PostHogCore {
     if (Number.isNaN(eventTime) || eventTime >= sessionStart) {
       return
     }
-    if (isObject(message.properties)) {
-      for (const key of Object.keys(message.properties)) {
-        if (isDebugPropertyKey(key)) {
-          delete (message.properties as PostHogEventProperties)[key]
-        }
-      }
-    }
+    message.properties = withoutDebugProperties(message.properties)
   }
 
   private _maybeActivateEventTrigger(eventName: unknown): void {
