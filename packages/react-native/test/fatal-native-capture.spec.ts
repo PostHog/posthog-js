@@ -167,6 +167,33 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(enqueued[0].properties.$exception_list[0].value).toContain('old-plugin-fatal')
   })
 
+  it('hands native a payload without the JS replay debug keys and keeps them on the JS fallback', async () => {
+    posthog = await readyClient()
+
+    handler(new Error('strip-debug-keys'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException).toHaveBeenCalledTimes(1)
+    const nativeProperties = mockPlugin.captureFatalException.mock.calls[0][2]
+    // Native writes its own replay debug map on the handed-off event, so the JS one must not
+    // ride along beside it.
+    expect(nativeProperties).not.toHaveProperty('$recording_status')
+    expect(Object.keys(nativeProperties).some((key) => key.startsWith('$sdk_debug_'))).toBe(false)
+    expect(nativeProperties.$exception_list[0].value).toContain('strip-debug-keys')
+    await posthog.shutdown()
+
+    mockPlugin.captureFatalException = undefined as any
+    posthog = await readyClient()
+    const enqueued = observeEnqueuedExceptions(posthog)
+
+    handler(new Error('js-fallback-keeps-keys'), true)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(enqueued).toHaveLength(1)
+    expect(enqueued[0].properties.$recording_status).toBe('disabled')
+    expect(typeof enqueued[0].properties.$sdk_debug_session_start).toBe('number')
+  })
+
   it('keeps the exception in the JS queue when the native payload cannot be built', async () => {
     posthog = await readyClient()
     const enqueued = observeEnqueuedExceptions(posthog)
