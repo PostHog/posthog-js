@@ -91,6 +91,9 @@ const NATIVE_CALL_TIMEOUT_MS = 10_000
 const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
 
 const DEFAULT_THROTTLE_DELAY_MS = 1000
+// Native clears a replay hold on its own clock, so a `buffering` map is re-read from the
+// capture path at most this often.
+const BUFFERING_STATUS_REFRESH_INTERVAL_MS = 5_000
 
 const isDebugPropertyKey = (key: string): boolean => key === '$recording_status' || key.startsWith('$sdk_debug_')
 
@@ -359,6 +362,7 @@ export class PostHog extends PostHogCore {
   // `undefined` until the first refresh lands; JS-derived values stand until then.
   private _nativeSessionReplayDebugProperties?: { [key: string]: JsonType }
   private _nativeSessionReplayDebugRefreshQueued = false
+  private _nativeSessionReplayDebugRefreshedAt = 0
   // Bumped on invalidation so a refresh already in flight cannot write a pre-invalidation map.
   private _nativeSessionReplayDebugGeneration = 0
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
@@ -899,6 +903,7 @@ export class PostHog extends PostHogCore {
         const map = await plugin.getSessionReplayDebugProperties?.()
         if (generation === this._nativeSessionReplayDebugGeneration) {
           this._nativeSessionReplayDebugProperties = isObject(map) ? (map as { [key: string]: JsonType }) : undefined
+          this._nativeSessionReplayDebugRefreshedAt = Date.now()
         }
       },
       false
@@ -908,6 +913,15 @@ export class PostHog extends PostHogCore {
         this._nativeSessionReplayDebugRefreshQueued = false
       }
     })
+  }
+
+  private _refreshStaleBufferingStatus(): void {
+    if (
+      this._nativeSessionReplayDebugProperties?.['$recording_status'] === 'buffering' &&
+      Date.now() - this._nativeSessionReplayDebugRefreshedAt >= BUFFERING_STATUS_REFRESH_INTERVAL_MS
+    ) {
+      this._refreshNativeSessionReplayDebugProperties()
+    }
   }
 
   // A capture between the state change and the refresh landing must not see the stale map.
@@ -3357,6 +3371,7 @@ export class PostHog extends PostHogCore {
     }
     try {
       this._maybeActivateEventTrigger(processed?.['event'])
+      this._refreshStaleBufferingStatus()
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
     }

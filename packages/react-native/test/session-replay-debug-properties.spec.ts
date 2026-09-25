@@ -794,6 +794,28 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_internal_buffer_length).toBeUndefined()
   })
 
+  it('a capture re-reads a buffering map once the refresh interval has passed', async () => {
+    nativeDebugMap = { $recording_status: 'buffering', $sdk_debug_replay_flush_hold_reason: 'below_minimum_duration' }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('buffering')
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    nativeDebugMap = { $recording_status: 'active' }
+    captureOne(client, 'inside the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).not.toHaveBeenCalled()
+
+    ;(client as any)._nativeSessionReplayDebugRefreshedAt = 0
+    captureOne(client, 'after the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalledTimes(1)
+
+    const { properties } = captureOne(client, 'refreshed')
+    expect(properties.$recording_status).toBe('active')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+  })
+
   it('Stopping recording clears the hold reason (native)', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': true }
