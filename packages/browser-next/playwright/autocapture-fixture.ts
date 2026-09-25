@@ -1,3 +1,4 @@
+import type { SurveysExtension } from '../src/surveys-internal'
 import { createPostHog } from '../src'
 import { autocapture } from '../src/autocapture'
 import { surveys } from '../src/surveys'
@@ -114,17 +115,17 @@ export const autocaptureHarness = {
             },
         })
         client.onEvent((event) => captured.push({ event: event.event, properties: { ...event.properties } }))
-        if (!delayed) await client.canRenderSurvey(actionSurvey.id)
-        else void client.canRenderSurvey(actionSurvey.id)
+        if (!delayed) await client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id)
+        else void client.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id)
     },
     release() {
         release?.()
     },
     async eligible() {
-        return (await client?.canRenderSurvey(actionSurvey.id))?.visible
+        return (await client?.getExtension<SurveysExtension>('surveys')!.canRenderSurvey(actionSurvey.id))?.visible
     },
     display() {
-        client?.displaySurvey(actionSurvey.id)
+        client?.getExtension<SurveysExtension>('surveys')!.displaySurvey(actionSurvey.id)
     },
     optOut() {
         client?.optOut()
@@ -143,7 +144,9 @@ export const autocaptureHarness = {
     },
     async clearSelectors() {
         definitions = []
-        await new Promise<void>((resolve) => client?.getSurveys(() => resolve(), true))
+        await new Promise<void>((resolve) =>
+            client?.getExtension<SurveysExtension>('surveys')!.getSurveys(() => resolve(), true)
+        )
     },
 }
 declare global {

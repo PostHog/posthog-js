@@ -1,3 +1,4 @@
+import type { SurveysExtension } from '../src/surveys-internal'
 // @vitest-environment jsdom
 import { createPostHog, FeatureFlagsExtension } from '../src'
 import { localRemoteConfig } from './helpers'
@@ -41,7 +42,9 @@ it('shares default JSON configuration across flags, logs, surveys and autocaptur
         await vi.waitFor(() =>
             expect(client.getExtension(FeatureFlagsExtension)!.getFeatureFlag('remote')?.enabled).toBe(true)
         )
-        const surveys = await new Promise((resolve) => client.getSurveys((values) => resolve(values)))
+        const surveys = await new Promise((resolve) =>
+            client.getExtension<SurveysExtension>('surveys')!.getSurveys((values) => resolve(values))
+        )
         expect(surveys).toEqual([])
         expect(requests).toContain('/api/surveys/')
         const captured = vi.fn()
