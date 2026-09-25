@@ -379,7 +379,6 @@ describe('PostHog RN session replay debug properties', () => {
     vi.spyOn(client as any, '_sessionReplayDebugProperties').mockImplementation(() => {
       calls += 1
       const built = original()
-      // Simulate a value present on the first call and absent on the second.
       return calls === 1
         ? { ...built, $sdk_debug_replay_capture_mode: 'screenshot' }
         : { ...built, $sdk_debug_replay_capture_mode: undefined }
