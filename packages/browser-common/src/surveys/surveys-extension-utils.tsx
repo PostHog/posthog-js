@@ -1,10 +1,8 @@
 import { FeatureFlagsCommonExtension } from '../extension-tokens'
 import { getTargetingUrl } from '../utils/url-targeting-utils'
 import { getSurveyReplayUrl } from '../survey-render-context'
-import { surveyStorage } from '../utils/survey-storage'
 import { type VNode, cloneElement, createContext, type JSX } from 'preact'
 import type { SurveyRenderContext } from '../survey-render-context'
-import type { SurveyStorage } from '../utils/survey-storage'
 import type { Survey, SurveyAppearance, SurveyQuestion } from '../types/surveys'
 import {
     SurveyEventName,
@@ -420,10 +418,10 @@ interface SendSurveyEventArgs {
     questionSnapshots?: Record<string, string> | undefined
 }
 
-const setSurveySeen = (survey: Survey, storage: SurveyStorage): void => {
+const setSurveySeen = (survey: Survey): void => {
     try {
         const key = getSurveySeenKey(survey)
-        if (!storage.getItem(key)) storage.setItem(key, 'true')
+        if (!localStorage.getItem(key)) localStorage.setItem(key, 'true')
     } catch (error) {
         logger.error('Failed to persist survey seen state', error)
     }
@@ -446,7 +444,7 @@ export const sendSurveyEvent = ({
     if (!posthog.client?.canCapture) {
         return
     }
-    setSurveySeen(survey, surveyStorage)
+    setSurveySeen(survey)
     posthog.client?.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -470,7 +468,7 @@ export const sendSurveyEvent = ({
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey, surveyStorage)
+        clearInProgressSurveyState(survey)
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
@@ -517,7 +515,7 @@ export const dismissedSurveyEvent = (
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
+    const inProgressSurvey = getInProgressSurveyState(survey)
     // Prefer the language snapshotted when the user last answered (answer-time language),
     // which is legitimately `null` when no translation matched at answer time — that must not
     // fall through to the current display language. Only fall back to the current display
@@ -531,8 +529,8 @@ export const dismissedSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     })
-    clearInProgressSurveyState(survey, surveyStorage)
-    setSurveySeen(survey, surveyStorage)
+    clearInProgressSurveyState(survey)
+    setSurveySeen(survey)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
@@ -542,9 +540,13 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderC
         return
     }
 
+    if (!posthog.client?.canCapture) {
+        return
+    }
+
     const abandonedKey = getSurveyAbandonedKey(survey)
     try {
-        if (surveyStorage.getItem(abandonedKey) === 'true') {
+        if (localStorage.getItem(abandonedKey) === 'true') {
             return
         }
     } catch {
@@ -552,13 +554,13 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: SurveyRenderC
         return
     }
 
-    const inProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
+    const inProgressSurvey = getInProgressSurveyState(survey)
     if (!inProgressSurvey) {
         return
     }
 
     try {
-        surveyStorage.setItem(abandonedKey, 'true')
+        localStorage.setItem(abandonedKey, 'true')
     } catch {
         // localStorage not available
     }
@@ -642,10 +644,9 @@ export const getDisplayOrderQuestions = (
 }
 
 export const canActivateRepeatedly = (
-    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>,
-    storage?: SurveyStorage
+    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
 ): boolean => {
-    return canSurveyActivateRepeatedly(survey) || isSurveyInProgress(survey, storage)
+    return canSurveyActivateRepeatedly(survey) || isSurveyInProgress(survey)
 }
 
 /**
@@ -653,12 +654,17 @@ export const canActivateRepeatedly = (
  * and overrides this value if the survey can be repeatedly activated by its events.
  * @param survey
  */
-export const getSurveySeen = (survey: Survey, storage?: SurveyStorage): boolean => {
-    const surveySeen = storage?.getItem(getSurveySeenKey(survey))
+export const getSurveySeen = (survey: Survey): boolean => {
+    let surveySeen: string | null = null
+    try {
+        surveySeen = localStorage.getItem(getSurveySeenKey(survey))
+    } catch (error) {
+        logger.error('localStorage error: ' + error)
+    }
     if (surveySeen) {
         // if a survey has already been seen,
         // we will override it with the event repeated activation value.
-        return !canActivateRepeatedly(survey, storage)
+        return !canActivateRepeatedly(survey)
     }
 
     return false
@@ -666,8 +672,13 @@ export const getSurveySeen = (survey: Survey, storage?: SurveyStorage): boolean 
 
 const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
-export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined, storage?: SurveyStorage): boolean => {
-    const lastSeenSurveyDate = storage?.getItem(LAST_SEEN_SURVEY_DATE_KEY)
+export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
+    let lastSeenSurveyDate: string | null = null
+    try {
+        lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
+    } catch (error) {
+        logger.error('localStorage error: ' + error)
+    }
     return hasPeriodPassed(waitPeriodInDays, lastSeenSurveyDate)
 }
 
@@ -786,12 +797,11 @@ export const clearAllInMemoryInProgressSurveyState = (): void => {
 
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
-    state: InProgressSurveyState,
-    storage?: SurveyStorage
+    state: InProgressSurveyState
 ): void => {
     const key = getInProgressSurveyStateKey(survey)
     try {
-        storage?.setItem(key, JSON.stringify(state))
+        localStorage.setItem(key, JSON.stringify(state))
         // The write landed, so drop any copy left by an earlier failed one.
         delete inMemoryInProgressSurveyState[key]
     } catch (e) {
@@ -801,8 +811,7 @@ export const setInProgressSurveyState = (
 }
 
 export const getInProgressSurveyState = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    storage?: SurveyStorage
+    survey: Pick<Survey, 'id' | 'current_iteration'>
 ): InProgressSurveyState | null => {
     const key = getInProgressSurveyStateKey(survey)
     // Preferred when set, because storage refused that write and so holds nothing newer. Covers
@@ -812,7 +821,7 @@ export const getInProgressSurveyState = (
         return inMemoryState
     }
     try {
-        const stateString = storage?.getItem(key)
+        const stateString = localStorage.getItem(key)
         if (stateString) {
             return JSON.parse(stateString) as InProgressSurveyState
         }
@@ -822,22 +831,16 @@ export const getInProgressSurveyState = (
     return null
 }
 
-export const isSurveyInProgress = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    storage?: SurveyStorage
-): boolean => {
-    const state = getInProgressSurveyState(survey, storage)
+export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>): boolean => {
+    const state = getInProgressSurveyState(survey)
     return !isNullish(state?.surveySubmissionId)
 }
 
-export const clearInProgressSurveyState = (
-    survey: Pick<Survey, 'id' | 'current_iteration'>,
-    storage?: SurveyStorage
-): void => {
+export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_iteration'>): void => {
     const key = getInProgressSurveyStateKey(survey)
     delete inMemoryInProgressSurveyState[key]
     try {
-        storage?.removeItem(key)
+        localStorage.removeItem(key)
     } catch (e) {
         logger.error('Error clearing in-progress survey state from localStorage', e)
     }

@@ -2,7 +2,6 @@ import { SURVEYS } from './surveys-config'
 import { FeatureFlagsCommonExtension } from './extension-tokens'
 import { getSurveyReplayUrl } from './survey-render-context'
 import { uuidv7 } from './utils/uuidv7'
-import { surveyStorage } from './utils/survey-storage'
 import { type JSX, type RefObject, render, Fragment } from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { SurveyRenderContext } from './survey-render-context'
@@ -236,7 +235,7 @@ export class SurveyManager {
             return
         }
         for (const survey of surveys) {
-            if (isSurveyInProgress(survey, surveyStorage)) {
+            if (isSurveyInProgress(survey)) {
                 sendSurveyAbandonedEvent(survey, this._host)
             }
         }
@@ -592,8 +591,8 @@ export class SurveyManager {
      */
     private _sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort((a, b) => {
-            const isSurveyInProgressA = isSurveyInProgress(a, surveyStorage)
-            const isSurveyInProgressB = isSurveyInProgress(b, surveyStorage)
+            const isSurveyInProgressA = isSurveyInProgress(a)
+            const isSurveyInProgressB = isSurveyInProgress(b)
             if (isSurveyInProgressA && !isSurveyInProgressB) {
                 return -1 // a comes before b (in progress surveys first)
             }
@@ -774,19 +773,15 @@ export class SurveyManager {
             )
             const isSurveyCompleted = startQuestionIndex >= survey.questions.length
 
-            setInProgressSurveyState(
-                survey,
-                {
-                    surveySubmissionId: submissionId,
-                    responses: responses,
-                    lastQuestionIndex: startQuestionIndex,
-                    questionOrder: getQuestionOrder(survey.questions),
-                    // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
-                    visitedIndices: skippedIndices,
-                    surveyLanguage,
-                },
-                surveyStorage
-            )
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: submissionId,
+                responses: responses,
+                lastQuestionIndex: startQuestionIndex,
+                questionOrder: getQuestionOrder(survey.questions),
+                // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
+                visitedIndices: skippedIndices,
+                surveyLanguage,
+            })
 
             logger.info('[Survey Prefill] Stored prefilled responses in localStorage')
 
@@ -843,7 +838,7 @@ export class SurveyManager {
 
     private _internalFlagCheckSatisfied(survey: Survey): { satisfied: boolean; reason?: string | undefined } {
         // Repeatable and in-progress surveys intentionally bypass the internal targeting flag.
-        if (canActivateRepeatedly(survey, surveyStorage)) {
+        if (canActivateRepeatedly(survey)) {
             return { satisfied: true }
         }
 
@@ -920,13 +915,13 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!hasWaitPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays, surveyStorage)) {
+        if (!hasWaitPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays)) {
             eligibility.eligible = false
             eligibility.reason = `Survey wait period has not passed`
             return eligibility
         }
 
-        if (getSurveySeen(survey, surveyStorage)) {
+        if (getSurveySeen(survey)) {
             eligibility.eligible = false
             eligibility.reason = `Survey has already been seen and it can't be activated again`
             return eligibility
@@ -1505,7 +1500,7 @@ export function usePopupVisibility(
                 })
             }
             try {
-                surveyStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
             } catch {
                 // localStorage is not always available (e.g. in cross-origin iframes).
             }
@@ -1629,7 +1624,7 @@ export function SurveyPopup({
         isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
 
     const [introScreenDismissed, setIntroScreenDismissed] = useState(false)
-    const hasInProgressState = useMemo(() => !!getInProgressSurveyState(survey, surveyStorage), [survey])
+    const hasInProgressState = useMemo(() => !!getInProgressSurveyState(survey), [survey])
     /**
      * The intro screen is a leading page, the mirror of the trailing confirmation message. It is
      * skipped whenever the survey already has answers in progress (resumed session or URL
@@ -1645,7 +1640,7 @@ export function SurveyPopup({
         : !!survey.appearance?.displayIntroScreen && hasIntroContent && !introScreenDismissed && !hasInProgressState
 
     const surveyContextValue = useMemo(() => {
-        const getInProgressSurvey = getInProgressSurveyState(survey, surveyStorage)
+        const getInProgressSurvey = getInProgressSurveyState(survey)
         const surveySubmissionId = getInProgressSurvey?.surveySubmissionId || uuidv7() || ''
         return {
             isPreviewMode,
@@ -1737,7 +1732,7 @@ export function Questions({
     // the whole record is stale, so we discard it and start fresh rather than clamping the index
     // while keeping the equally-stale responses and visited indices around.
     const initialInProgressState = useMemo(() => {
-        const state = getInProgressSurveyState(survey, surveyStorage)
+        const state = getInProgressSurveyState(survey)
         if (!state) {
             return null
         }
@@ -1749,7 +1744,7 @@ export function Questions({
         const isIndexInRange =
             hasIndex && state.lastQuestionIndex >= 0 && state.lastQuestionIndex < survey.questions.length
         if (hasIndex && !isIndexInRange) {
-            clearInProgressSurveyState(survey, surveyStorage)
+            clearInProgressSurveyState(survey)
             return null
         }
         return state
@@ -1793,7 +1788,7 @@ export function Questions({
         )
     })
     const [questionSnapshots, setQuestionSnapshots] = useState<Record<string, string>>(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey, surveyStorage)
+        const inProgressSurveyData = getInProgressSurveyState(survey)
         return inProgressSurveyData?.questionSnapshots ?? {}
     })
     // A shuffled survey's display order (and any random shuffle) must stay fixed across a
@@ -1870,19 +1865,15 @@ export function Questions({
         if (!isSurveyCompleted) {
             setVisitedIndices(newVisitedIndices)
             setCurrentQuestionIndex(nextStep)
-            setInProgressSurveyState(
-                survey,
-                {
-                    surveySubmissionId: surveySubmissionId,
-                    responses: newResponses,
-                    lastQuestionIndex: nextStep,
-                    questionOrder: getQuestionOrder(surveyQuestions),
-                    visitedIndices: newVisitedIndices,
-                    surveyLanguage,
-                    questionSnapshots: newSnapshots,
-                },
-                surveyStorage
-            )
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: surveySubmissionId,
+                responses: newResponses,
+                lastQuestionIndex: nextStep,
+                questionOrder: getQuestionOrder(surveyQuestions),
+                visitedIndices: newVisitedIndices,
+                surveyLanguage,
+                questionSnapshots: newSnapshots,
+            })
         }
 
         // If partial responses are enabled, send the survey sent event with with the responses,
@@ -1925,19 +1916,15 @@ export function Questions({
         const newVisitedIndices = visitedIndices.slice(0, -1)
         setVisitedIndices(newVisitedIndices)
         setCurrentQuestionIndex(previousIndex)
-        setInProgressSurveyState(
-            survey,
-            {
-                surveySubmissionId,
-                responses: questionsResponses,
-                lastQuestionIndex: previousIndex,
-                questionOrder: getQuestionOrder(surveyQuestions),
-                visitedIndices: newVisitedIndices,
-                surveyLanguage,
-                questionSnapshots,
-            },
-            surveyStorage
-        )
+        setInProgressSurveyState(survey, {
+            surveySubmissionId,
+            responses: questionsResponses,
+            lastQuestionIndex: previousIndex,
+            questionOrder: getQuestionOrder(surveyQuestions),
+            visitedIndices: newVisitedIndices,
+            surveyLanguage,
+            questionSnapshots,
+        })
     }
 
     const canGoBack =

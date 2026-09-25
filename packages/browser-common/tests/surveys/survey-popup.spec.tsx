@@ -1,4 +1,3 @@
-import { surveyStorage } from '../../src/utils/survey-storage'
 /* oxlint-disable compat/compat -- Tests run in Node. */
 // @vitest-environment jsdom
 import '../helpers/surveys-setup'
@@ -169,7 +168,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
@@ -189,7 +188,7 @@ describe('SurveyPopup', () => {
         )
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.getByRole('textbox')).toHaveValue('Previous answer')
-        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey, surveyStorage)
+        expect(mockedGetInProgressSurveyState).toHaveBeenCalledWith(mockSurvey)
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
