@@ -1,5 +1,4 @@
 import { getSurveyRenderContext } from '../../browser-surveys'
-import { surveyStorage } from '@posthog/browser-common/utils/survey-storage'
 import {
     doesSurveyUrlMatch,
     getSurveySeen,
@@ -140,7 +139,7 @@ describe('survey storage adapter', () => {
             throw new Error('storage unavailable')
         })
 
-        expect(hasWaitPeriodPassed(7, surveyStorage)).toBe(true)
+        expect(hasWaitPeriodPassed(7)).toBe(true)
 
         getItemSpy.mockRestore()
     })
@@ -149,7 +148,7 @@ describe('survey storage adapter', () => {
             throw new Error('storage unavailable')
         })
 
-        expect(getSurveySeen({ id: 'storage-unavailable' } as Survey, surveyStorage)).toBe(false)
+        expect(getSurveySeen({ id: 'storage-unavailable' } as Survey)).toBe(false)
 
         getItemSpy.mockRestore()
     })

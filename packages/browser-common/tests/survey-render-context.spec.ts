@@ -3,13 +3,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Survey } from '../src/types/surveys'
 import { SurveyType } from '../src/survey-constants'
 import { getSurveyReplayUrl } from '../src/survey-render-context'
-import { sendSurveyAbandonedEvent, setInProgressSurveyState } from '../src/surveys/surveys-extension-utils'
-import { surveyStorage } from '../src/utils/survey-storage'
+import {
+    clearAllInMemoryInProgressSurveyState,
+    getInProgressSurveyState,
+    sendSurveyAbandonedEvent,
+    setInProgressSurveyState,
+} from '../src/surveys/surveys-extension-utils'
+import { SurveyManager } from '../src/surveys-renderer'
+import { getSurveyAbandonedKey } from '../src/utils/survey-utils'
+import { SURVEYS } from '../src/surveys-config'
 import { TestClient } from './helpers/test-client'
 
 const config = { disableSurveys: false, cookielessMode: false, advancedEnableSurveys: false, requestTimeoutMs: 10000 }
 
-afterEach(() => localStorage.clear())
+afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
+    clearAllInMemoryInProgressSurveyState()
+})
 
 describe('shared survey rendering capabilities', () => {
     it('constructs the replay URL from routed config and live client context', () => {
@@ -36,14 +47,11 @@ describe('shared survey rendering capabilities', () => {
             type: SurveyType.Popover,
             questions: [{ id: 'q1', type: 'open', question: 'Feedback?' }],
         } as Survey
-        setInProgressSurveyState(
-            survey,
-            {
-                surveySubmissionId: 'submission',
-                responses: { $survey_response_q1: 'partial answer' },
-            },
-            surveyStorage
-        )
+        setInProgressSurveyState(survey, {
+            surveySubmissionId: 'submission',
+            lastQuestionIndex: 0,
+            responses: { $survey_response_q1: 'partial answer' },
+        })
         sendSurveyAbandonedEvent(survey, { client, config })
         sendSurveyAbandonedEvent(survey, { client, config })
         expect(client.capturedEvents).toHaveLength(1)
@@ -58,5 +66,55 @@ describe('shared survey rendering capabilities', () => {
         })
         expect(write).not.toHaveBeenCalled()
         expect(localStorage.length).toBeGreaterThan(0)
+    })
+
+    it('skips repeated unload capture when localStorage is blocked, retaining partial answers in memory', () => {
+        const client = new TestClient()
+        const survey = { id: 'blocked-storage', name: 'Feedback', questions: [] } as unknown as Survey
+        client.kv.set(SURVEYS, [survey])
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('blocked')
+        })
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('blocked')
+        })
+        const state = { surveySubmissionId: 'submission', lastQuestionIndex: 0, responses: { answer: 'partial' } }
+        setInProgressSurveyState(survey, state)
+        expect(getInProgressSurveyState(survey)).toEqual(state)
+        const manager = new SurveyManager({ client, config })
+        try {
+            manager.handlePageUnload()
+            manager.handlePageUnload()
+            expect(client.capturedEvents).toHaveLength(0)
+            expect(getInProgressSurveyState(survey)).toEqual(state)
+        } finally {
+            manager.dispose()
+        }
+    })
+
+    it('leaves the abandonment marker unwritten under denial, then captures once after consent', () => {
+        const client = new TestClient({ canCapture: false })
+        const survey = { id: 'consent', name: 'Feedback', questions: [] } as unknown as Survey
+        client.kv.set(SURVEYS, [survey])
+        setInProgressSurveyState(survey, {
+            surveySubmissionId: 'submission',
+            lastQuestionIndex: 0,
+            responses: { answer: 'partial' },
+        })
+        const write = vi.spyOn(Storage.prototype, 'setItem')
+        const manager = new SurveyManager({ client, config })
+        try {
+            manager.handlePageUnload()
+            expect(write).not.toHaveBeenCalled()
+            expect(localStorage.getItem(getSurveyAbandonedKey(survey))).toBeNull()
+            expect(client.capturedEvents).toHaveLength(0)
+            client.canCapture = true
+            manager.handlePageUnload()
+            manager.handlePageUnload()
+            expect(client.capturedEvents).toHaveLength(1)
+            expect(localStorage.getItem(getSurveyAbandonedKey(survey))).toBe('true')
+        } finally {
+            manager.dispose()
+        }
     })
 })
