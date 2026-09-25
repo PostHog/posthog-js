@@ -1,62 +1,39 @@
-// @vitest-environment jsdom
+import type { KeyValueStore } from '@posthog/browser-common'
 import { SurveysStorage } from '../src/surveys-storage'
-import { MemoryStorage } from './helpers'
 
-const host = (storage = new MemoryStorage(), key = 'surveys') => ({ storage, key, onSession: () => ({ dispose() {} }) })
+const makeStore = () => {
+    const values = new Map<string, unknown>()
+    const kv = {
+        get: vi.fn((key: string) => values.get(key)),
+        set: vi.fn((key: string, value: unknown) => values.set(key, value)),
+        remove: vi.fn((key: string) => values.delete(key)),
+    } as unknown as KeyValueStore
+    return { values, kv, store: new SurveysStorage(kv) }
+}
 
 describe('SurveysStorage', () => {
-    it('keeps memory-only clients isolated and never accesses native storage', () => {
-        const read = vi.spyOn(globalThis, 'localStorage', 'get').mockImplementation(() => {
-            throw new Error('native storage')
-        })
-        try {
-            const first = new SurveysStorage(undefined)
-            const second = new SurveysStorage(undefined)
-            first.setItem('seen', 'true')
-            expect(first.getItem('seen')).toBe('true')
-            expect(second.getItem('seen')).toBeNull()
-            expect(read).not.toHaveBeenCalled()
-        } finally {
-            read.mockRestore()
-        }
+    it('stores renderer strings verbatim in the supplied KV namespace', () => {
+        const { kv, store } = makeStore()
+        const value = JSON.stringify({ answer: 'yes' })
+        store.setItem('progress', value)
+        expect(kv.set).toHaveBeenCalledWith('progress', value)
+        expect(store.getItem('progress')).toBe(value)
+        store.removeItem('progress')
+        expect(kv.remove).toHaveBeenCalledWith('progress')
+        expect(store.getItem('progress')).toBeNull()
     })
 
-    it('merges disjoint sequential tab writes against the latest product record', () => {
-        const config = host()
-        const first = new SurveysStorage(config)
-        const second = new SurveysStorage(config)
-        first.setItem('first', 'true')
-        second.setItem('second', 'true')
-        expect(first.getItem('second')).toBe('true')
-        second.removeItem('first')
-        first.setItem('third', 'true')
-        expect(second.getItem('first')).toBeNull()
-        expect(second.getItem('third')).toBe('true')
+    it('reads current host state rather than retaining a second cache', () => {
+        const { values, store } = makeStore()
+        values.set('seen', 'true')
+        expect(store.getItem('seen')).toBe('true')
+        values.clear()
+        expect(store.getItem('seen')).toBeNull()
     })
 
-    it.each(['getItem', 'setItem'] as const)('retains in-memory state after %s fails', (method) => {
-        const config = host()
-        const store = new SurveysStorage(config)
-        store.setItem('before', 'old')
-        config.storage[method] = () => {
-            throw new Error('blocked')
-        }
-        store.setItem('after', 'new')
-        expect(store.getItem('before')).toBe('old')
-        expect(store.getItem('after')).toBe('new')
-    })
-
-    it('clears only its own record on reset and prevents writes after disposal', () => {
-        const config = host()
-        const store = new SurveysStorage(config)
-        config.storage.setItem('core', 'unrelated')
-        store.kv.set({ cache: [1], optional: undefined })
-        expect(store.kv.get('cache')).toEqual([1])
-        store.reset()
-        expect(store.kv.get('cache')).toBeUndefined()
-        expect(config.storage.getItem('core')).toBe('unrelated')
-        store.dispose()
-        store.setItem('late', 'true')
-        expect(store.getItem('late')).toBeNull()
+    it('does not expose structured KV values as renderer strings', () => {
+        const { values, store } = makeStore()
+        values.set('definitions', [{ id: 'survey' }])
+        expect(store.getItem('definitions')).toBeNull()
     })
 })

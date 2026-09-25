@@ -66,7 +66,11 @@ test('event-targeted survey activates from admitted capture and remembered submi
             page.evaluate(() => window.surveysHarness.events().filter(({ event }) => event === 'survey sent').length)
         )
         .toBe(1)
-    expect(await page.evaluate(() => localStorage.getItem('surveys-client_surveys'))).toContain('browser-survey')
+    expect(
+        await page.evaluate(() =>
+            JSON.stringify(JSON.parse(localStorage.getItem('surveys-client')!).extensionData.surveys)
+        )
+    ).toContain('browser-survey')
     await page.evaluate(() => window.surveysHarness.initialize('static', true, true, true, true))
     await page.evaluate(() => window.surveysHarness.capture())
     await page.waitForTimeout(1100)
