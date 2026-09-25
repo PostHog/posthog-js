@@ -108,6 +108,49 @@ const REPLAY_CONSOLE_PREFIX = '[replayer]';
  */
 const DETACH_ADDS_THRESHOLD = 1000;
 
+type DetachedStyleRules = {
+  style: HTMLStyleElement;
+  text: string | null;
+  rules: string[];
+};
+
+// A reconnected <style> rebuilds its sheet from text, which drops rules the
+// player added through insertRule. Cross-origin <link> sheets are skipped: the
+// player cannot insert rules into them.
+function captureStyleRules(root: Element): DetachedStyleRules[] {
+  const styles =
+    root.tagName === 'STYLE'
+      ? [root as HTMLStyleElement]
+      : Array.from(root.getElementsByTagName('style'));
+  const captured: DetachedStyleRules[] = [];
+  for (const style of styles) {
+    const sheet = style.sheet;
+    if (!sheet) continue;
+    captured.push({
+      style,
+      text: style.textContent,
+      rules: Array.from(sheet.cssRules, (rule) => rule.cssText),
+    });
+  }
+  return captured;
+}
+
+function restoreStyleRules(captured: DetachedStyleRules[]): void {
+  for (const { style, text, rules } of captured) {
+    const sheet = style.sheet;
+    // Changed text means the live path would also have rebuilt the sheet.
+    if (!sheet || style.textContent !== text) continue;
+    while (sheet.cssRules.length) sheet.deleteRule(0);
+    rules.forEach((rule) => {
+      try {
+        sheet.insertRule(rule, sheet.cssRules.length);
+      } catch (e) {
+        // The rule parsed once, so a failure here is a browser quirk. Skip it.
+      }
+    });
+  }
+}
+
 const defaultMouseTailConfig = {
   duration: 500,
   lineCap: 'round',
@@ -1702,7 +1745,12 @@ export class Replayer {
   private detachRootForLargeAddBatch(
     d: mutationData,
     mirror: Mirror | RRDOMMirror,
-  ): { node: Node; parent: Node; nextSibling: Node | null } | null {
+  ): {
+    node: Node;
+    parent: Node;
+    nextSibling: Node | null;
+    styleRules: DetachedStyleRules[];
+  } | null {
     if (this.usingVirtualDom) return null;
     if (d.adds.length < DETACH_ADDS_THRESHOLD) return null;
     // Not on the virtual dom path, so this is the real-DOM mirror.
@@ -1737,9 +1785,10 @@ export class Replayer {
         return null;
       }
     }
+    const styleRules = captureStyleRules(node as Element);
     const nextSibling = node.nextSibling;
     parent.removeChild(node);
-    return { node, parent, nextSibling };
+    return { node, parent, nextSibling, styleRules };
   }
 
   /**
@@ -2137,6 +2186,7 @@ export class Replayer {
           detachedRoot.node,
           detachedRoot.nextSibling,
         );
+        restoreStyleRules(detachedRoot.styleRules);
       }
       pendingDialogs.forEach((dialog) => {
         applyDialogToTopLevel(dialog);

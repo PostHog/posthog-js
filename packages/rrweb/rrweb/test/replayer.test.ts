@@ -40,6 +40,10 @@ import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import hugeAddMutationEvents from './events/huge-add-mutation';
 import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
+import hugeAddCssomRulesEvents, {
+  HEAD_ID,
+  DIV_ID,
+} from './events/huge-add-cssom-rules';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
 import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
@@ -1040,6 +1044,38 @@ describe('replayer', function () {
       bodyOrder: ['root', 'c-span', 'd-span'],
     });
   });
+
+  it.each([
+    ['<head>', HEAD_ID],
+    ['a body <div>', DIV_ID],
+  ])(
+    'keeps CSSOM rules when a huge add batch lands in %s',
+    async (_, batchParentId) => {
+      await page.evaluate(
+        `events = ${JSON.stringify(hugeAddCssomRulesEvents(batchParentId))}`,
+      );
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const rules = (id) =>
+          Array.from(doc.getElementById(id).sheet.cssRules, (r) => r.cssText);
+        return {
+          metaCount: doc.getElementsByTagName('meta').length,
+          head: rules('head-style'),
+          div: rules('div-style'),
+        };
+      })()
+    `);
+      expect(result).toEqual({
+        metaCount: 1100,
+        head: ['.from-6 { color: red; }'],
+        div: ['.from-11 { color: red; }'],
+      });
+    },
+  );
 
   it('opens a modal dialog added inside a huge add mutation', async () => {
     await page.evaluate(
