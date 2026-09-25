@@ -152,3 +152,61 @@ test('keeps the release snippet exactly as posthog-cli matches it through Vite 8
     assert.equal(body(first.code), `${createChunkIdSnippet(first.chunkId, 'release-a')}\n${body(withoutPlugin.code)}`)
     assert.equal(first.map.mappings, `;${withoutPlugin.map.mappings}`)
 })
+
+test('keeps a "use client" directive first, ahead of the snippet', async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-rollup-plugin-vite-'))
+    t.after(() => fs.rm(root, { recursive: true, force: true }))
+
+    const cliPath = path.join(root, 'posthog-cli.mjs')
+    await fs.writeFile(cliPath, `#!/usr/bin/env node\nprocess.stdout.write('release-a\\n')\n`)
+    await fs.chmod(cliPath, 0o755)
+    await fs.writeFile(
+        path.join(root, 'entry.js'),
+        '"use client";\nexport function boom() { throw new Error("boom") }\n'
+    )
+
+    async function buildLibrary(withPlugin) {
+        const plugins = withPlugin
+            ? [
+                  posthogRollupPlugin({
+                      personalApiKey: 'phx_test',
+                      projectId: '1',
+                      cliBinaryPath: cliPath,
+                      sourcemaps: { deleteAfterUpload: false, releaseMode: 'event' },
+                  }),
+              ]
+            : []
+        // A library build resolves to one result per format.
+        const results = await build({
+            configFile: false,
+            root,
+            logLevel: 'silent',
+            plugins,
+            build: {
+                lib: { entry: path.join(root, 'entry.js'), formats: ['es'] },
+                minify: 'oxc',
+                sourcemap: true,
+                write: false,
+            },
+        })
+        const [result] = Array.isArray(results) ? results : [results]
+        const chunk = result.output.find((item) => item.type === 'chunk')
+        const map = JSON.parse(result.output.find((item) => item.fileName === `${chunk.fileName}.map`).source)
+        return { code: chunk.code, map, chunkId: CHUNK_ID_COMMENT.exec(chunk.code)?.[1] }
+    }
+
+    const withPlugin = await buildLibrary(true)
+    const withoutPlugin = await buildLibrary(false)
+    const body = (code) =>
+        code
+            .split('\n')
+            .filter((line) => !line.startsWith('//# '))
+            .join('\n')
+
+    assert.ok(withoutPlugin.code.startsWith('"use client";'), 'the build keeps the directive')
+    assert.equal(
+        body(withPlugin.code),
+        `"use client";${createChunkIdSnippet(withPlugin.chunkId, 'release-a')}\n${body(withoutPlugin.code)}`
+    )
+    assert.equal(withPlugin.map.mappings, `;${withoutPlugin.map.mappings}`)
+})

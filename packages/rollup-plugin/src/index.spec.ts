@@ -346,13 +346,103 @@ describe('posthogRollupPlugin', () => {
             expect(determineChunkIdFromSource(final)).not.toBe(determineChunkIdFromSource(inCode!.code))
         })
 
-        it('keeps the snippet in code for a chunk with a directive', async () => {
+        it('copies directives ahead of the snippet, so they still lead the chunk', async () => {
             const directiveCode = '"use client";console.log("app");'
             const { rendered, hash, code: final } = await renderUnderRolldown(testPlugin(options), {}, directiveCode)
+            const chunkId = determineChunkIdFromSource(final)!
+            const line = `"use client";${createChunkIdSnippet(chunkId, 'release-id-1')}`
 
-            expect(rendered!.code.startsWith('"use client";!function(){try{')).toBe(true)
-            expect(hash).toBeUndefined()
-            expect(final.startsWith('\n"use client";!function(){try{')).toBe(true)
+            expect(rendered).toBeNull()
+            expect(hash).toBe(line)
+            expect(final).toBe(`${line}\n${directiveCode}${createChunkIdComment(chunkId)}`)
+            expect(() => new Function(final)).not.toThrow()
+        })
+
+        it('copies only the directives out of a prologue with a hashbang and comments', async () => {
+            const prologue =
+                '#!/usr/bin/env node\n// a "quoted" comment\n/* \'another\' */"use client"\n\'use strict\';\n'
+            const { code: final } = await renderUnderRolldown(testPlugin(options), {}, `${prologue}console.log("app");`)
+            const chunkId = determineChunkIdFromSource(final)!
+
+            expect(
+                final.startsWith(`"use client";'use strict';${createChunkIdSnippet(chunkId, 'release-id-1')}\n`)
+            ).toBe(true)
+        })
+
+        it('scans a long run of comments in linear time', async () => {
+            const comments = `/*${'*//*'.repeat(20_000)}*/`
+            const { code: final } = await renderUnderRolldown(testPlugin(options), {}, `${comments}console.log("app");`)
+
+            expect(final.startsWith('!function(){try{')).toBe(true)
+        })
+
+        describe('when two outputs render the same file name', () => {
+            // One output's hooks, driven by hand so the test decides how two outputs interleave.
+            function startOutput(plugin: TestPlugin) {
+                const outputOptions = plugin.outputOptions.handler.call(
+                    rolldownContext,
+                    {} as OutputOptions
+                ) as RolldownOutputOptions
+                const renderedChunk = { fileName: preliminaryFileName }
+                return {
+                    render: (chunkCode: string) => plugin.renderChunk.handler(chunkCode, renderedChunk, outputOptions),
+                    hash: () => plugin.augmentChunkHash(renderedChunk),
+                    generate: () => {
+                        const bundle = {
+                            [fileName]: {
+                                type: 'chunk',
+                                fileName,
+                                preliminaryFileName,
+                                code: `${placeholder}\n${code}`,
+                            },
+                        }
+                        plugin.generateBundle.handler(outputOptions, bundle)
+                        return bundle[fileName].code
+                    },
+                }
+            }
+
+            it('hashes only its own line when the outputs run one after another', async () => {
+                const plugin = testPlugin(options)
+                const es = startOutput(plugin)
+                await es.render(code)
+                const esHash = es.hash()
+                es.generate()
+
+                const cjs = startOutput(plugin)
+                await cjs.render(`${code}more();`)
+
+                const cjsHash = cjs.hash()!
+                expect(cjsHash).not.toContain(esHash)
+                expect(cjs.generate().startsWith(`${cjsHash}\n`)).toBe(true)
+            })
+
+            it('always hashes its own line when the outputs render concurrently', async () => {
+                const plugin = testPlugin(options)
+                const es = startOutput(plugin)
+                const cjs = startOutput(plugin)
+                await es.render(code)
+                await cjs.render(`${code}more();`)
+
+                const esHash = es.hash()!
+                const esCode = es.generate()
+                const cjsCode = cjs.generate()
+
+                expect(esHash).toContain(esCode.split('\n')[0])
+                expect(esHash).toContain(cjsCode.split('\n')[0])
+            })
+
+            it('keeps a line both outputs share until the second output is done with it', async () => {
+                const plugin = testPlugin(options)
+                const first = startOutput(plugin)
+                const second = startOutput(plugin)
+                await first.render(code)
+                await second.render(code)
+                first.hash()
+                const line = first.generate().split('\n')[0]
+
+                expect(second.hash()).toBe(line)
+            })
         })
 
         it('injects in code when another plugin replaced the postBanner', async () => {

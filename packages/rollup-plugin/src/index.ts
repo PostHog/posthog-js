@@ -37,8 +37,29 @@ const JS_CHUNK_REGEX = /\.(js|mjs|cjs)$/
 const PROLOGUE_REGEX =
     /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*;|[^\S\n]*\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
 
-// True when a prologue matched by PROLOGUE_REGEX holds a directive, not only a hashbang and comments.
-const DIRECTIVE_IN_PROLOGUE_REGEX = /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*["']/
+// Lists the directives in a prologue matched by PROLOGUE_REGEX, each as a statement ending in `;`.
+// A scan rather than a regex: the prologue is already known to hold only a hashbang, whitespace,
+// comments and directives, and a regex that has to fail over comments backtracks exponentially.
+function prologueDirectives(prologue: string): string[] {
+    const directives: string[] = []
+    let at = prologue.startsWith('#!') ? prologue.indexOf('\n') + 1 : 0
+    while (at < prologue.length) {
+        if (prologue.startsWith('//', at)) {
+            const end = prologue.indexOf('\n', at)
+            at = end === -1 ? prologue.length : end + 1
+        } else if (prologue.startsWith('/*', at)) {
+            at = prologue.indexOf('*/', at + 2) + 2
+        } else if (prologue[at] === '"' || prologue[at] === "'") {
+            const end = prologue.indexOf(prologue[at], at + 1)
+            directives.push(`${prologue.slice(at, end + 1)};`)
+            at = end + 1
+        } else {
+            // Whitespace, or the `;` that ends a directive.
+            at++
+        }
+    }
+    return directives
+}
 
 // Rolldown (Vite 8) minifies after renderChunk, and minification rewrites an injected snippet
 // (quoting, variable names, syntax). posthog-cli finds and strips the snippet by exact text so that
@@ -47,6 +68,9 @@ const DIRECTIVE_IN_PROLOGUE_REGEX = /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/
 // line through `output.postBanner` and shifts the source map by it, and generateBundle swaps it for
 // the chunk's snippet. The banner can't carry the snippet itself, because rolldown evaluates it
 // before renderChunk derives the chunk id. The line holds no mappings, so the map stays valid.
+// Rolldown lifts a hashbang above the line, but a directive stays below it and would stop being a
+// directive, so a chunk with directives gets a copy of them ahead of the snippet on the same line.
+// The originals below become plain string statements, which do nothing.
 const SNIPPET_PLACEHOLDER = '/*posthog-chunk-id-snippet*/'
 
 // Rolldown's `output.postBanner`, which Rollup's types don't know.
@@ -72,24 +96,25 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     let warnedAboutMissingRelease = false
     const chunkIdsByPreliminaryFileName = new Map<string, Set<string>>()
 
-    // Snippets that generateBundle still has to swap in (see SNIPPET_PLACEHOLDER), per rolldown
-    // output. Keyed by the postBanner function each output gets, which renderChunk and
-    // generateBundle receive back in their output options, so two outputs that render the same
-    // file name keep their own snippets.
-    const snippetsByOutput = new WeakMap<object, Map<string, string>>()
-    // The same snippets by file name across outputs, for augmentChunkHash, which gets no output
-    // options. Hashing them keeps file names content hashes: a new release or chunk id renames the
-    // file instead of changing its bytes under the same name.
-    const deferredSnippetsByPreliminaryFileName = new Map<string, Set<string>>()
-
-    function addToSet(map: Map<string, Set<string>>, key: string, value: string) {
-        const values = map.get(key) ?? new Set<string>()
-        values.add(value)
-        map.set(key, values)
-    }
+    // Lines that generateBundle still has to swap in (see SNIPPET_PLACEHOLDER), per rolldown output.
+    // Keyed by the postBanner function each output gets, which renderChunk and generateBundle
+    // receive back in their output options, so two outputs that render the same file name keep
+    // their own lines.
+    const snippetLinesByOutput = new WeakMap<object, Map<string, string>>()
+    // The same lines by file name, for augmentChunkHash. Hashing them keeps file names content
+    // hashes: a new release or chunk id renames the file instead of changing its bytes under the
+    // same name. augmentChunkHash can't tell which output it hashes for (rolldown passes no output
+    // options and a fresh context per call), so this pools the outputs that are still rendering:
+    // a chunk's own line is always in its hash, and generateBundle takes an output's lines out once
+    // they are swapped in. With outputs generated one after another, as Vite does, each hash holds
+    // only its own line. Concurrent outputs sharing a file name can also hash each other's line,
+    // which renames a chunk more often than needed but never keeps a stale name.
+    const pendingSnippetLinesByPreliminaryFileName = new Map<string, string[]>()
 
     function rememberChunkId(preliminaryFileName: string, chunkId: string) {
-        addToSet(chunkIdsByPreliminaryFileName, preliminaryFileName, chunkId)
+        const chunkIds = chunkIdsByPreliminaryFileName.get(preliminaryFileName) ?? new Set<string>()
+        chunkIds.add(chunkId)
+        chunkIdsByPreliminaryFileName.set(preliminaryFileName, chunkIds)
     }
 
     function injectChunkId(code: string, chunkId: string, releaseId?: string) {
@@ -110,7 +135,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             releaseIdPromise = undefined
             warnedAboutMissingRelease = false
             chunkIdsByPreliminaryFileName.clear()
-            deferredSnippetsByPreliminaryFileName.clear()
+            pendingSnippetLinesByPreliminaryFileName.clear()
         },
 
         config() {
@@ -142,7 +167,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                         await renderAddon(postBanner, chunk),
                         JS_CHUNK_REGEX.test(chunk.fileName) ? SNIPPET_PLACEHOLDER : undefined
                     )
-                snippetsByOutput.set(outputPostBanner, new Map())
+                snippetLinesByOutput.set(outputPostBanner, new Map())
                 return { ...withSourcemaps, postBanner: outputPostBanner }
             },
         },
@@ -171,21 +196,17 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     return null
                 }
 
-                // Under rolldown the snippet goes in after minification (see SNIPPET_PLACEHOLDER).
-                // Rolldown lifts a hashbang above the placeholder line, but a directive would end up
-                // below the snippet and stop being a directive, so a chunk that has one keeps the
-                // snippet inside its code, where the minifier may still rewrite it.
+                // Under rolldown the snippet goes in after minification (see SNIPPET_PLACEHOLDER),
+                // unless another plugin replaced the postBanner that adds the placeholder.
                 const postBanner = (outputOptions as RolldownOutputOptions | undefined)?.postBanner
-                const outputSnippets = typeof postBanner === 'function' ? snippetsByOutput.get(postBanner) : undefined
-                const deferredSnippets =
-                    outputSnippets && !DIRECTIVE_IN_PROLOGUE_REGEX.test(code.match(PROLOGUE_REGEX)?.[0] ?? '')
-                        ? outputSnippets
-                        : undefined
+                const snippetLines = typeof postBanner === 'function' ? snippetLinesByOutput.get(postBanner) : undefined
                 const inject = (chunkId: string, releaseId?: string) => {
-                    if (!deferredSnippets) return injectChunkId(code, chunkId, releaseId)
-                    const snippet = createChunkIdSnippet(chunkId, releaseId)
-                    deferredSnippets.set(chunk.fileName, snippet)
-                    addToSet(deferredSnippetsByPreliminaryFileName, chunk.fileName, snippet)
+                    if (!snippetLines) return injectChunkId(code, chunkId, releaseId)
+                    const directives = prologueDirectives(code.match(PROLOGUE_REGEX)?.[0] ?? '')
+                    const line = directives.join('') + createChunkIdSnippet(chunkId, releaseId)
+                    snippetLines.set(chunk.fileName, line)
+                    const pending = pendingSnippetLinesByPreliminaryFileName.get(chunk.fileName) ?? []
+                    pendingSnippetLinesByPreliminaryFileName.set(chunk.fileName, [...pending, line])
                     return null
                 }
 
@@ -202,7 +223,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 // Its layout differs from the same code with the snippet inside, and a shared id
                 // would let one layout's upload overwrite the other's symbol set.
                 releaseIdPromise ??= resolveReleaseId(posthogOptions)
-                const chunkId = createStableChunkId(deferredSnippets ? `${SNIPPET_PLACEHOLDER}\n${code}` : code)
+                const chunkId = createStableChunkId(snippetLines ? `${SNIPPET_PLACEHOLDER}\n${code}` : code)
                 rememberChunkId(chunk.fileName, chunkId)
                 return releaseIdPromise.then((releaseId) => {
                     // A build that identifies no release still symbolicates from its chunk ids, so
@@ -219,13 +240,14 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             },
         },
 
+        // Rollup's contract for this hook is `string | void`, so nothing to add is `undefined`.
         augmentChunkHash(chunk: RenderedChunk) {
-            const snippets = deferredSnippetsByPreliminaryFileName.get(chunk.fileName)
-            return snippets && Array.from(snippets).sort().join('\n')
+            const lines = pendingSnippetLinesByPreliminaryFileName.get(chunk.fileName)
+            return lines && Array.from(new Set(lines)).sort().join('\n')
         },
 
-        // Swaps each placeholder line for its chunk's snippet, or for nothing when the chunk kept
-        // its snippet in code. Then restores the CLI-facing comment, which Vite 8's Oxc output
+        // Swaps each placeholder line for its chunk's snippet line, or for nothing when the chunk
+        // got no snippet here. Then restores the CLI-facing comment, which Vite 8's Oxc output
         // minifier removes and which the snippet itself doesn't carry. preliminaryFileName links the
         // final OutputChunk back to its RenderedChunk even when Rollup replaces a [hash] placeholder.
         // Matching against the tracked id avoids treating unrelated bundled `_posthogChunkIds`
@@ -234,12 +256,17 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             order: 'pre',
             handler(options, bundle) {
                 const postBanner = (options as RolldownOutputOptions).postBanner
-                const outputSnippets = typeof postBanner === 'function' ? snippetsByOutput.get(postBanner) : undefined
+                const snippetLines = typeof postBanner === 'function' ? snippetLinesByOutput.get(postBanner) : undefined
+                for (const [preliminaryFileName, line] of snippetLines ?? []) {
+                    const pending = pendingSnippetLinesByPreliminaryFileName.get(preliminaryFileName) ?? []
+                    const index = pending.indexOf(line)
+                    if (index !== -1) pending.splice(index, 1)
+                }
                 for (const chunk of Object.values(bundle)) {
                     if (chunk.type !== 'chunk' || !JS_CHUNK_REGEX.test(chunk.fileName)) continue
-                    if (outputSnippets) {
-                        const snippet = outputSnippets.get(chunk.preliminaryFileName) ?? ''
-                        chunk.code = chunk.code.replace(SNIPPET_PLACEHOLDER, () => snippet)
+                    if (snippetLines) {
+                        const line = snippetLines.get(chunk.preliminaryFileName) ?? ''
+                        chunk.code = chunk.code.replace(SNIPPET_PLACEHOLDER, () => line)
                     }
                     if (determineChunkIdFromSource(chunk.code)) continue
 
