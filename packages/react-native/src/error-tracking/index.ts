@@ -45,7 +45,7 @@ interface AutocaptureOptions {
    * For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols`
    * on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication
    *
-   * Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.11.0 or newer.
+   * Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer.
    */
   androidNdkCrashes?: boolean
 }
