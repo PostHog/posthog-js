@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2158](https://github.com/PostHog/posthog-js/issues/2158) | Valid Node SDK enhancement: current APIs cannot reliably distinguish an invalid project API key from an empty flag result or a transient request failure. | feature, enhancement, node, team/client-libraries |  | no | 2026-09-25T08:44:00.894Z |
 | PostHog/posthog-js | [issue 2162](https://github.com/PostHog/posthog-js/issues/2162) | Confirmed React Native feature gap: the SDK supports ordinary feature flags but does not expose early-access feature discovery or enrollment APIs. | enhancement, help wanted, feature/flags, team/feature-flags, react-native, feature/mobile |  | no | 2026-09-25T08:42:53.503Z |
 | PostHog/posthog-js | [issue 2488](https://github.com/PostHog/posthog-js/issues/2488) | Valid documentation clarification request: importing the default client is safe outside React only when it is the same initialized instance supplied to the provider. | documentation, web | https://github.com/PostHog/posthog-js/pull/5104 | no | 2026-09-25T08:41:36.018Z |
 | PostHog/posthog-js | [issue 2921](https://github.com/PostHog/posthog-js/issues/2921) | Valid bot-traffic report, but the proposed global user-agent version heuristic is not sufficiently safe for default blocking. | enhancement, feature, feature/web-analytics, web, team/web-analytics |  | no | 2026-09-25T08:38:55.569Z |
