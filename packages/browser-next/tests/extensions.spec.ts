@@ -218,7 +218,7 @@ describe('@posthog/browser extensions', () => {
         expect(client?.deviceId).toBe(postConsentAnonymousId)
     })
 
-    it('runs extensions and remote config while gating analytics outputs', async () => {
+    it('runs extensions and fetches remote config while opted out, but gates analytics outputs', async () => {
         const deniedRequests: SentRequest[] = []
         let deniedClient: Client | undefined
         const deniedSetup = vi.fn(async (client: Client) => {
@@ -252,7 +252,10 @@ describe('@posthog/browser extensions', () => {
         await deniedClient?.capture('allowed-output')
         await denied.flush()
         expect(deniedRequests).toHaveLength(1)
+        await denied.dispose()
+    })
 
+    it('runs extensions and exposes inline remote config for bots while blocking network outputs', async () => {
         const blockedRequests: SentRequest[] = []
         const blockedSetup = vi.fn(async (client: Client) => {
             await client.capture('bot-output')
@@ -271,6 +274,7 @@ describe('@posthog/browser extensions', () => {
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(blocked.getExtension('blocked')).toBeDefined()
         expect(blockedRequests).toHaveLength(0)
+        await blocked.dispose()
     })
 
     it('returns remote configuration completed after denial', async () => {

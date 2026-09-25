@@ -122,6 +122,18 @@ describe.each([
         await posthog.dispose()
     })
 
+    it('blocks automatic remote-config fetching for bots', async () => {
+        const fetch = vi.fn(async () => response())
+        const posthog = await create({
+            ...options,
+            navigator: { userAgent: 'Googlebot/2.1' },
+            fetch,
+        })
+        await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
+        expect(fetch).not.toHaveBeenCalled()
+        await posthog.dispose()
+    })
+
     it.each([
         ['server failure', () => new Response('{}', { status: 500 })],
         ['malformed JSON', () => new Response('{')],
