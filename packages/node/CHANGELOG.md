@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.54.0
+
+### Minor Changes
+
+- [#5099](https://github.com/PostHog/posthog-js/pull/5099) [`e3955f8`](https://github.com/PostHog/posthog-js/commit/e3955f894d583dcda1da41b7580b002db924e552) Thanks [@marandaneto](https://github.com/marandaneto)! - Expose feature flag evaluation reasons and preserve them in OpenFeature resolution metadata.
+  (2026-09-25)
+
 ## 5.53.0
 
 ### Minor Changes
