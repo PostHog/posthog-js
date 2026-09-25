@@ -19,6 +19,7 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
@@ -36,6 +37,11 @@ class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext),
   ActivityEventListener {
+  // The native SDK ignores a second setup(), so the config this module built may be dead; the
+  // cache is keyed on the config the SDK actually runs.
+  @Volatile
+  private var cachedReplayIntegration: Pair<PostHogAndroidConfig, PostHogReplayIntegration?>? = null
+
   override fun getName(): String = NAME
 
   override fun initialize() {
@@ -271,6 +277,26 @@ class PosthogReactNativePluginModule(
       logError("isEnabled", e)
       promise.resolve(false)
     }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      val properties = replayIntegration()?.debugProperties() ?: emptyMap()
+      promise.resolve(mapToWritableMap(properties))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
+    }
+  }
+
+  private fun replayIntegration(): PostHogReplayIntegration? {
+    val config = PostHog.getConfig<PostHogAndroidConfig>() ?: return null
+    cachedReplayIntegration?.takeIf { it.first === config }?.let { return it.second }
+    return config.integrations
+      .filterIsInstance<PostHogReplayIntegration>()
+      .firstOrNull()
+      .also { cachedReplayIntegration = config to it }
   }
 
   @ReactMethod
@@ -740,6 +766,34 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// Testable in isolation: a unit test passes JavaOnlyMap/JavaOnlyArray factories instead of
+// Arguments::createMap/createArray, which require a loaded native library.
+internal fun mapToWritableMap(
+  source: Map<String, Any?>,
+  createMap: () -> WritableMap = Arguments::createMap,
+  createArray: () -> WritableArray = Arguments::createArray,
+): WritableMap {
+  val result = createMap()
+  for ((key, value) in source) {
+    when (value) {
+      null -> result.putNull(key)
+      is String -> result.putString(key, value)
+      is Boolean -> result.putBoolean(key, value)
+      is Int -> result.putInt(key, value)
+      is Long -> result.putDouble(key, value.toDouble())
+      is Double -> result.putDouble(key, value)
+      is Float -> result.putDouble(key, value.toDouble())
+      is List<*> -> {
+        val array = createArray()
+        value.forEach { item -> array.pushString(item?.toString() ?: "") }
+        result.putArray(key, array)
+      }
+      else -> result.putString(key, value.toString())
+    }
+  }
+  return result
+}
 
 internal fun applyScreenshotConfig(
   map: ReadableMap?,
