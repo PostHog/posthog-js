@@ -1,5 +1,5 @@
 import { createPostHog } from '../src'
-import { surveys } from '../src/surveys'
+import { surveys, type SurveysExtension } from '../src/surveys'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import type { PostHog } from '../src/types'
@@ -132,12 +132,12 @@ export const surveysHarness: Window['surveysHarness'] = {
                     : globalThis.fetch(url, options),
         })
         client.onEvent((event) => events.push({ event: event.event, properties: { ...event.properties } }))
-        client.displaySurvey(survey.id)
+        client.getExtension<SurveysExtension>('surveys')!.displaySurvey(survey.id)
     },
     pagehide() {
         window.dispatchEvent(new Event('pagehide'))
     },
-    display: () => client?.displaySurvey(survey.id),
+    display: () => client?.getExtension<SurveysExtension>('surveys')?.displaySurvey(survey.id),
     capture: () => client?.capture('trigger-survey'),
     optOut: () => client?.optOut(),
     optIn: () => client?.optIn(),

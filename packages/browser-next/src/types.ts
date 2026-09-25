@@ -1,7 +1,7 @@
 import type { FlagsConfiguration } from './flags-options'
 import type { BrowserClient } from './browser-client'
 import type { LogsConfiguration } from './logs-options'
-import type { SurveysConfiguration, SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
+import type { SurveysConfiguration } from './surveys-options'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -118,12 +118,6 @@ export interface CaptureSummary {
 }
 
 export interface PostHog extends BrowserClient, Disposable {
-    getSurveys(callback: SurveyCallback, forceReload?: boolean): void
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void
-    displaySurvey(id: string, options?: DisplaySurveyOptions): void
-    canRenderSurvey(id: string, forceReload?: boolean): Promise<SurveyRenderReason>
-    onSurveysLoaded(callback: SurveyCallback): Disposable
-    cancelPendingSurvey(id: string): void
     readonly onNewSession: Listener<NewSessionInfo>
     /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
     captureImmediate(

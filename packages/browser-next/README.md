@@ -149,14 +149,17 @@ The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits 
 Surveys orchestration loads dynamically during initialization by default. Its UI is a separate dynamic chunk: a successful remote configuration with surveys enabled loads it automatically; otherwise an explicit survey call can load it for manual use. Definitions come from a separate `/api/surveys/` request and are cached for five minutes. Client creation does not wait for the renderer or definitions.
 
 ```ts
+import type { SurveysExtension } from '@posthog/browser/surveys'
+
 const posthog = await createPostHog({
     projectToken: '<project-token>',
     surveys: { automaticDisplay: false, requestTimeoutMs: 10_000 },
 })
-posthog.getSurveys((surveys, context) => {
-    if (context?.isLoaded && surveys[0]) posthog.displaySurvey(surveys[0].id)
+const feedback = posthog.getExtension<SurveysExtension>('surveys')
+feedback?.getSurveys((surveys, context) => {
+    if (context?.isLoaded && surveys[0]) feedback.displaySurvey(surveys[0].id)
 })
-const eligibility = await posthog.canRenderSurvey('feedback')
+const eligibility = await feedback?.canRenderSurvey('feedback')
 ```
 
 The options are `automaticDisplay` (default `true`), `requestTimeoutMs` (default `10_000`), `prefillFromUrl` (default `false`), `overrideDisplayLanguage`, `prepareStylesheet`, and `getCurrentUrl`. `getActiveMatchingSurveys(callback, forceReload?)` applies targeting; `onSurveysLoaded(callback)` returns a disposable subscription; `cancelPendingSurvey(id)` cancels pending display. Capture consent still gates rendering and responses.
@@ -166,15 +169,19 @@ Use `surveys: false` to omit automatic inclusion. An explicitly supplied instanc
 ```ts
 import { surveys } from '@posthog/browser/surveys'
 
+const feedback = surveys({ automaticDisplay: false })
 const posthog = await createPostHog({
     projectToken: '<project-token>',
-    extensions: [surveys({ automaticDisplay: false })],
+    extensions: [feedback],
 })
+feedback.displaySurvey('feedback')
 ```
 
-The manual core entrypoint never loads surveys automatically. Disabled clients return empty callback results and `{ visible: false }` for eligibility. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
+Await client creation before using extension controls.
 
-Definitions, seen/in-progress state, and event activation state use the selected storage in `<effective core persistence key>_surveys`, separate from unrelated core writes. `storage: false` keeps this state in memory; storage errors fall back to memory. Reset clears this client's survey record. This layout does not migrate legacy browser survey state, and simultaneous writes are not atomic. Event targeting works through admitted captures; DOM-action selector targeting requires a compatible autocapture extension.
+The manual core entrypoint never loads surveys automatically. Extension lookup returns undefined when surveys is omitted or fails setup. Without a document, rendering is unavailable. Disposal removes renderer listeners, polling, pending displays, and rendered elements. Survey abandonment uses analytics' existing pagehide keepalive handoff when delivery is initialized; an analytics module still loading during pagehide cannot send it.
+
+Definitions, seen/in-progress state, and event activation state use the host-provided surveys KV namespace in the core persistence record. The renderer accesses that namespace through a string-storage adapter. `storage: false` keeps this state in memory; storage errors fall back to memory. Client reset clears persisted extension data, and surveys subscribes to reset notifications to clear its runtime state. This layout does not migrate legacy browser survey state, and simultaneous writes are not atomic. Event targeting works through admitted captures; DOM-action selector targeting requires a compatible autocapture extension.
 
 ## Capture and delivery
 
