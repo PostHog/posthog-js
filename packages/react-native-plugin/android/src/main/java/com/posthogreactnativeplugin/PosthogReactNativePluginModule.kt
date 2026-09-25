@@ -19,6 +19,7 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
@@ -273,6 +274,22 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("isEnabled", e)
       promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      // Read the config the SDK runs, not the one this module built: the SDK ignores a second setup().
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      promise.resolve(Arguments.makeNativeMap(integration?.debugProperties() ?: emptyMap()))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
     }
   }
 

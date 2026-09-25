@@ -447,6 +447,16 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         #endif
     }
 
+    @objc(getSessionReplayDebugProperties:withRejecter:)
+    func getSessionReplayDebugProperties(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
+        #if os(iOS)
+            resolve(PostHogSDK.shared.sessionReplayDebugProperties())
+        #else
+            // Session replay is unsupported on macOS.
+            resolve([:])
+        #endif
+    }
+
     @objc(endSession:withRejecter:)
     func endSession(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
         PostHogSDK.shared.endSession()
