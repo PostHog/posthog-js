@@ -772,7 +772,7 @@ describe('feature flag dependencies', () => {
         ],
       }
 
-      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: structuredClone(flags) }))
 
       posthog = buildClient()
       const options = { onlyEvaluateLocally: true, sendFeatureFlagEvents: false }
@@ -780,6 +780,9 @@ describe('feature flag dependencies', () => {
       expect(await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id', options)).toBeUndefined()
 
       dependency.dependency_chain = ['parent-flag']
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: structuredClone(flags) }))
+      expect(await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id', options)).toBeUndefined()
+
       await posthog.reloadFeatureFlags()
       expect(await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id', options)).toBe(true)
       expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
