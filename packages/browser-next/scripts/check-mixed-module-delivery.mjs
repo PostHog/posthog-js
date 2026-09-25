@@ -117,7 +117,7 @@ await core.flush()
 await core.dispose()
 if (
     coreRequests.length !== 1 ||
-    String(coreRequests[0][0]) !== 'https://us.i.posthog.com/array/ph_test/config?token=ph_test' ||
+    String(coreRequests[0][0]) !== 'https://us-assets.i.posthog.com/array/ph_test/config?token=ph_test' ||
     coreRequests[0][1].method !== 'GET'
 ) {
     throw new Error('The CommonJS core entrypoint must load only remote configuration, not analytics delivery')

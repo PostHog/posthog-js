@@ -27,7 +27,7 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
 }
 
 export type RequestRuntime = [
-    hosts: { api: string; flags: string },
+    hosts: { api: string; flags: string; assets: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,
@@ -46,12 +46,12 @@ export const sendRequest = async (
     let headers: Record<string, string>
 
     try {
-        if (!path.startsWith('/') || path.startsWith('//')) {
+        if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) {
             return createFailedResponse(new Error('Request paths must be relative to a configured PostHog host'))
         }
 
-        const baseUrl = new URL(`${runtime[0][init.target === 'flags' ? 'flags' : 'api']}/`)
-        url = new URL(path, baseUrl)
+        const baseUrl = new URL(`${runtime[0][init.target ?? 'api']}/`)
+        url = new URL(`.${path}`, baseUrl)
         if (url.origin !== baseUrl.origin) {
             return createFailedResponse(new Error('Request path resolved outside the configured PostHog host'))
         }

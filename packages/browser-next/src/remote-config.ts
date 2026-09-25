@@ -10,7 +10,7 @@ export const loadRemoteConfig = async (
     const response = await sendRequest(
         runtime,
         `/array/${encodeURIComponent(runtime[1])}/config`,
-        { target: 'api' },
+        { target: 'assets' },
         canSend,
         signal
     )

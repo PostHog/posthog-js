@@ -6,6 +6,7 @@ const runtime = (fetch: BrowserFetch): RequestRuntime => [
     {
         api: 'https://api.example.com/posthog',
         flags: 'https://flags.example.com/proxy',
+        assets: 'https://assets.example.com/static-proxy',
     },
     'ph_test',
     fetch,
@@ -31,6 +32,17 @@ afterEach(() => {
 })
 
 describe('control-plane requests', () => {
+    it.each([
+        [undefined, 'https://api.example.com/posthog'],
+        ['api', 'https://api.example.com/posthog'],
+        ['flags', 'https://flags.example.com/proxy'],
+        ['assets', 'https://assets.example.com/static-proxy'],
+    ] as const)('preserves the base path for target %s', async (target, host) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(async () => new Response('{}'))
+        await sendRequest(runtime(fetch), '/endpoint', target ? { target } : {})
+        expect(String(fetch.mock.calls[0]?.[0])).toBe(`${host}/endpoint?token=ph_test`)
+    })
+
     it.each([false, true])('times out with an external signal: %s', async (external) => {
         vi.useFakeTimers()
         const controller = new AbortController()
