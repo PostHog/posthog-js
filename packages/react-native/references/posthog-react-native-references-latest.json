@@ -4156,6 +4156,10 @@
           "name": "captureFatalException"
         },
         {
+          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "name": "getSessionReplayDebugProperties"
+        },
+        {
           "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",
           "name": "registerPushNotificationToken"
         },
