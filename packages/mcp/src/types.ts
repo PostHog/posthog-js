@@ -187,6 +187,12 @@ export interface MCPAnalyticsOptions {
    */
   beforeSend?: BeforeSendFn
   /**
+   * Decide which argument names `$mcp_input_keys` records on tool-call events.
+   * By default only names the tool's input schema declares are recorded; every
+   * other name becomes one `[redacted]` entry, because a name can carry private data.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */
@@ -303,6 +309,21 @@ export type RegisteredTool = {
  * Return the event (optionally mutated) to send it, or a nullish value to drop it.
  */
 export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
+
+/**
+ * Decides whether one top-level argument name appears in `$mcp_input_keys`.
+ * `declared` is true when the server's input schema declares the name.
+ * Return `true` to record the name; any other result, or a throw, records `[redacted]`.
+ */
+export type ShouldRecordInputKeyFn = (key: string, details: { declared: boolean }) => boolean
+
+export interface ToolInputOptions {
+  /**
+   * Replace the default rule, which records only declared names. The SDK still
+   * drops names longer than 64 characters and records at most 20 names.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+}
 
 export interface Event {
   actorId?: string

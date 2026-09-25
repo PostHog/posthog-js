@@ -263,7 +263,9 @@ export type {
   PrepareToolCallOptions,
   PrepareToolListOptions,
   RequestHeaderBag,
+  ShouldRecordInputKeyFn,
   ToolCallCaptureData,
+  ToolInputOptions,
   ToolsListCaptureData,
   UserIdentity,
 } from './types'

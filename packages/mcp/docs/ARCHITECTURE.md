@@ -79,9 +79,20 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 Automatic tool-call events include `$mcp_input_keys` on success and failure.
 The SDK reads the original arguments before validation can remove unknown fields.
 It records up to 20 top-level field names, sorted, without their values.
-Only names declared by the server's input schema remain visible.
+By default, only names declared by the server's input schema remain visible.
 Unknown names and names longer than 64 characters are replaced by one `[redacted]` entry, the same marker the SDK uses for other hidden data.
 Declared names come first, so `[redacted]` appears only when the 20-name limit leaves space.
+
+The `shouldRecordInputKey(key, { declared })` option replaces the default rule, for automatic capture and as the helper's third argument.
+Return `true` to record a name; any other result, or a throw, records `[redacted]`.
+The 64-character limit, the 20-name limit, and declared-names-first ordering still apply.
+Use it when your server can accept that a caller-chosen name reaches analytics, for example to see misspelled parameter names:
+
+```ts
+instrument(server, posthog, {
+  shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
+})
+```
 SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
 Non-object arguments do not produce this property.
 
@@ -107,7 +118,7 @@ posthog.captureToolCall({ toolName, isError: false, properties })
 Compute these properties before argument normalization, and include them in both success and error events.
 Pass a schema owned by the server, never one supplied by the caller.
 Custom command formats must extract the actual tool arguments and schema before calling the helper.
-Alternative field names must appear in the supplied schema to remain visible.
+Alternative field names must appear in the supplied schema, or pass `shouldRecordInputKey`, to remain visible.
 Do not report which alternative names a call used through server-specific `$mcp_*` properties.
 Alias telemetry is planned SDK follow-up work: the server will pass its own alias map to the helper, and the helper will add `$mcp_input_aliases_used` (for example `["experimentId:id"]`) without exposing unknown names.
 The SDK does not normalize arguments or infer which alternative a server accepted.

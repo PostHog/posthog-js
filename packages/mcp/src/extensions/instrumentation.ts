@@ -172,7 +172,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
-      ...getToolInputProperties(request.params?.arguments ?? {}, schema),
+      ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
+        shouldRecordInputKey: data.options.shouldRecordInputKey,
+      }),
     }
   }
   if (preparedEvent && explicitContextIntent) {

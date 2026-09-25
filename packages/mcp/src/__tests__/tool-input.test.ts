@@ -39,6 +39,43 @@ describe('getToolInputProperties', () => {
     expect(input.id).toBe('private-value')
   })
 
+  it('lets the caller replace the default rule and keeps declared names first', () => {
+    const schema = {
+      properties: { id: {}, ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`d${i}`, {}])) },
+    }
+    const input = { ...schema.properties, aKey: 1, experimentId: 1, 'person@example.com': 1, ['x'.repeat(65)]: 1 }
+    const seen: Array<[string, boolean]> = []
+    const keys = getToolInputProperties(input, schema, {
+      shouldRecordInputKey: (key, { declared }) => {
+        seen.push([key, declared])
+        return /^[A-Za-z0-9_]+$/.test(key)
+      },
+    }).$mcp_input_keys as string[]
+    expect(keys).toHaveLength(20)
+    expect(keys).toContain('id')
+    expect(keys).not.toContain('aKey')
+    expect(seen).toContainEqual(['experimentId', false])
+    expect(seen).toContainEqual(['id', true])
+    expect(seen.map(([key]) => key)).not.toContain('x'.repeat(65))
+
+    expect(
+      getToolInputProperties({ id: 1, experimentId: 1, other: 1 }, schema, {
+        shouldRecordInputKey: (key) => key !== 'id' && key !== 'other',
+      })
+    ).toEqual({ $mcp_input_keys: ['experimentId', '[redacted]'] })
+  })
+
+  it.each([
+    () => {
+      throw new Error('boom')
+    },
+    () => 'yes' as unknown as boolean,
+  ])('records [redacted] when shouldRecordInputKey throws or does not return true', (shouldRecordInputKey) => {
+    expect(getToolInputProperties({ id: 1 }, { properties: { id: {} } }, { shouldRecordInputKey })).toEqual({
+      $mcp_input_keys: ['[redacted]'],
+    })
+  })
+
   it.each([undefined, null, 'invalid', ['id'], new Date()])('omits names for non-object arguments %j', (input) => {
     expect(getToolInputProperties(input, { properties: { id: {} } })).toEqual({})
   })
