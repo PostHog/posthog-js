@@ -1,5 +1,20 @@
 # posthog-react-native
 
+## 4.78.0
+
+### Minor Changes
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android 12+ (requires `@posthog/react-native-plugin` 2.12.0). Update `posthog-android` to 3.71.1 so these crashes are stamped at the right time when the device clock disagrees with network time.
+  (2026-09-25)
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Upload Android native (`.so`) debug symbols, and their C/C++ sources with `includeSource`, when the Expo plugin's `uploadNativeSymbols` is enabled
+  (2026-09-25)
+
+### Patch Changes
+
+- Updated dependencies [[`f8d7db4`](https://github.com/PostHog/posthog-js/commit/f8d7db4f4bf990e24ef46aeb33fcd0871c9aabab), [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0)]:
+  - @posthog/react-native-plugin@2.12.0
+
 ## 4.77.1
 
 ### Patch Changes

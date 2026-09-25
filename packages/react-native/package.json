@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.77.1",
+  "version": "4.78.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
