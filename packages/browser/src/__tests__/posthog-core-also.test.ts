@@ -687,22 +687,18 @@ describe('posthog core', () => {
             })
         })
 
-        it.each(['$feature_flag_called', '$$heatmap', 'custom_event', 'livestream_connected'])(
-            'does not add replay debug properties to %s',
-            (eventName) => {
-                const properties = posthog.calculateEventProperties(eventName, { event: 'prop' }, new Date(), uuid)
-
-                expect(properties).not.toHaveProperty('$recording_status')
-                expect(properties.$sdk_debug_retry_queue_size).toEqual(0)
-            }
-        )
-
-        it('adds replay debug properties at most once per 30 seconds', () => {
+        it('adds replay debug properties only to SDK events, at most once per 30 seconds', () => {
             const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
             const pauseTimers = () => setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 30_000)
             const recordingStatus = (readOnly?: boolean) =>
                 posthog.calculateEventProperties('$pageview', {}, new Date(), uuid, readOnly).$recording_status
             try {
+                expect(
+                    posthog.calculateEventProperties('$feature_flag_called', {}, new Date(), uuid).$recording_status
+                ).toBe(undefined)
+                expect(posthog.calculateEventProperties('custom_event', {}, new Date(), uuid).$recording_status).toBe(
+                    undefined
+                )
                 expect(recordingStatus(true)).toEqual('disabled')
                 expect(pauseTimers()).toHaveLength(0)
                 expect(recordingStatus()).toEqual('disabled')

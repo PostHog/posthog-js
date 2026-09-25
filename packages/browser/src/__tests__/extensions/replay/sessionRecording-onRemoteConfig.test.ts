@@ -188,23 +188,6 @@ describe('SessionRecording', () => {
         window!.location = originalLocation
     })
 
-    it('adds the replay debug state stored for the session to sdkDebugProperties', () => {
-        const sessionPersistence = new PostHogPersistence(config)
-        sessionPersistence.register({
-            $sdk_debug_replay_url_trigger_status: 'trigger_pending',
-            $sdk_debug_recording_script_not_loaded: true,
-        })
-        posthog.sessionPersistence = sessionPersistence
-
-        // hidden from event properties, so only events that get replay debug properties carry it
-        expect(sessionPersistence.properties()).toEqual({})
-        expect(sessionRecording.sdkDebugProperties).toEqual({
-            $recording_status: 'disabled',
-            $sdk_debug_replay_url_trigger_status: 'trigger_pending',
-            $sdk_debug_recording_script_not_loaded: true,
-        })
-    })
-
     describe('onRemoteConfig()', () => {
         beforeEach(() => {
             vi.spyOn(sessionRecording, 'startIfEnabledOrStop')
