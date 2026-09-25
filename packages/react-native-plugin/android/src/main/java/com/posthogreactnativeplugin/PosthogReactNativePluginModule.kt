@@ -19,6 +19,7 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
@@ -36,6 +37,14 @@ class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext),
   ActivityEventListener {
+  // Built on the UI thread in setupNativeSdk, read on the module thread by
+  // getSessionReplayDebugProperties.
+  @Volatile
+  private var currentConfig: PostHogAndroidConfig? = null
+
+  @Volatile
+  private var cachedReplayIntegration: PostHogReplayIntegration? = null
+
   override fun getName(): String = NAME
 
   override fun initialize() {
@@ -228,6 +237,8 @@ class PosthogReactNativePluginModule(
               }
             }
           PostHogAndroid.setup(context, config)
+          currentConfig = config
+          cachedReplayIntegration = null
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
 
@@ -271,6 +282,26 @@ class PosthogReactNativePluginModule(
       logError("isEnabled", e)
       promise.resolve(false)
     }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      val properties = replayIntegration()?.debugProperties() ?: emptyMap()
+      promise.resolve(mapToWritableMap(properties))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
+    }
+  }
+
+  private fun replayIntegration(): PostHogReplayIntegration? {
+    cachedReplayIntegration?.let { return it }
+    return currentConfig
+      ?.integrations
+      ?.filterIsInstance<PostHogReplayIntegration>()
+      ?.firstOrNull()
+      .also { cachedReplayIntegration = it }
   }
 
   @ReactMethod
@@ -740,6 +771,34 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// Testable in isolation: a unit test passes JavaOnlyMap/JavaOnlyArray factories instead of
+// Arguments::createMap/createArray, which require a loaded native library.
+internal fun mapToWritableMap(
+  source: Map<String, Any?>,
+  createMap: () -> WritableMap = Arguments::createMap,
+  createArray: () -> WritableArray = Arguments::createArray,
+): WritableMap {
+  val result = createMap()
+  for ((key, value) in source) {
+    when (value) {
+      null -> result.putNull(key)
+      is String -> result.putString(key, value)
+      is Boolean -> result.putBoolean(key, value)
+      is Int -> result.putInt(key, value)
+      is Long -> result.putDouble(key, value.toDouble())
+      is Double -> result.putDouble(key, value)
+      is Float -> result.putDouble(key, value.toDouble())
+      is List<*> -> {
+        val array = createArray()
+        value.forEach { item -> array.pushString(item?.toString() ?: "") }
+        result.putArray(key, array)
+      }
+      else -> result.putString(key, value.toString())
+    }
+  }
+  return result
+}
 
 internal fun applyScreenshotConfig(
   map: ReadableMap?,

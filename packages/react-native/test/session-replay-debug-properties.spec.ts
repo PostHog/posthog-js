@@ -1,11 +1,14 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState, Platform } from 'react-native'
-import { wait, waitForNativePluginEvaluation } from './test-utils'
+import { wait, waitForNativeChain, waitForNativePluginEvaluation } from './test-utils'
 
 // The native plugin bridge, mocked with the legacy start() surface (no `setup`). The
 // getter lets a test remove the plugin altogether to model an app without it installed.
 let nativeRecording = false
+// The native replay debug map returned by `getSessionReplayDebugProperties`; mutable so a
+// test can shape it, reset to `{}` (no integration) between tests.
+let nativeDebugMap: Record<string, any> = {}
 
 const modules = vi.hoisted(() => ({ plugin: undefined as any }))
 
@@ -24,6 +27,7 @@ const pluginMock = {
   identify: vi.fn(async () => {}),
   startRecording: vi.fn(async () => {}),
   stopRecording: vi.fn(async () => {}),
+  getSessionReplayDebugProperties: vi.fn(async () => nativeDebugMap),
 }
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
@@ -41,6 +45,8 @@ const DEBUG_KEYS = [
   '$sdk_debug_replay_event_trigger_status',
   '$sdk_debug_replay_linked_flag_trigger_status',
   '$sdk_debug_replay_pending_trigger_conditions',
+  '$sdk_debug_replay_flush_hold_reason',
+  '$sdk_debug_replay_internal_buffer_length',
   '$sdk_debug_error_capturing_properties',
 ]
 
@@ -77,6 +83,11 @@ describe('PostHog RN session replay debug properties', () => {
     pluginMock.stopRecording.mockImplementation(async () => {
       nativeRecording = false
     })
+    nativeDebugMap = {}
+    // `mockReset` (not `mockClear`), so a `mockImplementationOnce` a test queued but the SDK
+    // never consumed (e.g. because a refresh site no-op'd) can't leak into the next test.
+    pluginMock.getSessionReplayDebugProperties.mockReset()
+    pluginMock.getSessionReplayDebugProperties.mockImplementation(async () => nativeDebugMap)
 
     currentFlags = {}
     currentFlagDetails = undefined
@@ -141,6 +152,12 @@ describe('PostHog RN session replay debug properties', () => {
     client.capture(event, properties)
     expect(seen).toHaveLength(1)
     return seen[0]
+  }
+
+  const reloadAndSettle = async (client: PostHog): Promise<void> => {
+    await client.reloadFeatureFlagsAsync()
+    await waitForNativePluginEvaluation(client)
+    await waitForNativeChain(client)
   }
 
   // Caches the remote replay config so the next launch evaluates its gates at startup instead
@@ -349,12 +366,12 @@ describe('PostHog RN session replay debug properties', () => {
     const stopping = client.reloadFeatureFlagsAsync().then(() => waitForNativePluginEvaluation(client))
     const racing = captureOne(client).properties
     expect(['disabled', 'active']).toContain(racing.$recording_status)
-    expect(racing).not.toHaveProperty('$sdk_debug_replay_flush_hold_reason')
+    expect(racing.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
     await stopping
 
     const after = captureOne(client).properties
     expect(after.$recording_status).toBe('disabled')
-    expect(after).not.toHaveProperty('$sdk_debug_replay_flush_hold_reason')
+    expect(after.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 
   it('A build failure attaches the stringified error and nothing else from the debug map', async () => {
@@ -483,7 +500,7 @@ describe('PostHog RN session replay debug properties', () => {
     await pauseViaLinkedFlag(client)
     const { properties } = captureOne(client)
     expect(properties.$recording_status).toBe('disabled')
-    expect(properties).not.toHaveProperty('$sdk_debug_replay_flush_hold_reason')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 
   it('Config-derived keys remain present after stop/uninstall while status is disabled', async () => {
@@ -542,5 +559,259 @@ describe('PostHog RN session replay debug properties', () => {
     const client = await readyClient({ enableSessionReplay: true })
     expect(captureOne(client).properties.$recording_status).toBe('disabled')
     expect(await client.isSessionReplayActive()).toBe(false)
+  })
+
+  it('Holding for remote config or minimum duration reports buffering', async () => {
+    nativeDebugMap = {
+      $recording_status: 'buffering',
+      $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
+      $sdk_debug_replay_internal_buffer_length: 3,
+    }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('buffering')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
+    expect(properties.$sdk_debug_replay_internal_buffer_length).toBe(3)
+  })
+
+  it('Neither holding nor disabled reports active (native)', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    nativeDebugMap = { $recording_status: 'active' }
+    await reloadAndSettle(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('active')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+  })
+
+  it('Mobile hold reason is present only while buffering', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    nativeDebugMap = {
+      $recording_status: 'buffering',
+      $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
+    }
+    await reloadAndSettle(client)
+    const buffering = captureOne(client).properties
+    expect(buffering.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
+
+    nativeDebugMap = { $recording_status: 'active' }
+    await reloadAndSettle(client)
+
+    const active = captureOne(client, 'after refresh').properties
+    expect(active.$recording_status).toBe('active')
+    expect(active.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+  })
+
+  // Flags-driven pause is the stop path that owns the JS recording flag (see `pauseViaLinkedFlag`
+  // below), so it's used here too rather than the public `stopSessionRecording()`, which doesn't
+  // update `_sessionReplayRecordingActive` and would leave the JS-derived fallback ambiguous.
+  it('Capture racing stop() yields a consistent status, never a torn read (native)', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    nativeDebugMap = {
+      $recording_status: 'buffering',
+      $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
+    }
+    await reloadAndSettle(client)
+    expect(captureOne(client).properties.$recording_status).toBe('buffering')
+
+    // The reload queues two refreshes (onFeatureFlags and the stop it triggers); gate both so
+    // neither lands before the capture below races the stop.
+    currentFlags = { 'replay-flag': false }
+    nativeDebugMap = { $recording_status: 'disabled' }
+    let releaseGetter: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      releaseGetter = resolve
+    })
+    pluginMock.getSessionReplayDebugProperties.mockImplementation(async () => {
+      await gate
+      return nativeDebugMap
+    })
+
+    const reloading = client.reloadFeatureFlagsAsync().then(() => waitForNativePluginEvaluation(client))
+    await wait(10)
+
+    // Neither refresh has landed (their getters are gated above); the cache was cleared
+    // synchronously in `_stopSessionRecording`, so JS's own disabled status stands rather than
+    // the stale buffering map.
+    const racing = captureOne(client).properties
+    expect(racing.$recording_status).toBe('disabled')
+    expect(racing.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+
+    releaseGetter?.()
+    await reloading
+    await waitForNativeChain(client)
+
+    const after = captureOne(client).properties
+    expect(after.$recording_status).toBe('disabled')
+    expect(after.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+  })
+
+  it('Active recording status implies the boolean getter is true (native)', async () => {
+    nativeRecording = true
+    const client = await readyClient({ enableSessionReplay: true })
+    nativeDebugMap = { $recording_status: 'active' }
+    await reloadAndSettle(client)
+
+    expect(captureOne(client).properties.$recording_status).toBe('active')
+    expect(await client.isSessionReplayActive()).toBe(true)
+  })
+
+  it("native trigger keys never override JS's", async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+    nativeDebugMap = {
+      $sdk_debug_replay_event_trigger_status: 'trigger_disabled',
+      $sdk_debug_replay_linked_flag_trigger_status: 'trigger_disabled',
+      $sdk_debug_replay_pending_trigger_conditions: ['event_trigger'],
+      $sdk_debug_replay_capture_mode: 'wireframe',
+      $sdk_debug_replay_throttle_delay_ms: 42,
+    }
+    const client = await readyClient({ enableSessionReplay: true, sessionReplayConfig: { throttleDelayMs: 250 } })
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client, 'unrelated')
+    expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_pending')
+    expect(properties.$sdk_debug_replay_pending_trigger_conditions).toEqual(['event_trigger'])
+    expect(properties.$sdk_debug_replay_capture_mode).toBe('screenshot')
+    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBe(250)
+  })
+
+  it('native disabled wins over a JS active', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('active')
+
+    nativeDebugMap = { $recording_status: 'disabled' }
+    await reloadAndSettle(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('disabled')
+  })
+
+  it('refreshes native debug properties on AppState becoming active', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    const changeCalls = (AppState.addEventListener as any).mock.calls.filter(([event]: [string]) => event === 'change')
+    const listener = changeCalls[changeCalls.length - 1][1]
+    listener('active')
+    await waitForNativeChain(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+  })
+
+  it('refreshes native debug properties on a feature-flags reload', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    await reloadAndSettle(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    await reloadAndSettle(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+  })
+
+  it('a flags reload that stops recording refreshes no more often than one that changes nothing', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+    await reloadAndSettle(client)
+    const unchangedReloadCalls = pluginMock.getSessionReplayDebugProperties.mock.calls.length
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    await pauseViaLinkedFlag(client)
+    await waitForNativeChain(client)
+
+    const stopReloadCalls = pluginMock.getSessionReplayDebugProperties.mock.calls.length
+    expect(stopReloadCalls).toBeGreaterThanOrEqual(1)
+    expect(stopReloadCalls).toBeLessThanOrEqual(unchangedReloadCalls)
+  })
+
+  it('refreshes native debug properties after starting session recording', async () => {
+    const client = await readyClient()
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    await client.startSessionRecording()
+    await waitForNativeChain(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+  })
+
+  it('refreshes native debug properties after stopping session recording', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    await client.stopSessionRecording()
+    await waitForNativeChain(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+  })
+
+  it('refreshes native debug properties after an event-trigger activation', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    client.capture('$pageview')
+    await wait(50)
+    await waitForNativeChain(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+  })
+
+  it('Old-plugin fallback: no getSessionReplayDebugProperties leaves JS values standing', async () => {
+    const { getSessionReplayDebugProperties: _omit, ...legacyPlugin } = pluginMock
+    modules.plugin = legacyPlugin
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('active')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+    expect(properties.$sdk_debug_replay_internal_buffer_length).toBeUndefined()
+  })
+
+  it('Empty native map (no integration) leaves JS status standing', async () => {
+    nativeDebugMap = {}
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('active')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+    expect(properties.$sdk_debug_replay_internal_buffer_length).toBeUndefined()
+  })
+
+  it('Stopping recording clears the hold reason (native)', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': true }
+    nativeDebugMap = {
+      $recording_status: 'buffering',
+      $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
+    }
+    await warmup()
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
+
+    nativeDebugMap = { $recording_status: 'disabled' }
+    await pauseViaLinkedFlag(client)
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('disabled')
+    expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 })

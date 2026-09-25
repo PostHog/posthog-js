@@ -139,6 +139,15 @@ export function captureFatalException(
   return PosthogReactNativePlugin.captureFatalException(distinctId, timestamp, properties)
 }
 
+/**
+ * Returns the native SDK's session-replay debug map (`$recording_status`, `$sdk_debug_replay_*`).
+ *
+ * @internal Used by `posthog-react-native`'s debug properties. Not part of the public API.
+ */
+export function getSessionReplayDebugProperties(): Promise<PostHogReactNativePluginMap> {
+  return PosthogReactNativePlugin.getSessionReplayDebugProperties()
+}
+
 export function registerPushNotificationToken(deviceToken: string, appId: string | null): Promise<void> {
   return PosthogReactNativePlugin.registerPushNotificationToken(deviceToken, appId)
 }
@@ -243,6 +252,8 @@ export interface PostHogReactNativePluginModule {
     properties: PostHogReactNativePluginMap
   ) => Promise<void>
 
+  getSessionReplayDebugProperties: () => Promise<PostHogReactNativePluginMap>
+
   registerPushNotificationToken: (deviceToken: string, appId: string | null) => Promise<void>
 
   unregisterPushNotificationToken: () => Promise<void>
@@ -266,6 +277,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   stopRecording,
   addExceptionStep,
   captureFatalException,
+  getSessionReplayDebugProperties,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
   setOptOut,

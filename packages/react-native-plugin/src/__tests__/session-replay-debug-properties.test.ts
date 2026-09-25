@@ -1,0 +1,39 @@
+/* oxlint-disable compat/compat */
+const mock = vi.hoisted(() => ({
+  nativeModule: {
+    getSessionReplayDebugProperties: vi.fn(() => Promise.resolve({ $recording_status: 'active' })),
+  },
+}))
+
+vi.mock('react-native', () => ({
+  NativeModules: { PosthogReactNativePlugin: mock.nativeModule },
+  NativeEventEmitter: class {},
+  Platform: { OS: 'ios', select: (obj: any) => obj.ios ?? obj.default },
+}))
+
+import PostHogReactNativePlugin, { getSessionReplayDebugProperties } from '../index'
+
+const { nativeModule } = mock
+
+describe('getSessionReplayDebugProperties', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    nativeModule.getSessionReplayDebugProperties.mockImplementation(() =>
+      Promise.resolve({ $recording_status: 'active' })
+    )
+  })
+
+  it('forwards to the native module and resolves its map', async () => {
+    const result = await getSessionReplayDebugProperties()
+
+    expect(nativeModule.getSessionReplayDebugProperties).toHaveBeenCalledWith()
+    expect(result).toEqual({ $recording_status: 'active' })
+  })
+
+  it('the default export exposes it', async () => {
+    const result = await PostHogReactNativePlugin.getSessionReplayDebugProperties()
+
+    expect(nativeModule.getSessionReplayDebugProperties).toHaveBeenCalled()
+    expect(result).toEqual({ $recording_status: 'active' })
+  })
+})
