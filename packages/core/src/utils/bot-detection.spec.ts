@@ -107,10 +107,10 @@ describe('isImpossibleChromeVersion', () => {
     expect(isImpossibleChromeVersion('Chrome/250.0.1234.56')).toBe(false); // major=250
     expect(isImpossibleChromeVersion(REAL_CHROME_UAS[6])).toBe(false); // Chrome/143.0.7499.999
     expect(isImpossibleChromeVersion(FAKE_BOT_UAS[4])).toBe(true); // Chrome/143.0.7499.1000
-    // Custom thresholds — REAL_CHROME_UAS[0] is Chrome/143.0.7499.193, so patch=193 < 500 → still allowed.
-    // To test the custom threshold flip, use a UA whose patch/build cross the tighter bound:
-    expect(isImpossibleChromeVersion('Chrome/143.0.7499.600', 8000, 500)).toBe(true); // patch=600, over custom 500
-    expect(isImpossibleChromeVersion('Chrome/143.0.8600.100', 8500, 1000)).toBe(true); // build=8600, over custom 8500
+    // Custom patch threshold: REAL_CHROME_UAS[0] is Chrome/143.0.7499.193
+    // (patch=193 < any tighter bound), so we use a UA with a higher patch.
+    expect(isImpossibleChromeVersion('Chrome/143.0.7499.600', 500)).toBe(true); // patch=600, over custom 500
+    expect(isImpossibleChromeVersion('Chrome/143.0.7499.400', 500)).toBe(false); // patch=400, under custom 500
   });
 });
 
