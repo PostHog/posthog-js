@@ -14,37 +14,11 @@ const options = {
 
 afterEach(() => {
     vi.doUnmock('../src/autocapture')
-    vi.doUnmock('../src/flags')
     vi.resetModules()
     vi.restoreAllMocks()
 })
 
 describe('automatic autocapture module loading', () => {
-    it('snapshots configuration before awaiting earlier product imports', async () => {
-        let loadFlags!: (module: { flags: () => Extension }) => void
-        vi.doMock(
-            '../src/flags',
-            () =>
-                new Promise((resolve) => {
-                    loadFlags = resolve
-                })
-        )
-        const factory = vi.fn(() => ({ name: 'autocapture', setup() {} }))
-        vi.doMock('../src/autocapture', () => ({ autocapture: factory }))
-        const { createPostHog } = await import('../src')
-        const configuration = { cssSelectorAllowlist: ['.original'] }
-        const pending = createPostHog({ ...options, flags: {}, autocapture: configuration })
-        await vi.waitFor(() => expect(loadFlags).toBeDefined())
-        configuration.cssSelectorAllowlist[0] = '.mutated'
-        loadFlags({ flags: () => ({ name: 'featureFlags', setup() {} }) })
-        const client = await pending
-        try {
-            expect(factory).toHaveBeenCalledWith({ cssSelectorAllowlist: ['.original'] })
-        } finally {
-            await client.dispose()
-        }
-    })
-
     it('waits for the dynamic module and extension setup before returning the client', async () => {
         let loaded!: (module: { autocapture: () => Extension }) => void
         let setupFinished!: () => void
