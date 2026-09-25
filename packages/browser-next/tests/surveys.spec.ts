@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { detectUserLanguage } from '@posthog/browser-common/surveys/survey-translations'
 import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
-import { getSurveyStorage } from '@posthog/browser-common/survey-render-context'
 import {
     setInProgressSurveyState,
     getInProgressSurveyState,
@@ -85,57 +84,43 @@ afterEach(async () => {
     vi.restoreAllMocks()
     vi.useRealTimers()
     document.body.innerHTML = ''
+    localStorage.clear()
 })
 
 describe('surveys', () => {
-    it.each(['selected', 'memory'] as const)('isolates %s UI state and reset from ambient storage', async (mode) => {
-        const contexts: SurveyRenderContext[] = []
-        const make = () =>
-            create({
+    it.each(['selected', 'memory'] as const)(
+        'keeps interaction state in localStorage with %s SDK persistence',
+        async (mode) => {
+            let context!: SurveyRenderContext
+            const client = await create({
                 storage: mode === 'selected' ? new MemoryStorage() : false,
                 extensions: [
                     createSurveys({ automaticDisplay: false }, async () => ({
-                        generateSurveys(context, enabled) {
-                            contexts.push(context)
-                            return generateSurveys(context, enabled)
+                        generateSurveys(value, enabled) {
+                            context = value
+                            return generateSurveys(value, enabled)
                         },
                     })),
                 ],
                 fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
             })
-        const first = await make()
-        const second = await make()
-        await getSurveys(first)
-        await getSurveys(second)
-        const [one, two] = contexts as [SurveyRenderContext, SurveyRenderContext]
-        const ambient = vi.spyOn(globalThis, 'localStorage', 'get').mockImplementation(() => {
-            throw new Error('ambient storage')
-        })
-        const state = {
-            surveySubmissionId: 'selected',
-            lastQuestionIndex: 0,
-            responses: { $survey_response: 'answer' },
+            await getSurveys(client)
+            const write = vi.spyOn(context.client!.kv, 'set')
+            const state = {
+                surveySubmissionId: 'submission',
+                lastQuestionIndex: 0,
+                responses: { $survey_response: 'answer'.repeat(2000) },
+            }
+            setInProgressSurveyState(definition, state)
+            expect(getInProgressSurveyState(definition)).toEqual(state)
+            expect(JSON.parse(localStorage.getItem('inProgressSurvey_survey-test')!)).toEqual(state)
+            sendSurveyAbandonedEvent(definition, context)
+            expect(localStorage.getItem('abandonedSurvey_survey-test')).toBe('true')
+            dismissedSurveyEvent(definition, context)
+            expect(getSurveySeen(definition)).toBe(true)
+            expect(write).not.toHaveBeenCalled()
         }
-        try {
-            setInProgressSurveyState(definition, state, getSurveyStorage(one))
-            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toBeNull()
-            sendSurveyAbandonedEvent(definition, one)
-            expect(getSurveyStorage(one).getItem('abandonedSurvey_survey-test')).toBe('true')
-            expect(getSurveyStorage(two).getItem('abandonedSurvey_survey-test')).toBeNull()
-            dismissedSurveyEvent(definition, one)
-            expect(getSurveySeen(definition, getSurveyStorage(one))).toBe(true)
-            expect(getSurveySeen(definition, getSurveyStorage(two))).toBe(false)
-            setInProgressSurveyState(definition, state, getSurveyStorage(two))
-            first.reset()
-            expect(getSurveySeen(definition, getSurveyStorage(one))).toBe(false)
-            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toEqual(state)
-            second.reset()
-            expect(getInProgressSurveyState(definition, getSurveyStorage(two))).toBeNull()
-            expect(ambient).not.toHaveBeenCalled()
-        } finally {
-            ambient.mockRestore()
-        }
-    })
+    )
 
     it('reads live person language and evaluation configuration through the renderer client', async () => {
         let context!: SurveyRenderContext
