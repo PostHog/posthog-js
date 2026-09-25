@@ -49,7 +49,15 @@ import {
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
+import {
+  getPlatformOS,
+  getRemoteConfigBool,
+  getRemoteConfigNumber,
+  isHermes,
+  isMacOS,
+  isValidSampleRate,
+  isWeb,
+} from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -81,6 +89,25 @@ const NATIVE_CALL_TIMEOUT_MS = 10_000
 // Native config readiness has no bridge notification, so manual starts need bounded timer
 // retries as well as flags-driven retries. JS flags can finish loading before native config.
 const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
+
+const DEFAULT_THROTTLE_DELAY_MS = 1000
+
+const isDebugPropertyKey = (key: string): boolean => key === '$recording_status' || key.startsWith('$sdk_debug_')
+
+const withoutDebugProperties = (properties: JsonType): JsonType => {
+  if (!isObject(properties)) {
+    return properties
+  }
+  const stripped: PostHogEventProperties = {}
+  for (const [key, value] of Object.entries(properties)) {
+    if (!isDebugPropertyKey(key)) {
+      stripped[key] = value
+    }
+  }
+  return stripped
+}
+
+type SessionReplayTriggerStatus = 'trigger_disabled' | 'trigger_pending' | 'trigger_activated'
 
 type ManualRecordingStartRequest = {
   pending: boolean
@@ -383,6 +410,7 @@ export class PostHog extends PostHogCore {
     super(normalizedApiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
+    this._sessionReplayOptions = options
     this._disableSurveys = options?.disableSurveys ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, {
       captureFatalException: (error, hint, eventUuid, timestamp, prepareNativeCapture) =>
@@ -756,7 +784,136 @@ export class PostHog extends PostHogCore {
       ...this._appProperties,
       $screen_height: Dimensions.get('screen').height,
       $screen_width: Dimensions.get('screen').width,
+      ...(this._sessionReplayDebugProperties() as PostHogEventProperties),
     }
+  }
+
+  // Runs twice per capture and also outside capture (flags, surveys), so it only reads state:
+  // no getSessionId() (rotates the session) and no bridge calls. Every owned key is written on
+  // each call, `undefined` when absent, so nothing leaks from the first call into the second.
+  private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
+    try {
+      const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
+      const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
+      const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
+      const platformOS = getPlatformOS()
+      const hasNativeReplay = !!OptionalReactNativePlugin && (platformOS === 'ios' || platformOS === 'android')
+      const replayEnabled = this._isEnableSessionReplay()
+
+      let eventTriggerStatus: SessionReplayTriggerStatus | undefined
+      let linkedFlagTriggerStatus: SessionReplayTriggerStatus | undefined
+      let pendingTriggerConditions: string[] | undefined
+      if (replayEnabled) {
+        const sessionId = this.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
+        eventTriggerStatus =
+          this._sessionReplayEventTriggers.length === 0
+            ? 'trigger_disabled'
+            : this._isEventTriggerActivatedForSession(sessionId)
+              ? 'trigger_activated'
+              : 'trigger_pending'
+        const sessionReplay = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+          [key: string]: JsonType
+        }
+        linkedFlagTriggerStatus = this._linkedFlagTriggerStatus(
+          sessionReplay['linkedFlag'],
+          (this.getKnownFeatureFlags() ?? {}) as { [key: string]: FeatureFlagValue }
+        ).status
+        const pending = [
+          eventTriggerStatus === 'trigger_pending' ? 'event_trigger' : undefined,
+          linkedFlagTriggerStatus === 'trigger_pending' ? 'linked_flag' : undefined,
+        ].filter((condition): condition is string => condition !== undefined)
+        pendingTriggerConditions = pending.length > 0 ? pending : undefined
+      }
+
+      return {
+        $recording_status: this._sessionReplayRecordingActive === true ? 'active' : 'disabled',
+        $sdk_debug_session_start: hasSessionStart ? sessionStart : undefined,
+        $sdk_debug_current_session_duration: hasSessionStart ? Date.now() - sessionStart : undefined,
+        $sdk_debug_pending_queue_size: Array.isArray(queue) ? queue.length : 0,
+        $sdk_debug_replay_capture_mode: hasNativeReplay ? 'screenshot' : undefined,
+        $sdk_debug_replay_throttle_delay_ms: hasNativeReplay
+          ? this._resolveThrottleDelayMs(this._sessionReplayOptions)
+          : undefined,
+        $sdk_debug_replay_event_trigger_status: eventTriggerStatus,
+        $sdk_debug_replay_linked_flag_trigger_status: linkedFlagTriggerStatus,
+        $sdk_debug_replay_pending_trigger_conditions: pendingTriggerConditions,
+        $sdk_debug_error_capturing_properties: undefined,
+      }
+    } catch (e) {
+      return {
+        $recording_status: undefined,
+        $sdk_debug_session_start: undefined,
+        $sdk_debug_current_session_duration: undefined,
+        $sdk_debug_pending_queue_size: undefined,
+        $sdk_debug_replay_capture_mode: undefined,
+        $sdk_debug_replay_throttle_delay_ms: undefined,
+        $sdk_debug_replay_event_trigger_status: undefined,
+        $sdk_debug_replay_linked_flag_trigger_status: undefined,
+        $sdk_debug_replay_pending_trigger_conditions: undefined,
+        $sdk_debug_error_capturing_properties: String(e),
+      }
+    }
+  }
+
+  private _resolveThrottleDelayMs(options?: PostHogOptions): number {
+    const defaultThrottleDelayMs = DEFAULT_THROTTLE_DELAY_MS
+    const {
+      throttleDelayMs: configuredThrottleDelayMs,
+      iOSdebouncerDelayMs = defaultThrottleDelayMs,
+      androidDebouncerDelayMs = defaultThrottleDelayMs,
+    } = options?.sessionReplayConfig ?? {}
+
+    let throttleDelayMs = configuredThrottleDelayMs ?? defaultThrottleDelayMs
+
+    // if deprecated values are set, we use the higher one for back compatibility
+    if (
+      throttleDelayMs === defaultThrottleDelayMs &&
+      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
+    ) {
+      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
+    }
+    return throttleDelayMs
+  }
+
+  private _linkedFlagTriggerStatus(
+    linkedFlag: JsonType | undefined,
+    featureFlags: { [key: string]: FeatureFlagValue }
+  ): { status: SessionReplayTriggerStatus; message: string } {
+    if (typeof linkedFlag === 'string') {
+      const value = featureFlags[linkedFlag]
+      let matched: boolean
+      if (typeof value === 'boolean') {
+        matched = value
+      } else if (typeof value === 'string') {
+        // if its a multi-variant flag linked to "any"
+        matched = true
+      } else {
+        // disable recording if the flag does not exist/quota limited
+        matched = false
+      }
+      return {
+        status: matched ? 'trigger_activated' : 'trigger_pending',
+        message: `Session replay '${linkedFlag}' linked flag value: '${value}'`,
+      }
+    }
+    if (linkedFlag && typeof linkedFlag === 'object') {
+      const linked = linkedFlag as { [key: string]: JsonType }
+      const flag = linked['flag'] as string | undefined
+      const variant = linked['variant'] as string | undefined
+      if (flag && variant) {
+        const value = featureFlags[flag]
+        return {
+          status: value === variant ? 'trigger_activated' : 'trigger_pending',
+          message: `Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`,
+        }
+      }
+      // disable recording if the flag does not exist/quota limited
+      return {
+        status: 'trigger_pending',
+        message: `Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`,
+      }
+    }
+    return { status: 'trigger_disabled', message: 'Session replay has no cached linkedFlag.' }
   }
 
   getSurveyDisplayLanguageOverride(): string | null {
@@ -2713,8 +2870,6 @@ export class PostHog extends PostHogCore {
       return false
     }
 
-    const defaultThrottleDelayMs = 1000
-
     const {
       maskAllTextInputs = true,
       maskAllImages = true,
@@ -2728,8 +2883,8 @@ export class PostHog extends PostHogCore {
       screenshotColorMode,
       screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
-      iOSdebouncerDelayMs = defaultThrottleDelayMs,
-      androidDebouncerDelayMs = defaultThrottleDelayMs,
+      iOSdebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
+      androidDebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
     } = options?.sessionReplayConfig ?? {}
 
     if (captureTouches === false && !isMacOS()) {
@@ -2747,15 +2902,7 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
-
-    // if deprecated values are set, we use the higher one for back compatibility
-    if (
-      throttleDelayMs === defaultThrottleDelayMs &&
-      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
-    ) {
-      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
-    }
+    const throttleDelayMs = this._resolveThrottleDelayMs(options)
 
     // Gate captureLog and captureNetworkTelemetry using cached remote config.
     // The effective state is: localEnabled AND remoteEnabled.
@@ -3056,41 +3203,9 @@ export class PostHog extends PostHogCore {
 
     this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
 
-    let recordingActive = true
-    const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
-      | string
-      | { [key: string]: JsonType }
-      | null
-      | undefined
-
-    if (typeof linkedFlag === 'string') {
-      const value = cachedFeatureFlags[linkedFlag]
-      if (typeof value === 'boolean') {
-        recordingActive = value
-      } else if (typeof value === 'string') {
-        // if its a multi-variant flag linked to "any"
-        recordingActive = true
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        recordingActive = false
-      }
-
-      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
-    } else if (linkedFlag && typeof linkedFlag === 'object') {
-      const flag = linkedFlag['flag'] as string | undefined
-      const variant = linkedFlag['variant'] as string | undefined
-      if (flag && variant) {
-        const value = cachedFeatureFlags[flag]
-        recordingActive = value === variant
-        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
-        recordingActive = false
-      }
-    } else {
-      this._logger.info(`Session replay has no cached linkedFlag.`)
-    }
+    const linkedFlagTrigger = this._linkedFlagTriggerStatus(cachedSessionReplayConfig['linkedFlag'], cachedFeatureFlags)
+    this._logger.info(linkedFlagTrigger.message)
+    let recordingActive = linkedFlagTrigger.status !== 'trigger_pending'
 
     // Event triggers: replay records only once the client captures an event whose name matches a
     // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
@@ -3146,6 +3261,9 @@ export class PostHog extends PostHogCore {
     const isObservedFatal =
       observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
     const processed = super.processBeforeEnqueue(message)
+    if (processed) {
+      this._stripDebugPropertiesIfBackdated(processed)
+    }
     let suppress = false
     if (isObservedFatal && processed && observation) {
       // The final, before_send-accepted payload. Offer it to the native SDK here rather than
@@ -3154,7 +3272,13 @@ export class PostHog extends PostHogCore {
       // outcomes have to be decided in this one step or the exception can end up in neither
       // queue, or in both.
       try {
-        observation.nativeCapture = observation.prepareNativeCapture(processed)
+        // Native runs its own debug-property builder on the handed-off event, so the JS
+        // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
+        // used when native declines, keeps it.
+        observation.nativeCapture = observation.prepareNativeCapture({
+          ...processed,
+          properties: withoutDebugProperties(processed.properties),
+        })
       } catch (e) {
         this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
         observation.nativeCapture = undefined
@@ -3193,6 +3317,26 @@ export class PostHog extends PostHogCore {
       this._fatalCaptureObservation = previousObservation
     }
     return { queued: observation.queued, nativeCapture: observation.nativeCapture }
+  }
+
+  private _stripDebugPropertiesIfBackdated(message: PostHogEventProperties): void {
+    const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
+    if (typeof sessionStart !== 'number' || sessionStart <= 0) {
+      return
+    }
+    const timestamp = message.timestamp
+    const eventTime =
+      timestamp instanceof Date ? timestamp.getTime() : typeof timestamp === 'string' ? Date.parse(timestamp) : NaN
+    if (Number.isNaN(eventTime) || eventTime >= sessionStart) {
+      return
+    }
+    if (isObject(message.properties)) {
+      for (const key of Object.keys(message.properties)) {
+        if (isDebugPropertyKey(key)) {
+          delete (message.properties as PostHogEventProperties)[key]
+        }
+      }
+    }
   }
 
   private _maybeActivateEventTrigger(eventName: unknown): void {

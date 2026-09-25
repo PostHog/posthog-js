@@ -254,6 +254,8 @@ describe('PostHog React Native', () => {
       $lib_version: expect.any(String),
       $screen_height: expect.any(Number),
       $screen_width: expect.any(Number),
+      $recording_status: 'disabled',
+      $sdk_debug_pending_queue_size: 0,
 
       $app_name: 'custom',
     })
@@ -273,6 +275,10 @@ describe('PostHog React Native', () => {
       $lib_version: expect.any(String),
       $screen_height: expect.any(Number),
       $screen_width: expect.any(Number),
+      $recording_status: 'disabled',
+      $sdk_debug_session_start: expect.any(Number),
+      $sdk_debug_current_session_duration: expect.any(Number),
+      $sdk_debug_pending_queue_size: expect.any(Number),
 
       $app_build: 'mock',
       $app_name: 'customised!', // changed
