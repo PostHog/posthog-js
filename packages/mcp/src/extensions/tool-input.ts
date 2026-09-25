@@ -1,4 +1,4 @@
-import type { JsonRecord, ShouldRecordInputKeyFn, ToolInputOptions } from '../types'
+import type { InputAliasMap, JsonRecord, ShouldRecordInputKeyFn, ToolInputOptions } from '../types'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { getObjectShape, isZodRawShapeCompat, unwrapInputSchema } from './mcp-sdk-compat'
 
@@ -27,6 +27,30 @@ function shouldRecord(fn: ShouldRecordInputKeyFn, key: string, declared: boolean
   }
 }
 
+function aliasNames(aliases: InputAliasMap | undefined): string[] {
+  if (!isRecord(aliases)) return []
+  return Object.values(aliases).flatMap((names) =>
+    Array.isArray(names) ? names.filter((name): name is string => typeof name === 'string') : []
+  )
+}
+
+/**
+ * Each alias the server needed: the canonical name is absent and this is the first of its
+ * aliases present, the same order a normalizer that fills the canonical from its aliases uses.
+ */
+function describeAliasesUsed(aliases: InputAliasMap | undefined, input: Record<string, unknown>): string[] {
+  if (!isRecord(aliases)) return []
+  const used: string[] = []
+  for (const [canonical, names] of Object.entries(aliases)) {
+    if (!Array.isArray(names) || Object.prototype.hasOwnProperty.call(input, canonical)) continue
+    const alias = names.find((name) => typeof name === 'string' && Object.prototype.hasOwnProperty.call(input, name))
+    if (alias && alias.length <= MAX_KEY_LENGTH && canonical.length <= MAX_KEY_LENGTH) {
+      used.push(`${alias}:${canonical}`)
+    }
+  }
+  return used.sort().slice(0, MAX_INPUT_KEYS)
+}
+
 /**
  * Describe the original arguments without reading their values.
  * Pass a server-owned JSON Schema or Zod object schema, never a schema from the caller.
@@ -39,7 +63,7 @@ export function getToolInputProperties(input: unknown, inputSchema?: unknown, op
     const prototype = Object.getPrototypeOf(input)
     if (prototype !== null && prototype !== Object.prototype) return {}
     const properties = declaredProperties(inputSchema)
-    const known = new Set(Object.keys(properties ?? {}))
+    const known = new Set([...Object.keys(properties ?? {}), ...aliasNames(options?.inputAliases)])
     const keys = Object.keys(input).filter((key) => known.has(key) || !ANALYTICS_KEYS.has(key))
     const record = options?.shouldRecordInputKey ?? recordDeclaredOnly
     const declared: string[] = []
@@ -57,7 +81,11 @@ export function getToolInputProperties(input: unknown, inputSchema?: unknown, op
     if (hasRedacted && visibleKeys.length < MAX_INPUT_KEYS) {
       visibleKeys.push('[redacted]')
     }
-    return { [PostHogMCPAnalyticsProperty.InputKeys]: visibleKeys }
+    const aliasesUsed = describeAliasesUsed(options?.inputAliases, input)
+    return {
+      [PostHogMCPAnalyticsProperty.InputKeys]: visibleKeys,
+      ...(aliasesUsed.length > 0 ? { [PostHogMCPAnalyticsProperty.InputAliasesUsed]: aliasesUsed } : {}),
+    }
   } catch {
     return {}
   }
