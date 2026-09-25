@@ -239,6 +239,22 @@ describe('PostHog RN session replay debug properties', () => {
     )
   })
 
+  it('session keys describe the rotated session when the previous one expired during capture', async () => {
+    const client = await readyClient()
+    const previousSessionId = client.getSessionId()
+    const previousStart = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)!
+    // Push the last activity past the expiry so the capture itself rotates the session.
+    client.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 3600 * 1000)
+
+    const { properties } = captureOne(client)
+    const newStart = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)!
+    expect(properties.$session_id).not.toBe(previousSessionId)
+    expect(properties.$session_id).toBe(client.getPersistedProperty(PostHogPersistedProperty.SessionId))
+    expect(newStart).toBeGreaterThanOrEqual(previousStart)
+    expect(properties.$sdk_debug_session_start).toBe(newStart)
+    expect(properties.$sdk_debug_current_session_duration).toBeLessThan(1000)
+  })
+
   it('Linked-flag trigger status reflects current state on every capture', async () => {
     currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
     currentFlags = { 'replay-flag': false }

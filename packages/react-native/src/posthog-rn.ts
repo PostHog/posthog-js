@@ -3263,7 +3263,11 @@ export class PostHog extends PostHogCore {
       observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
     const processed = super.processBeforeEnqueue(message)
     if (processed) {
-      this._stripDebugPropertiesIfBackdated(processed)
+      try {
+        this._stripDebugPropertiesIfBackdated(processed)
+      } catch (e) {
+        this._logger.error(`Session replay debug property strip failed: ${e}.`)
+      }
     }
     let suppress = false
     if (isObservedFatal && processed && observation) {
