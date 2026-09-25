@@ -33,7 +33,10 @@ const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
 
   // reverse mock calls array to get the last call
-  const call = mockedFetch.mock.calls.reverse().find((x) => (x[0] as string).includes('/batch/'))
+  const call = mockedFetch.mock.calls
+    .slice()
+    .reverse()
+    .find((x) => (x[0] as string).includes('/batch/'))
   if (!call) {
     return undefined
   }

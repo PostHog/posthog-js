@@ -19,7 +19,10 @@ const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
 const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
 
-  const call = mockedFetch.mock.calls.reverse().find((x) => (x[0] as string).includes('/batch/'))
+  const call = mockedFetch.mock.calls
+    .slice()
+    .reverse()
+    .find((x) => (x[0] as string).includes('/batch/'))
   if (!call) {
     return undefined
   }

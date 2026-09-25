@@ -1,5 +1,9 @@
 import { PostHog } from '@/entrypoints/index.node'
-import { PostHogSentryIntegration } from '@/extensions/sentry-integration'
+import {
+  PostHogSentryIntegration,
+  sentryIntegration,
+  type SentryIntegrationOptions,
+} from '@/extensions/sentry-integration'
 import { waitForPromises } from '../utils'
 
 vi.mock('../../version', () => ({ version: '1.2.3' }))
@@ -10,7 +14,10 @@ const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
 
   // reverse mock calls array to get the last call
-  const call = mockedFetch.mock.calls.reverse().find((x) => (x[0] as string).includes('/batch/'))
+  const call = mockedFetch.mock.calls
+    .slice()
+    .reverse()
+    .find((x) => (x[0] as string).includes('/batch/'))
   if (!call) {
     return undefined
   }
@@ -155,5 +162,68 @@ describe('PostHogSentryIntegration', () => {
         uuid: expect.any(String),
       },
     ])
+  })
+
+  it.each(['class', 'function'])('preserves Sentry events without forwarding when disabled (%s)', async (adapter) => {
+    let processEvent: (event: any) => any
+    if (adapter === 'class') {
+      new PostHogSentryIntegration(posthog, undefined, undefined, undefined, false).setupOnce(
+        (processor) => (processEvent = processor),
+        () => ({ getClient: () => undefined })
+      )
+    } else {
+      processEvent = sentryIntegration(posthog, { sendExceptionsToPostHog: false }).processEvent
+    }
+    const event = createMockSentryException()
+    const capture = vi.spyOn(posthog, 'capture')
+
+    expect(processEvent!(event)).toBe(event)
+    await posthog.flush()
+
+    expect(event.tags['PostHog Person URL']).toBe('http://example.com/project/TEST_API_KEY/person/EXAMPLE_APP_GLOBAL')
+    expect(capture).not.toHaveBeenCalled()
+    expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
+  it.each<{
+    label: string
+    options: SentryIntegrationOptions
+    level: string
+    shouldCapture: boolean
+  }>([
+    { label: 'default error', options: {}, level: 'error', shouldCapture: true },
+    { label: 'default warning', options: {}, level: 'warning', shouldCapture: false },
+    {
+      label: 'explicit warning',
+      options: { severityAllowList: ['warning'] },
+      level: 'warning',
+      shouldCapture: true,
+    },
+    {
+      label: 'excluded error',
+      options: { severityAllowList: ['warning'] },
+      level: 'error',
+      shouldCapture: false,
+    },
+    { label: 'wildcard info', options: { severityAllowList: '*' }, level: 'info', shouldCapture: true },
+  ])('respects the severity allowlist: $label', async ({ options, level, shouldCapture }) => {
+    const integration = sentryIntegration(posthog, options)
+    const event = { ...createMockSentryException(), level }
+
+    expect(integration.processEvent(event)).toBe(event)
+    await posthog.flush()
+
+    if (shouldCapture) {
+      expect(getLastBatchEvents()).toEqual([
+        expect.objectContaining({
+          event: '$exception',
+          distinct_id: 'EXAMPLE_APP_GLOBAL',
+          properties: expect.objectContaining({ $exception_level: level }),
+        }),
+      ])
+    } else {
+      expect(mockedFetch).not.toHaveBeenCalled()
+      expect(event.tags['PostHog Person URL']).toBeUndefined()
+    }
   })
 })
