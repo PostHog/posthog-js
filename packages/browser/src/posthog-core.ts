@@ -25,6 +25,7 @@ import {
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
     SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
@@ -186,6 +187,10 @@ const RESET_CONSENT_WARN =
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+
+// high-volume events nobody reads to debug replay capture, so they skip its debug properties
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
+const REPLAY_DEBUG_PROPERTY_PREFIX = '$sdk_debug_replay_'
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
@@ -2141,8 +2146,9 @@ export class PostHog implements PostHogInterface {
             extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
+        const withReplayDebugProperties = !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
         try {
-            if (this.sessionRecording) {
+            if (this.sessionRecording && withReplayDebugProperties) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
@@ -2226,6 +2232,16 @@ export class PostHog implements PostHogInterface {
         })
 
         properties['$is_identified'] = this._isIdentified()
+
+        if (!withReplayDebugProperties) {
+            // the recorder also registers trigger state for the session, which the merge above adds back
+            delete properties[SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]
+            for (const key of Object.keys(properties)) {
+                if (key.startsWith(REPLAY_DEBUG_PROPERTY_PREFIX)) {
+                    delete properties[key]
+                }
+            }
+        }
 
         if (isArray(this.config.property_denylist)) {
             each(this.config.property_denylist, function (denylisted_prop) {

@@ -380,7 +380,6 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent).toBeDefined()
 
         expect(targetEvent!['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-        expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeDefined()
         expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
     })
 })

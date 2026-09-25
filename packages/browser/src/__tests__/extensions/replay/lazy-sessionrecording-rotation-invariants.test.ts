@@ -470,7 +470,7 @@ describe('suspended tab session timestamps (#4825)', () => {
                     observations.push({
                         sessionId: props.$session_id,
                         start: debug.$sdk_debug_session_start,
-                        duration: debug.$sdk_debug_current_session_duration,
+                        duration: h.lazy._sessionDuration,
                         lastTimestamp: props.$snapshot_data[props.$snapshot_data.length - 1].timestamp,
                     })
                 }

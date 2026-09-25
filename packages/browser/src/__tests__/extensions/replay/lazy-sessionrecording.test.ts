@@ -2806,10 +2806,7 @@ describe('Lazy SessionRecording', () => {
                 // and the new session's full snapshot is attributed to it
                 _emit(createFullSnapshot({ timestamp: secondRotationTimestamp + 10 }))
                 expect(lazyRecorder['_buffer'].sessionId).toEqual('third-session-id')
-                const fullSnapshotSessions = lazyRecorder['_fullSnapshotTimestamps'].map(
-                    ([sid]: [string, number]) => sid
-                )
-                expect(fullSnapshotSessions).toContain('third-session-id')
+                expect(lazyRecorder['_lastFullSnapshotSessionId']).toEqual('third-session-id')
             })
 
             it('re-syncs a stale session id from the session manager while _isIdle is unknown', () => {
@@ -3246,62 +3243,6 @@ describe('Lazy SessionRecording', () => {
 
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(undefined)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(startTimer)
-            })
-        })
-
-        describe('full snapshot timestamp tracking', () => {
-            beforeEach(() => {
-                sessionRecording.onRemoteConfig(
-                    makeFlagsResponse({
-                        sessionRecording: {
-                            endpoint: '/s/',
-                        },
-                    })
-                )
-            })
-
-            it.each([
-                [1, [1000]],
-                [6, [1000, 2000, 3000, 4000, 5000, 6000]],
-                [8, [3000, 4000, 5000, 6000, 7000, 8000]],
-            ])('tracks last 6 full snapshot timestamps when %s snapshots emitted', (count, expectedTimestamps) => {
-                for (let i = 1; i <= count; i++) {
-                    _emit(createFullSnapshot({ timestamp: i * 1000 }))
-                }
-
-                const snapshots = sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']
-                expect(snapshots).toEqual(expectedTimestamps.map((ts: number) => [sessionId, ts]))
-            })
-
-            it('exposes full snapshot timestamps in sdkDebugProperties', () => {
-                _emit(createFullSnapshot({ timestamp: 1000 }))
-                _emit(createFullSnapshot({ timestamp: 2000 }))
-
-                expect(sessionRecording.sdkDebugProperties.$sdk_debug_replay_full_snapshots).toEqual([
-                    [sessionId, 1000],
-                    [sessionId, 2000],
-                ])
-            })
-
-            it('records the session id at the time of the snapshot', () => {
-                const firstSessionId = sessionId
-
-                _emit(createFullSnapshot({ timestamp: 1000 }))
-                _emit(createFullSnapshot({ timestamp: 2000 }))
-
-                sessionManager.resetSessionId()
-                sessionId = 'rotated-session-id'
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-
-                _emit(createFullSnapshot({ timestamp: 3000 }))
-
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']).toEqual([
-                    [firstSessionId, 1000],
-                    [firstSessionId, 2000],
-                    // the incremental arriving before the rotated session's full snapshot triggers a healing snapshot
-                    ['rotated-session-id', undefined],
-                    ['rotated-session-id', 3000],
-                ])
             })
         })
 
@@ -4359,105 +4300,6 @@ describe('Lazy SessionRecording', () => {
             ]).toMatchSnapshot()
         })
 
-        it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: {
-                        endpoint: '/s/',
-                    },
-                })
-            )
-
-            assignableWindow.__PosthogExtensions__.rrweb.wasMaxDepthReached.mockReturnValue(true)
-            _emit(createFullSnapshot())
-
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(true)
-            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
-                $snapshot_max_depth_exceeded: true,
-            })
-        })
-
-        it('reports the slowest full snapshot cost in sdkDebugProperties', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-            const rrweb = assignableWindow.__PosthogExtensions__.rrweb
-            const cost = (durationMs: number) => ({
-                durationMs,
-                stylesheetMs: durationMs / 2,
-                nodeCount: 1234,
-                cssRuleCount: 42_000,
-                nonDeferrableCssRuleCount: 30_000,
-                deferredStylesheetCount: 3,
-            })
-
-            rrweb.getLastSnapshotCost.mockReturnValue(cost(3918.4))
-            _emit(createFullSnapshot())
-            // a later, cheaper snapshot must not displace the expensive one - the worst
-            // snapshot is the freeze a user would actually have noticed
-            rrweb.getLastSnapshotCost.mockReturnValue(cost(12))
-            _emit(createFullSnapshot())
-
-            rrweb.getMutationCost.mockReturnValue({ slowestBatchMs: 240.6 })
-
-            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
-                $sdk_debug_replay_slowest_full_snapshot_ms: 3918,
-                $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: 1959,
-                $sdk_debug_replay_slowest_full_snapshot_nodes: 1234,
-                $sdk_debug_replay_slowest_full_snapshot_css_rules: 42_000,
-                $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable: 30_000,
-                $sdk_debug_replay_slowest_mutation_batch_ms: 241,
-            })
-        })
-
-        it('reports cumulative deferred stylesheet counters and durations in sdkDebugProperties', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-            // cumulative across the session, so a fast first snapshot's deferrals are
-            // not hidden by a slower snapshot that deferred nothing
-            assignableWindow.__PosthogExtensions__.rrweb.getDeferredStylesheetStats.mockReturnValue({
-                deferredCount: 5,
-                failedCount: 1,
-                abandonedCount: 2,
-                totalMs: 123.4,
-                slowestSliceMs: 45.6,
-            })
-
-            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
-                $sdk_debug_replay_deferred_stylesheets: 5,
-                $sdk_debug_replay_deferred_stylesheets_failed: 1,
-                $sdk_debug_replay_deferred_stylesheets_abandoned: 2,
-                $sdk_debug_replay_deferred_stylesheet_ms: 123,
-                $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: 46,
-            })
-        })
-
-        it('reports discarded duration samples in sdkDebugProperties', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-            // samples thrown away because their window straddled a tab suspension or
-            // exceeded the plausibility cap (see rrweb-snapshot snapshot-cost.ts)
-            assignableWindow.__PosthogExtensions__.rrweb.getDiscardedDurationSamples.mockReturnValue(3)
-
-            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
-                $sdk_debug_replay_discarded_duration_samples: 3,
-            })
-        })
-
-        it('reports observers that failed to start in sdkDebugProperties', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-
-            // the recorder swallows these errors and keeps every other health signal
-            // green, so this property is the only sign the frame records less than it should
-            assignableWindow.__PosthogExtensions__.rrweb.getObserverInitFailures.mockReturnValue([
-                'input',
-                'plugin:rrweb/console@1',
-            ])
-
-            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
-                $sdk_debug_replay_observer_init_failures: ['input', 'plugin:rrweb/console@1'],
-            })
-        })
-
         it('picks up the snapshot cost on a microtask when the emit-time read is stale', async () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
@@ -4466,7 +4308,7 @@ describe('Lazy SessionRecording', () => {
             // cost window closes, so the synchronous read can see no cost at all
             rrweb.getLastSnapshotCost.mockReturnValue(null)
             _emit(createFullSnapshot())
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_lastSeenSnapshotCost']).toBeUndefined()
 
             const cost = {
                 durationMs: 100,
@@ -4479,13 +4321,13 @@ describe('Lazy SessionRecording', () => {
             rrweb.getLastSnapshotCost.mockReturnValue(cost)
             await Promise.resolve()
 
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toEqual(cost)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_lastSeenSnapshotCost']).toEqual(cost)
         })
 
         it('resets snapshot cost tracking on session change', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
-            sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot'] = {
+            sessionRecording['_lazyLoadedSessionRecording']['_lastSeenSnapshotCost'] = {
                 durationMs: 3918,
                 stylesheetMs: 3000,
                 nodeCount: 1,
@@ -4498,43 +4340,11 @@ describe('Lazy SessionRecording', () => {
                 activityTimeout: true,
             })
 
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_lastSeenSnapshotCost']).toBeUndefined()
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
         })
 
-        it('accumulates throttler-dropped attribute mutations onto the debug property', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-            const onDropped = lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!
-
-            onDropped(3)
-            onDropped(2)
-
-            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
-        })
-
-        it('resets the throttled mutation drop count on session change', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-            // Drive the count through the throttler's own callback, so the reset is proven against
-            // the path that really increments it rather than against a hand-set field.
-            lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!(5)
-            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
-
-            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
-                activityTimeout: true,
-            })
-
-            // the count is cumulative across the session, so the new session starts at zero
-            expect(
-                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
-                    '$sdk_debug_replay_throttled_mutations_dropped'
-                ]
-            ).toEqual(0)
-        })
-
-        it('resets $snapshot_max_depth_exceeded on session change', () => {
+        it('resets rrweb max depth state on session change', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: {
@@ -4543,14 +4353,11 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded'] = true
-
             // simulate session id change callback
             sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
                 activityTimeout: true,
             })
 
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_maxDepthExceeded']).toBe(false)
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetMaxDepthState).toHaveBeenCalled()
         })
 
