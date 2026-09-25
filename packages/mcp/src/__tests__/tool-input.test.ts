@@ -19,6 +19,11 @@ describe('getToolInputProperties', () => {
     z.object({ id: z.string(), context: z.string(), properties: z.string() }).pipe(z.any()),
     z.object({ id: z.string(), context: z.string(), properties: z.string() }).optional(),
     z4.object({ id: z4.string(), context: z4.string(), properties: z4.string() }).transform((value) => value),
+    z4.preprocess((value) => value, z4.object({ id: z4.string(), context: z4.string(), properties: z4.string() })),
+    z4.preprocess(
+      (value) => value,
+      z4.preprocess((value) => value, z4.object({ id: z4.string(), context: z4.string(), properties: z4.string() }))
+    ),
     z4
       .object({ id: z4.string(), context: z4.string(), properties: z4.string() })
       .pipe(z4.any())

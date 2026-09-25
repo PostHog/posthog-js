@@ -114,25 +114,33 @@ export function isZodRawShapeCompat(schema: unknown): schema is Record<string, u
 }
 
 interface ZodWrapperDef {
+  type?: unknown
   schema?: unknown
   in?: unknown
+  out?: unknown
   innerType?: unknown
 }
 
 const MAX_UNWRAP_DEPTH = 8
 
+function zodDef(schema: unknown): ZodWrapperDef | undefined {
+  return (isZ4Schema(schema) ? (schema as ZodV4Internal)._zod?.def : (schema as ZodV3Internal)._def) as
+    | ZodWrapperDef
+    | undefined
+}
+
 /**
  * Follows Zod wrappers to the schema that parses the caller's input: v3 effects
  * (refine, transform, preprocess) and pipelines, v4 pipes (which include
  * transforms), and optional, nullable, default, catch, and readonly wrappers.
+ * A v4 `z.preprocess` is a pipe whose input side is the transform, so its output side is followed.
  */
 export function unwrapInputSchema(schema: unknown): unknown {
   let current = schema
   for (let depth = 0; depth < MAX_UNWRAP_DEPTH && isZodTypeLike(current); depth++) {
-    const def = (isZ4Schema(current) ? (current as ZodV4Internal)._zod?.def : (current as ZodV3Internal)._def) as
-      | ZodWrapperDef
-      | undefined
-    const inner = def?.schema ?? def?.in ?? def?.innerType
+    const def = zodDef(current)
+    const pipeInput = def?.in !== undefined && zodDef(def.in)?.type === 'transform' ? def.out : def?.in
+    const inner = def?.schema ?? pipeInput ?? def?.innerType
     if (!inner) {
       break
     }
