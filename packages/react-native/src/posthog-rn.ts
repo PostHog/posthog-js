@@ -889,9 +889,11 @@ export class PostHog extends PostHogCore {
       return
     }
     this._nativeSessionReplayDebugRefreshQueued = true
+    let started = false
     void this._enqueueNative(
       'getSessionReplayDebugProperties',
       async (plugin) => {
+        started = true
         this._nativeSessionReplayDebugRefreshQueued = false
         const generation = this._nativeSessionReplayDebugGeneration
         const map = await plugin.getSessionReplayDebugProperties?.()
@@ -901,7 +903,10 @@ export class PostHog extends PostHogCore {
       },
       false
     ).finally(() => {
-      this._nativeSessionReplayDebugRefreshQueued = false
+      // Only an entry the chain skipped (disabled, web, native not set up) still owns the flag.
+      if (!started) {
+        this._nativeSessionReplayDebugRefreshQueued = false
+      }
     })
   }
 
