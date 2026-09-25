@@ -214,11 +214,12 @@ export class BrowserClientAdapter implements Client {
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
         const target = init.target ?? 'api'
-        const endpoint = this.instance.requestRouter.endpointFor(target, path)
+        const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
+        const endpoint = this.instance.requestRouter.endpointFor(target, pathWithQuery)
         const isLogsRequest = target === 'api' && path === '/i/v1/logs'
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
-            url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
+            url: endpoint,
             data: init.body as QueuedRequestWithOptions['data'],
             headers: init.headers,
             timeout: init.timeoutMs,
