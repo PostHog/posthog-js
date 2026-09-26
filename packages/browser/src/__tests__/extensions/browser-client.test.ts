@@ -52,6 +52,7 @@ function createMockPostHog(
         get_property: vi.fn((key: string) => props[key]),
         getGroups: vi.fn(() => props.$groups),
         is_capturing: vi.fn(() => true),
+        has_opted_out_capturing: vi.fn(() => false),
         sessionManager: {
             checkAndGetSessionAndWindowId: vi.fn(() => currentSession),
         },
@@ -66,6 +67,7 @@ function createMockPostHog(
             eventHandlers.add(handler)
             return () => eventHandlers.delete(handler)
         }),
+        _addCaptureHook: vi.fn((handler) => instance.on('eventCaptured', (payload) => handler(payload.event, payload))),
         emitEvent(event, properties = {}) {
             eventHandlers.forEach((handler) => handler({ event, properties }))
         },
@@ -92,22 +94,17 @@ runClientConformanceSuite('legacy browser', async () => {
     }
 })
 
-function testExtension(
-    name: string,
-    setup: (client: Client) => void | Promise<void>,
-    dispose: () => void = vi.fn()
-): Extension {
-    return { name, setup, dispose }
+function publishRemoteConfig(instance: PostHog, result: RemoteConfigResult): void {
+    instance._lastRemoteConfig = result
+    instance._internalEventEmitter.emit('extensionsRemoteConfig', result)
 }
 
 describe('BrowserClientAdapter', () => {
     it('shares one Client with core analytics behavior across extensions', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        let secondClient: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
-        host.add(testExtension('second', (value) => (secondClient = value)))
+        const client: Client = host
+        const secondClient = host
 
         expect(client).toBe(host)
         expect(secondClient).toBe(client)
@@ -143,17 +140,16 @@ describe('BrowserClientAdapter', () => {
             $set: { plan: 'paid' },
             $set_once: { source: 'test' },
         } satisfies CaptureOptions)
-
-        await host.dispose()
     })
 
-    it('resolves registered extensions through typed stable names during setup', async () => {
+    it('resolves host extensions through typed stable names during setup', async () => {
         interface LogsExtension extends Extension {
             captureLog(): void
         }
         const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
         const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
-        const host = new BrowserClientAdapter(createMockPostHog())
+        const instance = new PostHog()
+        const host = instance._getBrowserClientAdapter()
         const captureLog = vi.fn()
         let client: Client | undefined
         let resolvedDuringSetup: LogsExtension | undefined
@@ -168,7 +164,8 @@ describe('BrowserClientAdapter', () => {
         }
 
         expect(client).toBeUndefined()
-        await host.add(extension)
+        instance.logs = extension as any
+        await extension.setup(host)
 
         expect(resolvedDuringSetup).toBe(extension)
         expect(captureLog).toHaveBeenCalledTimes(1)
@@ -176,7 +173,7 @@ describe('BrowserClientAdapter', () => {
         expect(client?.getExtension<LogsExtension>('logs')).toBe(extension)
         expect(client?.getExtension(MissingExtension)).toBeUndefined()
 
-        host.dispose()
+        instance.logs = undefined
         expect(client?.getExtension(LogsExtension)).toBeUndefined()
     })
 
@@ -186,19 +183,16 @@ describe('BrowserClientAdapter', () => {
         }
         const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
         const posthog = new PostHog()
-        const host = posthog._getBrowserClientAdapter()
+        posthog._getBrowserClientAdapter()
         const extension: LogsExtension = {
             name: LogsExtension,
             setup: vi.fn(),
             captureLog: vi.fn(),
         }
 
-        await host.add(extension)
-
+        posthog.logs = extension as any
         expect(posthog.getExtension(LogsExtension)).toBe(extension)
-
-        host.dispose()
-        expect(posthog.getExtension(LogsExtension)).toBeUndefined()
+        expect(new BrowserClientAdapter(posthog).getExtension(LogsExtension)).toBe(extension)
     })
 
     it('falls back to the distinct id and an empty session in limited environments', async () => {
@@ -208,20 +202,17 @@ describe('BrowserClientAdapter', () => {
             throw new Error('cookieless')
         })
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
 
         expect(client?.anonymousId).toBe('distinct-id')
         expect(client?.deviceId).toBeUndefined()
         expect(client?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
-        await host.dispose()
     })
 
     it('reads, writes, and removes persistence keys directly', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
 
         const key = '$extension_state'
         expect(client?.kv.initialize()).toBeUndefined()
@@ -255,17 +246,16 @@ describe('BrowserClientAdapter', () => {
         client?.kv.remove(key)
         expect(instance.persistence?.unregister).toHaveBeenLastCalledWith(key)
         expect(instance.persistence?.props[key]).toBeUndefined()
-        await host.dispose()
     })
 
     it('publishes every remote-config outcome and replays the latest result to late listeners', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
+        const instance = createMockPostHog()
+        const host = new BrowserClientAdapter(instance)
+        const client: Client = host
         const changes: RemoteConfigResult[] = []
         client?.onRemoteConfig((result) => changes.push(result as RemoteConfigResult))
 
-        host.handleRemoteConfig({ ok: false })
+        publishRemoteConfig(instance, { ok: false })
         expect(changes).toEqual([{ ok: false }])
 
         const successfulConfig = {
@@ -274,43 +264,40 @@ describe('BrowserClientAdapter', () => {
             nested: { approved: true },
         } as any
         const success = { ok: true, config: successfulConfig } as const
-        host.handleRemoteConfig(success)
+        publishRemoteConfig(instance, success)
         expect(changes).toEqual([{ ok: false }, success])
 
         const lateListener = vi.fn()
         client?.onRemoteConfig(lateListener)
         expect(lateListener).toHaveBeenCalledWith(success)
-        await host.dispose()
     })
 
     it('publishes each remote-config result to every listener', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+        const instance = createMockPostHog()
+        const host = new BrowserClientAdapter(instance)
+        const client: Client = host
         const firstListener = vi.fn()
         const secondListener = vi.fn()
         client?.onRemoteConfig(firstListener)
         client?.onRemoteConfig(secondListener)
         const result = { ok: true, config: { nested: { approved: true } } as any } as const
 
-        host.handleRemoteConfig(result)
+        publishRemoteConfig(instance, result)
         expect(firstListener).toHaveBeenCalledWith(result)
         expect(secondListener).toHaveBeenCalledWith(result)
-        await host.dispose()
     })
 
-    it('stops publishing remote config after disposal', async () => {
-        const host = new BrowserClientAdapter(createMockPostHog())
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+    it('unsubscribes remote-config listeners through their returned disposable', () => {
+        const instance = createMockPostHog()
+        const client = new BrowserClientAdapter(instance)
         const listener = vi.fn()
-        client!.onRemoteConfig(listener)
+        const subscription = client.onRemoteConfig(listener)
 
-        host.dispose()
-        host.handleRemoteConfig({ ok: false })
+        subscription.dispose()
+        publishRemoteConfig(instance, { ok: false })
 
         expect(listener).not.toHaveBeenCalled()
-        expect(client!.onRemoteConfig(vi.fn()).dispose).toEqual(expect.any(Function))
+        expect(client.onRemoteConfig(vi.fn()).dispose).toEqual(expect.any(Function))
     })
 
     it('replays only canonical cached remote-config outcomes', async () => {
@@ -319,27 +306,22 @@ describe('BrowserClientAdapter', () => {
             config: { supportedCompression: [], cached: true } as any,
         } as const
         const cachedHost = new BrowserClientAdapter(createMockPostHog({ remoteConfigResult: cachedResult }))
-        let cachedClient: Client | undefined
-        cachedHost.add(testExtension('cached', (client) => (cachedClient = client)))
+        const cachedClient: Client = cachedHost
         const cachedListener = vi.fn()
         cachedClient?.onRemoteConfig(cachedListener)
         expect(cachedListener).toHaveBeenCalledWith(cachedResult)
-        await cachedHost.dispose()
 
         const disabledHost = new BrowserClientAdapter(createMockPostHog({ flagsDisabled: true }))
-        let disabledClient: Client | undefined
-        disabledHost.add(testExtension('disabled', (client) => (disabledClient = client)))
+        const disabledClient: Client = disabledHost
         const disabledListener = vi.fn()
         disabledClient?.onRemoteConfig(disabledListener)
         expect(disabledListener).not.toHaveBeenCalled()
-        await disabledHost.dispose()
     })
 
     it('adapts captured events and disposes subscriptions', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
         const events: unknown[] = []
         const eventSubscription = client!.onEvent((event) => events.push(event))
 
@@ -349,14 +331,12 @@ describe('BrowserClientAdapter', () => {
         eventSubscription.dispose()
         instance.emitEvent('ignored')
         expect(events).toHaveLength(1)
-        host.dispose()
     })
 
     it('isolates shared listener failures and continues sibling event and config delivery', async () => {
         const instance = createMockPostHog()
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
         const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const eventSibling = vi.fn()
         const configSibling = vi.fn()
@@ -371,12 +351,13 @@ describe('BrowserClientAdapter', () => {
         client?.onRemoteConfig(configSibling)
 
         expect(() => instance.emitEvent('continues', { nested: { approved: true } })).not.toThrow()
-        expect(() => host.handleRemoteConfig({ ok: true, config: { nested: { approved: true } } as any })).not.toThrow()
+        expect(() =>
+            publishRemoteConfig(instance, { ok: true, config: { nested: { approved: true } } as any })
+        ).not.toThrow()
 
         expect(eventSibling).toHaveBeenCalledTimes(1)
         expect(configSibling).toHaveBeenCalledTimes(1)
         expect(error).toHaveBeenCalledTimes(2)
-        host.dispose()
     })
 
     it('delegates dynamic properties and returns an idempotent disposable', async () => {
@@ -384,8 +365,7 @@ describe('BrowserClientAdapter', () => {
         const remove = vi.fn()
         instance._registerExtensionEventProperties = vi.fn(() => remove)
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
         const producer = () => ({ dynamic: true })
 
         const registration = client!.registerDynamicEventProperties(producer)
@@ -393,7 +373,6 @@ describe('BrowserClientAdapter', () => {
         registration.dispose()
         registration.dispose()
         expect(remove).toHaveBeenCalledTimes(1)
-        await host.dispose()
     })
 
     it('exposes the project token and adapts caller-owned request options', async () => {
@@ -403,8 +382,7 @@ describe('BrowserClientAdapter', () => {
             options.callback?.({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
         )
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
         const body = {
             token: 'body-project',
             $token: 'body-alias',
@@ -449,7 +427,6 @@ describe('BrowserClientAdapter', () => {
             api_key: 'api-key-alias',
             distinct_id: 'person-1',
         })
-        await host.dispose()
     })
 
     it('uses the regular API target by default and resolves dropped requests', async () => {
@@ -458,8 +435,7 @@ describe('BrowserClientAdapter', () => {
         const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation((options) => options.callback?.({ statusCode: 0, error: requestError }))
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
 
         await expect(client!.sendRequest('/api/surveys/', { method: 'GET' })).resolves.toEqual({
             statusCode: 0,
@@ -469,7 +445,6 @@ describe('BrowserClientAdapter', () => {
         expect(send).toHaveBeenCalledWith(
             expect.objectContaining({ method: 'GET', url: 'https://api.example.com/api/surveys/' })
         )
-        await host.dispose()
     })
 
     it('returns a best-effort response immediately for an explicit sendBeacon transport', async () => {
@@ -477,8 +452,7 @@ describe('BrowserClientAdapter', () => {
         const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation(() => undefined)
         const host = new BrowserClientAdapter(instance)
-        let client: Client | undefined
-        await host.add(testExtension('test', (value) => (client = value)))
+        const client: Client = host
 
         const response = await client!.sendRequest('/s/', {
             method: 'POST',
@@ -497,7 +471,6 @@ describe('BrowserClientAdapter', () => {
             })
         )
         expect(send.mock.calls[0][0].callback).toBeUndefined()
-        await host.dispose()
     })
 
     it('serializes the caller-owned body through the selected browser transport', async () => {
@@ -513,8 +486,7 @@ describe('BrowserClientAdapter', () => {
                 options.callback?.({ statusCode: 200 })
             })
             const host = new BrowserClientAdapter(instance)
-            let client: Client | undefined
-            await host.add(testExtension('test', (value) => (client = value)))
+            const client: Client = host
             const body = {
                 token: 'body-project',
                 $token: 'body-alias',
@@ -532,7 +504,6 @@ describe('BrowserClientAdapter', () => {
             expect(open).toHaveBeenCalled()
             expect(setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
             expect(JSON.parse(sendRequest.mock.calls[0][0] as string)).toEqual(body)
-            await host.dispose()
         } finally {
             open.mockRestore()
             setRequestHeader.mockRestore()
@@ -550,8 +521,7 @@ describe('BrowserClientAdapter', () => {
                 return event
             },
         })
-        let client: Client | undefined
-        await posthog._getBrowserClientAdapter().add(testExtension('test', (value) => (client = value)))
+        const client: Client = posthog._getBrowserClientAdapter()
 
         const extensionKey = 'posthog.test.opaqueState'
         await client?.kv.set(extensionKey, 'visible')
@@ -580,8 +550,7 @@ describe('BrowserClientAdapter', () => {
         })
         const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         const send = vi.spyOn(posthog, '_send_retriable_request')
-        let client: Client | undefined
-        await posthog._getBrowserClientAdapter().add(testExtension('capture-test', (value) => (client = value)))
+        const client: Client = posthog._getBrowserClientAdapter()
 
         await client?.capture('batched-core-event', { source: 'core' })
         expect(enqueue).toHaveBeenCalledTimes(1)
@@ -620,8 +589,7 @@ describe('BrowserClientAdapter', () => {
             posthog._onRemoteConfig(result)
 
             const host = posthog._getBrowserClientAdapter()
-            let client: Client | undefined
-            await host.add(testExtension('remote-config-test', (value) => (client = value)))
+            const client: Client = host
             const earlySubscriber = vi.fn()
             client?.onRemoteConfig(earlySubscriber)
             const initialCallCount = earlySubscriber.mock.calls.length
@@ -660,8 +628,7 @@ describe('BrowserClientAdapter', () => {
             before_send: (event) => event,
         })
         const host = posthog._getBrowserClientAdapter()
-        let client: Client | undefined
-        await host.add(testExtension('continuation-test', (value) => (client = value)))
+        const client: Client = host
         const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         const eventSibling = vi.fn()
@@ -699,10 +666,7 @@ describe('BrowserClientAdapter', () => {
 
     it('bridges PostHog remote config, finalized events, persistence reset, and shutdown', async () => {
         const posthog = await createPosthogInstance(undefined, { before_send: (event) => event })
-        const host = posthog._getBrowserClientAdapter()
-        const extensionDispose = vi.fn()
-        let client: Client | undefined
-        host.add(testExtension('lifecycle', (value) => (client = value), extensionDispose))
+        const client = posthog._getBrowserClientAdapter()
         const remoteConfigs: unknown[] = []
         const events: Array<{ event: string; properties: Record<string, unknown> }> = []
         client?.onRemoteConfig((config) => remoteConfigs.push(config))
@@ -745,7 +709,6 @@ describe('BrowserClientAdapter', () => {
         expect(await client?.kv.get(AUTOCAPTURE_DISABLED_SERVER_SIDE)).toBeUndefined()
 
         await posthog.shutdown()
-        expect(extensionDispose).toHaveBeenCalledTimes(1)
     })
 })
 

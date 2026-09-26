@@ -29,6 +29,9 @@
             "constants": [
                 "dist/constants.d.ts"
             ],
+            "extension-tokens": [
+                "dist/extension-tokens.d.ts"
+            ],
             "extension-runtime": [
                 "dist/extension-runtime.d.ts"
             ],
@@ -61,6 +64,11 @@
             "types": "./dist/constants.d.ts",
             "require": "./dist/constants.js",
             "import": "./dist/constants.mjs"
+        },
+        "./extension-tokens": {
+            "types": "./dist/extension-tokens.d.ts",
+            "require": "./dist/extension-tokens.js",
+            "import": "./dist/extension-tokens.mjs"
         },
         "./extension-runtime": {
             "types": "./dist/extension-runtime.d.ts",

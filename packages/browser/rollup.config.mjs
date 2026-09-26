@@ -201,6 +201,8 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // lifecycle lookup from independently released bundle-local client adapters
+
                               // private ABI between independently emitted slim cores and extension bundles
                               ...(preserveCrossBundleProperties
                                   ? crossBundlePrivateProperties

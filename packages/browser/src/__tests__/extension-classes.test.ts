@@ -271,16 +271,18 @@ describe('__extensionClasses enrollment', () => {
             throw disposeError
         })
         const loggerError = vi.spyOn(logger, 'error').mockImplementation(() => {})
-        vi.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const setup = vi.fn(() => {
+            throw new Error('setup failed')
+        })
         const initTasks: Array<() => void> = []
 
-        posthog['_enrollExtension']({ name: 'logs', setup: vi.fn(), dispose } as any, initTasks)
+        posthog['_enrollExtension']({ name: 'logs', setup, dispose } as any, initTasks)
         initTasks[0]?.()
 
         await vi.waitFor(() => {
             expect(dispose).toHaveBeenCalledTimes(1)
         })
-        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose extension "logs"', disposeError)
     })
 
     it('bundles logs through the shared lifecycle', () => {
@@ -444,8 +446,7 @@ describe('__extensionClasses enrollment', () => {
     it('keeps one reloading bridge when feature flags are enrolled repeatedly', () => {
         PostHog.__defaultExtensionClasses = FeatureFlagsExtensions
         const posthog = new PostHog()
-        const add = vi.fn().mockResolvedValue(undefined)
-        posthog._getBrowserClientAdapter = vi.fn().mockReturnValue({ add }) as any
+        const setup = vi.spyOn(posthog.featureFlags, 'setup').mockImplementation(() => {})
 
         const enrollFeatureFlags = () => (posthog as any)._enrollFeatureFlags()
         enrollFeatureFlags()
@@ -457,7 +458,7 @@ describe('__extensionClasses enrollment', () => {
 
         expect(callback).toHaveBeenCalledTimes(1)
         expect(callback).toHaveBeenCalledWith(true)
-        expect(add).toHaveBeenCalledTimes(1)
+        expect(setup).toHaveBeenCalledTimes(1)
         posthog.featureFlags.reset()
     })
 
