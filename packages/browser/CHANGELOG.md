@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.434.15
+
+### Patch Changes
+
+- [#5115](https://github.com/PostHog/posthog-js/pull/5115) [`8531e40`](https://github.com/PostHog/posthog-js/commit/8531e4029d04f4f1ddf2ca02b129534c3ddd9dae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix SPA `$pageview` events from `pushState`/`replaceState` navigations carrying the previous page's `title`
+  (2026-09-26)
+
 ## 1.434.14
 
 ### Patch Changes
