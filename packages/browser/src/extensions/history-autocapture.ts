@@ -2,9 +2,10 @@ import { PostHog } from '../posthog-core'
 import { EVENT_PAGEVIEW } from '../constants'
 import { window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
-import { isObject } from '@posthog/core'
+import { isNullish, isObject } from '@posthog/core'
 import type { CapturePageviewOptions } from '../types'
 import type { Extension } from './types'
 
@@ -19,6 +20,8 @@ export class HistoryAutocapture implements Extension {
     private _popstateListener: (() => void) | undefined
     private _hashchangeListener: (() => void) | undefined
     private _lastLocation: HistoryLocation | undefined
+    private _pendingPageview: (() => void) | undefined
+    private _isFlushingPageview = false
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -89,13 +92,18 @@ export class HistoryAutocapture implements Extension {
                 title: string,
                 url?: string | URL | null
             ): void {
+                if (self._isUrlChanging(url)) {
+                    self._flushPendingPageview()
+                }
                 ;(originalMethod as (state: any, title: string, url?: string | URL | null) => void).call(
                     this,
                     state,
                     title,
                     url
                 )
-                self._capturePageview(method)
+                // Navigations made while a pageview is being sent, or while routers render a back/forward traversal
+                // inside the popstate event, are captured right away so code that already ran can't precede them.
+                self._capturePageview(method, !self._isFlushingPageview && window?.event?.type !== 'popstate')
             }
         })
     }
@@ -140,8 +148,15 @@ export class HistoryAutocapture implements Extension {
         )
     }
 
-    private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate' | 'hashchange'): void {
+    private _capturePageview(
+        navigationType: 'pushState' | 'replaceState' | 'popstate' | 'hashchange',
+        defer = false
+    ): void {
         try {
+            if (!defer) {
+                this._flushPendingPageview()
+            }
+
             const currentLocation = this._getCurrentLocation()
 
             if (!currentLocation) {
@@ -149,13 +164,49 @@ export class HistoryAutocapture implements Extension {
             }
 
             if (this._hasLocationChanged(currentLocation)) {
-                this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
+                const capturePageview = () =>
+                    this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
+                if (defer) {
+                    // Routers can set the new route's document.title after calling the history API in the same task,
+                    // so the pageview (which reads the title) is captured once that task's synchronous work is done.
+                    this._pendingPageview = capturePageview
+                    Promise.resolve().then(() => this._flushPendingPageview())
+                } else {
+                    capturePageview()
+                }
             }
 
             this._lastLocation = currentLocation
         } catch (error) {
             logger.error(`Error capturing ${navigationType} pageview`, error)
         }
+    }
+
+    private _isUrlChanging(url?: string | URL | null): boolean {
+        if (isNullish(url) || !window) {
+            return false
+        }
+        return convertToURL(String(url))?.href !== window.location?.href
+    }
+
+    // Captures a deferred pageview before the URL changes again, so it keeps the URL it was scheduled for.
+    private _flushPendingPageview(): void {
+        const pendingPageview = this._pendingPageview
+        if (!pendingPageview) {
+            return
+        }
+        this._pendingPageview = undefined
+        this._isFlushingPageview = true
+        try {
+            pendingPageview()
+        } catch (error) {
+            logger.error('Error capturing deferred pageview', error)
+        } finally {
+            this._isFlushingPageview = false
+        }
+        // The URL can also change without the history API (e.g. assigning location.hash) before the pageview is
+        // sent, so later changes are compared against the URL that was actually captured.
+        this._lastLocation = this._getCurrentLocation()
     }
 
     private _setupPopstateListener(): void {
