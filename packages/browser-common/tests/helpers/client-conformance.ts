@@ -31,11 +31,15 @@ export const runClientConformanceSuite = (hostName: string, createHost: ClientCo
             expect(client.library).toEqual({ name: expect.any(String), version: expect.any(String) })
             expect(client.initialPersonProperties).toEqual(expect.any(Object))
             expect(client.groups).toEqual(expect.any(Object))
-            expect(client.session).toEqual({
-                sessionId: expect.any(String),
-                windowId: expect.any(String),
-                sessionStartTimestamp: expect.any(Number),
-            })
+            const session = client.session
+            if (session) {
+                expect(session).toEqual({
+                    sessionId: expect.any(String),
+                    windowId: expect.any(String),
+                    sessionStartTimestamp: expect.any(Number),
+                    lastActivityTimestamp: expect.any(Number),
+                })
+            }
             expect(client.projectToken).toEqual(expect.any(String))
             expect(client.logger).toBeDefined()
         })

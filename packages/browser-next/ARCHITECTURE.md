@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits both automatic dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags and logs during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits automatic product dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -96,7 +96,7 @@ The core contains these responsibilities:
 
 Keep the capture pipeline fixed and direct. Use compact explicit state machines. Do not add a generic middleware framework or a general dependency-injection framework.
 
-The root `createPostHog` factory keeps explicitly supplied analytics or statically constructs a default instance using the caller's analytics configuration. The lightweight factory is included in the initial root graph; only delivery is dynamically loaded. Analytics interprets its own loading and scheduling options. `automatic-analytics.ts` supplies the literal deferred-delivery loader; the core entrypoint retains buffer-only defaults without that reference. The shared `createPostHogCore` helper receives the original client options and configured extensions. Analytics settings and extension order are snapshotted before client construction. The client's internal static `create` takes core options and the selected `CaptureSink` and returns the client. The factory installs analytics and initializes its host before installing other extensions, so they can capture during setup. It then awaits eager analytics loading when configured and starts core-generated pageview capture. Core uses its supplied capture sink for admission, flush, immediate delivery, and consent purging. If analytics setup fails, the factory disconnects that sink and rolls back its registration; other extensions retain their normal setup and failure isolation.
+The root `createPostHog` factory keeps explicitly supplied analytics or statically constructs a default instance using the caller's analytics configuration. The lightweight factory is included in the initial root graph; only delivery is dynamically loaded. Analytics interprets its own loading and scheduling options. `automatic-analytics.ts` supplies the literal deferred-delivery loader; the core entrypoint retains buffer-only defaults without that reference. The shared `createPostHogCore` helper receives the original client options and configured extensions. Analytics settings and extension order are snapshotted before client construction. The client's internal static `create` takes core options and the selected `CaptureSink` and returns the client. The factory installs analytics and initializes its host before installing other extensions, so they can capture during setup. It then awaits eager analytics loading when configured and starts core-generated pageview capture. Core uses its supplied capture sink for admission, immediate delivery, and consent purging. Flush coordination belongs to the extension registry, which invokes the installed analytics extension alongside other extension owners. If analytics setup fails, the factory disconnects that sink and rolls back its registration; other extensions retain their normal setup and failure isolation.
 
 First-party analytics receives package-private `CaptureHost` initialization with the bound request runtime, dispatch-time consent/lifecycle authority, diagnostic reporting, and a capacity-availability notification for pending initial pageviews. This preserves raw gzip bodies, abort signals, keepalive, and shutdown delivery without changing the shared `Client.sendRequest()` contract. Core neither constructs a delivery object nor supplies queue-control callbacks. All configured extensions receive the shared narrow `Client` view through normal `Extension.setup()`.
 
@@ -146,6 +146,8 @@ Put delivery or product behavior in an extension, capability, or adapter. Exampl
 
 An optional module can import the core. The core must not import the optional module.
 
+Application-facing log methods belong to the logs extension reference. Shared/core logs owns its queue, batching, retries, and flush implementation. An extension can observe reset and consent changes to clear its own queued data. The extension registry flushes each installed owner once, independently of its lookup bindings, and isolates failures. `client.flush()` awaits each optional `Extension.flush()`; shutdown passes the `shutdown` reason and awaits flushing within its timeout before releasing resources. Logs uses normal delivery for these flushes and Beacon for pagehide.
+
 Each optional module must have an explicit entry point. A consumer must import that entry point directly.
 
 ### 4.5 Standard preset
@@ -192,7 +194,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags load during async initialization. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags and logs load during async initialization. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -210,6 +212,16 @@ Applications access flag controls through `getExtension(FeatureFlagsExtension)`.
 Browser-next supplies a `BrowserClient` view extending the shared `Client` with `onIdentify`, `onGroup`, and `onReset` listeners. Core publishes synchronous notifications after local state updates, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses these listeners to update evaluation context and reload; core does not look up product-specific identity hooks.
 
 Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
+
+### Logs
+
+Logs follows the flags composition pattern: the root awaits the literal module import and setup, not remote configuration. `logs: false` omits automatic inclusion; an explicit `logs(options)` extension owns its configuration and takes precedence. The manual core entrypoint contains no logs import. Applications call `captureLog()` on the logs extension; SDK diagnostics retain the existing `logger`.
+
+The optional module adapts the shared browser-common logs implementation. It owns programmatic and console queues, OTLP resources/scopes, the console runtime, persisted console enablement hints, and pagehide handoff. Console capture follows existing local/remote gates, not module loading. The generic console serialization and patching runtime is shared with legacy browser bundles; historical ABI routing and global registration stay exclusively in the legacy entrypoint.
+
+Shared logs uses the SDK-provided `Client.sendRequest()` for JSON requests to `/i/v1/logs?token=...` with a 60-second timeout. Logs owns status classification and retry policy; requests retain their own timeouts, while the SDK bounds how long shutdown waits for extension flushing. Pagehide uses the existing logs Beacon contract with keepalive Fetch fallback. This does not enable Beacon for analytics. Product queues, serializers, and console instrumentation stay in the optional module. Logs reads session context through the shared `Client.session` property without creating or advancing a session. The property can be undefined; an existing `SessionContext` includes `lastActivityTimestamp`. The logs adapter shapes the current URL through the shared `sanitizeUrl()` helper using its snapshotted `urlCapture` options. By default it retains the origin and path, omits query parameters and fragments, and omits invalid URLs. URL component selection is configured per extension.
+
+The logs extension subscribes to the browser client's reset and consent-change notifications to clear its queues on reset or observed consent denial. Capture stops when shutdown begins, but already admitted logs can flush while dispatch authority remains valid. `flush()` awaits analytics and both logs queues independently. Shutdown shares its existing timeout across delivery and disposal; an in-flight logs request can outlive that wait until its own timeout. Logs resolves `FeatureFlagsCommonExtension` through `Client.getExtension()` and reads `getFlags()` from the shared flags implementation to include flag keys without emitting exposure analytics. The host isolates extension setup, flush, and cleanup failures.
 
 ## 6. Import graph rules
 
@@ -291,7 +303,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature. Automatic analytics delivery and feature flags use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
+Use a separate export subpath for each substantial optional feature. Automatic analytics delivery, feature flags, and logs use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
 
 Example:
 
@@ -337,9 +349,9 @@ The change must include measurements that support this decision.
 
 ### 8.3 Register only selected extensions
 
-The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics and feature-flags instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
+The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics, feature-flags, and logs instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
 
-Do not add a static catalog of product implementations to core. The root selects automatic analytics and flags through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
+Do not add a static catalog of product implementations to core. The root selects automatic analytics, flags, and logs through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
 
 Do not put this code in the root graph:
 

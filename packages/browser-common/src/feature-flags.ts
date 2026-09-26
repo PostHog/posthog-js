@@ -1331,7 +1331,7 @@ export class PostHogFeatureFlags implements Extension {
         let sessionIdToPersist: string | undefined
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
         if (this._config.deduplicateCallsPerSession) {
-            const currentSessionId = this._client?.session.sessionId
+            const currentSessionId = this._client?.session?.sessionId
             const storedSessionId = this._prop(FLAG_CALL_REPORTED_SESSION_ID)
             if (currentSessionId && currentSessionId !== storedSessionId) {
                 flagCallReported = {}

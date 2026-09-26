@@ -84,7 +84,11 @@ An explicit extension takes precedence over the top-level option, including `fla
 
 Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
 
-## Extension lifecycle notifications
+## Extension lifecycle
+
+Creating an extension does not initialize it. Pass it in the `extensions` option to `createPostHog()` and await the returned promise before using its controls.
+
+### Lifecycle notifications
 
 Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
 
@@ -104,6 +108,41 @@ const extension = {
     },
 }
 ```
+
+## Logs
+
+Logs dynamically load during initialization by default, separately from analytics. `captureLog()` explicitly queues an OTLP log; loading the extension alone does not turn on console capture. Console capture follows remote configuration or a local `captureConsoleLogs` opt-in:
+
+```ts
+import type { LogsExtension } from '@posthog/browser/logs'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    logs: { captureConsoleLogs: true, serviceName: 'storefront', flushIntervalMs: 3_000 },
+})
+const logger = posthog.getExtension<LogsExtension>('logs')!
+logger.captureLog({ body: 'Checkout completed', level: 'info', attributes: { orderId: '123' } })
+await logger.flush()
+```
+
+Use `logs: false` to disable automatic inclusion. For static inclusion without a runtime module request:
+
+```ts
+import { logs } from '@posthog/browser/logs'
+
+const logger = logs({ serviceName: 'storefront' })
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [logger],
+})
+logger.captureLog({ body: 'Checkout completed' })
+```
+
+An explicit logs extension takes precedence over the top-level option, including `false`. The manual core entrypoint never loads logs automatically. Both paths accept the same options: `captureConsoleLogs`, `serviceName`, `serviceVersion`, `environment`, `resourceAttributes`, `beforeSend`, `flushIntervalMs`, `maxBufferSize`, and `maxLogsPerInterval`. Defaults match the legacy browser SDK: a 3,000ms flush interval, 100-record flush trigger, and 1,000 programmatic logs per interval. Console logs have a separate bounded queue and `console` scope, without the programmatic rate cap. Console service defaults to `posthog-browser-logs`; programmatic service defaults to `unknown_service`.
+
+Logs includes the current URL as `url.full`. Configure `logs: { urlCapture: { path: true, search: false, hash: false } }` or pass the same `urlCapture` option to `logs()` to select which URL components are retained. These are the defaults, including for omitted fields: the origin and pathname are retained, while query parameters and fragments are removed. With `path: false`, the pathname becomes `/`. Invalid URLs are omitted. Component selection does not redact sensitive values within retained components.
+
+The logs extension's `flush()` awaits both log queues. `posthog.flush()` awaits all installed extensions' flush methods, including analytics and logs. Consent denial and reset discard queued logs; later opt-in does not revive them. Shutdown awaits normal log delivery within its timeout before cleanup. On pagehide, logs attempt best-effort Beacon delivery with keepalive Fetch fallback. Console hooks and page lifecycle listeners are removed on disposal. Logs use their own `/i/v1/logs` endpoint, JSON payload, and project-token query authentication, never the analytics queue. The existing SDK `logger` remains diagnostic output; application logs use the logs extension's `captureLog()`.
 
 ## Capture and delivery
 

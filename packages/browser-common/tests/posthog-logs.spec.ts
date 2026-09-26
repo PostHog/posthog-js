@@ -35,17 +35,22 @@ describe('PostHogLogs', () => {
             createTestClient({
                 logger: mockLogger,
                 distinctId: 'distinct-id-123',
-                session: { sessionId: 'session-abc', windowId: 'window-xyz', sessionStartTimestamp: 1672567200000 },
+                session: {
+                    sessionId: 'session-abc',
+                    windowId: 'window-xyz',
+                    sessionStartTimestamp: 1672567200000,
+                    lastActivityTimestamp: 1672567200000,
+                },
             })
         const makeLogs = (client: TestClient = testClient) => {
             const extension = new (class extends PostHogLogs {
                 protected override _getConsoleLoader(): ConsoleLogsLoader {
                     return mockLoader
                 }
-            })({ get: () => config, captureHintKey: CAPTURE_HINT_KEY, remoteConfigWillArrive: true }, () => ({
-                distinctId: client.distinctId,
-                ...(client.session.sessionId ? client.session : {}),
-            }))
+            })({ get: () => config, captureHintKey: CAPTURE_HINT_KEY, remoteConfigWillArrive: true }, () => {
+                const session = client.session
+                return { distinctId: client.distinctId, ...(session?.sessionId ? session : {}) }
+            })
             clients.set(extension, client)
             return extension
         }
@@ -86,6 +91,21 @@ describe('PostHogLogs', () => {
         })
 
         describe('shared extension lifecycle', () => {
+            it('captures logs without a session', () => {
+                const client = newClient()
+                client.session = undefined
+                const extension = makeLogs(client)
+                setupLogs(extension)
+                extension.captureLog({ body: 'before session' })
+                extension.flushLogs('sendBeacon')
+
+                expect(client.sentRequests).toHaveLength(1)
+                const payload = JSON.stringify(client.sentRequests[0]?.init?.body)
+                expect(payload).not.toContain('"sessionId"')
+                expect(payload).not.toContain('"sessionStartTimestamp"')
+                expect(payload).not.toContain('"lastActivityTimestamp"')
+            })
+
             it('subscribes to remote config during setup', () => {
                 const remoteConfigDispose = vi.fn()
                 let remoteConfigHandler: ((result: any) => void) | undefined
@@ -1309,7 +1329,7 @@ describe('PostHogLogs', () => {
                 Object.defineProperty(instance, 'session', {
                     get: () => {
                         if (nested++ < 3) window.console.error('from inside the capture path')
-                        return { sessionId: 's', windowId: 'w', sessionStartTimestamp: 0 }
+                        return { sessionId: 's', windowId: 'w', sessionStartTimestamp: 0, lastActivityTimestamp: 0 }
                     },
                 })
                 logsFromPersisted = makeLogs(instance)

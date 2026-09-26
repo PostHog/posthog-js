@@ -28,7 +28,12 @@ function createMockPostHog(
         $groups: { organization: 'org-id' },
     }
     const eventHandlers = new Set<(event: { event: string; properties: Properties }) => void>()
-    const currentSession = { sessionId: 'session-id', windowId: 'window-id', sessionStartTimestamp: 123 }
+    const currentSession = {
+        sessionId: 'session-id',
+        windowId: 'window-id',
+        sessionStartTimestamp: 123,
+        lastActivityTimestamp: 120,
+    }
 
     const persistence = {
         props,
@@ -120,6 +125,7 @@ describe('BrowserClientAdapter', () => {
             sessionId: 'session-id',
             windowId: 'window-id',
             sessionStartTimestamp: 123,
+            lastActivityTimestamp: 120,
         })
         expect(client?.canCapture).toBe(true)
         ;(instance.is_capturing as vi.Mock).mockReturnValue(false)
@@ -206,7 +212,12 @@ describe('BrowserClientAdapter', () => {
 
         expect(client?.anonymousId).toBe('distinct-id')
         expect(client?.deviceId).toBeUndefined()
-        expect(client?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(client?.session).toEqual({
+            sessionId: '',
+            windowId: '',
+            sessionStartTimestamp: 0,
+            lastActivityTimestamp: 0,
+        })
     })
 
     it('reads, writes, and removes persistence keys directly', async () => {

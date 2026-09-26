@@ -203,7 +203,7 @@ describe('portable consent persistence', () => {
         expect(posthog.getExtension('blocked-by-consent')).toBeDefined()
         expect(fetch).not.toHaveBeenCalled()
         expect(posthog.anonymousId).not.toBe('')
-        expect(posthog.session.sessionId).toBe('')
+        expect(posthog.session).toBeUndefined()
         expect(storage.values.has('ph_ph_test_posthog_browser_v2')).toBe(true)
     })
 
@@ -332,18 +332,18 @@ describe('portable consent persistence', () => {
         await first.identify('person-before-denial')
         first.kv.set('private', { value: true })
         const oldAnonymousId = first.anonymousId
-        const oldSessionId = first.session.sessionId
+        const oldSessionId = first.session!.sessionId
 
         second.optOut()
         expect(first.hasOptedOut()).toBe(true)
         expect(first.anonymousId).toBe(oldAnonymousId)
-        expect(first.session.sessionId).toBe(oldSessionId)
+        expect(first.session!.sessionId).toBe(oldSessionId)
         expect(first.kv.get('private')).toEqual({ value: true })
 
         second.optIn()
         expect(first.hasOptedOut()).toBe(false)
         expect(first.anonymousId).toBe(oldAnonymousId)
-        expect(first.session.sessionId).toBe(oldSessionId)
+        expect(first.session!.sessionId).toBe(oldSessionId)
         expect(first.kv.get('private')).toEqual({ value: true })
     })
 

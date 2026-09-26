@@ -26,18 +26,18 @@ export const browserNextAdapter: BehaviorAdapter = {
             optOutByDefault: setup.optOutByDefault,
         })
         const ids = createGeneratedIdNormalizer()
-        ids.remember('anonymous', posthog.anonymousId)
-        ids.remember('session', posthog.session.sessionId)
-        ids.remember('window', posthog.session.windowId)
+        const rememberCurrentState = (): void => {
+            ids.remember('anonymous', posthog.anonymousId)
+            const session = posthog.session
+            if (session) {
+                ids.remember('session', session.sessionId)
+                ids.remember('window', session.windowId)
+            }
+        }
+        rememberCurrentState()
         const subscription = posthog.onEvent((event) => {
             capturedEvents.push({ event: event.event, properties: copyProperties(event.properties) })
         })
-
-        const rememberCurrentState = (): void => {
-            ids.remember('anonymous', posthog.anonymousId)
-            ids.remember('session', posthog.session.sessionId)
-            ids.remember('window', posthog.session.windowId)
-        }
 
         return {
             async capture(event, properties): Promise<void> {

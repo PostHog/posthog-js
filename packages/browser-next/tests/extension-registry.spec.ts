@@ -15,6 +15,90 @@ afterEach(() => {
     vi.restoreAllMocks()
 })
 
+describe('extension flushing', () => {
+    it.each(['flush', 'shutdown'] as const)(
+        'awaits each owner once with reason %s, not its bindings',
+        async (reason) => {
+            const registry = makeRegistry()
+            let finish!: () => void
+            const target = { name: 'target', setup: vi.fn(), flush: vi.fn() }
+            const owner = {
+                name: 'owner',
+                setup: vi.fn(),
+                bindings: { target },
+                flush: vi.fn(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            finish = resolve
+                        })
+                ),
+            }
+            Object.assign(owner.bindings, { alias: owner })
+            await registry.install(owner)
+            await registry.install({ name: 'without-flush', setup: vi.fn() })
+            let settled = false
+            const pending = registry.flush(reason).then(() => {
+                settled = true
+            })
+            await Promise.resolve()
+            expect(settled).toBe(false)
+            expect(owner.flush).toHaveBeenCalledTimes(1)
+            expect(owner.flush).toHaveBeenCalledWith(reason)
+            expect(target.flush).not.toHaveBeenCalled()
+            finish()
+            await pending
+            await registry.dispose()
+            await registry.flush()
+            expect(owner.flush).toHaveBeenCalledOnce()
+        }
+    )
+
+    it('isolates synchronous and asynchronous failures and starts other flushes', async () => {
+        const registry = makeRegistry()
+        const error = new Error('flush failed')
+        await registry.install({
+            name: 'sync',
+            setup: vi.fn(),
+            flush: () => {
+                throw error
+            },
+        })
+        await registry.install({
+            name: 'async',
+            setup: vi.fn(),
+            flush: async () => {
+                throw error
+            },
+        })
+        const flush = vi.fn(async () => {})
+        await registry.install({ name: 'healthy', setup: vi.fn(), flush })
+        await expect(registry.flush()).resolves.toBeUndefined()
+        expect(flush).toHaveBeenCalledTimes(1)
+        expect(flush).toHaveBeenCalledWith('flush')
+        expect(logger.error).toHaveBeenCalledWith('Extension "sync" flush failed', error)
+        expect(logger.error).toHaveBeenCalledWith('Extension "async" flush failed', error)
+    })
+
+    it('does not flush failed or rolled-back installations', async () => {
+        const registry = makeRegistry()
+        const flush = vi.fn(async () => {})
+        await expect(
+            registry.install({
+                name: 'failed',
+                setup: () => {
+                    throw new Error('setup failed')
+                },
+                flush,
+            })
+        ).rejects.toThrow('setup failed')
+        const extension = { name: 'removed', setup: vi.fn(), flush }
+        await registry.install(extension)
+        await registry.rollback(extension)
+        await registry.flush()
+        expect(flush).not.toHaveBeenCalled()
+    })
+})
+
 describe('extension lookup bindings', () => {
     it('resolves SDK and common tokens consistently from public and extension clients', async () => {
         const facade = flags({ featureFlagEvaluation: false })

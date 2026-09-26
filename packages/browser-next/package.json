@@ -38,6 +38,11 @@
             "types": "./dist/analytics.d.ts",
             "require": "./dist/analytics.js",
             "import": "./dist/analytics.mjs"
+        },
+        "./logs": {
+            "types": "./dist/logs.d.ts",
+            "import": "./dist/logs.mjs",
+            "require": "./dist/logs.js"
         }
     },
     "scripts": {
