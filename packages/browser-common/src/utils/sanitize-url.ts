@@ -14,6 +14,8 @@ export function sanitizeUrl(url: URL | string, options: UrlCaptureOptions): stri
         // Missing URL support is handled by the catch below: omit the URL rather than capture it unsanitized.
         // oxlint-disable-next-line compat/compat
         const result = new URL(String(url))
+        result.username = ''
+        result.password = ''
         if (options.path === false) {
             result.pathname = '/'
             // Opaque URLs can silently ignore pathname changes.
