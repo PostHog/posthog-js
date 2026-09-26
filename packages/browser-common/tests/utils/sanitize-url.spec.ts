@@ -23,6 +23,16 @@ describe('sanitizeUrl', () => {
         }
     }
 
+    it('removes embedded credentials without modifying the input URL', () => {
+        const input = new URL('https://user:password@example.com/path?query=value#fragment')
+        expect(sanitizeUrl(input, { path: true, search: true, hash: true })).toBe(
+            'https://example.com/path?query=value#fragment'
+        )
+        expect(sanitizeUrl(input.href, {})).toBe('https://example.com/path')
+        expect(input.username).toBe('user')
+        expect(input.password).toBe('password')
+    })
+
     it('uses defaults for omitted fields', () => {
         expect(sanitizeUrl(href, { hash: true })).toBe('https://example.com:8080/app/checkout#details')
     })
