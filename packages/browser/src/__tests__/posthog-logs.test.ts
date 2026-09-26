@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import type { Client } from '@posthog/browser-common'
 
 import { PostHogLogs, RECORDER_MAX_AGE_MS } from '../posthog-logs'
@@ -22,10 +23,10 @@ describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
-        let mockDisposeLogs: vi.Mock
-        let mockInitializeLogs: vi.Mock
-        let mockReplayConsoleBuffer: vi.Mock
-        let mockLoadExternalDependency: vi.Mock
+        let mockDisposeLogs: VitestMock
+        let mockInitializeLogs: VitestMock
+        let mockReplayConsoleBuffer: VitestMock
+        let mockLoadExternalDependency: VitestMock
 
         const flagsResponse = {
             featureFlags: {
@@ -227,6 +228,12 @@ describe('posthog-logs', () => {
                     expect(mockPostHog._send_request).toHaveBeenCalledWith(
                         expect.objectContaining({ transport: 'sendBeacon', batchKey: 'logs' })
                     )
+                    const sent = vi.mocked(mockPostHog._send_request).mock.calls[0][0]
+                    expect(
+                        (sent.data as Record<string, any>).resourceLogs[0].scopeLogs[0].logRecords.map(
+                            (record: any) => record.body.stringValue
+                        )
+                    ).toEqual(['queued before shutdown'])
                 } finally {
                     vi.useRealTimers()
                 }
@@ -505,7 +512,7 @@ describe('posthog-logs', () => {
                 expect(() => logsWithNullPostHog.reset()).not.toThrow()
             })
 
-            it('should handle window object not being available', () => {
+            it('should handle the extension registry not being available', () => {
                 ;(logs as any)._isLogsEnabled = true
                 const originalExtensions = assignableWindow.__PosthogExtensions__
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
@@ -587,7 +594,7 @@ describe('posthog-logs', () => {
             })
 
             it('should silently skip when user has opted out of capturing', () => {
-                ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
+                ;(mockPostHog.is_capturing as VitestMock).mockReturnValue(false)
 
                 logs.captureLog({ body: 'should not be captured' })
 
@@ -614,10 +621,12 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue[0].record.body.stringValue).toBe('test message')
             })
 
-            it('should not send before the flush timer expires', () => {
+            it('should not send before the flush timer expires', async () => {
                 logs.captureLog({ body: 'test message' })
-
+                await vi.advanceTimersByTimeAsync(2999)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
+                await vi.advanceTimersByTimeAsync(1)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
 
             it('should flush on timer expiry and clear the queue on success', async () => {
@@ -644,7 +653,7 @@ describe('posthog-logs', () => {
                 // Hold the flush open so capture outpaces drain. maxBufferSize (2) only
                 // triggers a flush; the eviction backstop sits at the rate cap (1000), so
                 // a burst the cap admits is held in full rather than dropped at the trigger.
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
                 ;(mockPostHog.config as any).logs = { maxBufferSize: 2, maxLogsPerInterval: 1000 }
                 logs = new PostHogLogs(mockPostHog)
 
@@ -661,7 +670,7 @@ describe('posthog-logs', () => {
                 vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })
 
@@ -669,7 +678,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test', level: 'error' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.data.resourceLogs).toBeDefined()
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
@@ -679,7 +688,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.batchKey).toBe('logs')
             })
 
@@ -687,7 +696,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.compression).toBe('best-available')
             })
 
@@ -698,7 +707,7 @@ describe('posthog-logs', () => {
                 vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
             })
 
@@ -706,7 +715,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -723,7 +732,7 @@ describe('posthog-logs', () => {
             it.each(['sessionStartTimestamp', 'lastActivityTimestamp'])(
                 'omits %s and does not throw when the session manager returns null for it',
                 (attribute) => {
-                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as vi.Mock).mockReturnValue({
+                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as VitestMock).mockReturnValue({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
                         sessionStartTimestamp: null,
@@ -735,7 +744,7 @@ describe('posthog-logs', () => {
                         vi.advanceTimersByTime(3000)
                     }).not.toThrow()
 
-                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                     const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -755,7 +764,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -775,7 +784,7 @@ describe('posthog-logs', () => {
                     logs.captureLog({ body: 'test' })
                     vi.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                     const attrsMap = Object.fromEntries(
                         call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                     )
@@ -804,7 +813,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -823,7 +832,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 2' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -835,7 +844,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'test' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -898,7 +907,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'unload log' })
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.transport).toBe('sendBeacon')
             })
         })
@@ -914,9 +923,13 @@ describe('posthog-logs', () => {
                     logs.logger[level]('test message', { key: 'value' })
                     vi.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
 
+                    expect(record.severityText).toBe(level.toUpperCase())
+                    expect(record.severityNumber).toBe(
+                        { trace: 1, debug: 5, info: 9, warn: 13, error: 17, fatal: 21 }[level]
+                    )
                     expect(record.body.stringValue).toBe('test message')
                     const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
                     expect(attrs.key).toEqual({ stringValue: 'value' })
@@ -927,7 +940,7 @@ describe('posthog-logs', () => {
                 logs.logger.info('no attrs')
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 expect(record.body.stringValue).toBe('no attrs')
             })
@@ -1001,7 +1014,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 expect(call.transport).toBe('sendBeacon')
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -1033,7 +1046,7 @@ describe('posthog-logs', () => {
 
                     logs.flushLogs(transport)
 
-                    const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                     expect(call.transport).toBe(transport)
                     expect(call.batchKey).toBe('logs')
                     expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
@@ -1653,7 +1666,7 @@ describe('posthog-logs', () => {
 
             it('should reach the real console method through an existing console wrapper', () => {
                 // A console already wrapped by another plugin must still be restorable.
-                const realLog = assignableWindow.console.log
+                const realLog = vi.fn()
                 const foreign = (...args: any[]) => (realLog as any)(...args)
                 ;(foreign as any).__rrweb_original__ = realLog
                 assignableWindow.console.log = foreign as any
@@ -1662,6 +1675,9 @@ describe('posthog-logs', () => {
                 logsFromPersisted.setup(noopClient())
 
                 expect((assignableWindow.console.log as any).__rrweb_original__).toBe(realLog)
+                assignableWindow.console.log('through active wrapper', 42)
+                expect(realLog).toHaveBeenCalledTimes(1)
+                expect(realLog).toHaveBeenCalledWith('through active wrapper', 42)
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
                 expect(assignableWindow.console.log).toBe(foreign)
@@ -1688,7 +1704,7 @@ describe('posthog-logs', () => {
 
             it('does not drop records captured after a reset mid-flush', async () => {
                 let releaseSend: (r: any) => void = () => {}
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(({ callback }: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(({ callback }: any) => {
                     releaseSend = callback
                 })
                 logs.captureConsoleLog({ body: 'before the reset' })
@@ -1709,7 +1725,7 @@ describe('posthog-logs', () => {
 
             it('does not drop records captured after opting back in mid-flush', async () => {
                 let releaseSend: (r: any) => void = () => {}
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(({ callback }: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(({ callback }: any) => {
                     releaseSend = callback
                 })
                 logs.captureConsoleLog({ body: 'before the opt-out' })
@@ -1736,7 +1752,7 @@ describe('posthog-logs', () => {
                 )
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -1764,7 +1780,7 @@ describe('posthog-logs', () => {
                 logs.captureConsoleLog({ body: 'console' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -1775,7 +1791,7 @@ describe('posthog-logs', () => {
                 logs.captureConsoleLog({ body: 'console' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 // Scope name labels the console stream...
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('console')
                 // ...but telemetry.sdk.name stays the SDK id, not the scope.
@@ -1789,7 +1805,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'programmatic' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('web')
             })
 
@@ -1797,7 +1813,7 @@ describe('posthog-logs', () => {
                 logs.captureConsoleLog({ body: 'console' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -1816,7 +1832,7 @@ describe('posthog-logs', () => {
                 logs.captureConsoleLog({ body: 'boom', level: 'error' })
                 vi.advanceTimersByTime(3000)
 
-                const records = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
+                const records = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
                     .scopeLogs[0].logRecords
                 expect(records[0]).toMatchObject({ severityText: 'WARN', severityNumber: 13 })
                 expect(records[1]).toMatchObject({ severityText: 'ERROR', severityNumber: 17 })
@@ -1829,7 +1845,7 @@ describe('posthog-logs', () => {
                 logs.captureConsoleLog({ body: 'console' })
                 vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -1842,7 +1858,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                const calls = (mockPostHog._send_request as vi.Mock).mock.calls
+                const calls = (mockPostHog._send_request as VitestMock).mock.calls
                 const serviceNames = calls.map((c: any[]) => {
                     const attrs = Object.fromEntries(
                         c[0].data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
@@ -1859,7 +1875,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                expect(mockPostHog._send_request as vi.Mock).toHaveBeenCalledTimes(1)
+                expect(mockPostHog._send_request as VitestMock).toHaveBeenCalledTimes(1)
             })
 
             it('clears both queues on reset', () => {
@@ -1879,7 +1895,7 @@ describe('posthog-logs', () => {
                 // console instance retains everything up to the eviction backstop (2048).
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, maxLogsPerInterval: 50 }
                 logs = new PostHogLogs(mockPostHog)
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
 
                 for (let i = 0; i < 1500; i++) {
                     logs.captureConsoleLog({ body: `console ${i}` })
@@ -1921,7 +1937,7 @@ describe('posthog-logs', () => {
             })
 
             const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
@@ -1958,7 +1974,7 @@ describe('posthog-logs', () => {
                 // Models the callback-less paths (request enqueued before load, or a
                 // transport that does not report back). Without the backstop timer the
                 // flush promise would never settle and wedge all future flushes.
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
                 logs.captureLog({ body: 'x' })
 
                 const flushPromise = (logs as any)._core.flush().catch(() => {})
@@ -1981,7 +1997,7 @@ describe('posthog-logs', () => {
             it('keeps records after a timer-driven flush hits a 429', async () => {
                 // Drives the real timer-expiry path (not _core.flush() directly) to
                 // confirm a transient response requeues end to end.
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 429 })
                 )
                 logs.captureLog({ body: 'x' })
@@ -1997,7 +2013,7 @@ describe('posthog-logs', () => {
             })
 
             it('does not re-log timer-driven transport failures handled by the request layer', async () => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
                 )
                 logs.captureLog({ body: 'x' })
@@ -2012,7 +2028,7 @@ describe('posthog-logs', () => {
             })
 
             it('warns once for a bare status-zero logs response', async () => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0 })
                 )
                 logs.captureLog({ body: 'x' })
@@ -2027,7 +2043,7 @@ describe('posthog-logs', () => {
             })
 
             it.each([400, 500])('keeps HTTP status %s at error severity', async (statusCode) => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
@@ -2042,7 +2058,7 @@ describe('posthog-logs', () => {
             })
 
             it('does not re-log handled failures from an explicit flush', async () => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
                 )
                 logs.captureLog({ body: 'x' })
@@ -2086,14 +2102,14 @@ describe('posthog-logs', () => {
             })
 
             const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
                 await (logs as any)._core.flush().catch(() => {})
             }
 
-            const sendCount = () => (mockPostHog._send_request as vi.Mock).mock.calls.length
+            const sendCount = () => (mockPostHog._send_request as VitestMock).mock.calls.length
 
             const setOnline = (value: boolean) => {
                 Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
@@ -2186,7 +2202,7 @@ describe('posthog-logs', () => {
 
                 // Restore online — reconnect flush delivers the retained records.
                 setOnline(true)
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 200 })
                 )
                 assignableWindow.dispatchEvent(new Event('online'))
@@ -2278,7 +2294,7 @@ describe('posthog-logs', () => {
             })
 
             it('does not count the send-timeout backstop toward the status-0 trip', async () => {
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
                 for (let i = 0; i < 3; i++) {
                     logs.captureLog({ body: 'x' })
                     const flushPromise = (logs as any)._core.flush().catch(() => {})
@@ -2304,7 +2320,7 @@ describe('posthog-logs', () => {
 
             const beaconResourceAttrs = () =>
                 Object.fromEntries(
-                    (mockPostHog._send_request as vi.Mock).mock.calls
+                    (mockPostHog._send_request as VitestMock).mock.calls
                         .at(-1)![0]
                         .data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -2350,7 +2366,7 @@ describe('posthog-logs', () => {
                 // the surviving core POSTs — otherwise both read the same head of the
                 // shared queue and double-send.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }
@@ -2375,7 +2391,7 @@ describe('posthog-logs', () => {
                 // the old console core so its armed timer can't double-send the shared
                 // `_consoleQueue`.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }

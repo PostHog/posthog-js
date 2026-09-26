@@ -1,3 +1,4 @@
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
 import {
     getBrowserDetectionHints,
     getBrowserLanguage,
@@ -10,14 +11,19 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(
+                new URL('https://example.com:8443/known/path?q=1') as unknown as Location
+            )
             const properties = getEventProperties()
-            expect(properties['$current_url']).toBeDefined()
-            expect(properties['$host']).toBeDefined()
-            expect(properties['$pathname']).toBeDefined()
+            expect(properties['$current_url']).toBe('https://example.com:8443/known/path?q=1')
+            expect(properties['$host']).toBe('example.com:8443')
+            expect(properties['$pathname']).toBe('/known/path')
         })
 
         it('should have user agent in properties', () => {
@@ -62,9 +68,13 @@ describe(`event-utils`, () => {
         })
 
         it('should have timezone and timezone offset', () => {
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Pacific/Auckland',
+            } as Intl.ResolvedDateTimeFormatOptions)
+            vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-345)
             const properties = getEventProperties()
-            expect(properties).toHaveProperty('$timezone')
-            expect(properties).toHaveProperty('$timezone_offset')
+            expect(properties['$timezone']).toBe('Pacific/Auckland')
+            expect(properties['$timezone_offset']).toBe(-345)
         })
     })
 
@@ -144,6 +154,7 @@ describe(`event-utils`, () => {
 
         beforeEach(() => {
             vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(androidTabletDesktopUA)
+            mockScreen(1280, 800, 1)
         })
 
         afterEach(() => {
@@ -154,15 +165,23 @@ describe(`event-utils`, () => {
             }
             if (originalMaxTouchPoints) {
                 Object.defineProperty(window.navigator, 'maxTouchPoints', originalMaxTouchPoints)
+            } else {
+                delete (window.navigator as any).maxTouchPoints
             }
             if (originalScreenWidth) {
                 Object.defineProperty(window.screen, 'width', originalScreenWidth)
+            } else {
+                delete (window.screen as any).width
             }
             if (originalScreenHeight) {
                 Object.defineProperty(window.screen, 'height', originalScreenHeight)
+            } else {
+                delete (window.screen as any).height
             }
             if (originalDevicePixelRatio) {
                 Object.defineProperty(window, 'devicePixelRatio', originalDevicePixelRatio)
+            } else {
+                delete (window as any).devicePixelRatio
             }
         })
 
@@ -192,7 +211,7 @@ describe(`event-utils`, () => {
         })
 
         it('should remain Desktop when Client Hints platform is not Android', () => {
-            mockNavigator({ platform: 'Linux' }, 0)
+            mockNavigator({ platform: 'Linux' }, 5)
 
             const properties = getEventProperties()
             expect(properties['$device_type']).toBe('Desktop')
@@ -274,18 +293,20 @@ describe(`event-utils`, () => {
 
     describe('timezones', () => {
         it('should compute timezone', () => {
-            const timezone = getTimezone()
-            expect(typeof timezone).toBe('string')
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Pacific/Auckland',
+            } as Intl.ResolvedDateTimeFormatOptions)
+            expect(getTimezone()).toBe('Pacific/Auckland')
         })
 
         it('should compute timezone offset as a number', () => {
-            const offset = getTimezoneOffset()
-            expect(typeof offset).toBe('number')
+            vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-345)
+            expect(getTimezoneOffset()).toBe(-345)
         })
     })
 
     describe('browser language', () => {
-        let languageGetter: vi.SpyInstance
+        let languageGetter: VitestSpyInstance
 
         beforeEach(() => {
             languageGetter = vi.spyOn(window.navigator, 'language', 'get')

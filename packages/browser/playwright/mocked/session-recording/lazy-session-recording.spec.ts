@@ -58,21 +58,11 @@ function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number
 
 async function simulateSessionExpiry(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const ph = (window as WindowWithPostHog).posthog
-        const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
-        const startTs = ph?.sessionManager?.['_sessionStartTimestamp']
-        const sessionId = ph?.sessionManager?.['_sessionId']
-        const timeout = ph?.sessionManager?.['_sessionTimeoutMs']
-
-        const expiredActivityTs = activityTs! - timeout! - 1000
-        const expiredStartTs = startTs! - timeout! - 1000
-
-        // @ts-expect-error - accessing private properties for test
-        ph.sessionManager['_sessionActivityTimestamp'] = expiredActivityTs
-        // @ts-expect-error - accessing private properties for test
-        ph.sessionManager['_sessionStartTimestamp'] = expiredStartTs
-        // @ts-expect-error - accessing private properties for test
-        ph.persistence.register({ $sesid: [expiredActivityTs, sessionId, expiredStartTs] })
+        const ph = (window as WindowWithPostHog).posthog!
+        const persistence = ph.persistence as any
+        const [, sessionId] = persistence.props.$sesid
+        const now = Date.now()
+        persistence.register({ $sesid: [now, sessionId, now - 24 * 60 * 60 * 1000 - 1000] })
     })
 }
 
@@ -273,32 +263,42 @@ test.describe('Session recording - array.js', () => {
         })
 
         await page.locator('[data-cy-input]').type('more activity')
-        await expect.poll(async () => (await page.capturedEvents()).length).toBe(3)
-
-        const capturedEvents = await page.capturedEvents()
-
-        const eventSummaries = capturedEvents.map((e: any) => {
-            const snapshotData = e.properties?.$snapshot_data || []
-            const tags = snapshotData.filter((s: any) => s.type === 5).map((s: any) => s.data?.tag)
-            return {
-                sessionId: e.properties?.$session_id === startingSessionId ? 'starting' : 'new',
-                tags,
-            }
-        })
-
-        // After reset we get:
-        // 1. Old session buffer flush (network event with old session)
-        // 2. New session snapshot with $session_id_change
-        // 3. Additional snapshot from feature flags reload network activity after reset
-        // Note: no $session_ending/$session_starting since reset is not a rotation (shouldLinkSessions=false)
-        expect(eventSummaries).toMatchObject([
-            { sessionId: 'starting', tags: [] },
-            {
-                sessionId: 'new',
-                tags: ['$remote_config_received', '$session_options', '$posthog_config', '$session_id_change'],
-            },
-            { sessionId: 'new', tags: [] },
+        const newSessionId = await page.evaluate(() => (window as WindowWithPostHog).posthog!.get_session_id())
+        expect(newSessionId).toEqual(expect.any(String))
+        expect(newSessionId.length).toBeGreaterThan(0)
+        expect(newSessionId).not.toBe(startingSessionId)
+        await expect
+            .poll(async () => {
+                const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
+                return snapshots.some(
+                    (e) =>
+                        e.properties.$session_id === newSessionId &&
+                        e.properties.$snapshot_data.some((s: any) => s.data?.tag === '$session_id_change')
+                )
+            })
+            .toBe(true)
+        const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
+        expect(snapshots.every((e) => [startingSessionId, newSessionId].includes(e.properties.$session_id))).toBe(true)
+        const oldData = snapshots
+            .filter((e) => e.properties.$session_id === startingSessionId)
+            .flatMap((e) => e.properties.$snapshot_data)
+        const newData = snapshots
+            .filter((e) => e.properties.$session_id === newSessionId)
+            .flatMap((e) => e.properties.$snapshot_data)
+        expect(oldData.length).toBeGreaterThan(0)
+        expect(oldData.filter((s: any) => s.type === 5)).toEqual([])
+        expect(newData.filter((s: any) => s.type === 5).map((s: any) => s.data.tag)).toEqual([
+            '$remote_config_received',
+            '$session_options',
+            '$posthog_config',
+            '$session_id_change',
         ])
+        expect(
+            newData
+                .filter((s: any) => s.type !== 6)
+                .slice(0, 2)
+                .map((s: any) => s.type)
+        ).toEqual([4, 2])
     })
 
     test('rotates sessions after 24 hours', async ({ page }) => {
@@ -344,6 +344,16 @@ test.describe('Session recording - array.js', () => {
 
         await page.expectCapturedEventsToBe(['$snapshot', '$snapshot', 'test_registered_property'])
         const capturedEventsAfter24Hours = await page.capturedEvents()
+        const changes = capturedEventsAfter24Hours
+            .filter((e) => e.event === '$snapshot')
+            .flatMap((e) => e.properties.$snapshot_data)
+            .filter((s: any) => s.data?.tag === '$session_id_change')
+        expect(changes).toHaveLength(1)
+        expect(changes[0].data.payload.changeReason).toMatchObject({
+            noSessionId: false,
+            activityTimeout: false,
+            sessionPastMaximumLength: true,
+        })
 
         expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).toEqual(firstSessionId)
         expect(getSnapshotTimestamp(capturedEventsAfter24Hours[0], 'last')).toBeLessThan(timestampAfterRotation)

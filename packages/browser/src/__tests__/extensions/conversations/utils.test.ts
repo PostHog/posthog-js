@@ -240,10 +240,11 @@ Done!`
         })
 
         it('should truncate text longer than max length with ellipsis', () => {
-            const text = 'a'.repeat(70)
+            const text = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789abcdefgh'
             const result = truncateText(text, 60)
             expect(result.length).toBe(60)
             expect(result.endsWith('...')).toBe(true)
+            expect(result).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234...')
         })
     })
 
@@ -286,10 +287,17 @@ Done!`
             expect(formatRelativeTime(threeDaysAgo)).toBe('3d ago')
         })
 
-        it('should return formatted date for times a week or more ago', () => {
-            const twoWeeksAgo = new Date('2024-01-01T12:00:00Z').toISOString()
-            const result = formatRelativeTime(twoWeeksAgo)
-            expect(result).toMatch(/\d{1,2}\/\d{1,2}\/\d{4}/)
+        it('should delegate older dates to the local date formatter', () => {
+            const date = new Date('2024-01-01T12:00:00Z')
+            const formatter = vi.spyOn(Date.prototype, 'toLocaleDateString').mockReturnValue('localized-date')
+            try {
+                expect(formatRelativeTime(date.toISOString())).toBe('localized-date')
+                expect(formatter).toHaveBeenCalledTimes(1)
+                expect(formatter.mock.instances[0]).toEqual(date)
+                expect(formatter).toHaveBeenCalledWith()
+            } finally {
+                formatter.mockRestore()
+            }
         })
     })
 })

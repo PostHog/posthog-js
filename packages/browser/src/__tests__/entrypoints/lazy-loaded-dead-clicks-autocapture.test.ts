@@ -24,6 +24,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     beforeEach(async () => {
         vi.setSystemTime(1000)
+        document.body.replaceChildren()
         selection = { type: 'Caret', focusNode: null }
         vi.spyOn(document, 'getSelection').mockImplementation(() => selection as Selection | null)
 
@@ -50,6 +51,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     afterEach(() => {
         lazyLoadedDeadClicksAutocapture.stop()
+        vi.clearAllTimers()
         vi.mocked(document.getSelection).mockRestore()
     })
 
@@ -642,15 +644,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
     })
 
-    // i think there's some kind of jsdom fangling happening where the mutation observer
-    // started by the detector isn't passed details of mutations made in the tests
-    // js-dom supports mutation observer since v13.x but 🤷
-    it.skip('tracks last mutation', () => {
+    it('tracks last mutation', async () => {
         expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).not.toBeDefined()
-
+        vi.setSystemTime(1234)
         document.body.append(document.createElement('div'))
-
-        expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBeDefined()
+        await Promise.resolve()
+        expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(1234)
     })
 
     describe('click ignore', () => {
@@ -738,10 +737,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             anchor.appendChild(child)
             shadowRoot.appendChild(anchor)
             document.body.append(host)
-
-            triggerMouseEvent(child, 'click')
-
+            triggerMouseEvent(child, 'click', { composed: true })
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            const control = document.createElement('span')
+            shadowRoot.appendChild(control)
+            triggerMouseEvent(control, 'click', { composed: true })
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
         })
 
         // buttons, inputs, selects, textareas, labels, forms all rely on app JS handlers
@@ -1092,6 +1093,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a selection change outside of threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1099,6 +1101,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 selectionChangedDelayMs: 100,
             })
 
+            vi.setSystemTime(1000)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -1106,7 +1109,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 '$dead_click',
                 {
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 100,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
@@ -1135,13 +1138,14 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a mutation after threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900 + 2501
-
+            vi.setSystemTime(3401)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -1149,7 +1153,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 '$dead_click',
                 {
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 2501,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: 3401,
@@ -1178,6 +1182,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a scroll after threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1185,16 +1190,15 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 scrollDelayMs: 2501,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
-
+            vi.setSystemTime(3401)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 {
-                    // faked system timestamp isn't moving so this is negative
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 2501,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
@@ -1223,6 +1227,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by nothing for too long, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1410,7 +1415,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             ] as unknown as MutationRecord[])
 
             expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
-            expect(querySelectorAll.mock.instances.filter((context) => context === host)).toHaveLength(0)
+            expect(querySelectorAll.mock.instances).not.toContain(host)
             querySelectorAll.mockRestore()
             outer.remove()
         })

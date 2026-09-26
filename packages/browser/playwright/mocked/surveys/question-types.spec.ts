@@ -82,7 +82,7 @@ const thumbsQuestion = {
 }
 
 test.describe('surveys - core display logic', () => {
-    test('shows the same to user if they do not dismiss or respond to it', async ({ page, context }) => {
+    test('renders and submits an open-text question', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -114,6 +114,9 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
+        const sent = (await page.capturedEvents()).filter((event) => event.event === 'survey sent')
+        expect(sent).toHaveLength(1)
+        expect(sent[0].properties.$survey_response_open_text_1).toBe('Great job!')
     })
 
     test('rating questions that are on the 10 scale start at 0', async ({ page, context }) => {
@@ -192,14 +195,14 @@ test.describe('surveys - core display logic', () => {
 
         await pollUntilEventCaptured(page, 'survey sent')
         const captures = await page.capturedEvents()
-        expect(captures.map((c) => c.event)).toEqual([
+        // Rageclick timing has dedicated positive/disabled coverage in capture.spec.ts.
+        expect(captures.filter((c) => c.event !== '$rageclick').map((c) => c.event)).toEqual([
             '$pageview',
             'survey shown',
             '$autocapture',
             '$autocapture',
             '$autocapture',
             '$autocapture',
-            '$rageclick',
             '$autocapture',
             'survey sent',
             '$autocapture',

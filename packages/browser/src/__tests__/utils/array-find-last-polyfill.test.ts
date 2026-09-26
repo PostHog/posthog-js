@@ -108,3 +108,5 @@ describe('Array.prototype.findLast polyfill', () => {
         })
     })
 })
+
+export {}

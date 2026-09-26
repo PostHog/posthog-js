@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import type { ApiResponse, Client, Disposable, RemoteConfigResult } from '@posthog/browser-common'
 
 import { PostHogSurveys } from '../posthog-surveys'
@@ -99,7 +100,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
             }
         })
         const { client } = createClient()
-        ;(client.onRemoteConfig as vi.Mock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
+        ;(client.onRemoteConfig as VitestMock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
             handler({ ok: true, config: { surveys: true } as any })
             return { dispose: vi.fn() }
         })

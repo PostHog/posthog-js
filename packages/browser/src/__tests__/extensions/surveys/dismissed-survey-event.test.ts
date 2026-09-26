@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { dismissedSurveyEvent, setInProgressSurveyState } from '../../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 import { PostHog } from '../../../posthog-core'
@@ -38,7 +39,7 @@ describe('dismissedSurveyEvent', () => {
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as VitestMock).mock.calls[0]
         expect(properties).not.toHaveProperty('$survey_language')
     })
 
@@ -57,7 +58,7 @@ describe('dismissedSurveyEvent', () => {
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as VitestMock).mock.calls[0]
         expect(properties).toEqual(expect.objectContaining({ $survey_language: 'es' }))
     })
 
@@ -72,7 +73,7 @@ describe('dismissedSurveyEvent', () => {
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as VitestMock).mock.calls[0]
         expect(properties).toEqual(expect.objectContaining({ $survey_language: 'fr' }))
     })
 })

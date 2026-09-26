@@ -68,15 +68,21 @@ test.describe('product tours - auto triggers', () => {
 
         await startWithTours(page, context, [tour], { waitForApiResponse: true })
 
+        await page.evaluate(() => {
+            ;(window as any).POSTHOG_DEBUG = true
+        })
+        const queued = page.waitForEvent('console', (message) =>
+            message.text().includes('Queueing tour cancel-test with 5s delay')
+        )
         await captureEvent(page, 'start_tour')
-
-        await page.waitForTimeout(2000)
+        await queued
 
         await captureEvent(page, 'cancel_tour')
 
-        await page.waitForTimeout(4000)
-
+        await page.waitForTimeout(6000)
         await expect(tourTooltip(page, 'cancel-test')).not.toBeVisible()
+        await captureEvent(page, 'start_tour')
+        await expect(tourTooltip(page, 'cancel-test')).toBeVisible({ timeout: 10000 })
     })
 
     test('selector click trigger shows tour', async ({ page, context }) => {
@@ -101,6 +107,7 @@ test.describe('product tours - auto triggers', () => {
         const tour = createTour({
             id: 'deleted-tour',
             auto_launch: false,
+            display_frequency: 'always',
             conditions: { selector: '#click-trigger-btn' },
         })
 
@@ -108,6 +115,11 @@ test.describe('product tours - auto triggers', () => {
 
         await page.evaluate(() => {
             ;(window as any).buttonClickCount = 0
+            ;(window as any).ancestorClickCount = 0
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            document.body.addEventListener('click', (event) => {
+                if ((event.target as HTMLElement).id === 'click-trigger-btn') (window as any).ancestorClickCount++
+            })
             const btn = document.getElementById('click-trigger-btn')
             if (btn) {
                 // oxlint-disable-next-line posthog-js/no-add-event-listener
@@ -133,18 +145,22 @@ test.describe('product tours - auto triggers', () => {
             await route.fulfill({ json: { product_tours: [] } })
         })
 
+        const refreshed = page.waitForResponse('**/api/product_tours/**')
         // Clear the cache to force a refresh
         await page.evaluate(() => {
             ;(window as any).posthog.productTours.clearCache()
         })
 
-        // Wait for next evaluation cycle to pick up empty tours and clean up listeners
-        await page.waitForTimeout(2000)
+        expect((await (await refreshed).json()).product_tours).toEqual([])
+        // The display loop must consume the confirmed empty API result.
+        await page.waitForTimeout(2200)
+        const ancestorBefore = await page.evaluate(() => (window as any).ancestorClickCount)
 
         // Click again - tour deleted, click still propagates
         await page.click('#click-trigger-btn')
         await expect(tourTooltip(page, 'deleted-tour')).not.toBeVisible()
         expect(await page.evaluate(() => (window as any).buttonClickCount)).toBe(2)
+        expect(await page.evaluate(() => (window as any).ancestorClickCount)).toBe(ancestorBefore + 1)
     })
 
     test.describe('event property filtering', () => {

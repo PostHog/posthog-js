@@ -10,7 +10,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
 import { fetch } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
-const mockedFetch = fetch as vi.MockedFunction<any>
+const mockedFetch = vi.mocked(fetch!)
 const fixedTimestamp = new Date('2023-11-14T22:13:20.000Z')
 
 const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[]): CaptureResult => {
@@ -49,11 +49,15 @@ const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[])
 }
 
 const parsedFetchBodyForPath = (path: string): any => {
-    const call = mockedFetch.mock.calls.find(([url]) => new URL(url).pathname === path)
+    const call = mockedFetch.mock.calls.find(
+        ([url]) => new URL(typeof url === 'string' || url instanceof URL ? url : url.url).pathname === path
+    )
     expect(call).toBeDefined()
-    expect(call![1].headers.get('Content-Type')).toBe('application/json')
+    expect(new Headers(call![1].headers).get('Content-Type')).toBe('application/json')
     expect(call![1].body).toEqual(expect.any(String))
-    return JSON.parse(call![1].body)
+    const body = call![1].body
+    if (typeof body !== 'string') throw new Error('Expected a JSON string body')
+    return JSON.parse(body)
 }
 
 describe('PostHog final decoded request envelopes', () => {
@@ -61,7 +65,7 @@ describe('PostHog final decoded request envelopes', () => {
         vi.useFakeTimers()
         vi.setSystemTime(fixedTimestamp)
         mockedFetch.mockReset()
-        mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{}') })
+        mockedFetch.mockResolvedValue(new Response('{}', { status: 200 }))
     })
 
     afterEach(() => {

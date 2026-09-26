@@ -1,23 +1,24 @@
 import { SessionPropsManager } from '../session-props'
 import { SessionIdManager } from '../sessionid'
-import { createMockPostHog, createMockPersistence } from './helpers/posthog-instance'
+import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
 
 describe('Session Props Manager', () => {
+    const cleanups: Array<() => void> = []
+    afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()))
     const createSessionPropsManager = () => {
-        const onSessionId = vi.fn()
+        const posthog = new PostHog()
+        posthog.config.persistence = 'memory'
+        const persistence = new PostHogPersistence(posthog.config)
         const generateProps = vi.fn()
-        const persistenceRegister = vi.fn()
-        const sessionIdManager = {
-            onSessionId,
-        } as unknown as SessionIdManager
-        const persistence = createMockPersistence({
-            register: persistenceRegister,
-            props: {},
-        })
-        const posthog = createMockPostHog({
-            sessionManager: sessionIdManager,
-            persistence,
-            config: {},
+        posthog.persistence = persistence
+        const sessionIdManager = new SessionIdManager(posthog)
+        const persistenceRegister = vi.spyOn(persistence, 'register').mockReturnValue(true)
+        const onSessionId = vi.spyOn(sessionIdManager, 'onSessionId').mockReturnValue(() => {})
+        posthog.sessionManager = sessionIdManager
+        cleanups.push(() => {
+            sessionIdManager.destroy()
+            persistence.destroy()
         })
 
         const sessionPropsManager = new SessionPropsManager(posthog, sessionIdManager, persistence, generateProps)
@@ -46,7 +47,7 @@ describe('Session Props Manager', () => {
         const callback = onSessionId.mock.calls[0][0]
 
         // act
-        callback(sessionId)
+        callback(sessionId, undefined)
 
         //assert
         expect(generateProps).toHaveBeenCalledTimes(1)
@@ -74,7 +75,7 @@ describe('Session Props Manager', () => {
         const callback = onSessionId.mock.calls[0][0]
 
         // act
-        callback(sessionId1)
+        callback(sessionId1, undefined)
 
         //assert
         expect(generateProps).toHaveBeenCalledTimes(0)
@@ -96,7 +97,7 @@ describe('Session Props Manager', () => {
         const callback = onSessionId.mock.calls[0][0]
 
         // act
-        callback(sessionId2)
+        callback(sessionId2, undefined)
 
         //assert
         expect(generateProps).toHaveBeenCalledTimes(1)

@@ -133,12 +133,13 @@ describe('ConversationsWidget', () => {
     })
 
     it('should require an email before restore request submit', async () => {
+        const onRequestRestoreLink = vi.fn().mockResolvedValue({ ok: true })
         const { getByText, findByText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
                 onSendMessage={vi.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
+                onRequestRestoreLink={onRequestRestoreLink}
             />
         )
 
@@ -146,6 +147,7 @@ describe('ConversationsWidget', () => {
         fireEvent.click(getByText('Send restore link'))
 
         expect(await findByText('Email is required')).toBeInTheDocument()
+        expect(onRequestRestoreLink).not.toHaveBeenCalled()
     })
 
     it('should request restore link and show success message', async () => {

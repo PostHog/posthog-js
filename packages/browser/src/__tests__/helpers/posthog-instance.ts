@@ -23,10 +23,10 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: { autocapture_opt_out: false, ...remoteConfig },
+            config: createRemoteConfig({ autocapture_opt_out: false, ...remoteConfig }),
             siteApps: [],
         },
-    } as any
+    }
 
     return await new Promise<PostHog>((resolve) =>
         posthog.init(
@@ -47,12 +47,30 @@ export const createPosthogInstance = async (
                 loaded: (p) => {
                     config.loaded?.(p)
 
-                    resolve(p as PostHog)
+                    resolve(requirePostHogInstance(p))
                 },
             },
             'test-' + token
         )
     )
+}
+
+export function createRemoteConfig(overrides: Partial<RemoteConfig> = {}): RemoteConfig {
+    return {
+        supportedCompression: [],
+        toolbarParams: {},
+        toolbarVersion: 'toolbar',
+        isAuthenticated: false,
+        siteApps: [],
+        ...overrides,
+    }
+}
+
+export function requirePostHogInstance(instance: unknown): PostHog {
+    if (!(instance instanceof PostHog)) {
+        throw new Error('Expected a real PostHog instance')
+    }
+    return instance
 }
 
 const posthog = init_as_module()

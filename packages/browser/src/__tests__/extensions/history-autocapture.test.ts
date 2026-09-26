@@ -1,15 +1,16 @@
+import type { Mock as VitestMock } from 'vitest'
 import '../helpers/mock-logger'
 import { HistoryAutocapture } from '../../extensions/history-autocapture'
 import type { PostHogConfig } from '../../types'
 
 describe('HistoryAutocapture', () => {
     let posthog: any
-    let capture: vi.Mock
+    let capture: VitestMock
     let historyAutocapture: HistoryAutocapture
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
-    let pageViewManagerDoPageView: vi.Mock
-    let scrollManagerResetContext: vi.Mock
+    let pageViewManagerDoPageView: VitestMock
+    let scrollManagerResetContext: VitestMock
     let mockLocation: { pathname: string; search: string; hash: string; href: string }
 
     const restartWithCapturePageview = (capturePageview: PostHogConfig['capture_pageview']): void => {
@@ -115,12 +116,25 @@ describe('HistoryAutocapture', () => {
         })
 
         it('should not setup event listeners if feature is disabled', () => {
+            historyAutocapture.stop()
+            const addListener = vi.spyOn(window, 'addEventListener')
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
 
             posthog.config.capture_pageview = false
             const historyAutocaptureDisabled = new HistoryAutocapture(posthog)
             historyAutocaptureDisabled.startIfEnabled()
+            expect(
+                addListener.mock.calls.filter(([event]) => event === 'popstate' || event === 'hashchange')
+            ).toHaveLength(0)
+            capture.mockClear()
+            mockLocation.pathname = '/disabled-path'
+            window.dispatchEvent(new Event('popstate'))
+            mockLocation.hash = '#disabled-hash'
+            window.dispatchEvent(new Event('hashchange'))
+            expect(capture).not.toHaveBeenCalled()
+            historyAutocaptureDisabled.stop()
+            addListener.mockRestore()
 
             expect((window.history.pushState as any).__posthog_wrapped__).toBeUndefined()
             expect((window.history.replaceState as any).__posthog_wrapped__).toBeUndefined()
@@ -463,55 +477,24 @@ describe('HistoryAutocapture', () => {
         })
     })
 
-    describe('PageViewManager integration', () => {
-        it('should call PageViewManager.doPageView when capturing a pageview', () => {
-            // Setup capture to call pageViewManagerDoPageView to simulate
-            // what would happen in the actual implementation
-            capture.mockImplementation((eventName, properties) => {
-                if (eventName === '$pageview') {
-                    pageViewManagerDoPageView(new Date(), 'test-uuid')
-                }
-                return { event: eventName, properties }
-            })
-
+    describe('History capture forwarding', () => {
+        it('should forward a history navigation to capture', () => {
             // Update location and trigger pushState
             mockLocation.pathname = '/pageviewmanager-test'
             window.history.pushState({ page: 1 }, 'Test Page', '/pageviewmanager-test')
 
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
-            expect(pageViewManagerDoPageView).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledTimes(1)
         })
 
-        it('should track history through multiple pageviews', () => {
-            const firstPageviewId = 'first-pageview-id'
-            const secondPageviewId = 'second-pageview-id'
-
-            // Setup pageview sequence with proper ID tracking
-            capture.mockImplementation((eventName, properties) => {
-                if (eventName === '$pageview') {
-                    if (capture.mock.calls.length === 1) {
-                        pageViewManagerDoPageView.mockReturnValueOnce({
-                            $pageview_id: firstPageviewId,
-                        })
-                    } else {
-                        pageViewManagerDoPageView.mockReturnValueOnce({
-                            $pageview_id: secondPageviewId,
-                            $prev_pageview_id: firstPageviewId,
-                            $prev_pageview_pathname: '/page-1',
-                        })
-                    }
-
-                    pageViewManagerDoPageView(new Date(), 'test-uuid')
-                }
-                return { event: eventName, properties }
-            })
-
+        it('should forward each successive history navigation once', () => {
             // First navigation
             mockLocation.pathname = '/page-1'
             window.history.pushState({ page: 1 }, 'Page 1', '/page-1')
 
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
             capture.mockClear()
-            pageViewManagerDoPageView.mockClear()
 
             // Second navigation
             mockLocation.pathname = '/page-2'
@@ -519,7 +502,6 @@ describe('HistoryAutocapture', () => {
 
             expect(capture).toHaveBeenCalledTimes(1)
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
-            expect(pageViewManagerDoPageView).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -540,6 +522,7 @@ describe('HistoryAutocapture', () => {
 
     describe('Cleanup', () => {
         it('should properly clean up event listeners when stopped', () => {
+            historyAutocapture.stop()
             const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
             const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
@@ -550,8 +533,22 @@ describe('HistoryAutocapture', () => {
 
             expect(addEventListenerSpy).toHaveBeenCalledWith('popstate', expect.any(Function), expect.any(Object))
             expect(addEventListenerSpy).toHaveBeenCalledWith('hashchange', expect.any(Function), expect.any(Object))
-
+            capture.mockClear()
+            mockLocation.hash = '#before-stop'
+            window.dispatchEvent(new Event('hashchange'))
+            expect(capture).toHaveBeenCalledTimes(1)
+            const handlers = addEventListenerSpy.mock.calls.filter(
+                ([event]) => event === 'popstate' || event === 'hashchange'
+            )
             newHistoryAutocapture.stop()
+            for (const [event, handler] of handlers) {
+                expect(removeEventListenerSpy).toHaveBeenCalledWith(event, handler)
+            }
+            capture.mockClear()
+            mockLocation.hash = '#after-stop'
+            window.dispatchEvent(new Event('hashchange'))
+            window.dispatchEvent(new Event('popstate'))
+            expect(capture).not.toHaveBeenCalled()
 
             expect(removeEventListenerSpy).toHaveBeenCalledWith('popstate', expect.any(Function))
             expect(removeEventListenerSpy).toHaveBeenCalledWith('hashchange', expect.any(Function))

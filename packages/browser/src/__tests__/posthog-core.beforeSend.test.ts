@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { mockLogger } from './helpers/mock-logger'
 
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -56,7 +57,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -111,7 +112,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: editingEventFn,
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -132,7 +133,7 @@ describe('posthog core - before send', () => {
 
     it('uses a valid provided uuid', () => {
         const posthog = posthogWith({})
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
         const uuid = uuidv7()
 
         const capturedData = posthog.capture(eventName, {}, { uuid })
@@ -142,7 +143,7 @@ describe('posthog core - before send', () => {
 
     it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({})
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
@@ -154,7 +155,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -163,6 +164,10 @@ describe('posthog core - before send', () => {
     })
 
     it('can take an array of fns', () => {
+        const finalHook = vi.fn((cr: CaptureResult) => ({
+            ...cr,
+            properties: { ...cr.properties, edited_two: true },
+        }))
         const posthog = posthogWith({
             before_send: [
                 (cr) => ({ ...cr, properties: { ...cr.properties, edited_one: true } }),
@@ -178,14 +183,17 @@ describe('posthog core - before send', () => {
                         },
                     }
                 },
-                (cr) => ({ ...cr, properties: { ...cr.properties, edited_two: true } }),
+                finalHook,
             ],
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
 
-        expect(capturedData.filter((cd) => !!cd)).toHaveLength(1)
+        expect(capturedData[1]).toBeUndefined()
+        expect(finalHook).toHaveBeenCalledTimes(1)
+        expect(finalHook).toHaveBeenCalledWith(expect.objectContaining({ event: eventName }))
+        expect(posthog._send_retriable_request).toHaveBeenCalledTimes(1)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'second_saw_first'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_two'], true)
@@ -214,7 +222,7 @@ describe('posthog core - before send', () => {
                 sentinel,
             ],
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
         let capturedData: CaptureResult | undefined
 
         expect(() => {
@@ -234,7 +242,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
@@ -259,7 +267,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
@@ -280,19 +288,16 @@ describe('posthog core - before send', () => {
         )
     })
 
-    it('logs a warning when rejecting an unsafe to edit event', () => {
+    it.each(knownUnsafeEditableEvent)('logs a warning when rejecting unsafe event %s', (unsafeEvent) => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
-        // chooses a random string from knownUnEditableEvent
-        const randomUnsafeEditableEvent =
-            knownUnsafeEditableEvent[Math.floor(Math.random() * knownUnsafeEditableEvent.length)]
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
+        expect(posthog.capture(unsafeEvent, {}, {})).toBeUndefined()
 
-        posthog.capture(randomUnsafeEditableEvent, {}, {})
-
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.warn).toHaveBeenCalledWith(
-            `Event '${randomUnsafeEditableEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
+            `Event '${unsafeEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
         )
     })
 
@@ -313,7 +318,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_retriable_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 

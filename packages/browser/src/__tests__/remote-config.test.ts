@@ -10,15 +10,19 @@ vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
-import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
+import { PostHog, defaultConfig } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
+import { BrowserClientAdapter } from '../extensions/browser-client'
+import { PostHogConfig } from '../types'
 import type { Client } from '@posthog/browser-common'
 import type { RequestResponse } from '@posthog/types'
 import { Autocapture } from '../autocapture'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { createRemoteConfig } from './helpers/posthog-instance'
 
 const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
@@ -29,7 +33,8 @@ describe('RemoteConfigLoader', () => {
         vi.useFakeTimers()
         vi.clearAllMocks()
 
-        const defaultConfig: Partial<PostHogConfig> = {
+        const config: PostHogConfig = {
+            ...defaultConfig(),
             token: 'testtoken',
             api_host: 'https://test.com',
             persistence: 'memory',
@@ -39,21 +44,19 @@ describe('RemoteConfigLoader', () => {
         document.head.innerHTML = ''
         vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
-        posthog = createMockPostHog({
-            config: { ...defaultConfig },
-            _onRemoteConfig: vi.fn(),
-            _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            _shouldDisableFlags: () =>
-                posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
-            featureFlags: {
-                ensureFlagsLoaded: vi.fn(),
-            },
-            reloadFeatureFlags: vi.fn(),
-            requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
-        })
+        posthog = new PostHog()
+        posthog.config = config
+        posthog.persistence = new PostHogPersistence(config)
+        vi.spyOn(posthog, '_onRemoteConfig').mockImplementation(() => {})
+        vi.spyOn(posthog, '_send_request').mockImplementation(({ callback }) => callback?.({ statusCode: 200 }))
+        posthog.featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        vi.spyOn(posthog.featureFlags, 'ensureFlagsLoaded').mockImplementation(() => {})
+        vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+        posthog.requestRouter = new RequestRouter(posthog)
     })
 
     afterEach(() => {
+        posthog.persistence?.destroy()
         vi.useRealTimers()
     })
 
@@ -81,19 +84,22 @@ describe('RemoteConfigLoader', () => {
                     config.remoteRequestsDisabled = posthog._shouldDisableFlags()
                 },
             })
-            autocapture.setup({
-                capture,
-                kv: {
-                    get: (key: string) => (key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? cachedOptOut : undefined),
-                    set: (_key: string, value: boolean) => {
-                        cachedOptOut = value
-                    },
-                },
-                onRemoteConfig: (handler: (result: RemoteConfigResult) => void) => {
-                    posthog._onRemoteConfig = handler
+            class AutocaptureTestClient extends BrowserClientAdapter {
+                override readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
+                    posthog._onRemoteConfig = (result) => handler(result)
                     return { dispose: vi.fn() }
-                },
-            } as unknown as Client)
+                }
+            }
+            const client = new AutocaptureTestClient(posthog)
+            client.capture = capture
+            vi.spyOn(posthog.persistence!, 'get_property').mockImplementation((key) =>
+                key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? cachedOptOut : undefined
+            )
+            vi.spyOn(posthog.persistence!, 'register').mockImplementation((properties) => {
+                cachedOptOut = properties[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+                return true
+            })
+            autocapture.setup(client)
         })
 
         afterEach(() => {
@@ -135,7 +141,7 @@ describe('RemoteConfigLoader', () => {
 
         it.each([true, false])('applies preloaded opt-out %s synchronously', (optOut) => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
-                [posthog.config.token]: { config: { autocapture_opt_out: optOut }, siteApps: [] },
+                [posthog.config.token]: { config: createRemoteConfig({ autocapture_opt_out: optOut }), siteApps: [] },
             }
 
             new RemoteConfigLoader(posthog).load()
@@ -179,7 +185,7 @@ describe('RemoteConfigLoader', () => {
     })
 
     describe('remote config', () => {
-        const config = { surveys: true } as RemoteConfig
+        const config = createRemoteConfig({ surveys: true })
 
         beforeEach(() => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined

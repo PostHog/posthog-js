@@ -117,7 +117,7 @@ describe('posthog.set_config', () => {
             expect(localStorage.getItem('ph_debug')).toBe('true')
         })
 
-        it('should not modify debug if not a boolean', () => {
+        it('preserves debug when set_config omits debug', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, { debug: false }, token)!
             const initialDebug = posthog.config.debug

@@ -22,7 +22,7 @@ function setupWrappedFetch(
         observe() {}
         disconnect() {}
     }
-    ;(global as any).PerformanceObserver = MockPerformanceObserver
+    vi.stubGlobal('PerformanceObserver', MockPerformanceObserver)
 
     const mockWindow = {
         fetch: downstreamFetch,
@@ -40,14 +40,41 @@ function setupWrappedFetch(
         initiatorTypes: ['fetch'],
     } as any)
 
+    expect(mockWindow.fetch).not.toBe(downstreamFetch)
     return { wrappedFetch: mockWindow.fetch, cleanup }
 }
 
 describe('fetch wrapper', () => {
     // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
     // from keeping the Jest worker alive after tests complete.
-    beforeEach(() => vi.useFakeTimers())
-    afterEach(() => vi.useRealTimers())
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+    })
+
+    // Reading direct Blob/File bodies in Node can leave BLOBREADER resources open;
+    // body recording is covered separately in browser tests.
+    it.each([
+        ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
+        ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
+    ])('forwards %s body through the installed wrapper', async (_name, createBody) => {
+        let receivedBody: BodyInit | null | undefined
+        const result = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            receivedBody = init?.body
+            return new Response('ok')
+        }, false)
+        const body = createBody()
+
+        try {
+            await expectNotToThrow(result.wrappedFetch('https://example.com/api', { method: 'POST', body }))
+            expect(receivedBody).toBe(body)
+        } finally {
+            result.cleanup()
+        }
+    })
 
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch
@@ -106,29 +133,6 @@ describe('fetch wrapper', () => {
             ['undefined', () => undefined],
         ])('handles %s body', async (_name, createBody) => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', { method: 'POST', body: createBody() }))
-        })
-
-        // Reading a direct Blob or File body through Node's Request implementation leaves a
-        // BLOBREADER async resource registered with Jest even after the read has completed. Body
-        // recording remains covered by the other Node cases and the real-browser wrapper tests;
-        // keep these cases focused on forwarding without turning that artifact into a worker leak.
-        it.each([
-            ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
-            ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
-        ])('handles %s body', async (_name, createBody) => {
-            let receivedBody: BodyInit | null | undefined
-            const result = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
-                receivedBody = init?.body
-                return new Response('ok')
-            }, false)
-            const body = createBody()
-
-            try {
-                await expectNotToThrow(result.wrappedFetch('https://example.com/api', { method: 'POST', body }))
-                expect(receivedBody).toBe(body)
-            } finally {
-                result.cleanup()
-            }
         })
 
         it('handles custom headers', async () => {
@@ -342,10 +346,14 @@ describe('fetch wrapper', () => {
 
         const contentType = capturedRequest!.headers.get('content-type')!
         const headerBoundary = contentType.match(/boundary=([^\s;]+)/)?.[1]
-        const body = await capturedRequest!.text()
-        const bodyBoundary = body.match(/^--+([^\r\n]+)/)?.[1]
-
-        expect(headerBoundary).toContain(bodyBoundary)
+        expect(headerBoundary).toBeTruthy()
+        const body = await capturedRequest!.clone().text()
+        expect(body.split('\r\n')[0]).toBe(`--${headerBoundary}`)
+        const parsed = await capturedRequest!.formData()
+        expect(parsed.get('key')).toBe('value')
+        const file = parsed.get('file') as File
+        expect(file.name).toBe('test.txt')
+        expect(await file.text()).toBe('test content')
     })
 
     it('passes init to downstream wrappers', async () => {

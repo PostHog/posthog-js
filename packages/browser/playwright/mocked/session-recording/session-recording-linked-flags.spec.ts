@@ -3,6 +3,10 @@ import { start, StartOptions, waitForRemoteConfig } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { BrowserContext, Page } from '@playwright/test'
 
+test.beforeEach(async ({ page }) => {
+    await page.clock.install()
+})
+
 const startOptions: StartOptions = {
     options: {
         session_recording: {
@@ -70,9 +74,8 @@ test.describe('Session recording - linked flags', () => {
 
         // even activity won't trigger a snapshot, we're buffering
         await page.locator('[data-cy-input]').type('hello posthog!')
-        // short delay since there's no snapshot to wait for
-        await page.waitForTimeout(250)
-
+        // Observe beyond two replay flush cycles with the flag unsatisfied.
+        await page.clock.runFor(4500)
         await page.expectCapturedEventsToBe([])
     })
 
@@ -222,9 +225,8 @@ test.describe('Session recording - linked flags', () => {
 
         // even activity won't trigger a snapshot, we're buffering
         await page.locator('[data-cy-input]').type('hello posthog!')
-        // short delay since there's no snapshot to wait for
-        await page.waitForTimeout(250)
-
+        // Observe beyond two replay flush cycles with the flag unsatisfied.
+        await page.clock.runFor(4500)
         await page.expectCapturedEventsToBe([])
     })
 

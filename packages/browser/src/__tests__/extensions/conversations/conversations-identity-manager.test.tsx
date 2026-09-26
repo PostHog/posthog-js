@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { ConversationsManager } from '../../../extensions/conversations/external'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
@@ -144,7 +145,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -163,7 +164,7 @@ describe('ConversationsManager Identity Verification', () => {
             await flushPromises()
 
             // Should NOT call the restore endpoint
-            const calls = (mockPosthog._send_request as vi.Mock).mock.calls
+            const calls = (mockPosthog._send_request as VitestMock).mock.calls
             const restoreCalls = calls.filter(
                 (c: any) => c[0].url?.includes('/widget/restore') && c[0].method === 'POST'
             )
@@ -178,7 +179,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -197,7 +198,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -216,7 +217,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             const url = call[0].url as string
@@ -237,7 +238,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             const url = call[0].url as string
@@ -266,7 +267,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             const url = call[0].url as string
@@ -295,7 +296,7 @@ describe('ConversationsManager Identity Verification', () => {
 
             manager.setIdentity()
 
-            const calls = (mockPosthog._send_request as vi.Mock).mock.calls
+            const calls = (mockPosthog._send_request as VitestMock).mock.calls
             const ticketCalls = calls.filter((c: any) => c[0].url?.includes('/widget/tickets'))
             expect(ticketCalls.length).toBeGreaterThan(0)
         })
@@ -306,16 +307,22 @@ describe('ConversationsManager Identity Verification', () => {
 
             manager.setIdentity()
 
+            await act(async () => {
+                await manager.sendMessage('Identity-owned ticket')
+            })
+            expect(manager.getCurrentTicketId()).toBe('ticket-123')
             delete (mockPosthog as any).config.identity_distinct_id
             delete (mockPosthog as any).config.identity_hash
             manager.clearIdentity()
+            expect(manager.getCurrentTicketId()).toBeNull()
+            expect(manager['_persistence'].clearTicketId).toHaveBeenCalled()
             vi.clearAllMocks()
 
             await act(async () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -342,7 +349,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/message') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -362,7 +369,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getMessages('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/messages/ticket-123') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -381,7 +388,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.markAsRead('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/read') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -400,7 +407,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -431,7 +438,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const calls = (mockPosthog._send_request as vi.Mock).mock.calls.map((call: any[]) => call[0])
+            const calls = (mockPosthog._send_request as VitestMock).mock.calls.map((call: any[]) => call[0])
             const sendMessageCall = calls.find(
                 (call: any) => call.url?.endsWith('/widget/message') && call.method === 'POST'
             )
@@ -476,7 +483,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.sendMessage('Hello!')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/message') && c[0].method === 'POST'
             )
             expect(call).toBeDefined()
@@ -492,7 +499,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getTickets()
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
             )
             expect(call).toBeDefined()
@@ -507,7 +514,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.getMessages('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/widget/messages/ticket-123') && c[0].method === 'GET'
             )
             const url = call[0].url as string
@@ -521,7 +528,7 @@ describe('ConversationsManager Identity Verification', () => {
                 await manager.markAsRead('ticket-123')
             })
 
-            const call = (mockPosthog._send_request as vi.Mock).mock.calls.find(
+            const call = (mockPosthog._send_request as VitestMock).mock.calls.find(
                 (c: any) => c[0].url?.includes('/read') && c[0].method === 'POST'
             )
             expect(call[0].data).toEqual({ widget_session_id: 'test-widget-session-id' })

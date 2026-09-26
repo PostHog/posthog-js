@@ -15,9 +15,9 @@ function createComplexState(depth: number, breadth: number, includeArrays = fals
             if (includeArrays && i % 3 === 0) {
                 state[key] = new Array(10).fill(0).map((_, idx) => ({ id: idx, value: `item_${idx}` }))
             } else if (i % 2 === 0) {
-                state[key] = `value_${i}_${Math.random().toString(36).substr(2, 9)}`
+                state[key] = `value_${i}_deterministic`
             } else {
-                state[key] = Math.floor(Math.random() * 1000)
+                state[key] = i * 17
             }
         }
     }
@@ -34,8 +34,8 @@ function modifyStateForDrag(state: Record<string, any>, modifications: number = 
         const key = `drag_operation_${i}`
         newState[key] = {
             isDragging: true,
-            dragStartTime: Date.now(),
-            dragPosition: { x: Math.random() * 1000, y: Math.random() * 1000 },
+            dragStartTime: 1700000000000,
+            dragPosition: { x: i * 10, y: i * 20 },
             dragElement: `element_${i}`,
             dragData: new Array(20).fill(0).map((_, idx) => ({
                 id: idx,
@@ -50,7 +50,7 @@ function modifyStateForDrag(state: Record<string, any>, modifications: number = 
         Object.keys(newState.key_0).forEach((key, idx) => {
             if (idx < modifications) {
                 if (typeof newState.key_0[key] === 'object') {
-                    newState.key_0[key] = { ...newState.key_0[key], modified: true, timestamp: Date.now() }
+                    newState.key_0[key] = { ...newState.key_0[key], modified: true, timestamp: 1700000000000 }
                 }
             }
         })
@@ -128,25 +128,30 @@ describe('getChangedState', () => {
                 },
             }
 
-            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState))
-
+            const { result, executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState))
             expect(executionTime).toBeLessThan(10)
+            expect(result).toEqual({
+                ui: {
+                    modal: { isOpen: true, content: 'Save changes?' },
+                    editor: { cursor: { column: 11 }, selection: { start: 6, end: 11 } },
+                },
+            })
         })
 
         test('should handle medium complexity state objects', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const { executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState, 10))
-
+            const { result, executionTime } = measureExecutionTime(() => getChangedState(prevState, nextState, 10))
             expect(executionTime).toBeLessThan(45)
+            expect(result.drag_operation_0).toEqual(nextState.drag_operation_0)
         })
 
         test('should handle large complex state objects (stress test)', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+            const { result, avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
                 getChangedState(prevState, nextState, 5)
             )
 
@@ -154,6 +159,7 @@ describe('getChangedState', () => {
             expect(medianTime).toBeLessThan(150)
             expect(avgTime).toBeLessThan(250)
             expect(stdDev).toBeLessThan(150)
+            expect(result.drag_operation_0).toEqual(nextState.drag_operation_0)
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -192,13 +198,20 @@ describe('getChangedState', () => {
                 },
             }
 
-            const { avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
+            const { result, avgTime, medianTime, stdDev } = measureMultipleExecutions(() =>
                 getChangedState(prevState, nextState)
             )
 
             expect(medianTime).toBeLessThan(10)
             expect(avgTime).toBeLessThan(15)
             expect(stdDev).toBeLessThan(10)
+            expect(result).toMatchObject({
+                app: {
+                    user: { name: 'Jane' },
+                    data: { items: nextState.app.data.items, filters: { category: 'active' } },
+                },
+                ui: { modal: { open: true, type: 'confirm' } },
+            })
         })
 
         test('should handle identical states efficiently', () => {

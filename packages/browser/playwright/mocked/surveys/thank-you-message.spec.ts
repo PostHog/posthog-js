@@ -20,8 +20,8 @@ const emojiRatingQuestion = {
 
 const appearanceWithThanks = {
     displayThankYouMessage: true,
-    thankyouMessageHeader: 'Thanks!',
-    thankyouMessageBody: 'We appreciate your feedback.',
+    thankYouMessageHeader: 'Thanks!',
+    thankYouMessageDescription: 'We appreciate your feedback.',
 }
 
 test.describe('surveys - feedback widget', () => {
@@ -71,15 +71,23 @@ test.describe('surveys - feedback widget', () => {
             })
         })
 
+        await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await start(startOptions, page, context)
         await surveysAPICall
 
         await expect(page.locator('.PostHogSurvey-123 .ratings-emoji')).toHaveCount(5)
+        await page.clock.pauseAt(new Date('2024-01-01T00:01:00Z'))
         await page.locator('.PostHogSurvey-123 .ratings-emoji').first().click()
+        await page.clock.runFor(50)
         await page.locator('.PostHogSurvey-123 .form-submit').click()
+        await page.clock.runFor(50)
 
         await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
-        await page.waitForTimeout(5000)
+        await page.clock.runFor(4949)
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
+        await page.clock.runFor(1)
+        // The close animation has a separate fallback unmount timer.
+        await page.clock.runFor(500)
         await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).not.toBeVisible()
     })
 })

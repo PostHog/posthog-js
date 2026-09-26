@@ -128,6 +128,8 @@ describe('PostHogProvider component', () => {
                 )
             })
 
+            expect(posthogJs.init).toHaveBeenCalledTimes(1)
+            expect(posthogJs.init).toHaveBeenLastCalledWith(apiKey, initialOptions)
             // Should warn about apiKey change
             expect(consoleSpy).toHaveBeenCalledWith(
                 expect.stringContaining('You have provided a different `apiKey` to `PostHogProvider`')

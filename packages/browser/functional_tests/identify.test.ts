@@ -62,7 +62,7 @@ describe('FunctionalTests / Identify', () => {
         expect(vi.mocked(logger).error).toBeCalledTimes(0)
     })
 
-    test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
+    test('identify sends only a $set update when called again with the same distinct id and $set/$set_once', async () => {
         // The intention here is to reduce the number of unncecessary $identify
         // requests to process.
         // The first time we identify, it calls the /e/ endpoint with an $identify
@@ -104,9 +104,13 @@ describe('FunctionalTests / Identify', () => {
                 })
             )
         )
+        const events = getRequests(token)['/e/']
+        expect(events.filter((event) => event.event === '$identify')).toHaveLength(1)
+        expect(events.filter((event) => event.event === '$set')).toHaveLength(1)
+        expect(events.find((event) => event.event === '$set').properties).not.toHaveProperty('$anon_distinct_id')
     })
 
-    test('identify sends an $set event if identify called twice with a different distinct_id', async () => {
+    test('identify sends only a $set update when called again with a different distinct_id', async () => {
         // This is due to $identify only being called for anonymous users.
         // The first time we identify, it calls the /e/ endpoint with an $identify
         posthog.identify('test-id', { email: 'first@email.com' }, { location: 'first' })
@@ -147,5 +151,9 @@ describe('FunctionalTests / Identify', () => {
                 })
             )
         )
+        const events = getRequests(token)['/e/']
+        expect(events.filter((event) => event.event === '$identify')).toHaveLength(1)
+        expect(events.filter((event) => event.event === '$set')).toHaveLength(1)
+        expect(events.find((event) => event.event === '$set').properties).not.toHaveProperty('$anon_distinct_id')
     })
 })

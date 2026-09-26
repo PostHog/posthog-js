@@ -281,7 +281,7 @@ describe('Autocapture click targets', () => {
 
         it('retains selectors on the original SVG path', () => {
             config.css_selector_allowlist = ['path']
-            config.element_allowlist = ['path']
+            config.element_allowlist = ['button']
             clickIcon()
             expect(capture).toHaveBeenCalledTimes(1)
             capture.mockClear()

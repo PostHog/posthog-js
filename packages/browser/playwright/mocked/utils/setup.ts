@@ -1,5 +1,5 @@
 import { Page, BrowserContext } from '@playwright/test'
-import { Compression, FlagsResponse, PostHogConfig } from '@/types'
+import { Compression, FlagsResponse, PostHogConfig } from '../../../src/types'
 import path from 'path'
 import { WindowWithPostHog } from './posthog-playwright-test-base'
 
@@ -25,10 +25,10 @@ export interface StartOptions {
     resetOnInit?: boolean
     // playwright is stricter than cypress on access to the window object
     // sometimes you need to pass functions here that will run on window in the correct page
-    runBeforePostHogInit?: (pg: Page) => void
+    runBeforePostHogInit?: (pg: Page) => void | Promise<void>
     // playwright is stricter than cypress on access to the window object
     // sometimes you need to pass functions here that will run on window in the correct page
-    runAfterPostHogInit?: (pg: Page) => void
+    runAfterPostHogInit?: (pg: Page) => void | Promise<void>
     type?: 'navigate' | 'reload'
     options?: Partial<PostHogConfig>
     flagsResponseOverrides?: Partial<FlagsResponse>
@@ -119,7 +119,7 @@ export async function start(
         await gotoPage(page, url)
     }
 
-    runBeforePostHogInit?.(page)
+    await runBeforePostHogInit?.(page)
 
     // Initialize PostHog if required
     if (initPosthog) {
@@ -160,7 +160,7 @@ export async function start(
         )
     }
 
-    runAfterPostHogInit?.(page)
+    await runAfterPostHogInit?.(page)
 
     // Reset PostHog if required
     if (resetOnInit) {
@@ -186,6 +186,7 @@ export async function waitForSessionRecordingToStart(page: Page, timeout = 5000)
             const ph = (window as any).posthog
             return ph?.sessionRecording?.started === true
         },
+        undefined,
         { timeout }
     )
 }
@@ -202,6 +203,7 @@ export async function waitForRemoteConfig(page: Page, timeout = 5000): Promise<v
             const status = ph?.sessionRecording?.status
             return status !== 'lazy_loading' && status !== undefined
         },
+        undefined,
         { timeout }
     )
 }

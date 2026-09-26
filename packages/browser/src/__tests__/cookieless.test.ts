@@ -18,7 +18,8 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockedFetch,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()
@@ -58,7 +59,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 
 const { mockURLGetter, mockedCookieBox, mockedFetch, document } = mockedGlobals as any
 
-const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
+const delay = (timeoutMs: number) => vi.advanceTimersByTimeAsync(timeoutMs)
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
@@ -77,6 +78,7 @@ describe('cookieless', () => {
     }
 
     beforeEach(() => {
+        vi.useFakeTimers()
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
         mockedFetch.mockReset()
@@ -85,6 +87,7 @@ describe('cookieless', () => {
 
     afterEach(async () => {
         await Promise.all(instances.splice(0).map((instance) => instance.shutdown(0)))
+        vi.clearAllTimers()
         vi.useRealTimers()
     })
 
@@ -138,7 +141,7 @@ describe('cookieless', () => {
             expect(document.cookie).toBe('')
         })
 
-        it.each([[true], ['history_change'], [{ path: true }]])(
+        it.each([[true], ['history_change' as const], [{ path: true }]])(
             'should send the initial pageview event when capture_pageview is %p',
             async (capturePageview: PostHogConfig['capture_pageview']) => {
                 const { posthog, beforeSendMock } = await setup({
