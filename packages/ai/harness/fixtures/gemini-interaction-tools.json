@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-24T08:44:20.689Z",
+    "providerSdkVersion": "2.18.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gemini-3.1-flash-lite",
+          "input": "Call describe_shape for a blue triangle with three sides. Do not answer in text.",
+          "store": false,
+          "tools": [
+            {
+              "type": "function",
+              "name": "describe_shape",
+              "description": "Describe an artificial shape.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "string"
+                  },
+                  "sides": {
+                    "type": "integer"
+                  }
+                },
+                "required": ["color", "sides"]
+              }
+            }
+          ],
+          "generation_config": {
+            "tool_choice": "any",
+            "max_output_tokens": 64,
+            "thinking_level": "minimal"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "status": "requires_action",
+            "usage": {
+              "total_tokens": 93,
+              "total_input_tokens": 73,
+              "input_tokens_by_modality": [
+                {
+                  "modality": "text",
+                  "tokens": 73
+                }
+              ],
+              "total_cached_tokens": 0,
+              "total_output_tokens": 20,
+              "total_tool_use_tokens": 0,
+              "total_thought_tokens": 0,
+              "raw_prompt_token": 111,
+              "model_invocation_token_counts": [
+                {
+                  "prompt_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 111
+                    }
+                  ],
+                  "candidates_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 26
+                    }
+                  ]
+                }
+              ],
+              "non_grounding_model_invocation_token_counts": [
+                {
+                  "prompt_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 111
+                    }
+                  ],
+                  "candidates_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 26
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-09-24T08:44:24Z",
+            "updated": "2026-09-24T08:44:24Z",
+            "service_tier": "standard",
+            "steps": [
+              {
+                "signature": "EnEKbwFpFH0TAqaOBbVhLpMLwNHw9wDuVJkgFrrAyhJXvBx0wlF5pIh3QUmDz0fJ/0ksDxrfcQnGh20DvoEdzKMv3GkTjEylRj/KUrKTOE1/BPKLENaZbm3ZdPPJxeB1Efkjyt7/2DVIA4+/aMmIIvENsg==",
+                "type": "thought"
+              },
+              {
+                "id": "call_867943",
+                "type": "function_call",
+                "name": "describe_shape",
+                "arguments": {
+                  "sides": 3,
+                  "color": "blue"
+                }
+              }
+            ],
+            "object": "interaction",
+            "model": "gemini-3.1-flash-lite"
+          }
+        }
+      }
+    }
+  ]
+}

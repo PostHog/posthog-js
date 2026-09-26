@@ -1,0 +1,107 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-24T08:31:02.435Z",
+    "providerSdkVersion": "2.18.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gemini-3.1-flash-lite",
+          "input": "Reply with a short greeting.",
+          "store": false,
+          "generation_config": {
+            "max_output_tokens": 64,
+            "thinking_level": "minimal"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "status": "completed",
+            "usage": {
+              "total_tokens": 16,
+              "total_input_tokens": 7,
+              "input_tokens_by_modality": [
+                {
+                  "modality": "text",
+                  "tokens": 7
+                }
+              ],
+              "total_cached_tokens": 0,
+              "total_output_tokens": 9,
+              "total_tool_use_tokens": 0,
+              "total_thought_tokens": 0,
+              "raw_prompt_token": 36,
+              "model_invocation_token_counts": [
+                {
+                  "prompt_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 36
+                    }
+                  ],
+                  "candidates_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 13
+                    }
+                  ]
+                }
+              ],
+              "non_grounding_model_invocation_token_counts": [
+                {
+                  "prompt_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 36
+                    }
+                  ],
+                  "candidates_tokens_details": [
+                    {
+                      "modality": "text",
+                      "tokens": 13
+                    }
+                  ]
+                }
+              ]
+            },
+            "created": "2026-09-24T08:31:04Z",
+            "updated": "2026-09-24T08:31:04Z",
+            "service_tier": "standard",
+            "steps": [
+              {
+                "signature": "EnEKbwFpFH0T4jCkPWR4n+Cbmu2AvcTQSnMteYaxoX619ZaRY4Aq2OKCe+4UVHepEwU/n/JwKxJbnlMkG2R0J0nBjoB1lOjktnqhqpsXAa5vK673BID0l9mwUpmX/k6NQ9uOfpjgx7D15v1biUKZVhPXXg==",
+                "type": "thought"
+              },
+              {
+                "content": [
+                  {
+                    "text": "Hello! How can I help you today?",
+                    "type": "text"
+                  }
+                ],
+                "type": "model_output"
+              }
+            ],
+            "object": "interaction",
+            "model": "gemini-3.1-flash-lite"
+          }
+        }
+      }
+    }
+  ]
+}
