@@ -19,7 +19,15 @@ type BasePrototypeCache = {
 };
 
 const testableAccessors = {
-  Node: ['childNodes', 'parentNode', 'parentElement', 'textContent'] as const,
+  Node: [
+    'childNodes',
+    'parentNode',
+    'parentElement',
+    'textContent',
+    'lastChild',
+    'nextSibling',
+    'previousSibling',
+  ] as const,
   ShadowRoot: ['host', 'styleSheets'] as const,
   Element: ['shadowRoot'] as const,
   MutationObserver: [] as const,
@@ -235,6 +243,18 @@ export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
 }
 
+export function lastChild(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'lastChild');
+}
+
+export function nextSibling(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'nextSibling');
+}
+
+export function previousSibling(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'previousSibling');
+}
+
 let isConnectedGetter: PropertyDescriptor['get'] | null | undefined;
 
 export function isConnected(n: Node): boolean | undefined {
@@ -405,6 +425,9 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  lastChild,
+  nextSibling,
+  previousSibling,
   isConnected,
   contains,
   getRootNode,
@@ -420,6 +443,9 @@ export default {
   parentNode: typeof parentNode;
   parentElement: typeof parentElement;
   textContent: typeof textContent;
+  lastChild: typeof lastChild;
+  nextSibling: typeof nextSibling;
+  previousSibling: typeof previousSibling;
   isConnected: typeof isConnected;
   contains: typeof contains;
   getRootNode: typeof getRootNode;

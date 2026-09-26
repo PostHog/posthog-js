@@ -1,0 +1,376 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import type * as puppeteer from 'puppeteer';
+import { vi } from 'vitest';
+import { launchPuppeteer, waitForRAF } from '../utils';
+import type { addedNodeMutation } from '@posthog/rrweb-types';
+
+type scenarioResult = {
+  adds: addedNodeMutation[];
+  snapshotIds: number[];
+  incrementalHtml: string;
+  freshHtml: string;
+};
+
+// The recorder serializes each added tree from its root down, so an `add` can
+// be emitted before an earlier-queued sibling of one of its ancestors. The
+// replayer places every node by `parentId` and `nextId`, so that order is only
+// safe while both ids resolve at the moment the `add` is applied. These tests
+// assert that property directly, and check that replaying the adds builds the
+// same DOM as a fresh full snapshot of the mutated page.
+describe('mutation add ordering', () => {
+  vi.setConfig({ testTimeout: 30_000 });
+
+  let browser: puppeteer.Browser;
+  let code: string;
+
+  beforeAll(async () => {
+    browser = await launchPuppeteer();
+    code = fs.readFileSync(
+      path.resolve(__dirname, '../../dist/rrweb.umd.cjs'),
+      'utf8',
+    );
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  const run = async (body: string, mutate: string): Promise<scenarioResult> => {
+    const page = await browser.newPage();
+    try {
+      await page.goto('about:blank');
+      await page.setContent(`<!DOCTYPE html>
+<html>
+  <body>
+    ${body}
+    <script>
+      ${code}
+      window.snapshots = [];
+      rrweb.record({
+        emit: (event) => window.snapshots.push(event),
+        recordAfter: 'DOMContentLoaded',
+        slimDOMOptions: { comment: true },
+      });
+    </script>
+  </body>
+</html>`);
+      await waitForRAF(page);
+      await page.evaluate(mutate);
+      await page.waitForTimeout(50);
+
+      return (await page.evaluate(`(() => {
+        const recorded = window.snapshots.slice();
+        // A checkout snapshot of the mutated page is the reference DOM: it runs
+        // through the same serializer, so blocked and ignored nodes are handled
+        // the same way as in the incremental adds.
+        rrweb.record.takeFullSnapshot();
+        const meta = recorded.find((event) => event.type === 4);
+        const fresh = window.snapshots
+          .slice(recorded.length)
+          .find((event) => event.type === 2);
+
+        const htmlOf = (events) => {
+          const replayer = new rrweb.Replayer(events, { mouseTail: false });
+          replayer.pause(
+            events[events.length - 1].timestamp - events[0].timestamp + 1,
+          );
+          return replayer.iframe.contentDocument.body.innerHTML.replace(
+            /<script[^>]*>[\\s\\S]*?<\\/script>/g,
+            '<script></script>',
+          );
+        };
+
+        const snapshotIds = [];
+        const collect = (node) => {
+          snapshotIds.push(node.id);
+          (node.childNodes || []).forEach(collect);
+        };
+        collect(recorded.find((event) => event.type === 2).data.node);
+
+        return {
+          adds: recorded
+            .filter((event) => event.type === 3 && event.data.source === 0)
+            .flatMap((event) => event.data.adds),
+          snapshotIds,
+          incrementalHtml: htmlOf(recorded),
+          freshHtml: htmlOf([meta, fresh]),
+        };
+      })()`)) as scenarioResult;
+    } finally {
+      await page.close();
+    }
+  };
+
+  // Every add must land on a parent that already exists, next to a sibling that
+  // already exists. The removed secondary add list used to guarantee this by
+  // deferring any node whose ids were not resolvable yet.
+  const expectResolvableOrder = (result: scenarioResult) => {
+    const known = new Set(result.snapshotIds);
+    expect(result.adds.length).toBeGreaterThan(0);
+    for (const add of result.adds) {
+      expect(known.has(add.parentId)).toBe(true);
+      if (add.nextId !== null) expect(known.has(add.nextId)).toBe(true);
+      known.add(add.node.id);
+    }
+  };
+
+  const expectSameDom = (result: scenarioResult) => {
+    expect(result.incrementalHtml).toEqual(result.freshHtml);
+  };
+
+  const elementAdd = (result: scenarioResult, id: string) =>
+    result.adds.find(
+      (add) => add.node.type === 2 && add.node.attributes.id === id,
+    );
+
+  it('serializes a nested tree added in one batch from its root down', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const outer = document.createElement('div');
+        outer.id = 'outer';
+        const middle = document.createElement('section');
+        const inner = document.createElement('span');
+        inner.textContent = 'deep';
+        middle.appendChild(inner);
+        outer.appendChild(middle);
+        document.getElementById('target').appendChild(outer);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    expect(result.adds[0]).toBe(elementAdd(result, 'outer'));
+  });
+
+  it('serializes children queued before their parent entered the DOM', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const parent = document.createElement('div');
+        parent.id = 'late-parent';
+        const child = document.createElement('span');
+        child.id = 'late-child';
+        // The child mutation record is queued first, but the child cannot be
+        // serialized before its parent has an id.
+        parent.appendChild(child);
+        document.getElementById('target').appendChild(parent);
+        child.appendChild(document.createTextNode('late'));
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+  });
+
+  it('keeps sibling order when siblings are added in separate records', async () => {
+    const result = await run(
+      '<div id="target"><b id="anchor"></b></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const anchor = document.getElementById('anchor');
+        ['one', 'two', 'three'].forEach((name) => {
+          const el = document.createElement('i');
+          el.id = name;
+          target.insertBefore(el, anchor);
+        });
+        const trailing = document.createElement('u');
+        trailing.id = 'trailing';
+        target.appendChild(trailing);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    expect(elementAdd(result, 'one').nextId).toBe(
+      elementAdd(result, 'two').node.id,
+    );
+    expect(elementAdd(result, 'trailing').nextId).toBe(null);
+  });
+
+  it('places nodes added around a blocked sibling', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const blocked = document.createElement('div');
+        blocked.className = 'rr-block';
+        blocked.appendChild(document.createElement('span'));
+        const before = document.createElement('p');
+        before.id = 'before-blocked';
+        const after = document.createElement('p');
+        after.id = 'after-blocked';
+        target.append(before, blocked, after);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // The blocked node keeps its placeholder, but its child is never serialized.
+    expect(
+      result.adds.some(
+        (add) => add.node.type === 2 && add.node.tagName === 'span',
+      ),
+    ).toBe(false);
+  });
+
+  it('skips an ignored comment when resolving nextId', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const first = document.createElement('p');
+        first.id = 'first';
+        const last = document.createElement('p');
+        last.id = 'last';
+        target.append(first, document.createComment('ignored'), last);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // The comment has no id of its own, so `first` points past it at `last`.
+    expect(elementAdd(result, 'first').nextId).toBe(
+      elementAdd(result, 'last').node.id,
+    );
+  });
+
+  it('keeps every addition when existing ignored comments split the row', async () => {
+    const result = await run(
+      '<div id="split"><!--gap one--><!--gap two--><b id="tail"></b></div>',
+      `(() => {
+        const host = document.getElementById('split');
+        const gaps = Array.from(host.childNodes).filter(
+          (node) => node.nodeType === Node.COMMENT_NODE,
+        );
+        // Interleave the additions with the comments that are already there,
+        // and keep an existing element last so the row cannot be reached from
+        // the parent's last child.
+        ['first', 'second', 'third'].forEach((name, index) => {
+          const el = document.createElement('p');
+          el.id = 'split-' + name;
+          el.textContent = name;
+          host.insertBefore(el, gaps[index] || document.getElementById('tail'));
+        });
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // An ignored sibling carries no id of its own, so it must not end the row:
+    // the addition beyond it has to be serialized first.
+    expect(elementAdd(result, 'split-first').nextId).toBe(
+      elementAdd(result, 'split-second').node.id,
+    );
+    expect(elementAdd(result, 'split-second').nextId).toBe(
+      elementAdd(result, 'split-third').node.id,
+    );
+  });
+
+  it('adds siblings next to blocked and ignored nodes that were already there', async () => {
+    const result = await run(
+      `<div id="with-blocked"><div class="rr-block"></div></div>
+       <div id="with-comment"><!-- already ignored --></div>`,
+      `(() => {
+        ['with-blocked', 'with-comment'].forEach((id) => {
+          const host = document.getElementById(id);
+          const leading = document.createElement('p');
+          leading.id = id + '-leading';
+          host.insertBefore(leading, host.firstChild);
+          const trailing = document.createElement('p');
+          trailing.id = id + '-trailing';
+          host.appendChild(trailing);
+        });
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+  });
+
+  // Style serialization is untouched here, but the reordering decides when a
+  // newly added <style> and its text reach the replayer relative to the nodes
+  // that depend on them. Framework-generated CSS is the shape that broke
+  // silently before (see .agents/skills/replay-incident-risk INCIDENTS class 4).
+  it('replays framework-shaped CSS added in the same batch as the nodes it styles', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const style = document.createElement('style');
+        // Shorthand set to var() with one longhand overridden by another var(),
+        // the Chakra v3 / Panda pattern, plus a Tailwind-shaped utility.
+        style.appendChild(
+          document.createTextNode(
+            ':root { --pad: 4px; --pad-top: 12px; }' +
+              '.card { padding: var(--pad); padding-top: var(--pad-top); }' +
+              '.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }',
+          ),
+        );
+        const card = document.createElement('div');
+        card.id = 'card';
+        card.className = 'card px-2';
+        card.style.setProperty('--local', 'red');
+        card.style.setProperty('color', 'var(--local)');
+        const label = document.createElement('span');
+        label.textContent = 'styled';
+        card.appendChild(label);
+        target.append(style, card);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    // The compared DOM really carries the rules, so a dropped declaration fails.
+    expect(result.incrementalHtml).toContain('--pad-top');
+    expect(result.incrementalHtml).toContain('padding-left');
+    const styleAdd = result.adds.find(
+      (add) => add.node.type === 2 && add.node.tagName === 'style',
+    )!;
+    expect(elementAdd(result, 'card').nextId).toBe(null);
+    expect(styleAdd.nextId).toBe(elementAdd(result, 'card').node.id);
+  });
+
+  it('replays rules inserted into a style element added in the same batch', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const target = document.getElementById('target');
+        const style = document.createElement('style');
+        const box = document.createElement('div');
+        box.id = 'box';
+        box.className = 'emotion-0';
+        target.append(style, box);
+        // Emotion "speedy" mode never puts text in the <style> element.
+        style.sheet.insertRule('.emotion-0 { padding: var(--gap, 8px); }', 0);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    expectSameDom(result);
+    expect(result.incrementalHtml).toContain('var(--gap, 8px)');
+  });
+
+  it('serializes a shadow host together with its shadow content', async () => {
+    const result = await run(
+      '<div id="target"></div>',
+      `(() => {
+        const host = document.createElement('div');
+        host.id = 'shadow-host';
+        host.attachShadow({ mode: 'open' });
+        const inner = document.createElement('span');
+        inner.textContent = 'in shadow';
+        host.shadowRoot.appendChild(inner);
+        document.getElementById('target').appendChild(host);
+      })()`,
+    );
+
+    expectResolvableOrder(result);
+    const shadowSpan = result.adds.find(
+      (add) => add.node.type === 2 && add.node.tagName === 'span',
+    );
+    expect(shadowSpan).toBeDefined();
+    expect(shadowSpan.parentId).toBe(elementAdd(result, 'shadow-host').node.id);
+  });
+});
