@@ -20,6 +20,15 @@ export default defineConfig({
                 find: '@posthog/browser-common/feature-flags',
                 replacement: fromRoot('../browser-common/src/feature-flags.ts'),
             },
+            {
+                find: '@posthog/browser-common/logs-types',
+                replacement: fromRoot('../browser-common/src/logs-types.ts'),
+            },
+            {
+                find: '@posthog/browser-common/logs-config',
+                replacement: fromRoot('../browser-common/src/logs-config.ts'),
+            },
+            { find: '@posthog/browser-common/logs', replacement: fromRoot('../browser-common/src/logs.ts') },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },
             {

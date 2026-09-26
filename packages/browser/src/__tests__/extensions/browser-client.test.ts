@@ -375,6 +375,51 @@ describe('BrowserClientAdapter', () => {
         expect(remove).toHaveBeenCalledTimes(1)
     })
 
+    it('flushes both logs queues and releases capture resources during shutdown', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            capture_pageview: false,
+            advanced_disable_flags: true,
+            disable_session_recording: true,
+        })
+        const send = vi.spyOn(posthog, '_send_request')
+        const logger = posthog.logger
+        const beforeSend = vi.fn((record) => record)
+        posthog.set_config({ logs: { beforeSend } })
+        posthog.captureLog({ body: 'programmatic' })
+        posthog.logs!.captureConsoleLog({ body: 'console' })
+        const requestHeader = vi.fn(() => {
+            logger.info('reentrant cached logger')
+            posthog.captureLog({ body: 'reentrant SDK capture' })
+            return 'value'
+        })
+        posthog.set_config({
+            request_headers: {
+                get 'X-Test'() {
+                    return requestHeader()
+                },
+            },
+        })
+        await posthog.shutdown()
+        expect(requestHeader).toHaveBeenCalledTimes(2)
+        expect(send).toHaveBeenCalledTimes(2)
+        expect(
+            send.mock.calls.flatMap(([options]) =>
+                (options.data as any).resourceLogs[0].scopeLogs[0].logRecords.map((record: any) => [
+                    options.transport,
+                    record.body,
+                ])
+            )
+        ).toEqual([
+            ['sendBeacon', { stringValue: 'programmatic' }],
+            ['sendBeacon', { stringValue: 'console' }],
+        ])
+        beforeSend.mockClear()
+        posthog.captureLog({ body: 'after cleanup' })
+        logger.info('after cleanup')
+        expect(beforeSend).not.toHaveBeenCalled()
+        expect(send).toHaveBeenCalledTimes(2)
+    })
+
     it('exposes the project token and adapts caller-owned request options', async () => {
         const instance = createMockPostHog()
         const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
@@ -427,6 +472,19 @@ describe('BrowserClientAdapter', () => {
             api_key: 'api-key-alias',
             distinct_id: 'person-1',
         })
+    })
+
+    it.each([
+        ['/i/v1/logs', undefined, 'logs'],
+        ['/i/v1/logs', 'api', 'logs'],
+        ['/i/v1/logs', 'flags', undefined],
+        ['/i/v1/analytics/events', undefined, undefined],
+    ] as const)('preserves the quota bucket for %s on %s', async (path, target, batchKey) => {
+        const instance = createMockPostHog()
+        vi.mocked(instance._send_request).mockImplementation((options) => options.callback?.({ statusCode: 200 }))
+        const client = new BrowserClientAdapter(instance)
+        await client.sendRequest(path, { target })
+        expect(vi.mocked(instance._send_request).mock.calls[0][0].batchKey).toBe(batchKey)
     })
 
     it('uses the regular API target by default and resolves dropped requests', async () => {

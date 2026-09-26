@@ -1,4 +1,5 @@
-import { resolveLogsConfig } from '../logs-defaults'
+// @vitest-environment jsdom
+import { resolveLogsConfig } from '../src/logs-config'
 
 describe('resolveLogsConfig', () => {
     it('applies browser defaults when nothing is configured', () => {
