@@ -453,6 +453,7 @@
         "_lastByteRefill",
         "_lastCheckedUrl",
         "_lastCookieSyncTimestamp",
+        "_lastErrorsLoading",
         "_lastFocusChange",
         "_lastFullSnapshotSessionId",
         "_lastHref",
