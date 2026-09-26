@@ -49,10 +49,9 @@ import {
     type Logger,
 } from '@posthog/core'
 import { createLogger } from './utils/logger'
-import { getTimezone } from './utils/event-utils'
-import { document, window } from './utils/globals'
+import { getTimezone } from './utils/timezone'
 import { continueWith } from './utils/promise-utils'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-reachability'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -284,11 +283,20 @@ export const QuotaLimitedResource = {
 } as const
 export type QuotaLimitedResource = (typeof QuotaLimitedResource)[keyof typeof QuotaLimitedResource]
 
+export interface FeatureFlagsReloadResult {
+    /** loaded: evaluation completed; error: request/evaluation failed; skipped: evaluation unavailable; cancelled: reset/disposal. */
+    status: 'loaded' | 'error' | 'skipped' | 'cancelled'
+}
+
+type ReloadCompletion = (result: FeatureFlagsReloadResult) => void
+
 export class PostHogFeatureFlags implements Extension {
     readonly name: string = 'featureFlags'
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[] = []
     $anon_distinct_id: string | undefined
+    private _window: Window | undefined
+    private _document: Document | undefined
     private _client: Client | undefined
     private _initializingClient: Client | undefined
     private _logger: Client['logger'] = logger
@@ -299,6 +307,8 @@ export class PostHogFeatureFlags implements Extension {
     // Bootstrap values are a transient view over the last durable flag snapshot.
     private _bootstrapState: FeatureFlagsState | undefined
     private _reloadingHandlers: Array<() => void> = []
+    private _pendingReloads = new Set<ReloadCompletion>()
+    private _activeReloads = new Set<ReloadCompletion>()
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
     private _requestGeneration: number = 0
@@ -336,6 +346,13 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     setup(client: Client): void | Promise<void> {
+        try {
+            this._window = typeof window === 'undefined' ? undefined : window
+            this._document = typeof document === 'undefined' ? undefined : document
+        } catch {
+            this._window = undefined
+            this._document = undefined
+        }
         this._initializingClient = client
         this._logger = client.logger.createLogger('[FeatureFlags]')
         return continueWith(client.kv.initialize(), () => {
@@ -352,8 +369,8 @@ export class PostHogFeatureFlags implements Extension {
         if (this._client !== client) {
             return
         }
-        if (window) {
-            addEventListener(window, 'online', this._onOnline)
+        if (this._window) {
+            addEventListener(this._window, 'online', this._onOnline)
         }
         this._syncAutomaticRefresh()
         this._dynamicProperties = client.registerDynamicEventProperties(() =>
@@ -383,8 +400,8 @@ export class PostHogFeatureFlags implements Extension {
             isUndefined(refreshIntervalMs) ||
             isUndefined(dueIntervalMs) ||
             this._config.remoteRequestsDisabled ||
-            !document ||
-            document.visibilityState === 'hidden' ||
+            !this._document ||
+            this._document.visibilityState === 'hidden' ||
             Date.now() - (this._lastRefreshAt ?? 0) < dueIntervalMs
         ) {
             return
@@ -409,7 +426,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _onVisibilityChange = (): void => {
-        if (document?.visibilityState === 'visible') {
+        if (this._document?.visibilityState === 'visible') {
             // Deliberately not through _onUserInteraction: refreshes fall due while the page is
             // hidden, and an interaction from before it was hidden would skip the due check here.
             this._resumeConfiguredInterval()
@@ -426,7 +443,7 @@ export class PostHogFeatureFlags implements Extension {
         const configuredIntervalMs = this._config.refreshIntervalMs
         const refreshIntervalMs =
             !this._config.remoteRequestsDisabled &&
-            document &&
+            this._document &&
             !isUndefined(configuredIntervalMs) &&
             configuredIntervalMs > 0
                 ? configuredIntervalMs
@@ -446,10 +463,10 @@ export class PostHogFeatureFlags implements Extension {
         this._refreshIntervalMs = refreshIntervalMs
         this._dueRefreshIntervalMs = refreshIntervalMs
         this._scheduleNextRefresh()
-        if (document?.addEventListener) {
-            addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+        if (this._document?.addEventListener) {
+            addEventListener(this._document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
             eachArray(USER_INTERACTION_EVENTS, (eventName) => {
-                addEventListener(document, eventName, this._onUserInteraction, { capture: true })
+                addEventListener(this._document, eventName, this._onUserInteraction, { capture: true })
             })
         }
     }
@@ -469,9 +486,9 @@ export class PostHogFeatureFlags implements Extension {
         if (!isUndefined(this._refreshInterval)) {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
-            document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            this._document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
             eachArray(USER_INTERACTION_EVENTS, (eventName) => {
-                document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
+                this._document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
             })
         }
         this._refreshIntervalMs = undefined
@@ -493,6 +510,8 @@ export class PostHogFeatureFlags implements Extension {
         this._requestGeneration++
         this._additionalReloadRequested = false
         this._initializingClient = undefined
+        this._settleReloads(this._pendingReloads, 'cancelled')
+        this._settleReloads(this._activeReloads, 'cancelled')
         if (!this._client) {
             return
         }
@@ -502,7 +521,7 @@ export class PostHogFeatureFlags implements Extension {
         this._crossTabPersistenceUnsubscribe?.()
         this._crossTabPersistenceUnsubscribe = undefined
         this._reloadingHandlers = []
-        window?.removeEventListener('online', this._onOnline)
+        this._window?.removeEventListener('online', this._onOnline)
         this._client = undefined
     }
 
@@ -931,6 +950,30 @@ export class PostHogFeatureFlags implements Extension {
         }, 5)
     }
 
+    /** Await the next requested evaluation, rather than cached or locally injected flag changes. */
+    reloadFeatureFlagsAsync(): Promise<FeatureFlagsReloadResult> {
+        if (
+            !this._client ||
+            this._reloadingDisabled ||
+            this._config.featureFlagsDisabled ||
+            this._config.remoteRequestsDisabled ||
+            this._hasStatusZeroCircuitBreakerTripped()
+        ) {
+            return Promise.resolve({ status: 'skipped' })
+        }
+        // Like the Client transport, the awaitable API requires Promise support.
+        // oxlint-disable-next-line compat/compat
+        return new Promise((resolve) => {
+            this._pendingReloads.add(resolve)
+            this.reloadFeatureFlags()
+        })
+    }
+
+    private _settleReloads(completions: Set<ReloadCompletion>, status: FeatureFlagsReloadResult['status']): void {
+        completions.forEach((complete) => complete({ status }))
+        completions.clear()
+    }
+
     private _clearDebouncer(): void {
         clearTimeout(this._reloadDebouncer)
         this._reloadDebouncer = undefined
@@ -968,6 +1011,7 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         const client = this._client
         if (!client || this._config.remoteRequestsDisabled || this._hasStatusZeroCircuitBreakerTripped()) {
+            this._settleReloads(this._pendingReloads, 'skipped')
             return
         }
         if (this._requestInFlight) {
@@ -1007,6 +1051,9 @@ export class PostHogFeatureFlags implements Extension {
         const isPartialFlagsResponse = this._config.onlyEvaluateSurveyFeatureFlags
         const path = `/flags/?v=2${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
         const requestGeneration = this._requestGeneration
+        const completions = this._pendingReloads
+        this._pendingReloads = new Set()
+        this._activeReloads = completions
         this._requestInFlight = true
 
         const requestAdditionalReload = (): void => {
@@ -1028,6 +1075,7 @@ export class PostHogFeatureFlags implements Extension {
                 this.$anon_distinct_id = undefined
             }
             if (data.disable_flags && !this._additionalReloadRequested) {
+                this._settleReloads(completions, 'skipped')
                 return
             }
             this._flagsLoadedFromRemote = !errorsLoading
@@ -1060,6 +1108,14 @@ export class PostHogFeatureFlags implements Extension {
             } else if (!data.disable_flags) {
                 this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
             }
+            this._settleReloads(
+                completions,
+                data.disable_flags
+                    ? 'skipped'
+                    : flagErrors.length || (!json.flags && !json.featureFlags)
+                      ? 'error'
+                      : 'loaded'
+            )
             requestAdditionalReload()
         }
         const handleError = (error: unknown): void => {
@@ -1073,6 +1129,7 @@ export class PostHogFeatureFlags implements Extension {
             if (this._fallBackToPersistedFlags()) {
                 this._fireFeatureFlagsCallbacks(true)
             }
+            this._settleReloads(completions, 'error')
             requestAdditionalReload()
         }
 
@@ -1091,6 +1148,7 @@ export class PostHogFeatureFlags implements Extension {
         const attempt = (): void => {
             if (requestGeneration !== this._requestGeneration || !this._client || this._config.remoteRequestsDisabled) {
                 this._requestInFlight = false
+                this._settleReloads(completions, 'skipped')
                 requestAdditionalReload()
                 return
             }
@@ -1915,6 +1973,8 @@ export class PostHogFeatureFlags implements Extension {
 
     reset(): void {
         this._requestGeneration++
+        this._settleReloads(this._pendingReloads, 'cancelled')
+        this._settleReloads(this._activeReloads, 'cancelled')
         this._additionalReloadRequested = false
         this._baseEventProperties = {}
         this._eventPropertiesWithFlagValues = {}

@@ -148,6 +148,7 @@ describe('client creation', () => {
         const configuration = { load: 'eager' as const, flushAt: 1, flushInterval: 0 }
         const options: PostHogOptions = {
             ...baseOptions,
+            flags: false,
             fetch: createFetch(requests),
             analytics: configuration,
             remoteConfig: localRemoteConfig,

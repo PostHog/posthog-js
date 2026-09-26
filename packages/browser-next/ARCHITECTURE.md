@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The `@posthog/browser/core` entrypoint omits that dynamic-import reference for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It installs one analytics extension that owns a bounded in-memory buffer from initialization. The first admitted event loads queue scheduling and Capture V1 delivery through a literal dynamic import by default; an explicitly supplied analytics extension includes delivery statically. The root also dynamically imports feature flags during async initialization, unless disabled or explicitly supplied. The `@posthog/browser/core` entrypoint omits both automatic dynamic-import references for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
@@ -192,7 +192,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features. Its automatic analytics loader imports the implementation only after runtime admission or explicit eager selection. You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports delivery only after runtime admission or explicit eager selection; flags load during async initialization. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -200,6 +200,16 @@ A bundler cannot remove an internal module when the factory always needs that mo
 Do not implement a large optional feature as a method on the core client class.
 Bundlers usually retain all methods on a used class.
 Use an extension or an adapter instead.
+
+### Feature flags
+
+`flags` accepts the same `FlagsOptions` as `flags(options)` from `@posthog/browser/flags`. With no explicit `featureFlags` extension, the root awaits a literal flags import and extension setup before resolving. It does not await remote evaluation. `flags: false` disables automatic inclusion; an explicit instance takes precedence. Failed loading/setup is isolated from core capture. The manual core entrypoint never imports flags automatically.
+
+Applications access flag controls through `getExtension(FeatureFlagsExtension)`. The typed token is lightweight and does not import the implementation. Result conversion, subscriptions, bootstrap, and evaluation stay in the optional module. Missing or failed extensions return undefined from lookup. Callbacks enumerate results without emitting flag-called events.
+
+Browser-next supplies a `BrowserClient` view extending the shared `Client` with `onIdentify`, `onGroup`, and `onReset` listeners. Core publishes synchronous notifications after local state updates, independently of capture admission. Publishers isolate listener failures and do not replay earlier operations. Extensions subscribe during setup and dispose their subscriptions during teardown. Flags uses these listeners to update evaluation context and reload; core does not look up product-specific identity hooks.
+
+Flags passes the shared `Client` directly to the shared feature-flags implementation and stores its values through `Client.kv`. The host owns storage selection, serialization, and durable writes. Core reset clears persisted extension data before notifying flags to clear its in-memory evaluation state and reload. Flag values follow the client's configured persistence, including memory-only operation with `storage: false`.
 
 ## 6. Import graph rules
 
@@ -281,7 +291,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature. Default analytics is the narrow exception: the root references its subpath through one literal dynamic import, while the core entrypoint does not.
+Use a separate export subpath for each substantial optional feature. Automatic analytics delivery and feature flags use literal dynamic imports from the root entrypoint; the core entrypoint references neither implementation.
 
 Example:
 
@@ -325,11 +335,11 @@ const posthog = await createPostHog({
 A small branch can stay in core when a separate boundary adds more bytes.
 The change must include measurements that support this decision.
 
-### 8.3 Keep the registry empty
+### 8.3 Register only selected extensions
 
-The extension registry must store only configured instances and the analytics instance selected by the factory. An explicitly supplied first-party analytics instance takes precedence over the default. Delivery loading does not add a registry entry.
+The extension registry stores configured instances and automatic instances selected by the root factory. Explicit analytics and feature-flags instances take precedence over their corresponding top-level options. Analytics delivery loading does not add a registry entry; flags register the same extension implementation used by static inclusion.
 
-Do not add a static catalog of product implementations to the core. Do not auto-register replay, surveys, flags, or other known extensions. Automatic analytics is selected by the root API contract, not a general product-name registry.
+Do not add a static catalog of product implementations to core. The root selects automatic analytics and flags through product-specific composition code, not a generic product-name loader registry. Other products require explicit composition until their automatic loading contract is implemented.
 
 Do not put this code in the root graph:
 
