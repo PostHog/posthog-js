@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
+import { normalizeBootstrappedFlagValue } from '../utils/feature-flag-utils'
 
 export function useFeatureFlagVariantKey(flag: string): string | boolean | undefined {
     const { client, bootstrap } = useContext(PostHogContext)
@@ -15,7 +16,7 @@ export function useFeatureFlagVariantKey(flag: string): string | boolean | undef
     }, [client, flag])
 
     if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
-        return bootstrap.featureFlags[flag]
+        return normalizeBootstrappedFlagValue(flag, bootstrap.featureFlags[flag])
     }
 
     return featureFlagVariantKey

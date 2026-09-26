@@ -1281,6 +1281,46 @@ describe('posthog core', () => {
             })
         })
 
+        it('flattens bootstrapped flag detail objects and warns', () => {
+            const posthog = posthogWith({
+                bootstrap: {
+                    featureFlags: {
+                        multivariant: { key: 'multivariant', enabled: true, variant: 'variant-1' },
+                        enabled: { key: 'enabled', enabled: true, variant: undefined },
+                        disabled: { key: 'disabled', enabled: false, variant: undefined },
+                    } as unknown as Record<string, string | boolean>,
+                },
+            })
+
+            expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
+            expect(posthog.getFeatureFlag('enabled')).toBe(true)
+            expect(posthog.getFeatureFlag('disabled')).toBe(false)
+            expect(posthog.getFeatureFlagResult('multivariant')).toMatchObject({
+                enabled: true,
+                variant: 'variant-1',
+            })
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid bootstrapped value for feature flag "multivariant"')
+            )
+        })
+
+        it('ignores bootstrapped flag values that are neither a string, a boolean, nor a flag detail', () => {
+            const posthog = posthogWith({
+                bootstrap: {
+                    featureFlags: {
+                        numeric: 1,
+                        nullish: null,
+                        multivariant: 'variant-1',
+                    } as unknown as Record<string, string | boolean>,
+                },
+            })
+
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1' })
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid bootstrapped value for feature flag "numeric"')
+            )
+        })
+
         it('sets the right feature flag payloads', () => {
             const posthog = posthogWith({
                 bootstrap: {

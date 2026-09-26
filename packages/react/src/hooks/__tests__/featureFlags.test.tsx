@@ -145,6 +145,87 @@ describe('feature flag hooks', () => {
         expect(result.current).toEqual(expected)
     })
 
+    describe('detail-shaped bootstrap values', () => {
+        function renderWithBootstrap(bootstrapFlags: Record<string, unknown>) {
+            const client = {
+                getFeatureFlag: () => undefined,
+                getFeatureFlagResult: () => undefined,
+                isFeatureEnabled: () => undefined,
+                onFeatureFlags: () => () => {},
+                config: {
+                    bootstrap: { featureFlags: bootstrapFlags },
+                },
+                featureFlags: {
+                    getFlags: () => [],
+                    hasLoadedFlags: false,
+                } as unknown as PostHog['featureFlags'],
+            } as unknown as PostHog
+
+            const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+                <PostHogProvider client={client}>{children}</PostHogProvider>
+            )
+
+            return wrapper
+        }
+
+        let warnSpy: Mock
+
+        beforeEach(() => {
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {}) as unknown as Mock
+        })
+
+        afterEach(() => {
+            warnSpy.mockRestore()
+        })
+
+        it('flattens a detail object to its variant and warns', () => {
+            const wrapper = renderWithBootstrap({
+                detail_variant: { key: 'detail_variant', enabled: true, variant: 'variant-a' },
+            })
+
+            const { result } = renderHook(() => useFeatureFlagVariantKey('detail_variant'), { wrapper })
+            expect(result.current).toBe('variant-a')
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid bootstrapped value for feature flag "detail_variant"')
+            )
+        })
+
+        it('flattens a variantless detail object to its enabled value', () => {
+            const wrapper = renderWithBootstrap({
+                detail_on: { key: 'detail_on', enabled: true, variant: undefined },
+                detail_off: { key: 'detail_off', enabled: false, variant: undefined },
+            })
+
+            expect(renderHook(() => useFeatureFlagEnabled('detail_on'), { wrapper }).result.current).toBe(true)
+            expect(renderHook(() => useFeatureFlagEnabled('detail_off'), { wrapper }).result.current).toBe(false)
+            expect(renderHook(() => useActiveFeatureFlags(), { wrapper }).result.current).toEqual(['detail_on'])
+        })
+
+        it('builds a flag result from a detail object', () => {
+            const wrapper = renderWithBootstrap({
+                detail_result: { key: 'detail_result', enabled: true, variant: 'variant-a' },
+            })
+
+            const { result } = renderHook(() => useFeatureFlagResult('detail_result'), { wrapper })
+            expect(result.current).toEqual({
+                key: 'detail_result',
+                enabled: true,
+                variant: 'variant-a',
+                payload: undefined,
+            })
+        })
+
+        it('ignores a value that is neither a string, a boolean, nor a detail object', () => {
+            const wrapper = renderWithBootstrap({ numeric_flag: 1 })
+
+            const { result } = renderHook(() => useFeatureFlagVariantKey('numeric_flag'), { wrapper })
+            expect(result.current).toBeUndefined()
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid bootstrapped value for feature flag "numeric_flag"')
+            )
+        })
+    })
+
     describe('useFeatureFlagEnabled defaultValue', () => {
         // A client whose flags have loaded but where isFeatureEnabled returns undefined,
         // i.e. the flag is absent from the payload. The default beforeEach mock coerces

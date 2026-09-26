@@ -2,6 +2,7 @@ import type { FeatureFlagResult } from 'posthog-js'
 import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
 import { isUndefined } from '../utils/type-utils'
+import { normalizeBootstrappedFlagValue } from '../utils/feature-flag-utils'
 
 export function useFeatureFlagResult(flag: string): FeatureFlagResult | undefined {
     const { client, bootstrap } = useContext(PostHogContext)
@@ -15,7 +16,7 @@ export function useFeatureFlagResult(flag: string): FeatureFlagResult | undefine
     }, [client, flag])
 
     if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
-        const bootstrappedValue = bootstrap.featureFlags[flag]
+        const bootstrappedValue = normalizeBootstrappedFlagValue(flag, bootstrap.featureFlags[flag])
         if (isUndefined(bootstrappedValue)) {
             return undefined
         }

@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from 'react'
 import { PostHogContext } from '../context'
 import { isUndefined } from '../utils/type-utils'
+import { normalizeBootstrappedFlagValue } from '../utils/feature-flag-utils'
 
 /**
  * Check whether a feature flag is enabled for the current user.
@@ -33,10 +34,9 @@ export function useFeatureFlagEnabled(flag: string, defaultValue?: boolean): boo
         })
     }, [client, flag])
 
-    const bootstrapped = bootstrap?.featureFlags?.[flag]
-
     // if the client is not loaded yet, check if we have a bootstrapped value and then true/false it
     if (!client?.featureFlags?.hasLoadedFlags && bootstrap?.featureFlags) {
+        const bootstrapped = normalizeBootstrappedFlagValue(flag, bootstrap.featureFlags[flag])
         return isUndefined(bootstrapped) ? defaultValue : !!bootstrapped
     }
 

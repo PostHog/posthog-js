@@ -547,6 +547,7 @@
         "_nextFlushDelay",
         "_nextPollDelayMs",
         "_noopLogger",
+        "_normalizeBootstrappedFlagValue",
         "_notifySurveyCallbacks",
         "_numberOfChanges",
         "_observeGesturePath",
