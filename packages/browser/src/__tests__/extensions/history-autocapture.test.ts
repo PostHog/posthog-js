@@ -1,5 +1,6 @@
 import '../helpers/mock-logger'
 import { HistoryAutocapture } from '../../extensions/history-autocapture'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import type { PostHogConfig } from '../../types'
 
 // pushState and replaceState pageviews are captured in a microtask
@@ -603,6 +604,54 @@ describe('HistoryAutocapture', () => {
             await flushDeferredPageviews()
 
             expect(titles).toEqual(['New page'])
+        })
+
+        it('should capture a navigation made while a pageview is being sent', async () => {
+            restartWithLocationUpdatingHistory()
+            const pathnames: string[] = []
+            capture.mockImplementation(() => {
+                pathnames.push(mockLocation.pathname)
+                if (mockLocation.pathname === '/a') {
+                    window.history.pushState({}, '', '/nested')
+                }
+            })
+
+            window.history.pushState({}, '', '/a')
+            window.history.pushState({}, '', '/b')
+            await flushDeferredPageviews()
+
+            expect(pathnames).toEqual(['/a', '/nested', '/b'])
+        })
+
+        it('should capture history calls made during popstate before later code in that event runs', () => {
+            let capturesBeforeRouterContinued: number | undefined
+            const routerPopstateListener = (): void => {
+                window.history.replaceState({}, '', '/traversed')
+                capturesBeforeRouterContinued = capture.mock.calls.length
+            }
+            addEventListener(window, 'popstate', routerPopstateListener)
+            restartWithLocationUpdatingHistory()
+
+            window.dispatchEvent(new PopStateEvent('popstate'))
+            window.removeEventListener('popstate', routerPopstateListener)
+
+            expect(capturesBeforeRouterContinued).toBe(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
+        })
+
+        it('should not capture twice when the hash changes before a deferred pageview is sent', async () => {
+            posthog.config.capture_pageview = { path: true, hash: true }
+            restartWithLocationUpdatingHistory()
+            const urls: string[] = []
+            capture.mockImplementation(() => urls.push(mockLocation.pathname + mockLocation.hash))
+
+            window.history.pushState({}, '', '/about')
+            mockLocation.hash = '#details'
+            window.dispatchEvent(new PopStateEvent('popstate'))
+            await flushDeferredPageviews()
+            window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+            expect(urls).toEqual(['/about#details'])
         })
     })
 

@@ -405,6 +405,7 @@
         "_isExceptionList",
         "_isExcludedPointerTarget",
         "_isExtensionException",
+        "_isFlushingPageview",
         "_isIdle",
         "_isInitializing",
         "_isInitializingSurveys",
