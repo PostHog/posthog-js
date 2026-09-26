@@ -11,6 +11,11 @@ adapter_image=${1:?adapter image required}
 harness_image=${2:?harness image required}
 mode=${3:?v0 or v1 required}
 reports=${4:?new absolute report directory required}
+suite=${5:-migration}
+case "$suite" in
+    migration|acceptance) ;;
+    *) echo 'Unknown compliance suite' >&2; exit 2 ;;
+esac
 case "$mode" in
     v0) profile=node-legacy ;;
     v1) profile=node-analytics-v1 ;;
@@ -69,7 +74,7 @@ done
 "$ready" || { echo 'Adapter startup failed' >&2; exit 1; }
 docker create --name "$harness" --network "$network" --network-alias harness \
     --mount "type=bind,src=$reports,dst=/reports" --entrypoint posthog-test-harness-v2 "$harness_image" \
-    run --migration-suite --adapter-url http://adapter:8080 --allow-private-network \
+    run "--${suite}-suite" --adapter-url http://adapter:8080 --allow-private-network \
     --mock-bind-host 0.0.0.0 --mock-advertised-host harness --profile "$profile" \
     --timeout-ms 60000 --report /reports/report.json > "$reports/harness.txt"
 harness_created=true
