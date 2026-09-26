@@ -2576,6 +2576,27 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds()).toEqual(new Set())
                 })
 
+                it('a held epoch that overflows its buffer still ships zero recordings without interaction', () => {
+                    // a background tab whose DOM mutates past the size cap must not start
+                    // shipping: the cap stops collection, and the retained data only ships
+                    // on a release, which an interaction or override must still trigger
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']
+                    sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }) as eventWithTime)
+                    lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                    sessionRecording.onRRwebEmit(
+                        createIncrementalSnapshot({
+                            timestamp: Date.now(),
+                            data: { source: 0 } as any,
+                        }) as eventWithTime
+                    )
+                    expect(lazy['_heldBufferOverflowed']).toEqual(true)
+
+                    const rotations = runExternalRotations(startingTimestamp, 1)
+
+                    expect(rotations).toBeGreaterThan(20)
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
                 // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
                 // rotation land in the new session's empty buffer, and shipping them opens a
                 // recording that bills the customer and plays back as nothing.
@@ -2927,29 +2948,95 @@ describe('Lazy SessionRecording', () => {
                 }
             )
 
-            it('drops a held buffer at the size cap and recovers with a fresh full snapshot on release', () => {
+            it('stops collecting a held buffer at the size cap but keeps its data for the release', () => {
                 vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
 
-                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                const firstEvent = createFullSnapshot({ timestamp: startingTimestamp + 100 })
+                sessionRecording.onRRwebEmit(firstEvent as eventWithTime)
 
                 // fake having a large buffer, as the idle === true counterpart test does
                 sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
 
                 // a tab nobody touched must not ship a billable recording, and its held
-                // buffer must not grow unbounded — the data is dropped instead
+                // buffer must not grow unbounded — collecting stops but the held data
+                // survives, so a release ships the epoch from its start
                 expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(firstEvent)
 
-                // an unload after the overflow has nothing useful to ship
-                sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
-                expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                // post-cap events are not collected
+                const bufferLengthAfterCap = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toEqual(
+                    bufferLengthAfterCap
+                )
 
-                // an interaction release takes a fresh full snapshot so the recording resumes playable
+                // an interaction release ships the retained data and takes a fresh full
+                // snapshot to bridge the gap between cap and release
                 const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
                 takeFullSnapshot.mockClear()
                 emitActiveEvent(startingTimestamp + 200)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({
+                        $snapshot_data: expect.arrayContaining([firstEvent as any]),
+                    }),
+                    expect.any(Object)
+                )
+            })
+
+            it('ships an overflowed fresh-start hold on clean unload like any other fresh-start hold', () => {
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+
+                const firstEvent = createFullSnapshot({ timestamp: startingTimestamp + 100 })
+                sessionRecording.onRRwebEmit(firstEvent as eventWithTime)
+                sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                ;(posthog.capture as Mock).mockClear()
+
+                // nothing shipped while held
+                expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({
+                        $snapshot_data: expect.arrayContaining([firstEvent as any]),
+                    }),
+                    expect.any(Object)
+                )
+            })
+
+            it('an overflowed fresh-start hold released by a cancelled unload still heals on the next interaction', () => {
+                // beforeunload fires, the release runs, then the navigation is cancelled and
+                // the page keeps running: the overflow gap needs a recovery full snapshot
+                // on the next interaction, or post-cap incrementals apply to stale DOM
+                vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                const lazy = sessionRecording['_lazyLoadedSessionRecording']
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                sessionRecording.onRRwebEmit(
+                    createFullSnapshot({ timestamp: startingTimestamp + 100 }) as eventWithTime
+                )
+                lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                expect(lazy['_heldBufferOverflowed']).toEqual(true)
+
+                // unload releases the hold and heals the cap gap immediately, so a
+                // cancelled navigation resumes a playable recording without waiting
+                // for the next interaction
+                takeFullSnapshot.mockClear()
+                lazy['_onBeforeUnload']()
+                expect(lazy['_heldBufferOverflowed']).toEqual(false)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                // the next interaction takes no second snapshot
+                emitActiveEvent(startingTimestamp + 500)
                 expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
