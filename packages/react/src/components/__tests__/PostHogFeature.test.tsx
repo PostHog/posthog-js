@@ -284,6 +284,38 @@ describe('PostHogFeature component', () => {
         expect(posthog.capture).not.toHaveBeenCalled()
     })
 
+    it('should render fallback when the flag evaluates to false and no match is specified', () => {
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test_false'} fallback={<div data-testid="oldButton">Old Button</div>}>
+                    <div data-testid="newButton">New Button</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        expect(screen.queryByTestId('newButton')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('oldButton')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByTestId('oldButton'))
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
+    it('should render content for any enabled value when no match is specified', () => {
+        render(
+            <PostHogProvider client={posthog}>
+                <PostHogFeature flag={'test'}>
+                    <div data-testid="booleanFlag">Boolean flag</div>
+                </PostHogFeature>
+                <PostHogFeature flag={'multivariate_feature'}>
+                    <div data-testid="multivariateFlag">Multivariate flag</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        expect(screen.queryByTestId('booleanFlag')).toBeInTheDocument()
+        expect(screen.queryByTestId('multivariateFlag')).toBeInTheDocument()
+    })
+
     it('should render content when match=false and flag variant is false', () => {
         render(
             <PostHogProvider client={posthog}>
