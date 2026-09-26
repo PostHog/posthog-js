@@ -35,8 +35,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     let resetSubscription: Disposable | undefined
     const getFlagsContext = () => client?.getExtension<FlagsExtension>('featureFlags')?.getSurveyContext?.()
     const reset = () => {
-        manager?.clearInMemoryInProgressSurveyState?.()
-        shared._surveyEventReceiver?.reset()
+        shared.reset()
     }
     const loadRenderer = () => (loading ??= load().then((value) => (renderer = value)))
     const source: SurveysConfigSource = {
