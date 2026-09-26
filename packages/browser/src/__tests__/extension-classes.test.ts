@@ -9,6 +9,7 @@ import {
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { FeatureFlagsExtension } from '../extension-tokens'
+import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -374,6 +375,10 @@ describe('__extensionClasses enrollment', () => {
 
             expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
             expect(posthog.getExtension(FeatureFlagsExtension)).toBe(posthog.featureFlags)
+            expect(posthog.getExtension(FeatureFlagsCommonExtension)).toBe(posthog.featureFlags)
+            expect(posthog._getBrowserClientAdapter().getExtension(FeatureFlagsCommonExtension)).toBe(
+                posthog.featureFlags
+            )
             expect(beforeInitCallback).toHaveBeenCalledTimes(1)
             expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
 
