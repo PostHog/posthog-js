@@ -11,7 +11,7 @@
     "directory": "packages/node"
   },
   "scripts": {
-    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json",
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json && tsc --noEmit --project tsconfig.test-types.json",
     "clean": "rimraf dist coverage",
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
@@ -20,7 +20,7 @@
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
