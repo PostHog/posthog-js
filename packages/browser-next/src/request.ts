@@ -1,4 +1,4 @@
-import type { ApiResponse, RequestTarget, SendRequestInit } from '@posthog/browser-common'
+import type { ApiResponse, SendRequestInit } from '@posthog/browser-common'
 
 import type { BrowserFetch, BrowserNavigator } from './types'
 
@@ -27,7 +27,7 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
 }
 
 export type RequestRuntime = [
-    hosts: Record<RequestTarget, string>,
+    hosts: { api: string; flags: string; assets: string },
     projectToken: string,
     fetch: BrowserFetch | undefined,
     navigator: BrowserNavigator | undefined,
@@ -37,7 +37,8 @@ export const sendRequest = async (
     runtime: RequestRuntime,
     path: string,
     init: SendRequestInit = {},
-    canSend: () => boolean = () => true
+    canSend: () => boolean = () => true,
+    signal?: AbortSignal
 ): Promise<ApiResponse> => {
     let url: URL
     let body: string | undefined
@@ -45,12 +46,12 @@ export const sendRequest = async (
     let headers: Record<string, string>
 
     try {
-        if (!path.startsWith('/') || path.startsWith('//')) {
+        if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) {
             return createFailedResponse(new Error('Request paths must be relative to a configured PostHog host'))
         }
 
         const baseUrl = new URL(`${runtime[0][init.target ?? 'api']}/`)
-        url = new URL(path, baseUrl)
+        url = new URL(`.${path}`, baseUrl)
         if (url.origin !== baseUrl.origin) {
             return createFailedResponse(new Error('Request path resolved outside the configured PostHog host'))
         }
@@ -98,6 +99,15 @@ export const sendRequest = async (
     }
 
     const controller = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+    const abort = () => controller?.abort(signal?.reason)
+    if (controller && signal) {
+        if (signal.aborted) {
+            abort()
+        } else {
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
+            signal.addEventListener('abort', abort, { once: true })
+        }
+    }
     const timeout =
         controller && init.timeoutMs ? globalThis.setTimeout(() => controller.abort(), init.timeoutMs) : undefined
 
@@ -110,8 +120,9 @@ export const sendRequest = async (
         if (init.transport === 'sendBeacon') {
             requestInit.keepalive = true
         }
-        if (controller) {
-            requestInit.signal = controller.signal
+        const requestSignal = controller?.signal ?? signal
+        if (requestSignal) {
+            requestInit.signal = requestSignal
         }
         if (!canSend()) {
             return createFailedResponse(new Error('PostHog requests are disabled'))
@@ -121,6 +132,9 @@ export const sendRequest = async (
     } catch (error) {
         return createFailedResponse(error)
     } finally {
+        if (controller && signal) {
+            signal.removeEventListener('abort', abort)
+        }
         if (timeout !== undefined) {
             globalThis.clearTimeout(timeout)
         }
