@@ -16,6 +16,14 @@ export const ConsentStatus = {
 export type ConsentStatus = (typeof ConsentStatus)[keyof typeof ConsentStatus]
 
 /**
+ * True while the SDK waits for a consent decision that has not been made yet. A capture made now is
+ * dropped, but the user may still opt in, so the event is worth holding rather than discarding.
+ */
+export function isAwaitingConsent(instance: PostHog): boolean {
+    return instance.consent.consent === ConsentStatus.PENDING && !instance.is_capturing()
+}
+
+/**
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
 export class ConsentManager {

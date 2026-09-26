@@ -1,4 +1,4 @@
-import { test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
+import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start, gotoPage } from './utils/setup'
 
 test.describe('opting out', () => {
@@ -55,6 +55,46 @@ test.describe('opting out', () => {
             })
 
             await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        })
+
+        test('sends the navigations made while the consent banner was open', async ({ page, context }) => {
+            await start(
+                {
+                    flagsResponseOverrides: {
+                        autocapture_opt_out: true,
+                    },
+                    options: {
+                        opt_out_capturing_by_default: true,
+                        capture_pageview: 'history_change',
+                    },
+                    url: '/playground/cypress/index.html',
+                },
+                page,
+                context
+            )
+
+            await page.expectCapturedEventsToBe([])
+
+            await page.evaluate(() => {
+                window.history.pushState({}, '', '/playground/cypress/first')
+                window.history.pushState({}, '', '/playground/cypress/second')
+            })
+
+            await page.expectCapturedEventsToBe([])
+
+            await page.evaluate(() => {
+                ;(window as WindowWithPostHog).posthog?.opt_in_capturing()
+            })
+
+            await page.expectCapturedEventsToBe(['$opt_in', '$pageview', '$pageview', '$pageview'])
+
+            const capturedEvents = await page.capturedEvents()
+            const pageviews = capturedEvents.filter((event) => event.event === '$pageview')
+            expect(pageviews.map((event) => event.properties.$pathname)).toEqual([
+                '/playground/cypress/index.html',
+                '/playground/cypress/first',
+                '/playground/cypress/second',
+            ])
         })
 
         test('does not send a duplicate $pageview event when opting in', async ({ page, context }) => {

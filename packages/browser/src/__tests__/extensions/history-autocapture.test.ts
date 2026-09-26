@@ -45,6 +45,8 @@ describe('HistoryAutocapture', () => {
 
         posthog = {
             capture,
+            consent: { consent: -1 },
+            is_capturing: () => true,
             config: {
                 capture_pageview: 'history_change',
             },
@@ -558,6 +560,99 @@ describe('HistoryAutocapture', () => {
 
             addEventListenerSpy.mockRestore()
             removeEventListenerSpy.mockRestore()
+        })
+    })
+
+    describe('Pending consent', () => {
+        const navigateTo = (pathname: string): void => {
+            mockLocation.pathname = pathname
+            mockLocation.href = `http://localhost${pathname}`
+            window.history.pushState({}, '', pathname)
+        }
+
+        beforeEach(() => {
+            posthog.is_capturing = () => false
+        })
+
+        it('holds navigations instead of dropping them, then sends them on opt in', () => {
+            navigateTo('/page-1')
+            navigateTo('/page-2')
+
+            expect(capture).not.toHaveBeenCalled()
+
+            posthog.is_capturing = () => true
+            historyAutocapture.flushPendingPageviews()
+
+            expect(capture).toHaveBeenCalledTimes(2)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageview',
+                {
+                    navigation_type: 'pushState',
+                    $current_url: 'http://localhost/page-1',
+                    $pathname: '/page-1',
+                },
+                { timestamp: expect.any(Date) }
+            )
+            expect(capture).toHaveBeenNthCalledWith(
+                2,
+                '$pageview',
+                expect.objectContaining({ $current_url: 'http://localhost/page-2', $pathname: '/page-2' }),
+                { timestamp: expect.any(Date) }
+            )
+        })
+
+        it('keeps the time each navigation happened', async () => {
+            const before = new Date()
+            navigateTo('/page-1')
+            await new Promise((r) => setTimeout(r, 5))
+            const after = new Date()
+
+            historyAutocapture.flushPendingPageviews()
+
+            const { timestamp } = capture.mock.calls[0][2]
+            expect(timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime())
+            expect(timestamp.getTime()).toBeLessThan(after.getTime())
+        })
+
+        it('masks the held URL the same way a captured one is masked', () => {
+            posthog.config.mask_personal_data_properties = true
+            mockLocation.pathname = '/page-1'
+            mockLocation.href = 'http://localhost/page-1?gclid=secret'
+            window.history.pushState({}, '', '/page-1?gclid=secret')
+
+            historyAutocapture.flushPendingPageviews()
+
+            expect(capture).toHaveBeenCalledWith(
+                '$pageview',
+                expect.objectContaining({ $current_url: 'http://localhost/page-1?gclid=<masked>' }),
+                expect.anything()
+            )
+        })
+
+        it('drops the held navigations when the user rejects consent', () => {
+            navigateTo('/page-1')
+
+            historyAutocapture.discardPendingPageviews()
+            historyAutocapture.flushPendingPageviews()
+
+            expect(capture).not.toHaveBeenCalled()
+        })
+
+        it('keeps only the most recent navigations when consent never arrives', () => {
+            for (let i = 0; i < 60; i++) {
+                navigateTo(`/page-${i}`)
+            }
+
+            historyAutocapture.flushPendingPageviews()
+
+            expect(capture).toHaveBeenCalledTimes(50)
+            expect(capture).toHaveBeenNthCalledWith(
+                1,
+                '$pageview',
+                expect.objectContaining({ $pathname: '/page-10' }),
+                expect.anything()
+            )
         })
     })
 })

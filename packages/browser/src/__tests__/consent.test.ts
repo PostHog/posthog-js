@@ -196,6 +196,44 @@ describe('consentManager', () => {
         })
     })
 
+    describe('pageviews held while consent is pending', () => {
+        const pageviewsSentTo = (beforeSendMock: any) =>
+            beforeSendMock.mock.calls.map((call: any[]) => call[0]).filter((event: any) => event.event === '$pageview')
+
+        it('sends the deferred initial $pageview with the time the page loaded', async () => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            const posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+
+            // Wait for the deferred initial $pageview, which capturing being off would otherwise drop
+            await new Promise((r) => setTimeout(r, 10))
+            expect(beforeSendMock).toHaveBeenCalledTimes(0)
+
+            const beforeConsent = Date.now()
+            await new Promise((r) => setTimeout(r, 20))
+            posthog.opt_in_capturing()
+
+            const pageviews = pageviewsSentTo(beforeSendMock)
+            expect(pageviews).toHaveLength(1)
+            expect(pageviews[0].properties.$event_time_override_provided).toBe(true)
+            expect(pageviews[0].timestamp.getTime()).toBeLessThanOrEqual(beforeConsent)
+        })
+
+        it('does not send a held $pageview once the user rejects consent', async () => {
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
+            const posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+            await new Promise((r) => setTimeout(r, 10))
+
+            posthog.opt_out_capturing()
+            expect(pageviewsSentTo(beforeSendMock)).toHaveLength(0)
+
+            // A later opt in still owes a $pageview, but a fresh one rather than the held one
+            posthog.opt_in_capturing()
+            const pageviews = pageviewsSentTo(beforeSendMock)
+            expect(pageviews).toHaveLength(1)
+            expect(pageviews[0].properties.$event_time_override_provided).toBeUndefined()
+        })
+    })
+
     describe('reset() and consent', () => {
         it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)
