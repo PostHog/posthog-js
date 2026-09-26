@@ -1102,6 +1102,11 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optIn()
     void this._eventsStorage.waitForPersist()
+    // Replay was stopped at opt-out; start it again under a new session. Before initialization
+    // there is nothing to restart, because startup evaluates replay against the saved consent.
+    if (this._isInitialized) {
+      void result.then(() => this._evaluateAndStartSessionReplay(undefined, true)).catch(() => {})
+    }
     // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
     // work on the next flush), so the token unregistered by optOut() comes back without a restart.
     this._propagateNativeOptOut()
@@ -1127,6 +1132,10 @@ export class PostHog extends PostHogCore {
     this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
     const coreOptOut = super.optOut()
+    // Stop recording as soon as consent is withdrawn, not just drop what it captures afterwards.
+    if (this._isInitialized) {
+      void coreOptOut.then(() => this._evaluateAndStartSessionReplay()).catch(() => {})
+    }
     const persistOptOut = (): Promise<void> => {
       this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
       return this._eventsStorage.waitForPersist()
@@ -3043,15 +3052,21 @@ export class PostHog extends PostHogCore {
    *
    * Evaluations are serialized so concurrent flags reloads run one at a time.
    */
-  private _evaluateAndStartSessionReplay(cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>): Promise<void> {
+  private _evaluateAndStartSessionReplay(
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
+    freshSession: boolean = false
+  ): Promise<void> {
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
-      .then(() => this._evaluateAndStartSessionReplayInternal(cachedRemoteConfig))
+      .then(() => this._evaluateAndStartSessionReplayInternal(cachedRemoteConfig, freshSession))
     return this._sessionReplayEvalChain
   }
 
   private async _evaluateAndStartSessionReplayInternal(
-    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
+    cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
+    // Set when recording restarts after the user opted back in: replay starts a new session
+    // instead of resuming the one that was stopped at opt-out.
+    freshSession: boolean = false
   ): Promise<void> {
     const options = this._sessionReplayOptions
     const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
@@ -3067,6 +3082,14 @@ export class PostHog extends PostHogCore {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
+      // Replay can turn off while a recording is running (the user opted out). Opt-out also has to
+      // end a recording the app started by hand, which _sessionReplayRecordingActive doesn't track.
+      const wasFlagDriven = this._sessionReplayRecordingActive === true
+      if (wasFlagDriven || (this.optedOut && this._sessionReplayNativeInitialized)) {
+        const stopped = await this._stopSessionRecording()
+        // Keep the flag set if the native stop failed, so the next evaluation retries.
+        this._sessionReplayRecordingActive = wasFlagDriven && !stopped
+      }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
@@ -3136,6 +3159,21 @@ export class PostHog extends PostHogCore {
       this._logger.info(`Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`)
     }
 
+    // Consent overrides every other gate (linked flag, event triggers). It gates recording, not native
+    // setup: native still comes up armed (it carries the push identity provider and its own opt-out
+    // flag), so replay can start on optIn() without a restart, but nothing records until then.
+    if (this.optedOut) {
+      const nativeWasInitialized = this._sessionReplayNativeInitialized
+      if (!nativeWasInitialized) {
+        await this.initializeNativePlugin(options, remoteConfig, true)
+      }
+      if (this._sessionReplayNativeInitialized && (!nativeWasInitialized || this._sessionReplayRecordingActive === true)) {
+        await this._stopSessionRecording()
+      }
+      this._sessionReplayRecordingActive = false
+      return
+    }
+
     if (recordingActive) {
       if (this._sessionReplayRecordingActive === true) {
         // Already recording — nothing to do.
@@ -3144,7 +3182,7 @@ export class PostHog extends PostHogCore {
       // Record the actual outcome; on failure it stays false so the next reload retries.
       // (Already initialized means replay was paused by an earlier flag-off, so resume it.)
       this._sessionReplayRecordingActive = this._sessionReplayNativeInitialized
-        ? await this._startSessionRecording(true)
+        ? await this._startSessionRecording(!freshSession)
         : await this.initializeNativePlugin(options, remoteConfig, true)
     } else {
       this._logger.info('Session replay disabled.')
