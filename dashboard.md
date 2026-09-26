@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2141](https://github.com/PostHog/posthog-js/issues/2141) | Valid Node SDK feature gap, although the existing person-property APIs can already support the enrollment portion of the invitation-email workflow. | enhancement, feature, feature/flags, team/feature-flags, node |  | no | 2026-09-26T08:35:46.397Z |
 | PostHog/posthog-js | [issue 5114](https://github.com/PostHog/posthog-js/issues/5114) | Confirmed replay-player regression introduced by the large-add detached-subtree optimization. | feature/replay, javascript, bug |  | no | 2026-09-25T17:44:18.044Z |
 | PostHog/posthog-js | [issue 5109](https://github.com/PostHog/posthog-js/issues/5109) | Confirmed browser SDK bug: history-based SPA pageviews are captured before frameworks such as Next.js update document.title. | javascript, web, team/client-libraries, bug |  | no | 2026-09-25T10:38:55.880Z |
 | PostHog/posthog-js | [issue 5106](https://github.com/PostHog/posthog-js/issues/5106) | Confirmed React Native survey-response regression: shuffled multiple-choice options are submitted using their displayed index against the original choice order. | react-native, feature/mobile, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5107 | no | 2026-09-25T09:46:41.505Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2036](https://github.com/PostHog/posthog-js/issues/2036) | Valid selector-trigger survey lifecycle bug; keep open. | feature/surveys |  | no | 2026-06-24T12:28:14.000Z |
 | PostHog/posthog-js | [issue 2292](https://github.com/PostHog/posthog-js/issues/2292) | Plausible web replay textarea masking bug, but not yet reproducible enough for a safe code change. | bug, feature/replay, web |  | no | 2026-06-24T12:06:10.186Z |
 | PostHog/posthog-js | [issue 2241](https://github.com/PostHog/posthog-js/issues/2241) | Valid enhancement request for quieter @posthog/nextjs-config sourcemap upload output, but likely needs CLI/logging behavior design rather than a tiny config-only tweak. | enhancement, frameworks/next-js, feature/error-tracking, team/error-tracking |  | no | 2026-06-24T11:57:54.317Z |
-| PostHog/posthog-js | [issue 2512](https://github.com/PostHog/posthog-js/issues/2512) | Valid replay enhancement; existing stale-cache handling is related but I did not find a per-session remote-config fetch option. | enhancement, feature/replay |  | no | 2026-06-24T11:55:57.399Z |
