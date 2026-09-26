@@ -744,24 +744,59 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
-        // buttons, inputs, selects, textareas, labels, forms all rely on app JS handlers
+        // a native picker's list is drawn by the browser or the OS, so opening one changes
+        // nothing our observers can see and every tap on it would otherwise report dead
+        it.each([
+            { label: 'select', tag: 'select' },
+            { label: 'input[type=file]', tag: 'input', type: 'file' },
+            { label: 'input[type=color]', tag: 'input', type: 'color' },
+            { label: 'input[type=date]', tag: 'input', type: 'date' },
+            { label: 'input[type=datetime-local]', tag: 'input', type: 'datetime-local' },
+            { label: 'input[type=month]', tag: 'input', type: 'month' },
+            { label: 'input[type=week]', tag: 'input', type: 'week' },
+            { label: 'input[type=time]', tag: 'input', type: 'time' },
+        ])('click on a native $label picker is never a deadclick', ({ tag, type }) => {
+            const el = document.createElement(tag)
+            if (type) {
+                el.setAttribute('type', type)
+            }
+            document.body.append(el)
+
+            triggerMouseEvent(el, 'click')
+            vi.setSystemTime(4000)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('click on an option inside a select is never a deadclick', () => {
+            const select = document.createElement('select')
+            const option = document.createElement('option')
+            select.appendChild(option)
+            document.body.append(select)
+
+            triggerMouseEvent(option, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        // buttons, text inputs, textareas, labels, forms all rely on app JS handlers
         // (or browser-native side effects we can observe via mutation/scroll/selection).
         // If the handler ran, our observers catch the effect; if it didn't, dead-click
         // correctly surfaces the bug. A click on a broken <button> with no handler
         // should still flag — that's exactly the case we want to catch.
-        it.each(['button', 'input', 'select', 'textarea', 'label', 'form'])(
-            'click on a %s is still a candidate',
-            (tag) => {
-                const el = document.createElement(tag)
-                document.body.append(el)
+        it.each(['button', 'input', 'textarea', 'label', 'form'])('click on a %s is still a candidate', (tag) => {
+            const el = document.createElement(tag)
+            document.body.append(el)
 
-                triggerMouseEvent(el, 'click')
+            triggerMouseEvent(el, 'click')
 
-                expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
-            }
-        )
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+        })
 
-        it.each(['button', 'input', 'select', 'textarea', 'label', 'form'])(
+        it.each(['button', 'input', 'textarea', 'label', 'form'])(
             'click on a child of a %s is still a candidate',
             (ancestorTag) => {
                 const ancestor = document.createElement(ancestorTag)
