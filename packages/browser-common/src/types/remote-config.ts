@@ -125,6 +125,8 @@ export interface ConversationsRemoteConfig {
     domains?: string[]
     /** Position of the widget on the screen. */
     widgetPosition?: WidgetPosition
+    /** Whether users may ask for an email link that recovers their tickets in another browser. */
+    restoreEnabled?: boolean
 }
 
 /**

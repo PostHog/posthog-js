@@ -238,6 +238,49 @@ describe('ConversationsWidget', () => {
         expect(queryByText('Recover them here')).not.toBeInTheDocument()
     })
 
+    const hiddenRestoreCases: [string, boolean, ConversationsRemoteConfig][] = [
+        ['identity mode is on', true, config],
+        ['ticket recovery is disabled', false, { ...config, restoreEnabled: false }],
+    ]
+
+    it.each(hiddenRestoreCases)(
+        'should hide both recover entry points when %s',
+        (_case, isIdentityMode, widgetConfig) => {
+            const { queryByText } = render(
+                <ConversationsWidget
+                    config={widgetConfig}
+                    initialState="open"
+                    initialView="tickets"
+                    initialTickets={[]}
+                    showTicketList={true}
+                    isIdentityMode={isIdentityMode}
+                    onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                    onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
+                />
+            )
+
+            expect(queryByText('Recover them here')).not.toBeInTheDocument()
+            expect(queryByText('Fetch previous conversations')).not.toBeInTheDocument()
+        }
+    )
+
+    it('should show both recover entry points on an empty ticket list by default', () => {
+        const { getByText } = render(
+            <ConversationsWidget
+                config={config}
+                initialState="open"
+                initialView="tickets"
+                initialTickets={[]}
+                showTicketList={true}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
+            />
+        )
+
+        expect(getByText('Recover them here')).toBeInTheDocument()
+        expect(getByText('Fetch previous conversations')).toBeInTheDocument()
+    })
+
     it('should render handled send failures without logging them again', async () => {
         const error = createConversationsError(
             'network',

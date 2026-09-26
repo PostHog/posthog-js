@@ -213,6 +213,10 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         }
     }
 
+    private _restoreAvailable(): boolean {
+        return !this.state.isIdentityMode && this.props.config.restoreEnabled !== false
+    }
+
     private _handleOpenRestoreRequest = () => {
         this.setState((prevState) => ({
             view: 'restore_request',
@@ -577,6 +581,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 onSelectTicket={this._handleSelectTicket}
                 onNewConversation={this._handleNewConversation}
                 onOpenRestoreRequest={this._handleOpenRestoreRequest}
+                showRestore={this._restoreAvailable()}
             />
         )
     }
@@ -683,7 +688,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         const showBackButton = (view === 'messages' && this.state.showTicketList) || view === 'restore_request'
 
         // Show recover footer only in tickets and messages views, and not in identity mode
-        const showRecoverFooter = !this.state.isIdentityMode && (view === 'tickets' || view === 'messages')
+        const showRecoverFooter = this._restoreAvailable() && (view === 'tickets' || view === 'messages')
 
         return (
             <div style={styles.widget}>
