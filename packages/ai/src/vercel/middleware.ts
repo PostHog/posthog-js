@@ -596,7 +596,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           await captureAiGeneration(phClient, {
             ...baseOptions,
             model: modelId,
-            provider: model.provider,
+            provider: extractProvider(model),
             input: mergedOptions.posthogPrivacyMode
               ? ''
               : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
