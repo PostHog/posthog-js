@@ -14,11 +14,6 @@ const logger = createLogger('[Error tracking]')
 // exception came from an extension (see _isExtensionException).
 const MASKED_URL_PREFIX = 'webkit-masked-url:'
 
-const MASKED_EXTENSION_EXCEPTION_VALUE = [
-    { value: 'isolatedAPI.contexts.topHostname', exact: false },
-    { value: 'No response from target', exact: true },
-]
-
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
@@ -307,26 +302,16 @@ export class PostHogExceptions implements Extension {
             return false
         }
 
-        // Safari also masks blob, eval'd, and injected application code, so a masked URL alone does
-        // not prove the exception came from an extension. For an all-masked stack, require a known
-        // extension-only signature and no remaining page frame. Ignore masked frames when checking
-        // for page code because the Sentry integration may forward them with `in_app: true`.
+        // A masked URL alone does not prove the exception came from an extension, so an all-masked
+        // stack needs a second signal: no frame that the app itself loaded. The parser resolves the
+        // page's own blob and eval'd code to the site URL, which keeps it `in_app`. Ignore masked
+        // frames when checking for page code because the Sentry integration may forward them with
+        // `in_app: true`.
         const onlyMaskedExtensionFrames = extensionFrames.every(
             ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
         )
         if (onlyMaskedExtensionFrames) {
-            const hasKnownExtensionSignature = exceptionList.some(
-                ({ type, value }) =>
-                    type === 'NoResponse' ||
-                    (isString(value) &&
-                        MASKED_EXTENSION_EXCEPTION_VALUE.some(({ value: signature, exact }) =>
-                            exact ? value === signature : value.includes(signature)
-                        ))
-            )
-            return (
-                hasKnownExtensionSignature &&
-                !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
-            )
+            return !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
         }
 
         return true

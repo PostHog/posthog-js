@@ -62,6 +62,40 @@ describe('ErrorEventCoercer', () => {
     })
   })
 
+  it('falls back to the reported location when the Error carries no stack', () => {
+    const error = new TypeError("undefined is not an object (evaluating 'message.response')")
+    error.stack = ''
+
+    expect(
+      buildException(
+        new FakeErrorEvent({
+          error,
+          message: error.message,
+          filename: 'webkit-masked-url://hidden/',
+          lineno: 27,
+          colno: 33,
+        })
+      )
+    ).toMatchObject({
+      type: 'TypeError',
+      mechanism: { synthetic: false },
+      stacktrace: {
+        frames: [expect.objectContaining({ filename: 'webkit-masked-url://hidden/', lineno: 27, colno: 33 })],
+      },
+    })
+  })
+
+  it('prefers the stack of the Error over the reported location', () => {
+    const error = new Error('boom')
+    error.stack = 'appCode@https://example.com/app.js:1:2'
+
+    const exception = buildException(
+      new FakeErrorEvent({ error, message: 'boom', filename: 'webkit-masked-url://hidden/', lineno: 27, colno: 33 })
+    )
+
+    expect(exception.stacktrace?.frames).toEqual([expect.objectContaining({ filename: 'https://example.com/app.js' })])
+  })
+
   it('preserves the message and location when there is no Error object', () => {
     const exception = buildException(
       new FakeErrorEvent({
