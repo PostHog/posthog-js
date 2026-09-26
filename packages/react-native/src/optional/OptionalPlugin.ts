@@ -26,6 +26,7 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   setPushIdentityProvider?: (provider: PostHogPushIdentityProvider) => void
   reset?: (distinctId: string, anonymousId: string) => Promise<void>
   captureFatalException?: (distinctId: string, timestamp: string, properties: { [key: string]: any }) => Promise<void>
+  getSessionReplayDebugProperties?: () => Promise<{ [key: string]: any }>
 }
 
 export type OptionalPluginLoaders = {
