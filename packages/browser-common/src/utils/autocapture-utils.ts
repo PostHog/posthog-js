@@ -75,12 +75,24 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * @returns {string} the element's direct text content
  */
 export function getSafeText(el: Element): string {
+    return joinSafeTextNodes(el, '')
+}
+
+/*
+ * Get the direct text content of an element, joining its text nodes with the given separator.
+ * `getSafeText` joins them with nothing, which is what `$el_text` expects; pass a separator
+ * only when the words of a label must stay apart.
+ * @param {Element} el - element to get the text of
+ * @param {string} separator - placed after each text node
+ * @returns {string} the element's direct text content
+ */
+function joinSafeTextNodes(el: Element, separator: string): string {
     let elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += makeSafeText(child.textContent) ?? ''
+                elText += `${makeSafeText(child.textContent) ?? ''}${separator}`
             }
         })
     }
@@ -171,23 +183,63 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 export const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
-const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+// pagers and carousel controls are built to be clicked repeatedly, in words or in arrow glyphs
+const DEFAULT_CONTENT_IGNORELIST = [
+    'next',
+    'previous',
+    'prev',
+    '>',
+    '<',
+    '→',
+    '←',
+    '›',
+    '‹',
+    '»',
+    '«',
+    '▶',
+    '◀',
+    '❯',
+    '❮',
+]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
-const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+// the cap guards against over-long user lists. it clears our own longest default list with room
+// to spare, so copying the defaults and adding a few keywords of your own still works
+const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
 
 interface ElementWithText {
     safeText: string
     ariaLabel: string
 }
 
+const INTERACTIVE_TAGS = ['button', 'a', 'input', 'select', 'textarea', 'label']
+const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
+
+const isWordKeyword = (keyword: string): boolean => /[a-z0-9]/i.test(keyword)
+
+// our own word keywords match whole words, so "prev" doesn't suppress "preview". no prototype, so a
+// user keyword such as "constructor" can't resolve to an inherited member
+const DEFAULT_WORD_KEYWORD_REGEXES: Record<string, RegExp> = Object.create(null)
+each(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, (keyword) => {
+    if (isWordKeyword(keyword)) {
+        DEFAULT_WORD_KEYWORD_REGEXES[keyword] = new RegExp(`\\b${keyword}\\b`)
+    }
+})
+
 // symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
-const matchesContentKeyword = (text: string, keyword: string): boolean =>
-    /[a-z0-9]/i.test(keyword) ? text.includes(keyword) : text === keyword
+// a shipped word keyword matches whole words wherever it appears, including inside a list the user
+// built themselves; any other word keyword the user adds keeps matching as a substring
+const matchesContentKeyword = (text: string, keyword: string): boolean => {
+    if (!isWordKeyword(keyword)) {
+        return text === keyword
+    }
+    const wholeWordRegex = DEFAULT_WORD_KEYWORD_REGEXES[keyword]
+    return wholeWordRegex ? wholeWordRegex.test(text) : text.includes(keyword)
+}
 
 function shouldIgnoreByContent(
     contentIgnorelist: boolean | string[] | undefined,
-    elementsWithText: ElementWithText[]
+    { safeText, ariaLabel }: ElementWithText
 ): boolean {
     if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
         return false
@@ -208,11 +260,96 @@ function shouldIgnoreByContent(
         return false
     }
 
-    return elementsWithText.some(({ safeText, ariaLabel }) => {
-        return keywords.some(
-            (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
-        )
+    return keywords.some(
+        (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
+    )
+}
+
+const isInteractiveElement = (el: Element): boolean =>
+    INTERACTIVE_TAGS.some((tag) => isTag(el, tag)) ||
+    includes(INTERACTIVE_ROLES, (el.getAttribute('role') || '').toLowerCase())
+
+// keywords describe the control that was clicked, so we read the label of the nearest interactive
+// ancestor: a region labelled "Featured carousel" must not suppress the "Buy now" button inside it,
+// and a label held in a child span must still be read when the click lands on the button itself
+function clickedControlText(el: Element, targetElementList: Element[]): ElementWithText {
+    let control = el
+    let foundTagOrRoleControl = false
+    for (const candidate of targetElementList) {
+        if (isInteractiveElement(candidate)) {
+            control = candidate
+            foundTagOrRoleControl = true
+            break
+        }
+    }
+
+    // a non-semantic control is often a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses. cursor
+    // inherits, so we walk the contiguous pointer run from the click target up and stop at its first labelled element.
+    if (!foundTagOrRoleControl && window) {
+        for (const candidate of targetElementList) {
+            let cursor: string
+            try {
+                cursor = window.getComputedStyle(candidate).getPropertyValue('cursor')
+            } catch {
+                break
+            }
+            if (cursor !== 'pointer') {
+                break
+            }
+            const isLabelled =
+                !!candidate.getAttribute('aria-label') ||
+                !!joinSafeTextNodes(candidate, ' ') ||
+                !!joinNestedSpanText(candidate, ' ')
+            if (isLabelled) {
+                control = candidate
+                break
+            }
+        }
+    }
+
+    // the label describes the control, not the path a click happened to take through it, so it is read
+    // entirely from the control's own subtree and never depends on which descendant was clicked
+    return controlLabelText(control)
+}
+
+// walks an element's subtree in document order, collecting each element's direct text and aria-label,
+// skipping the whole subtree of anything shouldCaptureElement/isSensitiveElement excludes
+function collectLabelParts(el: Element, texts: string[], ariaLabels: string[]): void {
+    if (!shouldCaptureElement(el) || isSensitiveElement(el)) {
+        return
+    }
+    const text = joinSafeTextNodes(el, ' ')
+    if (text) {
+        texts.push(text)
+    }
+    const ariaLabel = el.getAttribute('aria-label')
+    if (ariaLabel) {
+        ariaLabels.push(ariaLabel)
+    }
+    each(el.childNodes, (child: Node) => {
+        if (isElementNode(child)) {
+            collectLabelParts(child, texts, ariaLabels)
+        }
     })
+}
+
+// an inline icon or an interpolated value splits a label across text nodes, and getSafeText joins
+// those with nothing, so <button>Next <svg/> page</button> would read as "nextpage" and no whole-word
+// keyword could match it. we keep the words apart for matching; $el_text keeps using getSafeText
+function controlLabelText(control: Element): ElementWithText {
+    const texts: string[] = []
+    const ariaLabels: string[] = []
+    collectLabelParts(control, texts, ariaLabels)
+
+    const text = texts.join(' ').replace(/\s+/g, ' ').trim()
+    const safeText = (shouldCaptureValue(text) ? text : '').toLowerCase()
+
+    // a control's own aria-label always wins; a descendant icon's aria-label is a fallback used only
+    // when the control has no text of its own
+    const ownAriaLabel = (control.getAttribute('aria-label') || '').toLowerCase().trim()
+    const ariaLabel = ownAriaLabel || (safeText ? '' : (ariaLabels[0] || '').toLowerCase().trim())
+
+    return { safeText, ariaLabel }
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
@@ -271,7 +408,8 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true
+        // every project below the 2025-11-30 defaults resolves to rageclick: true, so filtering stays off
+        // here to keep capturing what they always have; opt in with { content_ignorelist: true }
         contentIgnorelist = undefined
         ignoreTextSelection = false
     } else {
@@ -288,14 +426,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element).toLowerCase(),
-        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
-    }))
 
-    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
+    if (contentIgnorelist && shouldIgnoreByContent(contentIgnorelist, clickedControlText(el, targetElementList))) {
         return false
     }
 
@@ -671,16 +804,20 @@ export function getDirectAndNestedSpanText(target: Element): string {
  * @returns {string} text content of span tags
  */
 export function getNestedSpanText(target: Element): string {
+    return joinNestedSpanText(target, '')
+}
+
+function joinNestedSpanText(target: Element, separator: string): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
         each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
-                    const spanText = getSafeText(child)
+                    const spanText = joinSafeTextNodes(child, separator)
                     text = `${text} ${spanText}`.trim()
 
                     if (child.childNodes && child.childNodes.length) {
-                        text = `${text} ${getNestedSpanText(child)}`.trim()
+                        text = `${text} ${joinNestedSpanText(child, separator)}`.trim()
                     }
                 } catch (e) {
                     logger.error('[AutoCapture]', e)
