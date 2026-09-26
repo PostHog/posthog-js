@@ -48,8 +48,6 @@ export interface PostHogOptions {
     apiHost?: string
     /** Origin used for requests targeting feature flags. Defaults to `apiHost`. */
     flagsHost?: string
-    /** Origin used for requests targeting static assets. Defaults to `apiHost`. */
-    assetsHost?: string
     /** Storage implementation. Pass `false` to keep all state in memory. */
     storage?: StorageLike | false
     /** Override the storage key. */
@@ -74,9 +72,7 @@ export interface PostHogOptions {
     debug?: boolean
     /** Supply initial remote configuration without a request. */
     remoteConfig?: RemoteConfig
-    /** Load remote configuration when an extension first requests it. */
-    remoteConfigLoader?: () => Promise<RemoteConfig | undefined>
-    /** Stop waiting for remote configuration after this duration. */
+    /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
     /**
      * Automatic first-party analytics delivery. Defaults to lazy loading after the first admitted event.
