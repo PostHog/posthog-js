@@ -292,6 +292,33 @@ describe('Published subpath entry points', () => {
         }
     })
 
+    const resolveShimTargets = (specifier: string) => {
+        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
+        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
+        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
+        return { module: resolveFromShim(shim.module), types: resolveFromShim(shim.types) }
+    }
+
+    const typeCheckFixture = (fixtureName: string, source: string, moduleResolution: ts.ModuleResolutionKind) => {
+        const fixturePath = path.join(consumerDirectory, fixtureName)
+        fs.writeFileSync(fixturePath, source)
+        const program = ts.createProgram([fixturePath], {
+            esModuleInterop: true,
+            module: ts.ModuleKind.ESNext,
+            moduleResolution,
+            noEmit: true,
+            skipLibCheck: true,
+            strict: true,
+            target: ts.ScriptTarget.ESNext,
+            types: [],
+        })
+        return ts.formatDiagnosticsWithColorAndContext(ts.getPreEmitDiagnostics(program), {
+            getCanonicalFileName: (fileName) => fileName,
+            getCurrentDirectory: () => consumerDirectory,
+            getNewLine: () => '\n',
+        })
+    }
+
     it.each([
         ['posthog-js/full', 'module.full'],
         ['posthog-js/no-external', 'module.no-external'],
@@ -339,23 +366,21 @@ process.stdout.write(JSON.stringify(Object.keys(metafile.inputs)))
         expect(bundledFiles).toContain(path.join(installedPackageRoot, `dist/${bundle}.js`))
         expect(bundledFiles).not.toContain(path.join(installedPackageRoot, `dist/${bundle}.cjs`))
 
-        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
-        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
-        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
-        expect(resolveFromShim(shim.module)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        const shim = resolveShimTargets(specifier)
+        expect(shim.module).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
         // Declarations come from the package's own `types`, not the bundle's sibling .d.ts:
         // PostHog has private members, so a second declaration file is a second, incompatible
         // type — a client from here could not be passed to anything typed by `posthog-js`.
-        expect(resolveFromShim(shim.types)).toBe(path.join(installedPackageRoot, packageJson.types))
+        expect(shim.types).toBe(path.join(installedPackageRoot, packageJson.types))
     })
 
     it.each([ts.ModuleResolutionKind.Node10, ts.ModuleResolutionKind.Bundler])(
         'types every subpath client as the canonical PostHog with module resolution %s',
         (moduleResolution) => {
-            const fixturePath = path.join(consumerDirectory, 'index.ts')
-            fs.writeFileSync(
-                fixturePath,
-                `
+            expect(
+                typeCheckFixture(
+                    'index.ts',
+                    `
 import type { PostHog } from 'posthog-js'
 import posthogFull from 'posthog-js/full'
 import posthogNoExternal from 'posthog-js/no-external'
@@ -363,27 +388,47 @@ import posthogFullNoExternal from 'posthog-js/full/no-external'
 
 const clients: PostHog[] = [posthogFull, posthogNoExternal, posthogFullNoExternal]
 void clients
-`
-            )
+`,
+                    moduleResolution
+                )
+            ).toBe('')
+        }
+    )
 
-            const options: ts.CompilerOptions = {
-                esModuleInterop: true,
-                module: ts.ModuleKind.ESNext,
-                moduleResolution,
-                noEmit: true,
-                skipLibCheck: true,
-                strict: true,
-                target: ts.ScriptTarget.ESNext,
-                types: [],
-            }
-            const program = ts.createProgram([fixturePath], options)
-            const diagnostics = ts.getPreEmitDiagnostics(program)
+    it.each([
+        ['posthog-js/slim', 'module.slim'],
+        ['posthog-js/slim/no-external', 'module.slim.no-external'],
+        ['posthog-js/extensions', 'extension-bundles'],
+    ])('%s ships an ESM entry for bundlers', (specifier, bundle) => {
+        // ES module only: these exist so a bundler can tree-shake them, so there is no CommonJS twin.
+        expect(resolveAsConsumer.resolve(specifier)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+
+        const shim = resolveShimTargets(specifier)
+        expect(shim.module).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        // Unlike the bundles above, these keep their own declarations: those mark each
+        // tree-shakeable extension as possibly undefined, and type the extension bundles.
+        expect(shim.types).toBe(path.join(installedPackageRoot, `dist/${bundle}.d.ts`))
+    })
+
+    it.each([ts.ModuleResolutionKind.Node10, ts.ModuleResolutionKind.Bundler])(
+        'types both slim subpaths as clients that accept the published extension bundles with module resolution %s',
+        (moduleResolution) => {
             expect(
-                ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-                    getCanonicalFileName: (fileName) => fileName,
-                    getCurrentDirectory: () => consumerDirectory,
-                    getNewLine: () => '\n',
-                })
+                typeCheckFixture(
+                    'slim.ts',
+                    `
+import posthog from 'posthog-js/slim'
+import posthogNoExternal from 'posthog-js/slim/no-external'
+import { AnalyticsExtensions, SessionReplayExtensions } from 'posthog-js/extensions'
+
+for (const client of [posthog, posthogNoExternal]) {
+    client.init('phc_test', {
+        __extensionClasses: { ...AnalyticsExtensions, ...SessionReplayExtensions },
+    })
+}
+`,
+                    moduleResolution
+                )
             ).toBe('')
         }
     )
