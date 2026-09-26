@@ -148,7 +148,9 @@ describe('V1CaptureSender', () => {
     })
 
     it('keeps request-id and created_at stable but increments attempt and regenerates request-timestamp', async () => {
-      const { sender, fetch } = makeSender()
+      let nextRequestId = 0
+      const generateRequestId = vi.fn(() => `req-${++nextRequestId}`)
+      const { sender, fetch } = makeSender({}, { generateRequestId })
       fetch
         .mockResolvedValueOnce(makeResponse(200, { results: { u1: { result: 'retry' } } }))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -157,7 +159,10 @@ describe('V1CaptureSender', () => {
 
       const h0 = headersOf(fetch, 0)
       const h1 = headersOf(fetch, 1)
-      expect(h0['PostHog-Request-Id']).toBe(h1['PostHog-Request-Id'])
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(h0['PostHog-Request-Id']).toBe('req-1')
+      expect(h1['PostHog-Request-Id']).toBe('req-1')
+      expect(generateRequestId).toHaveBeenCalledTimes(1)
       expect(bodyOf(fetch, 0).created_at).toBe(bodyOf(fetch, 1).created_at)
       expect(h0['PostHog-Attempt']).toBe('1')
       expect(h1['PostHog-Attempt']).toBe('2')
