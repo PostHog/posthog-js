@@ -240,7 +240,10 @@ test.describe('Session recording - array.js', () => {
         const capturedAfterReload = await page.capturedEvents()
         expect(capturedAfterReload[1]['properties']['$session_id']).toEqual(firstSessionId)
         expect(capturedAfterReload[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-        expect(capturedAfterReload[1]['properties']['$recording_status']).toEqual('active')
+        const recordingStatus = await page.evaluate(
+            () => (window as WindowWithPostHog).posthog?.sessionRecording?.sdkDebugProperties.$recording_status
+        )
+        expect(recordingStatus).toEqual('active')
     })
 
     test('starts a new recording after calling reset', async ({ page }) => {
@@ -359,7 +362,7 @@ test.describe('Session recording - array.js', () => {
         )
     })
 
-    test('adds debug properties to captured events', async ({ page }) => {
+    test('adds debug properties only to SDK events', async ({ page }) => {
         // make sure recording is running
         await ensureActivitySendsSnapshots(page, [
             '$remote_config_received',
@@ -377,6 +380,10 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent).toBeDefined()
 
         expect(targetEvent!['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-        expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
+        expect(targetEvent!['properties']['$recording_status']).toBeUndefined()
+        const debugProperties = await page.evaluate(
+            () => (window as WindowWithPostHog).posthog?.sessionRecording?.sdkDebugProperties
+        )
+        expect(debugProperties?.$sdk_debug_session_start).toBeDefined()
     })
 })
