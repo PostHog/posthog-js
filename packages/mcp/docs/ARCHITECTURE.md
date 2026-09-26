@@ -74,6 +74,60 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
 5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
+### Tool input field names
+
+Automatic tool-call events include `$mcp_input_keys` on success and failure.
+The SDK reads the original arguments before validation can remove unknown fields.
+It records up to 20 top-level field names, sorted, without their values.
+By default, only names declared by the server's input schema remain visible.
+Unknown names and names longer than 64 characters are replaced by one `[redacted]` entry, the same marker the SDK uses for other hidden data.
+Declared names come first, so `[redacted]` appears only when the 20-name limit leaves space.
+
+The `shouldRecordInputKey(key, { declared })` option replaces the default rule, for automatic capture and as the helper's third argument.
+Return `true` to record a name; any other result, or a throw, records `[redacted]`.
+The 64-character limit, the 20-name limit, and declared-names-first ordering still apply.
+Use it when your server can accept that a caller-chosen name reaches analytics, for example to see misspelled parameter names:
+
+```ts
+instrument(server, posthog, {
+  shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
+})
+```
+SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
+Non-object arguments do not produce this property.
+
+High-level servers use the registered tool's schema.
+Low-level servers use schemas from prior `tools/list` responses on the same server instance.
+Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]`.
+The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod object schemas, including objects wrapped by refinements, transforms, preprocessors, pipes, and optional, nullable, default, catch, or readonly wrappers.
+A pipe reports the names of its input schema.
+It does not resolve JSON Schema references or inspect fields inside unions.
+
+Custom dispatchers use the same helper through the existing `properties` argument:
+
+```ts
+import { getToolInputProperties, PostHogMCP } from '@posthog/mcp'
+
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
+await posthog.register({ $mcp_server_build: 'example-build' })
+
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema)
+posthog.captureToolCall({ toolName, isError: false, properties })
+```
+
+Compute these properties before argument normalization, and include them in both success and error events.
+Pass a schema owned by the server, never one supplied by the caller.
+Custom command formats must extract the actual tool arguments and schema before calling the helper.
+Alternative field names must appear in the supplied schema, or pass `shouldRecordInputKey`, to remain visible.
+Do not report which alternative names a call used through server-specific `$mcp_*` properties.
+Alias telemetry is planned SDK follow-up work: the server will pass its own alias map to the helper, and the helper will add `$mcp_input_aliases_used` (for example `["experimentId:id"]`) without exposing unknown names.
+The SDK does not normalize arguments or infer which alternative a server accepted.
+
+The helper adds no request values to the event.
+Existing parameter and response capture remains unchanged.
+Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+No session store or additional network request is required.
+
 ## 4. Session & identity
 
 ### Shared event properties
