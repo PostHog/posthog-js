@@ -2,13 +2,17 @@ import { CaptureResult } from '../../types'
 import { isNull } from '@posthog/core'
 import { sampleByDistinctId, sampleByEvent, sampleBySessionId } from '../../customizations/before-send'
 
-beforeAll(() => {
+beforeEach(() => {
     let fiftyFiftyRandom = true
-    Math.random = () => {
+    vi.spyOn(Math, 'random').mockImplementation(() => {
         const val = fiftyFiftyRandom ? 0.48 : 0.51
         fiftyFiftyRandom = !fiftyFiftyRandom
         return val
-    }
+    })
+})
+
+afterEach(() => {
+    vi.restoreAllMocks()
 })
 
 describe('before send utils', () => {
@@ -28,6 +32,40 @@ describe('before send utils', () => {
             $sample_threshold: 0.5,
             $sampled_events: ['$autocapture'],
         })
+    })
+
+    it.each([
+        { percent: 0.5, random: 0.49, sampled: true },
+        { percent: 0.5, random: 0.5, sampled: false },
+        { percent: 0.5, random: 0.51, sampled: false },
+        { percent: 0, random: 0, sampled: false },
+        { percent: 1, random: 0.999, sampled: true },
+    ])('samples at rate $percent with random value $random: $sampled', ({ percent, random, sampled }) => {
+        vi.mocked(Math.random).mockReturnValue(random)
+        const event = { event: '$autocapture', properties: { source: 'test' } } as unknown as CaptureResult
+
+        const result = sampleByEvent(['$autocapture'], percent)(event)
+
+        if (sampled) {
+            expect(result).toEqual({
+                event: '$autocapture',
+                properties: {
+                    source: 'test',
+                    $sample_type: ['sampleByEvent'],
+                    $sample_threshold: percent,
+                    $sampled_events: ['$autocapture'],
+                },
+            })
+        } else {
+            expect(result).toBeNull()
+        }
+    })
+
+    it('does not sample events outside the configured event names', () => {
+        const event = { event: 'checkout', properties: { source: 'test' } } as unknown as CaptureResult
+
+        expect(sampleByEvent(['$autocapture'], 0)(event)).toBe(event)
+        expect(Math.random).not.toHaveBeenCalled()
     })
 
     it('can sample by distinct id', () => {

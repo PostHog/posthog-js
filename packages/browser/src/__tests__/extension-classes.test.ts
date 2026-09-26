@@ -1,3 +1,5 @@
+import path from 'path'
+import { typeContractDiagnostics } from './helpers/type-contract'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import {
@@ -363,8 +365,8 @@ describe('__extensionClasses enrollment', () => {
                 __extensionClasses: FeatureFlagsExtensions,
                 capture_pageview: false,
                 remote_config_refresh_interval_ms: 0,
-                loaded: (instance) => {
-                    instance._send_request = vi.fn(({ callback }) =>
+                loaded: () => {
+                    posthog._send_request = vi.fn(({ callback }) =>
                         callback?.({ statusCode: 200, json: { flags: [] } })
                     )
                 },
@@ -420,8 +422,8 @@ describe('__extensionClasses enrollment', () => {
             posthog.init(token, {
                 capture_pageview: false,
                 remote_config_refresh_interval_ms: 0,
-                loaded: (instance) => {
-                    instance._send_request = vi.fn(({ callback }) =>
+                loaded: () => {
+                    posthog._send_request = vi.fn(({ callback }) =>
                         callback?.({ statusCode: 200, json: { flags: [] } })
                     )
                 },
@@ -502,6 +504,15 @@ describe('extension lifecycle', () => {
         it('has an entry for every key in the __extensionClasses type', () => {
             // If a new key is added to __extensionClasses but not to AllExtensions,
             // this test will fail because the full bundle would silently omit it.
+            const fixture = path.resolve(__dirname, '__audit_contract__.ts')
+            const source = `import type { PostHogConfig } from '../types'
+import { AllExtensions } from '../extensions/extension-bundles'
+type Expected = keyof NonNullable<PostHogConfig['__extensionClasses']>
+type Actual = keyof typeof AllExtensions
+const exact: [Exclude<Expected, Actual>, Exclude<Actual, Expected>] extends [never, never] ? true : false = true
+void exact`
+            expect(typeContractDiagnostics(fixture, source)).toEqual([])
+            expect(typeContractDiagnostics(fixture, source.replace('= true\n', '= false\n'))).not.toEqual([])
             const allKeys = Object.keys(AllExtensions).sort()
             expect(allKeys).toEqual([
                 'autocapture',
@@ -622,12 +633,13 @@ describe('extension lifecycle', () => {
         it('calls onRemoteConfig on all extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const onRemoteConfigSpy = vi.fn()
+            const toolbarConfig = vi.fn()
+            const conversationsConfig = vi.fn()
 
             class SpyExtension {
                 constructor() {}
                 onRemoteConfig(result: RemoteConfigResult) {
-                    onRemoteConfigSpy(result)
+                    toolbarConfig(result)
                 }
             }
 
@@ -635,20 +647,25 @@ describe('extension lifecycle', () => {
                 __preview_deferred_init_extensions: false,
                 __extensionClasses: {
                     toolbar: SpyExtension as any,
-                    conversations: SpyExtension as any,
+                    conversations: class {
+                        onRemoteConfig = conversationsConfig
+                    } as any,
                 },
                 capture_pageview: false,
             })
 
             // Clear any calls from the init/loaded flow
-            onRemoteConfigSpy.mockClear()
+            toolbarConfig.mockClear()
+            conversationsConfig.mockClear()
 
             const remoteConfig = { supportedCompression: [] } as unknown as RemoteConfig
             posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Two extensions, each should get onRemoteConfig called once
-            expect(onRemoteConfigSpy).toHaveBeenCalledTimes(2)
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            expect(toolbarConfig).toHaveBeenCalledTimes(1)
+            expect(toolbarConfig).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            expect(conversationsConfig).toHaveBeenCalledTimes(1)
+            expect(conversationsConfig).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
         })
     })
 

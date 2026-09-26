@@ -1,5 +1,6 @@
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { waitForSurveyDefinitions } from '../utils/survey-readiness'
 
 const startOptions = {
     options: {},
@@ -44,9 +45,12 @@ test.describe('surveys - event trigger reload persistence', () => {
         })
 
         const surveysResponse = page.waitForResponse('**/surveys/**')
+        await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
         await start(startOptions, page, context)
         await surveysAPICall
         await surveysResponse
+        await waitForSurveyDefinitions(page)
+        await page.clock.pauseAt(new Date('2024-01-01T00:01:00Z'))
 
         const survey = page.locator('.PostHogSurvey-armed-survey').locator('.survey-form')
 
@@ -54,13 +58,20 @@ test.describe('surveys - event trigger reload persistence', () => {
         await page.evaluate(() => {
             ;(window as any).posthog.capture('trigger_event')
         })
-        await page.reload()
-        await start({ ...startOptions, type: 'reload' }, page, context)
+        await page.clock.runFor(2000)
+        await expect(page.locator('.PostHogSurvey-armed-survey')).toBeAttached()
+        await expect(survey).not.toBeVisible()
+        await start({ ...startOptions, type: 'reload', waitForFlags: false }, page, context)
+        // oxlint-disable-next-line posthog-js/no-direct-function-check -- Serialized browser code cannot import isFunction.
+        await page.waitForFunction(() => typeof (window as any).posthog?.getFeatureFlag === 'function')
+        await page.clock.runFor(100)
         await surveysAPICall
+        await waitForSurveyDefinitions(page)
+        await page.clock.runFor(1000)
 
         // No fresh trigger fires after the reload: the survey shows only because the armed
-        // activation survived and the remaining delay elapsed.
-        await expect(survey).toBeVisible({ timeout: 10000 })
+        // Activation survived and only the remaining delay elapsed.
+        await expect(survey).toBeVisible()
     })
 
     test('an armed delayed survey does not survive a session rotation across a reload', async ({ page, context }) => {
@@ -161,6 +172,8 @@ test.describe('surveys - event trigger reload persistence', () => {
         await page.reload()
         await start({ ...startOptions, type: 'reload' }, page, context)
         await surveysAPICall
+        await waitForSurveyDefinitions(page)
+        await page.waitForTimeout(2200)
         await expect(survey).not.toBeInViewport()
     })
 

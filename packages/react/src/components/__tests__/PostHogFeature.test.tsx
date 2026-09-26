@@ -99,7 +99,7 @@ describe('PostHogFeature component', () => {
         expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
-    it('should track an interaction with each child node of the feature component', () => {
+    it.each(['helloDiv', 'worldDiv'])('tracks the first interaction from %s once per component', (firstChild) => {
         render(
             <PostHogProvider client={posthog}>
                 <PostHogFeature flag={'test'} match={true}>
@@ -109,7 +109,7 @@ describe('PostHogFeature component', () => {
             </PostHogProvider>
         )
 
-        fireEvent.click(screen.getByTestId('helloDiv'))
+        fireEvent.click(screen.getByTestId(firstChild))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
@@ -180,18 +180,10 @@ describe('PostHogFeature component', () => {
     })
 
     it('should not show the feature component if the flag is not enabled', () => {
-        renderWith(posthog, 'test_value')
-
+        const { container } = renderWith(posthog, 'test_value')
         expect(screen.queryByTestId('helloDiv')).not.toBeInTheDocument()
         expect(posthog.capture).not.toHaveBeenCalled()
-
-        // check if any elements are found
-        const allTags = screen.queryAllByText(/.*/)
-
-        // Assert that no random elements are found
-        expect(allTags.length).toEqual(2)
-        expect(allTags[0].tagName).toEqual('BODY')
-        expect(allTags[1].tagName).toEqual('DIV')
+        expect(container).toBeEmptyDOMElement()
     })
 
     it('should fallback when provided', () => {

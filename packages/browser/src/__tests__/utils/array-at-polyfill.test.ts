@@ -89,3 +89,5 @@ describe('Array.prototype.at polyfill', () => {
         })
     })
 })
+
+export {}

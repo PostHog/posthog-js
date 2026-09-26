@@ -77,12 +77,14 @@ describe('patch', () => {
     it('restores in LIFO order', () => {
         const original = fakeWindow.fakeFetch
         const firstRestore = patch(fakeWindow, 'fakeFetch', (firstOriginal) => {
+            if (typeof firstOriginal !== 'function') throw new Error('Expected a callable patch delegate')
             return function firstWrapper() {
                 return firstOriginal()
             }
         })
         const firstWrapper = fakeWindow.fakeFetch
         const secondRestore = patch(fakeWindow, 'fakeFetch', (secondOriginal) => {
+            if (typeof secondOriginal !== 'function') throw new Error('Expected a callable patch delegate')
             return function secondWrapper() {
                 return secondOriginal()
             }
@@ -98,11 +100,13 @@ describe('patch', () => {
     it('tears down a buried wrapper without clobbering newer wrappers', () => {
         const original = fakeWindow.fakeFetch
         const firstRestore = patch(fakeWindow, 'fakeFetch', (firstOriginal) => {
+            if (typeof firstOriginal !== 'function') throw new Error('Expected a callable patch delegate')
             return function firstWrapper() {
                 return firstOriginal()
             }
         })
         const secondRestore = patch(fakeWindow, 'fakeFetch', (secondOriginal) => {
+            if (typeof secondOriginal !== 'function') throw new Error('Expected a callable patch delegate')
             return function secondWrapper() {
                 return secondOriginal()
             }

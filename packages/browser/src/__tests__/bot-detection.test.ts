@@ -1,7 +1,8 @@
+import type { Mock as VitestMock } from 'vitest'
 import './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHogConfig } from '../types'
 import { navigator } from '@posthog/browser-common/utils/globals'
@@ -9,7 +10,7 @@ import * as globals from '@posthog/browser-common/utils/globals'
 
 describe('bot detection and pageview collection', () => {
     let posthog: PostHog
-    let beforeSendMock: vi.Mock
+    let beforeSendMock: VitestMock
     let originalUserAgent: string
 
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
@@ -21,7 +22,7 @@ describe('bot detection and pageview collection', () => {
                     capture_pageview: false, // Disable auto-capture to avoid race conditions
                     before_send: beforeSendMock,
                     ...config,
-                    loaded: (posthog) => resolve(posthog),
+                    loaded: (posthog) => resolve(requirePostHogInstance(posthog)),
                 },
                 uuidv7()
             )!
@@ -276,17 +277,18 @@ describe('bot detection and pageview collection', () => {
             navigatorSpy.mockRestore()
         })
 
-        it('should handle custom blocked user agents', async () => {
-            setBotUserAgent('MyCustomBot/1.0')
+        it.each([
+            [['MyCustomMarker'], '$bot_pageview'],
+            [[], '$pageview'],
+        ] as const)('handles custom markers %j', async (markers, expectedEvent) => {
+            setBotUserAgent('MyCustomMarker/1.0')
             posthog = await createPostHog({
-                custom_blocked_useragents: ['MyCustomBot'],
+                custom_blocked_useragents: [...markers],
                 __preview_capture_bot_pageviews: true,
             })
-
             posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            expect(beforeSendMock.mock.calls[0][0].event).toBe(expectedEvent)
         })
 
         it('should preserve event properties when renaming to $bot_pageview', async () => {

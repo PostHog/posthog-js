@@ -173,12 +173,14 @@ describe('extractPrefillParamsFromUrl', () => {
         })
 
         it('should handle multiple equals signs in value', () => {
-            // Note: split('=') only splits on first '=', so 'q0=a=b=c' becomes key='q0', value='a'
-            // This is the actual behavior of the implementation
             const result = extractPrefillParamsFromUrl('?q0=a=b=c')
-            expect(result.params).toEqual({
-                0: ['a'], // Only 'a' is captured, not 'a=b=c'
-            })
+            expect(result.params).toEqual({ 0: ['a=b=c'] })
+            expect(result.params[0][0]).toBe(new URLSearchParams('q0=a=b=c').get('q0'))
+        })
+
+        it('decodes percent-encoded equals signs without losing value data', () => {
+            const result = extractPrefillParamsFromUrl('?q0=a%3Db%3Dc&q1=2')
+            expect(result.params).toEqual({ 0: ['a=b=c'], 1: ['2'] })
         })
 
         it('should handle duplicate auto_submit parameters', () => {

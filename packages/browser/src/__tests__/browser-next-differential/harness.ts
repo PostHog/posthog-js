@@ -1,3 +1,4 @@
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
 import { isArray, isBoolean, isNull, isUndefined } from '@posthog/core'
 
 export interface RecordedEvent {
@@ -105,7 +106,7 @@ export class ControlledRuntime {
         listener: EventListenerOrEventListenerObject
         capture: boolean
     }> = []
-    private _windowAddListenerSpy: vi.SpyInstance | undefined
+    private _windowAddListenerSpy: VitestSpyInstance | undefined
     private _removeWindowListener: Window['removeEventListener'] | undefined
 
     readonly navigator = {

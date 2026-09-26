@@ -11,8 +11,6 @@ import {
     useActiveFeatureFlags,
 } from '../index'
 
-vi.useFakeTimers()
-
 const ACTIVE_FEATURE_FLAGS = ['example_feature_true', 'multivariate_feature', 'example_feature_payload']
 
 const FEATURE_FLAG_STATUS: Record<string, string | boolean> = {
@@ -36,7 +34,8 @@ describe('feature flag hooks', () => {
 
     beforeEach(() => {
         posthog = {
-            isFeatureEnabled: (flag: string) => !!FEATURE_FLAG_STATUS[flag],
+            isFeatureEnabled: (flag: string) =>
+                isUndefined(FEATURE_FLAG_STATUS[flag]) ? undefined : !!FEATURE_FLAG_STATUS[flag],
             getFeatureFlag: (flag: string) => FEATURE_FLAG_STATUS[flag],
             getFeatureFlagPayload: (flag: string) => FEATURE_FLAG_PAYLOADS[flag],
             getFeatureFlagResult: (flag: string) => {
@@ -73,7 +72,7 @@ describe('feature flag hooks', () => {
     it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
-        ['missing', false],
+        ['missing', undefined],
         ['multivariate_feature', true],
         ['example_feature_payload', true],
     ])('should get the boolean feature flag', (flag, expected) => {
@@ -90,10 +89,14 @@ describe('feature flag hooks', () => {
         ['multivariate_feature', undefined],
         ['example_feature_payload', FEATURE_FLAG_PAYLOADS.example_feature_payload],
     ])('should get the payload feature flag', (flag, expected) => {
+        const getter = vi.spyOn(posthog, 'getFeatureFlagResult')
         const { result } = renderHook(() => useFeatureFlagPayload(flag), {
             wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
+        expect(getter).toHaveBeenCalledTimes(2)
+        expect(getter).toHaveBeenNthCalledWith(1, flag, { send_event: false })
+        expect(getter).toHaveBeenNthCalledWith(2, flag, { send_event: false })
     })
 
     it('should return the active feature flags', () => {

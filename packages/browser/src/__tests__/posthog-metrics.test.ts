@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { PostHogMetrics } from '../posthog-metrics'
 import { PostHog } from '../posthog-core'
 
@@ -15,10 +16,10 @@ describe('posthog-metrics', () => {
     let mockPostHog: PostHog
     let metrics: PostHogMetrics
 
-    const sentRequests = (): any[] => (mockPostHog._send_request as vi.Mock).mock.calls.map((c) => c[0])
+    const sentRequests = (): any[] => (mockPostHog._send_request as VitestMock).mock.calls.map((c) => c[0])
 
     const respondWithStatus = (statusCode: number): void => {
-        ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => opts.callback?.({ statusCode }))
+        ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) => opts.callback?.({ statusCode }))
     }
 
     beforeEach(() => {
@@ -104,7 +105,7 @@ describe('posthog-metrics', () => {
     })
 
     it('captures nothing when the instance is not capturing', async () => {
-        ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
+        ;(mockPostHog.is_capturing as VitestMock).mockReturnValue(false)
         metrics.count('a', 1)
         await metrics.flush()
         expect(mockPostHog._send_request).not.toHaveBeenCalled()
@@ -125,7 +126,7 @@ describe('posthog-metrics', () => {
     it('drains synchronously over the given transport even while another flush is in flight', () => {
         // First request hangs: its callback is never invoked, so the core's
         // flush serializer keeps a pending promise (the pagehide race).
-        ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => {})
+        ;(mockPostHog._send_request as VitestMock).mockImplementation(() => {})
         metrics.count('a', 1)
         void metrics.flush()
 

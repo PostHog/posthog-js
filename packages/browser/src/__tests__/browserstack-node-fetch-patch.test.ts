@@ -3,12 +3,15 @@
  */
 /* oxlint-disable typescript/no-require-imports */
 
-const {
-    isRetryableError,
-    isRetryableStatus,
-    isSetupRequest,
-    patchNodeFetch,
-} = require('../../testcafe/browserstack-node-fetch-patch.cjs')
+const { isRetryableError, isRetryableStatus, isSetupRequest, patchNodeFetch } = (() => {
+    const Module = require('module')
+    const originalLoad = Module._load
+    try {
+        return require('../../testcafe/browserstack-node-fetch-patch.cjs')
+    } finally {
+        Module._load = originalLoad
+    }
+})()
 
 const setupUrl = 'https://hub-cloud.browserstack.com/wd/hub/session'
 const browserListUrl = 'https://api.browserstack.com/automate/browsers.json'
@@ -25,14 +28,14 @@ describe('browserstack-node-fetch-patch', () => {
     let warnSpy
 
     beforeEach(() => {
-        process.env.BROWSERSTACK_API_MAX_ATTEMPTS = '3'
-        process.env.BROWSERSTACK_API_BACKOFF_MS = '0'
+        vi.stubEnv('BROWSERSTACK_API_MAX_ATTEMPTS', '3')
+        vi.stubEnv('BROWSERSTACK_API_BACKOFF_MS', '0')
         warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     })
 
     afterEach(() => {
-        delete process.env.BROWSERSTACK_API_MAX_ATTEMPTS
-        delete process.env.BROWSERSTACK_API_BACKOFF_MS
+        vi.unstubAllEnvs()
+        vi.useRealTimers()
         warnSpy.mockRestore()
     })
 
@@ -102,13 +105,19 @@ describe('browserstack-node-fetch-patch', () => {
     })
 
     it('falls back to default backoff when the backoff override is invalid', async () => {
-        process.env.BROWSERSTACK_API_BACKOFF_MS = 'abc,def'
+        vi.useFakeTimers()
+        vi.stubEnv('BROWSERSTACK_API_BACKOFF_MS', 'abc,def')
         const fetch = vi
             .fn()
             .mockResolvedValueOnce(response(500, { status: 13 }))
             .mockResolvedValueOnce(response(200, { ok: true }))
 
-        await patchNodeFetch(fetch)(browserListUrl)
+        const pending = patchNodeFetch(fetch)(browserListUrl)
+        await vi.advanceTimersByTimeAsync(999)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(1)
+        await pending
+        expect(fetch).toHaveBeenCalledTimes(2)
 
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Retrying in 1000ms.'))
     })

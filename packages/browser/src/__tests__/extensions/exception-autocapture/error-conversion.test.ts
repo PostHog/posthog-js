@@ -218,7 +218,7 @@ describe('Error conversion', () => {
         }).toMatchSnapshot()
     })
 
-    it('should not use cause prop when it is a string', () => {
+    it('should emit a string cause as a chained exception', () => {
         const originalError = 'original test'
         const error = new Error('my error', { cause: originalError })
         const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined })

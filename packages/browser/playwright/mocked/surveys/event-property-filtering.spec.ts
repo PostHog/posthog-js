@@ -1,6 +1,16 @@
 import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start as startSdk, StartOptions } from '../utils/setup'
+import { BrowserContext, Page } from '@playwright/test'
+import { waitForSurveyDefinitions } from '../utils/survey-readiness'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
+
+async function start(options: StartOptions, page: Page, context: BrowserContext) {
+    await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
+    await startSdk(options, page, context)
+    await waitForSurveyDefinitions(page)
+    await page.clock.pauseAt(new Date('2024-01-01T00:01:00Z'))
+    await page.clock.runFor(2000)
+}
 
 const startOptions = {
     options: {},
@@ -60,6 +70,7 @@ test.describe('surveys - event property filtering', () => {
                 amount: 100,
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-event-survey-1').locator('.survey-form')).toBeVisible()
@@ -113,6 +124,7 @@ test.describe('surveys - event property filtering', () => {
                 amount: 50,
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should still not be visible
         await expect(page.locator('.PostHogSurvey-exact-filter-survey').locator('.survey-form')).not.toBeInViewport()
@@ -124,6 +136,7 @@ test.describe('surveys - event property filtering', () => {
                 amount: 100,
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-exact-filter-survey').locator('.survey-form')).toBeVisible()
@@ -173,6 +186,7 @@ test.describe('surveys - event property filtering', () => {
                 product_type: 'basic',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-is-not-filter-survey').locator('.survey-form')).not.toBeInViewport()
@@ -183,6 +197,7 @@ test.describe('surveys - event property filtering', () => {
                 product_type: 'premium',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-is-not-filter-survey').locator('.survey-form')).toBeVisible()
@@ -232,6 +247,7 @@ test.describe('surveys - event property filtering', () => {
                 url: '/home',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-regex-filter-survey').locator('.survey-form')).not.toBeInViewport()
@@ -242,6 +258,7 @@ test.describe('surveys - event property filtering', () => {
                 url: '/dashboard/analytics',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-regex-filter-survey').locator('.survey-form')).toBeVisible()
@@ -291,6 +308,7 @@ test.describe('surveys - event property filtering', () => {
                 query: 'dashboard setup',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(
@@ -303,6 +321,7 @@ test.describe('surveys - event property filtering', () => {
                 query: 'advanced analytics features',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-icontains-filter-survey').locator('.survey-form')).toBeVisible()
@@ -357,6 +376,7 @@ test.describe('surveys - event property filtering', () => {
                 amount: '50', // This should not match (is_not filter)
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-multi-filter-survey').locator('.survey-form')).not.toBeInViewport()
@@ -368,6 +388,7 @@ test.describe('surveys - event property filtering', () => {
                 amount: '100',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-multi-filter-survey').locator('.survey-form')).toBeVisible()
@@ -421,9 +442,11 @@ test.describe('surveys - event property filtering', () => {
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-missing-prop-survey').locator('.survey-form')).not.toBeInViewport()
 
-        // Wait a bit to make sure it doesn't appear
-        await page.waitForTimeout(1000)
+        await page.clock.runFor(2000)
         await expect(page.locator('.PostHogSurvey-missing-prop-survey').locator('.survey-form')).not.toBeInViewport()
+        await page.evaluate(() => (window as any).posthog.capture('user_action', { required_field: 'expected_value' }))
+        await page.clock.runFor(2000)
+        await expect(page.locator('.PostHogSurvey-missing-prop-survey .survey-form')).toBeVisible()
     })
 
     test('not_regex property filter works correctly', async ({ page, context }) => {
@@ -470,6 +493,7 @@ test.describe('surveys - event property filtering', () => {
                 url: '/admin/users',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-not-regex-survey').locator('.survey-form')).not.toBeInViewport()
@@ -480,6 +504,7 @@ test.describe('surveys - event property filtering', () => {
                 url: '/dashboard/home',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-not-regex-survey').locator('.survey-form')).toBeVisible()
@@ -529,6 +554,7 @@ test.describe('surveys - event property filtering', () => {
                 query: 'system error logs',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should not be visible
         await expect(page.locator('.PostHogSurvey-not-icontains-survey').locator('.survey-form')).not.toBeInViewport()
@@ -539,6 +565,7 @@ test.describe('surveys - event property filtering', () => {
                 query: 'user analytics dashboard',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-not-icontains-survey').locator('.survey-form')).toBeVisible()
@@ -592,6 +619,7 @@ test.describe('surveys - event property filtering', () => {
                 page: 'home',
             })
         })
+        await page.clock.runFor(2000)
 
         // Survey should now be visible
         await expect(page.locator('.PostHogSurvey-event-capture-survey').locator('.survey-form')).toBeVisible()
@@ -601,7 +629,9 @@ test.describe('surveys - event property filtering', () => {
 
         // Fill out and submit the survey
         await page.locator('.PostHogSurvey-event-capture-survey textarea').type('Property filtering works great!')
+        await page.clock.runFor(50)
         await page.locator('.PostHogSurvey-event-capture-survey .form-submit').click()
+        await page.clock.runFor(50)
 
         // Verify survey sent event was captured
         await pollUntilEventCaptured(page, 'survey sent')

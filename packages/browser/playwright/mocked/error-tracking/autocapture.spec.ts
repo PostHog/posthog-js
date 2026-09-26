@@ -14,7 +14,9 @@ test.describe('ErrorTracking autocapture', () => {
     }
 
     async function checkNoException(page: BasePage, events: EventsPage) {
-        await page.close()
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+        await page.evaluate(() => window.posthog.capture('exception-negative-control'))
+        await events.waitForEvent('exception-negative-control')
         const exceptionCount = events.countByName('$exception')
         expect(exceptionCount).toEqual(0)
     }
@@ -59,7 +61,9 @@ test.describe('ErrorTracking autocapture', () => {
             })
             await posthog.init()
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.click('[data-cy-button-throws-error]')
+            expect((await nativeError).message).toBeTruthy()
             await checkNoException(page, events)
         })
 
@@ -68,7 +72,9 @@ test.describe('ErrorTracking autocapture', () => {
                 capture_exceptions: false,
             })
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.click('[data-cy-button-throws-error]')
+            expect((await nativeError).message).toBeTruthy()
             await checkNoException(page, events)
         })
 
@@ -82,9 +88,11 @@ test.describe('ErrorTracking autocapture', () => {
                 capture_exceptions: false,
             })
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.evaluate(() => {
                 Promise.reject(new Error('An unknown error occured'))
             })
+            expect((await nativeError).message).toContain('An unknown error occured')
             await checkNoException(page, events)
         })
     })

@@ -19,12 +19,18 @@ describe('RetryQueue', () => {
     let now = Date.now()
 
     beforeEach(() => {
+        mockTransport.mockReset()
         retryQueue = new RetryQueue(mockPosthog as any)
 
         vi.useFakeTimers()
         vi.setSystemTime(now)
         assignableWindow.POSTHOG_DEBUG = false
         vi.spyOn(assignableWindow.console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        retryQueue.unload()
+        vi.useRealTimers()
     })
 
     const fastForwardTimeAndRunTimer = (time = 3500) => {
@@ -188,14 +194,27 @@ describe('RetryQueue', () => {
         expect(mockTransport).toHaveBeenCalledTimes(4)
     })
 
-    it('does not enqueue a request after 10 retries', () => {
+    it.each([9, 10, 11])('enforces the retry limit after %i failed retries', (retriesPerformedSoFar) => {
+        const callback = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => callback({ statusCode: 503 }))
+
         retryQueue.retriableRequest({
             url: '/e',
             data: { event: 'maxretries', timestamp: now },
-            retriesPerformedSoFar: 10,
+            retriesPerformedSoFar,
+            callback,
         })
 
-        expect(retryQueue.length).toEqual(0)
+        expect(mockTransport).toHaveBeenCalledOnce()
+        if (retriesPerformedSoFar === 9) {
+            expect(retryQueue.length).toBe(1)
+            expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toBe(10)
+            expect(callback).not.toHaveBeenCalled()
+        } else {
+            expect(retryQueue.length).toBe(0)
+            expect(callback).toHaveBeenCalledOnce()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 503 })
+        }
     })
 
     it.each([
@@ -290,31 +309,36 @@ describe('RetryQueue', () => {
     })
 
     describe('backoff calculation', () => {
-        const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
-        })
-        const retryDelaysTwo = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
-        })
-        const retryDelaysThree = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
+        it.each([
+            [0, 0, 2250],
+            [0, 0.5, 3000],
+            [0, 0.999, 3749],
+            [1, 0, 4500],
+            [1, 0.5, 6000],
+            [1, 0.999, 7497],
+            [2, 0.5, 12000],
+            [9, 0.5, 1536000],
+            [10, 0.5, 1800000],
+        ])('uses exponential backoff for attempt %i and draw %f', (attempt, draw, expected) => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(draw)
+            try {
+                expect(pickNextRetryDelay(attempt)).toBe(expected)
+                expect(pickNextRetryDelay(attempt)).toBe(expected)
+            } finally {
+                random.mockRestore()
+            }
         })
 
-        it('retry times are not identical each time they are generated', () => {
-            retryDelaysOne.forEach((delay, i) => {
-                expect(delay).not.toEqual(retryDelaysTwo[i])
-                expect(delay).not.toEqual(retryDelaysThree[i])
-            })
-        })
-
-        it('retry times are within bounds +/- jitter of 50%', () => {
-            retryDelaysOne
-                .concat(retryDelaysTwo)
-                .concat(retryDelaysThree)
-                .forEach((delay) => {
-                    expect(delay).toBeGreaterThanOrEqual(6000 * 0.5)
-                    expect(delay).toBeLessThanOrEqual(30 * 60 * 1000 * 1.5)
-                })
+        it.each([0, 0.5, 0.999])('keeps retry delays bounded for draw %f', (draw) => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(draw)
+            try {
+                for (let attempt = 0; attempt <= 10; attempt++) {
+                    expect(pickNextRetryDelay(attempt)).toBeGreaterThanOrEqual(2250)
+                    expect(pickNextRetryDelay(attempt)).toBeLessThanOrEqual(2700000)
+                }
+            } finally {
+                random.mockRestore()
+            }
         })
     })
 

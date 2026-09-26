@@ -14,7 +14,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/replay/types/rrweb-types'
-import Mock = vi.Mock
+import type { Mock } from 'vitest'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
@@ -646,17 +646,20 @@ describe('SessionRecording', () => {
                 }
             )
 
-            it.each([false, { endpoint: '/s/' }])('does not tag a successful refresh: %j', (sessionRecordingConfig) => {
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: sessionRecordingConfig }))
-                expect(registerForSessionMock).not.toHaveBeenCalledWith({
-                    $sdk_debug_replay_stale_config: true,
-                })
-                if (sessionRecordingConfig === false) {
-                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
-                } else {
-                    expect(sessionRecording.status).toBe('active')
+            it.each([false as const, { endpoint: '/s/' }])(
+                'does not tag a successful refresh: %j',
+                (sessionRecordingConfig) => {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: sessionRecordingConfig }))
+                    expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                        $sdk_debug_replay_stale_config: true,
+                    })
+                    if (sessionRecordingConfig === false) {
+                        expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                    } else {
+                        expect(sessionRecording.status).toBe('active')
+                    }
                 }
-            })
+            )
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {
@@ -679,6 +682,9 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            _emit(createFullSnapshot({ timestamp: Date.now() }))
+            expect((lazyRecorder as any)._buffer.data).toHaveLength(1)
+            ;(posthog.capture as Mock).mockClear()
             const clearBufferSpy = vi.spyOn(lazyRecorder as any, '_clearBuffer')
             const flushBufferSpy = vi.spyOn(lazyRecorder as any, '_flushBuffer')
 
@@ -688,6 +694,8 @@ describe('SessionRecording', () => {
             // Should have cleared buffer, not flushed it
             expect(clearBufferSpy).toHaveBeenCalled()
             expect(flushBufferSpy).not.toHaveBeenCalled()
+            expect((lazyRecorder as any)._buffer.data).toEqual([])
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 })

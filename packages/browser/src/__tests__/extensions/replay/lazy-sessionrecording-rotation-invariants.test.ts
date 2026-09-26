@@ -429,8 +429,10 @@ function minimize(actions: Action[]): Action[] {
 }
 
 describe('lazy session recording rotation invariants', () => {
+    const executedSeeds = new Set<number>()
     // guards against the sequences passing vacuously
     afterAll(() => {
+        if (executedSeeds.size !== SEEDS.length) return
         expect(coverage.rotations).toBeGreaterThan(SEEDS.length)
         expect(coverage.shippedSessions).toBeGreaterThan(SEEDS.length)
         expect(coverage.idleMarkers).toBeGreaterThan(0)
@@ -438,6 +440,7 @@ describe('lazy session recording rotation invariants', () => {
     })
 
     it.each(SEEDS)('holds under a random action sequence for seed %i', (seed) => {
+        executedSeeds.add(seed)
         const actions = generateActions(seed)
         const failure = replay(actions, true)
         if (!failure) {

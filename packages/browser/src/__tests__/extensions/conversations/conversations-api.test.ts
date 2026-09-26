@@ -1,3 +1,4 @@
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
 import {
     ConversationsRemoteConfig,
@@ -19,8 +20,8 @@ describe('Conversations API Methods', () => {
     let conversations: PostHogConversations
     let mockPostHog: PostHog
     let mockManager: ConversationsManager
-    let consoleLogSpy: vi.SpyInstance
-    let consoleWarnSpy: vi.SpyInstance
+    let consoleLogSpy: VitestSpyInstance
+    let consoleWarnSpy: VitestSpyInstance
 
     beforeEach(() => {
         // Clear localStorage
@@ -203,7 +204,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Hello!')
 
@@ -225,7 +226,7 @@ describe('Conversations API Methods', () => {
                     email: 'john@example.com',
                 }
 
-                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Hello!', userTraits)
 
@@ -242,7 +243,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('Start new conversation', undefined, true)
 
@@ -264,7 +265,7 @@ describe('Conversations API Methods', () => {
                     email: 'jane@example.com',
                 }
 
-                ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.sendMessage as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.sendMessage('New ticket please', userTraits, true)
 
@@ -291,7 +292,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages()
 
@@ -308,7 +309,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages('ticket-456')
 
@@ -327,7 +328,7 @@ describe('Conversations API Methods', () => {
 
                 const afterTimestamp = '2024-01-01T12:00:00Z'
 
-                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages(undefined, afterTimestamp)
 
@@ -372,7 +373,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.getMessages as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getMessages as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getMessages()
 
@@ -389,7 +390,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.markAsRead as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.markAsRead as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.markAsRead()
 
@@ -403,7 +404,7 @@ describe('Conversations API Methods', () => {
                     unread_count: 0,
                 }
 
-                ;(mockManager.markAsRead as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.markAsRead as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.markAsRead('ticket-789')
 
@@ -438,7 +439,7 @@ describe('Conversations API Methods', () => {
                     ],
                 }
 
-                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets()
 
@@ -452,7 +453,7 @@ describe('Conversations API Methods', () => {
                     results: [],
                 }
 
-                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets({
                     limit: 10,
@@ -472,7 +473,7 @@ describe('Conversations API Methods', () => {
                     results: [],
                 }
 
-                ;(mockManager.getTickets as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.getTickets as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.getTickets({
                     status: 'open',
@@ -492,7 +493,7 @@ describe('Conversations API Methods', () => {
         describe('requestRestoreLink', () => {
             it('should request a restore link through the manager', async () => {
                 const mockResponse: RequestRestoreLinkResponse = { ok: true }
-                ;(mockManager.requestRestoreLink as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.requestRestoreLink as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.requestRestoreLink('user@example.com')
 
@@ -508,7 +509,7 @@ describe('Conversations API Methods', () => {
                     widget_session_id: 'restored-session-id',
                     migrated_ticket_ids: ['ticket-1'],
                 }
-                ;(mockManager.restoreFromToken as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.restoreFromToken as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.restoreFromToken('restore-token')
 
@@ -518,7 +519,7 @@ describe('Conversations API Methods', () => {
 
             it('should redeem restore token from URL through the manager', async () => {
                 const mockResponse: RestoreFromTokenResponse = { status: 'invalid', code: 'token_invalid' }
-                ;(mockManager.restoreFromUrlToken as vi.Mock).mockResolvedValue(mockResponse)
+                ;(mockManager.restoreFromUrlToken as VitestMock).mockResolvedValue(mockResponse)
 
                 const result = await conversations.restoreFromUrlToken()
 
@@ -529,7 +530,7 @@ describe('Conversations API Methods', () => {
 
         describe('getCurrentTicketId', () => {
             it('should return current ticket ID when available', () => {
-                ;(mockManager.getCurrentTicketId as vi.Mock).mockReturnValue('ticket-abc')
+                ;(mockManager.getCurrentTicketId as VitestMock).mockReturnValue('ticket-abc')
 
                 const result = conversations.getCurrentTicketId()
 
@@ -538,7 +539,7 @@ describe('Conversations API Methods', () => {
             })
 
             it('should return null when no active ticket', () => {
-                ;(mockManager.getCurrentTicketId as vi.Mock).mockReturnValue(null)
+                ;(mockManager.getCurrentTicketId as VitestMock).mockReturnValue(null)
 
                 const result = conversations.getCurrentTicketId()
 
@@ -549,7 +550,7 @@ describe('Conversations API Methods', () => {
 
         describe('getWidgetSessionId', () => {
             it('should return widget session ID', () => {
-                ;(mockManager.getWidgetSessionId as vi.Mock).mockReturnValue('session-xyz')
+                ;(mockManager.getWidgetSessionId as VitestMock).mockReturnValue('session-xyz')
 
                 const result = conversations.getWidgetSessionId()
 
@@ -576,28 +577,28 @@ describe('Conversations API Methods', () => {
 
         it('should handle sendMessage errors', async () => {
             const error = new Error('Network error')
-            ;(mockManager.sendMessage as vi.Mock).mockRejectedValue(error)
+            ;(mockManager.sendMessage as VitestMock).mockRejectedValue(error)
 
             await expect(conversations.sendMessage('Hello')).rejects.toThrow('Network error')
         })
 
         it('should handle getMessages errors', async () => {
             const error = new Error('Ticket not found')
-            ;(mockManager.getMessages as vi.Mock).mockRejectedValue(error)
+            ;(mockManager.getMessages as VitestMock).mockRejectedValue(error)
 
             await expect(conversations.getMessages('invalid-ticket')).rejects.toThrow('Ticket not found')
         })
 
         it('should handle markAsRead errors', async () => {
             const error = new Error('Failed to mark as read')
-            ;(mockManager.markAsRead as vi.Mock).mockRejectedValue(error)
+            ;(mockManager.markAsRead as VitestMock).mockRejectedValue(error)
 
             await expect(conversations.markAsRead('ticket-123')).rejects.toThrow('Failed to mark as read')
         })
 
         it('should handle getTickets errors', async () => {
             const error = new Error('Failed to fetch tickets')
-            ;(mockManager.getTickets as vi.Mock).mockRejectedValue(error)
+            ;(mockManager.getTickets as VitestMock).mockRejectedValue(error)
 
             await expect(conversations.getTickets()).rejects.toThrow('Failed to fetch tickets')
         })
@@ -637,7 +638,7 @@ describe('Conversations API Methods', () => {
                 unread_count: 0,
             }
 
-            ;(mockManager.sendMessage as vi.Mock).mockResolvedValue(mockResponse)
+            ;(mockManager.sendMessage as VitestMock).mockResolvedValue(mockResponse)
 
             const result = await conversations.sendMessage('Test')
             expect(result).toEqual(mockResponse)

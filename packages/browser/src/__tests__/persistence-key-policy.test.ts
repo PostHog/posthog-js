@@ -81,7 +81,7 @@ const walkFiles = (dir: string): string[] => {
 }
 
 const isPropertyAccessLike = (
-    expression: ts.LeftHandSideExpression
+    expression: ts.Expression
 ): expression is ts.PropertyAccessExpression | ts.PropertyAccessChain => {
     return ts.isPropertyAccessExpression(expression) || ts.isPropertyAccessChain(expression)
 }
@@ -118,11 +118,7 @@ const isIdentifierNamed = (expression: ts.Expression | undefined, name: string):
 }
 
 const hasPropertyName = (expression: ts.Expression | undefined, names: string[]): boolean => {
-    return (
-        !!expression &&
-        isPropertyAccessLike(expression as ts.LeftHandSideExpression) &&
-        names.includes(expression.name.text)
-    )
+    return !!expression && isPropertyAccessLike(expression) && names.includes(expression.name.text)
 }
 
 const isPersistenceReceiver = (expression: ts.Expression | undefined): boolean => {
@@ -145,7 +141,7 @@ const isKeyValueStoreReceiver = (
         return true
     }
 
-    const symbolNode = isPropertyAccessLike(expression as ts.LeftHandSideExpression)
+    const symbolNode = isPropertyAccessLike(expression)
         ? expression.name
         : ts.isIdentifier(expression)
           ? expression
@@ -172,7 +168,7 @@ const isKeyValueStoreReceiver = (
 const isRegisterForSessionReceiver = (expression: ts.Expression | undefined): boolean => {
     return (
         !!expression &&
-        (ts.isThis(expression) ||
+        (expression.kind === ts.SyntaxKind.ThisKeyword ||
             isIdentifierNamed(expression, 'posthog') ||
             hasPropertyName(expression, ['_instance', 'instance']))
     )
@@ -223,7 +219,7 @@ const resolvePolicyIdentifiers = (
             return
         }
 
-        if (isPropertyAccessLike(node as ts.LeftHandSideExpression) && isUpperSnakeCase(node.name.text)) {
+        if (isPropertyAccessLike(node) && ts.isIdentifier(node.name) && isUpperSnakeCase(node.name.text)) {
             if (!visitSymbol(node.name, true)) {
                 result.hasUnresolved = true
             }
@@ -311,7 +307,7 @@ const analyzeKeyComposition = (
         return analyzeKeyComposition(expression.expression, checker, resolvesNamedConstant, visitedSymbols)
     }
 
-    if (ts.isIdentifier(expression) || isPropertyAccessLike(expression as ts.LeftHandSideExpression)) {
+    if (ts.isIdentifier(expression) || isPropertyAccessLike(expression)) {
         const symbolNode = ts.isIdentifier(expression) ? expression : expression.name
         const symbol = getResolvedSymbol(symbolNode, checker)
         const initializer = getSymbolInitializer(symbol)
@@ -612,7 +608,7 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
 
                 if (
                     methodName === '_remove' &&
-                    ts.isThis(receiver) &&
+                    receiver?.kind === ts.SyntaxKind.ThisKeyword &&
                     getEnclosingClassName(node) === 'PostHogFeatureFlags'
                 ) {
                     recordResolution(node.arguments[0], node, '_remove() in PostHogFeatureFlags', true)
@@ -678,7 +674,10 @@ const getEnclosingClassName = (node: ts.Node): string | undefined => {
 
 const isBrowserCommonKeyValueStoreSymbol = (symbol: ts.Symbol | undefined): boolean =>
     !!symbol?.declarations?.some((declaration) => {
-        const declarationName = 'name' in declaration ? declaration.name : undefined
+        const declarationName =
+            ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration)
+                ? declaration.name
+                : undefined
         const filePath = declaration.getSourceFile().fileName.replace(/\\/g, '/')
         return (
             !!declarationName &&
@@ -747,7 +746,7 @@ const isForwardedFeatureFlagsStateKey = (
     while (current && !ts.isMethodDeclaration(current)) {
         current = current.parent
     }
-    if (!current) {
+    if (!current || !ts.isMethodDeclaration(current)) {
         return false
     }
 
@@ -761,17 +760,18 @@ const isForwardedFeatureFlagsStateKey = (
 
 const isThisPropsElementAccess = (expression: ts.Expression): boolean => {
     return (
-        ts.isElementAccessExpression(expression) &&
+        (ts.isElementAccessExpression(expression) || ts.isPropertyAccessExpression(expression)) &&
         ts.isPropertyAccessExpression(expression.expression) &&
-        ts.isThis(expression.expression.expression) &&
+        expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
         expression.expression.name.text === 'props'
     )
 }
 
-const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
+const collectPostHogPersistenceMutationBoundaryIssues = (
+    sourceText = fs.readFileSync(path.resolve(__dirname, '../posthog-persistence.ts'), 'utf8')
+): string[] => {
     const issues: string[] = []
     const filePath = path.resolve(__dirname, '../posthog-persistence.ts')
-    const sourceText = fs.readFileSync(filePath, 'utf8')
     const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true)
     const allowedDirectMutationMethods = new Set(['_setProp', '_deleteProp'])
     const allowedSinkCallerMethods = new Set([
@@ -792,7 +792,8 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
     const visit = (node: ts.Node) => {
         if (
             ts.isBinaryExpression(node) &&
-            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+            node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
             isThisPropsElementAccess(node.left)
         ) {
             const enclosingMethodName = getEnclosingClassMethodName(node)
@@ -815,7 +816,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         if (
             ts.isCallExpression(node) &&
             isPropertyAccessLike(node.expression) &&
-            ts.isThis(node.expression.expression)
+            node.expression.expression.kind === ts.SyntaxKind.ThisKeyword
         ) {
             const methodName = node.expression.name.text
             if (methodName === '_setProp' || methodName === '_deleteProp') {
@@ -857,6 +858,9 @@ describe('persistence key policy', () => {
             .filter(([, expectedExposure, actualExposure]) => expectedExposure !== actualExposure)
 
         expect(compatibilitySnapshot).toEqual([])
+        for (const key of new Set([...LEGACY_RESERVED_PERSISTENCE_KEYS, ...extensionOwnedFeatureFlagKeys])) {
+            expect(getPersistenceKeyPolicy(key)).toMatchObject({ exposure: 'hidden' })
+        }
     })
 
     it('classifies replay trigger-group prefix keys as hidden', () => {
@@ -875,8 +879,37 @@ describe('persistence key policy', () => {
         ).toMatchObject({ exposure: 'hidden' })
     })
 
-    it('keeps direct persistence mutations behind the PostHogPersistence sink helpers', () => {
+    it('keeps bracket and dot persistence mutations behind the sink helpers', () => {
         expect(collectPostHogPersistenceMutationBoundaryIssues()).toEqual([])
+        for (const statement of [
+            "this.props['flag'] = true",
+            "this.props['count'] += 1",
+            "this.props['count'] ||= 1",
+            "delete this.props['flag']",
+            'this.props.flag = true',
+            'this.props.count += 1',
+            'delete this.props.flag',
+        ]) {
+            const issues = collectPostHogPersistenceMutationBoundaryIssues(
+                `class PostHogPersistence { unsafe() { ${statement} } }`
+            )
+            expect(issues).toHaveLength(1)
+            expect(issues[0]).toContain('direct this.props')
+        }
+        expect(
+            collectPostHogPersistenceMutationBoundaryIssues(`
+            class PostHogPersistence {
+                _setProp() { this.props['flag'] = true }
+                _deleteProp() { delete this.props['flag'] }
+                register() { this._setProp() }
+            }
+        `)
+        ).toEqual([])
+        expect(
+            collectPostHogPersistenceMutationBoundaryIssues(`
+            class PostHogPersistence { unsafe() { this._setProp() } }
+        `)
+        ).toEqual([expect.stringContaining('_setProp() is called from unexpected method unsafe')])
     })
 
     it('classifies SDK-owned persistence keys and forbids raw literal keys at persistence write sites', () => {

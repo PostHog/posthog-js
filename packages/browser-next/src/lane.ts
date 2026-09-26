@@ -414,7 +414,7 @@ export class Lane<E> {
 
                     let retryEntries: QueueEntry<E>[] = []
                     try {
-                        const retry = result?.retry
+                        const retry = result && result.retry
                         if (Array.isArray(retry)) {
                             const selected: QueueEntry<E>[] = []
                             const length = Math.min(retry.length, entries.length)

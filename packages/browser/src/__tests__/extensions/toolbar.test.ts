@@ -19,6 +19,8 @@ describe('Toolbar', () => {
     const toolbarParams = makeToolbarParams({})
 
     beforeEach(() => {
+        delete assignableWindow.ph_toolbar_state
+        window.localStorage.removeItem('_postHogToolbarParams')
         instance = createMockPostHog({
             config: createMockConfig({
                 api_host: 'http://api.example.com',
@@ -173,7 +175,12 @@ describe('Toolbar', () => {
         })
 
         it('should load if not previously loaded', () => {
+            const loader = vi.mocked(assignableWindow.__PosthogExtensions__!.loadExternalDependency)
+            loader.mockImplementation(() => {})
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+            expect(loader).toHaveBeenCalledWith(instance, 'toolbar', expect.any(Function))
+            expect(assignableWindow.ph_load_toolbar).not.toHaveBeenCalled()
+            loader.mock.calls[0][2]()
             expect(assignableWindow.ph_load_toolbar).toHaveBeenCalledWith(
                 { ...toolbarParams, apiURL: 'http://api.example.com' },
                 instance

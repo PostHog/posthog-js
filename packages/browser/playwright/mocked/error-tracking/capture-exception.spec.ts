@@ -141,7 +141,7 @@ async function bootstrap(posthog: PosthogPage, events: EventsPage, cb: (ph: Post
     return exception
 }
 
-async function exceptionMatch(
+function exceptionMatch(
     exception: CaptureResult,
     type: string,
     value: string | number | undefined,

@@ -185,7 +185,7 @@ describe('Rate Limiter', () => {
             )
         })
 
-        it('omits the page and session when they are unavailable', () => {
+        it('omits an unavailable session while retaining the page', () => {
             mockPostHog.get_session_id = vi.fn(() => '')
 
             range(200).forEach(() => rateLimiter.clientRateLimitContext())
@@ -278,8 +278,11 @@ describe('Rate Limiter', () => {
     })
 
     describe('server side', () => {
-        it('is not rate limited with no batch key', () => {
+        it('uses the events quota when no batch key is provided', () => {
             expect(rateLimiter.isServerRateLimited(undefined)).toBe(false)
+            rateLimiter.serverLimits = { events: Date.now() + 60_000 }
+            expect(rateLimiter.isServerRateLimited('events')).toBe(true)
+            expect(rateLimiter.isServerRateLimited(undefined)).toBe(true)
         })
 
         it('is not rate limited if there is nothing in persistence', () => {
@@ -397,6 +400,7 @@ describe('Rate Limiter', () => {
             })
 
             expect(mockLogger.error).not.toHaveBeenCalled()
+            expect(mockLogger.warn).not.toHaveBeenCalled()
         })
     })
 })

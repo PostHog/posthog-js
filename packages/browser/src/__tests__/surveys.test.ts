@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import type { Mock as VitestMock } from 'vitest'
 
 import { expect, it, describe, beforeEach, afterEach, vi } from 'vitest'
 import { render } from 'preact'
@@ -6,7 +7,6 @@ import { act } from 'preact/test-utils'
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
-    canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
     getInProgressSurveyState,
@@ -14,6 +14,8 @@ import {
     setInProgressSurveyState,
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { PostHogPersistence } from '../posthog-persistence'
 import { BrowserSurveys } from '../browser-surveys'
 import {
@@ -42,6 +44,7 @@ describe('surveys', () => {
     let surveys: BrowserSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location
+    const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
     const getSurveys = (forceReload = false): Promise<Survey[]> =>
         new Promise((resolve) => surveys.getSurveys(resolve, forceReload))
 
@@ -188,9 +191,8 @@ describe('surveys', () => {
         const loadScriptMock = vi.fn()
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
-            assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
+            assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
             assignableWindow.__PosthogExtensions__.generateSurveys = generateSurveys
-            assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
 
             callback()
         })
@@ -214,15 +216,14 @@ describe('surveys', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             onFeatureFlags: vi.fn().mockReturnValue(() => {}),
-            featureFlags: {
-                hasLoadedFlags: true,
-                _send_request: vi
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-            },
+            featureFlags: new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config)),
         })
+
+        vi.spyOn(instance.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
+        vi.spyOn(instance.featureFlags, 'getFeatureFlag').mockImplementation((key) => flagsResponse.featureFlags[key])
+        vi.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation(
+            (key) => !!flagsResponse.featureFlags[key]
+        )
 
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
@@ -256,11 +257,7 @@ describe('surveys', () => {
     afterEach(() => {
         instance.persistence?.clear()
 
-        Object.defineProperty(window, 'location', {
-            configurable: true,
-            enumerable: true,
-            value: originalWindowLocation,
-        })
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
     })
 
     it('getSurveys gets a list of surveys if not present already', async () => {
@@ -285,15 +282,25 @@ describe('surveys', () => {
     })
 
     it('disposes automatic display polling and visibility handling', () => {
+        vi.useFakeTimers()
         instance.getSurveys = vi.fn((callback) => callback([]))
         const removeEventListener = vi.spyOn(document, 'removeEventListener')
-        const surveyManager = generateSurveys(instance, true)
+        const surveyManager = generateSurveys(instance, true)!
+        const evaluate = vi.spyOn(surveyManager, 'callSurveysAndEvaluateDisplayLogic')
+        vi.advanceTimersByTime(1000)
+        expect(evaluate).toHaveBeenCalledTimes(1)
+        evaluate.mockClear()
 
-        surveyManager?.dispose()
-        surveyManager?.dispose()
+        surveyManager.dispose()
+        surveyManager.dispose()
 
+        vi.advanceTimersByTime(3000)
+        document.dispatchEvent(new Event('visibilitychange'))
+        expect(evaluate).not.toHaveBeenCalled()
+        evaluate.mockRestore()
         expect(removeEventListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
         removeEventListener.mockRestore()
+        vi.useRealTimers()
     })
 
     it('removes rendered survey DOM after a force reload replaces the persisted definitions', () => {
@@ -413,6 +420,7 @@ describe('surveys', () => {
     })
 
     it('getSurveys returns empty array if surveys are disabled', () => {
+        expect.assertions(2)
         instance.config.disable_surveys = true
         surveys.getSurveys((data) => {
             expect(data).toEqual([])
@@ -623,6 +631,7 @@ describe('surveys', () => {
             end_date: null,
         } as unknown as Survey
         const surveyWithEvents: Survey = {
+            id: 'event-triggered-survey',
             name: 'survey with events',
             description: 'survey with events description',
             type: SurveyType.Popover,
@@ -695,7 +704,7 @@ describe('surveys', () => {
         ])(
             'checks a $schedule survey on iteration $currentIteration against a cached internal targeting flag before flags load',
             ({ schedule, currentIteration, expected }) => {
-                instance.featureFlags.hasLoadedFlags = false
+                vi.spyOn(instance.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(false)
                 const surveyManager = (surveys as any)._surveyManager as SurveyManager
 
                 expect(
@@ -715,7 +724,7 @@ describe('surveys', () => {
             { state: 'have not loaded', hasLoadedFlags: false },
             { state: 'have loaded', hasLoadedFlags: true },
         ])('returns a cached-eligible API survey to a one-shot caller when flags $state', ({ hasLoadedFlags }) => {
-            instance.featureFlags.hasLoadedFlags = hasLoadedFlags
+            vi.spyOn(instance.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(hasLoadedFlags)
             instance.persistence?.register({ $surveys: [apiSurveyWithCachedTargetingFlags] })
             const callback = vi.fn()
 
@@ -726,6 +735,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys that are active', () => {
+            expect.assertions(1)
             surveysResponse = { surveys: [draftSurvey, activeSurvey, completedSurvey] }
 
             surveys.getActiveMatchingSurveys((data) => {
@@ -734,14 +744,23 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url and selector matching', () => {
+            expect.assertions(3)
             surveysResponse = {
                 surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector],
             }
-            assignableWindow.location = new URL('https://posthog.com') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://posthog.com'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithUrl])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveys.getActiveMatchingSurveys((data) => {
@@ -752,7 +771,11 @@ describe('surveys', () => {
                 document.body.removeChild(testSelectorEl)
             }
 
-            assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://posthogapp.com'),
+            })
             document.body.appendChild(document.createElement('div')).id = 'foo'
 
             surveys.getActiveMatchingSurveys((data) => {
@@ -765,6 +788,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url with urlMatchType settings', () => {
+            expect.assertions(5)
             surveysResponse = {
                 surveys: [
                     surveyWithRegexUrl,
@@ -777,38 +801,79 @@ describe('surveys', () => {
 
             const originalWindowLocation = assignableWindow.location
 
-            assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://regex-url.com/test'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithRegexUrl])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://example.com?name=something') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://example.com?name=something'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithParamRegexUrl])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://app.subdomain.com') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://app.subdomain.com'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardSubdomainUrl])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://wildcard.com/something/other') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://wildcard.com/something/other'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardRouteUrl])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://example.com/exact'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithExactUrlMatch])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
         })
 
         it('returns surveys based on device types matching', () => {
+            expect.assertions(1)
             surveysResponse = {
                 surveys: [surveyWithMobileDeviceType],
             }
@@ -825,6 +890,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on device types not matching', () => {
+            expect.assertions(1)
             surveysResponse = {
                 surveys: [surveyWithWebDeviceType],
             }
@@ -841,33 +907,59 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on exclusion conditions', () => {
+            expect.assertions(3)
             surveysResponse = {
                 surveys: [surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex],
             }
 
-            assignableWindow.location = new URL('https://posthog.com') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://posthog.com'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithIsNotUrlMatch and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
                 expect(data).toEqual([surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://example.com/exact'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithUrlDoesNotContain and surveyWithUrlDoesNotContainRegex because they are not exact matches
                 expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithUrlDoesNotContainRegex])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
 
-            assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://regex-url.com/test'),
+            })
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithUrlDoesNotContain and surveyWithIsNotUrlMatch because they are not regex matches
                 expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch])
             })
-            assignableWindow.location = originalWindowLocation
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: originalWindowLocation,
+            })
         })
 
         it('returns surveys that match linked and targeting feature flags', () => {
+            expect.assertions(1)
             surveysResponse = { surveys: [activeSurvey, surveyWithFlags, surveyWithEverything] }
             surveys.getActiveMatchingSurveys((data) => {
                 // active survey is returned because it has no flags aka there are no restrictions on flag enabled for it
@@ -876,6 +968,7 @@ describe('surveys', () => {
         })
 
         it('does not return surveys that have flag keys but no matching flags', () => {
+            expect.assertions(1)
             surveysResponse = { surveys: [surveyWithFlags, surveyWithUnmatchedFlags] }
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithFlags])
@@ -883,6 +976,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys that match internal feature flags', () => {
+            expect.assertions(1)
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
             }
@@ -892,6 +986,7 @@ describe('surveys', () => {
         })
 
         it('does not return event based surveys that didnt observe an event', () => {
+            expect.assertions(1)
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
@@ -901,15 +996,25 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
+            expect.assertions(2)
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
-            ;(surveys._surveyEventReceiver as any)?.on('user_subscribed')
+            instance.getSurveys = surveys.getSurveys.bind(surveys)
+            surveys.loadIfEnabled()
+            surveys._surveyEventReceiver!.register([surveyWithEvents])
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
+
+            vi.mocked(instance._addCaptureHook).mock.calls[0][0]('user_subscribed')
+
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag, surveyWithEvents])
+            })
         })
         it('does not return surveys that have internal flag keys but no matching internal flags', () => {
+            expect.assertions(1)
             surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
@@ -917,7 +1022,12 @@ describe('surveys', () => {
         })
 
         it('returns surveys that inclusively matches any of the above', () => {
-            assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
+            expect.assertions(1)
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: new URL('https://posthogapp.com'),
+            })
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
             // activeSurvey returns because there are no restrictions on conditions or flags on it
@@ -927,6 +1037,7 @@ describe('surveys', () => {
         })
 
         it('returns only surveys with enabled feature flags', () => {
+            expect.assertions(4)
             surveysResponse = { surveys: surveysWithFeatureFlagKeys }
 
             surveys.getActiveMatchingSurveys((data) => {
@@ -1070,10 +1181,11 @@ describe('surveys', () => {
         })
 
         it('returns false when regular feature flag is disabled', () => {
-            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('survey-targeting-flag-key2')
+            vi.mocked(instance.featureFlags.isFeatureEnabled).mockReturnValue(false)
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('regular-disabled-flag')
             expect(result).toBe(false)
-            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('survey-targeting-flag-key2', {
-                send_event: false,
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('regular-disabled-flag', {
+                send_event: true,
             })
         })
 
@@ -1588,10 +1700,13 @@ describe('surveys', () => {
             ] as SurveyQuestion[]
 
             const desiredOrder = ['A', 'G', 'C', 'E', 'H', 'D', 'F', 'B']
-            let currentStep = 0
+            let currentStep: number | typeof SurveyQuestionBranchingType.End = 0
             const actualOrder: string[] = []
 
             for (let i = 0; i < survey.questions.length; i++) {
+                if (currentStep === SurveyQuestionBranchingType.End) {
+                    throw new Error('Survey ended before all expected answers/questions were visited')
+                }
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
                 currentStep = getNextSurveyStep(survey, currentStep, 'Some response')
@@ -1648,9 +1763,12 @@ describe('surveys', () => {
                 'Sorry to hear that. Please enter your email, a colleague will be in touch.',
             ]
             let actualOrder: string[] = []
-            let currentStep = 0
+            let currentStep: number | typeof SurveyQuestionBranchingType.End = 0
             let answers: (string | number | null)[] = [0, 'test@test.com']
             for (const answer of answers) {
+                if (currentStep === SurveyQuestionBranchingType.End) {
+                    throw new Error('Survey ended before all expected answers/questions were visited')
+                }
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
                 currentStep = getNextSurveyStep(survey, currentStep, answer)
@@ -1664,6 +1782,9 @@ describe('surveys', () => {
             currentStep = 0
             answers = [7, 'I am not impressed']
             for (const answer of answers) {
+                if (currentStep === SurveyQuestionBranchingType.End) {
+                    throw new Error('Survey ended before all expected answers/questions were visited')
+                }
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
                 currentStep = getNextSurveyStep(survey, currentStep, answer)
@@ -1677,6 +1798,9 @@ describe('surveys', () => {
             currentStep = 0
             answers = [10, 'No', 'I am lazy']
             for (const answer of answers) {
+                if (currentStep === SurveyQuestionBranchingType.End) {
+                    throw new Error('Survey ended before all expected answers/questions were visited')
+                }
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
                 currentStep = getNextSurveyStep(survey, currentStep, answer)
@@ -1694,6 +1818,9 @@ describe('surveys', () => {
             currentStep = 0
             answers = [10, 'Yes', null]
             for (const answer of answers) {
+                if (currentStep === SurveyQuestionBranchingType.End) {
+                    throw new Error('Survey ended before all expected answers/questions were visited')
+                }
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
                 currentStep = getNextSurveyStep(survey, currentStep, answer)
@@ -1818,12 +1945,16 @@ describe('surveys', () => {
             }) as unknown as Survey
 
         beforeEach(() => {
-            ;(instance.capture as vi.Mock).mockClear()
+            ;(instance.capture as VitestMock).mockClear()
         })
 
         it('does not send a survey sent event for an incomplete prefill when partial responses are off', () => {
             const surveyManager = (surveys as any)._surveyManager
             const survey = singleChoiceSurvey({ enable_partial_responses: false })
+            survey.questions[0] = {
+                ...survey.questions[0],
+                skipSubmitButton: true,
+            } as (typeof survey.questions)[number]
 
             const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
 
@@ -1849,7 +1980,9 @@ describe('surveys', () => {
 
             expect(surveyManager._handleInitialResponses(survey, { 0: 0, 1: 1 })).toBe(false)
 
-            const [, properties] = (instance.capture as vi.Mock).mock.calls.find(([event]) => event === 'survey sent')
+            const [, properties] = (instance.capture as VitestMock).mock.calls.find(
+                ([event]) => event === 'survey sent'
+            )
             expect(properties).toEqual(
                 expect.objectContaining({ $survey_completed: false, $survey_response_q1: 'yes' })
             )
@@ -1919,15 +2052,23 @@ describe('surveys', () => {
         })
 
         it('updates _currentLanguage and re-renders when languagechange fires and language differs', () => {
-            // Spy on _translateSurveyForRendering to return French translation
-            ;(surveyManager as any)._translateSurveyForRendering = vi
-                .fn()
-                .mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._translateSurveyForRendering = vi.fn().mockReturnValue({
+                survey: { ...frSurvey, questions: [{ ...frSurvey.questions[0], question: 'Bonjour?' }] },
+                language: 'fr',
+            })
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'en'
             ;(surveyManager as any)._surveyIsRendered = true
 
+            const target = document.createElement('div')
+            target.className = getSurveyContainerClass(frSurvey)
+            const shadow = target.attachShadow({ mode: 'open' })
+            shadow.innerHTML = '<span data-language-sentinel>existing render</span>'
+            document.body.appendChild(target)
             window.dispatchEvent(new Event('languagechange'))
+            expect(shadow.textContent).toContain('Bonjour?')
+            expect(shadow.textContent).not.toContain('Hello?')
+            target.remove()
 
             expect((surveyManager as any)._currentLanguage).toBe('fr')
             expect((surveyManager as any)._translateSurveyForRendering).toHaveBeenCalledWith(frSurvey)
@@ -1942,7 +2083,15 @@ describe('surveys', () => {
             ;(surveyManager as any)._surveyIsRendered = true
 
             const languageBefore = (surveyManager as any)._currentLanguage
+            const target = document.createElement('div')
+            target.className = getSurveyContainerClass(frSurvey)
+            const shadow = target.attachShadow({ mode: 'open' })
+            shadow.innerHTML = '<span data-language-sentinel>existing render</span>'
+            document.body.appendChild(target)
+            const markupBefore = shadow.innerHTML
             window.dispatchEvent(new Event('languagechange'))
+            expect(shadow.innerHTML).toBe(markupBefore)
+            target.remove()
 
             // _translateSurveyForRendering should still be called (to detect), but language shouldn't change
             expect((surveyManager as any)._currentLanguage).toBe(languageBefore)

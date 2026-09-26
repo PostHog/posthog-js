@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@posthog/browser-common/utils/logger')>()),
     createLogger: vi.fn().mockReturnValue({
@@ -12,13 +13,16 @@ vi.useFakeTimers()
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
-import { PostHog } from '../posthog-core'
+import { PostHog, defaultConfig } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { DEFAULT_DISPLAY_SURVEY_OPTIONS, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
-import { createMockPostHog } from './helpers/posthog-instance'
+import '../entrypoints/default-extensions'
 import { createSurveysClient } from './helpers/surveys-client'
 
 const mockLogger = vi.mocked(createLogger).mock.results[0].value
@@ -31,12 +35,12 @@ const flushPromises = async (): Promise<void> => {
 describe('posthog-surveys', () => {
     describe('BrowserSurveys Class', () => {
         let mockPostHog: PostHog & {
-            get_property: vi.Mock
-            _send_request: vi.Mock
+            get_property: VitestMock
+            _send_request: VitestMock
         }
         let surveys: BrowserSurveys
-        let mockGenerateSurveys: vi.Mock
-        let mockLoadExternalDependency: vi.Mock
+        let mockGenerateSurveys: VitestMock
+        let mockLoadExternalDependency: VitestMock
 
         const survey: Survey = {
             id: 'completed-survey',
@@ -97,54 +101,36 @@ describe('posthog-surveys', () => {
             localStorage.clear()
 
             // Mock PostHog instance
-            mockPostHog = createMockPostHog({
-                config: {
-                    disable_surveys: false,
-                    token: 'test-token',
-                    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
-                },
-                persistence: {
-                    register: vi.fn(),
-                    props: {},
-                },
-                requestRouter: {
-                    endpointFor: vi.fn().mockReturnValue('https://test.com/api/surveys'),
-                },
-                _send_request: vi.fn(),
-                get_property: vi.fn(),
-                consent: {
-                    _instance: {} as any,
-                    _config: {} as any,
-                    consent: {} as any,
-                    isOptedIn: vi.fn().mockReturnValue(true),
-                    isOptedOut: vi.fn().mockReturnValue(false),
-                    hasOptedInBefore: vi.fn().mockReturnValue(false),
-                    hasOptedOutBefore: vi.fn().mockReturnValue(false),
-                    optInCapturing: vi.fn(),
-                    optOutCapturing: vi.fn(),
-                    reset: vi.fn(),
-                    onConsentChange: vi.fn(),
-                },
-                onFeatureFlags: vi.fn().mockReturnValue(() => {}),
-                featureFlags: {
-                    hasLoadedFlags: true,
-                    _send_request: vi
-                        .fn()
-                        .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                    getFeatureFlag: vi
-                        .fn()
-                        .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                    isFeatureEnabled: vi
-                        .fn()
-                        .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                },
-            }) as PostHog & {
-                get_property: vi.Mock
-                _send_request: vi.Mock
+            mockPostHog = Object.assign(new PostHog(), {
+                get_property: vi.fn<Parameters<PostHog['get_property']>, ReturnType<PostHog['get_property']>>(),
+                _send_request: vi.fn<Parameters<PostHog['_send_request']>, ReturnType<PostHog['_send_request']>>(),
+            })
+            mockPostHog.config = {
+                ...defaultConfig(),
+                persistence: 'memory',
+                disable_surveys: false,
+                token: 'test-token',
+                surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
             }
+            mockPostHog.persistence = new PostHogPersistence(mockPostHog.config)
+            vi.spyOn(mockPostHog.persistence, 'register').mockReturnValue(true)
+            vi.spyOn(mockPostHog.requestRouter, 'endpointFor').mockReturnValue('https://test.com/api/surveys')
+            vi.spyOn(mockPostHog, 'capture').mockReturnValue(undefined)
+            vi.spyOn(mockPostHog, 'is_capturing').mockReturnValue(true)
+            vi.spyOn(mockPostHog.consent, 'isOptedIn').mockReturnValue(true)
+            vi.spyOn(mockPostHog.consent, 'isOptedOut').mockReturnValue(false)
+            vi.spyOn(mockPostHog, 'onFeatureFlags').mockReturnValue(() => {})
+            mockPostHog.featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
+            vi.spyOn(mockPostHog.featureFlags, 'getFeatureFlag').mockImplementation(
+                (key) => flagsResponse.featureFlags[key]
+            )
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(
+                (key) => !!flagsResponse.featureFlags[key]
+            )
 
             // Create surveys instance
-            surveys = new BrowserSurveys(mockPostHog as PostHog)
+            surveys = new BrowserSurveys(mockPostHog)
 
             // Mock window.__PosthogExtensions__
             mockGenerateSurveys = vi.fn()
@@ -160,6 +146,7 @@ describe('posthog-surveys', () => {
 
         afterEach(() => {
             // Clean up
+            mockPostHog.persistence?.destroy()
             delete assignableWindow.__PosthogExtensions__
             localStorage.clear()
         })
@@ -275,6 +262,13 @@ describe('posthog-surveys', () => {
                 vi.advanceTimersByTime(1000)
 
                 expect(render).not.toHaveBeenCalled()
+
+                isCapturing.mockReturnValue(true)
+                surveys.renderSurvey({ ...survey, appearance: { surveyPopupDelaySeconds: 1 } }, 'body')
+                vi.advanceTimersByTime(999)
+                expect(render).not.toHaveBeenCalled()
+                vi.advanceTimersByTime(1)
+                expect(render).toHaveBeenCalledTimes(1)
             })
         })
 
@@ -513,6 +507,7 @@ describe('posthog-surveys', () => {
 
         describe('loadIfEnabled', () => {
             it('should not initialize if surveys are already loaded', () => {
+                surveys['_isSurveysEnabled'] = true
                 // Set surveyManager to simulate already loaded state
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
                 surveys.loadIfEnabled()
@@ -522,6 +517,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should not initialize if already initializing', () => {
+                surveys['_isSurveysEnabled'] = true
                 // Set isInitializingSurveys to true
                 surveys['_isInitializingSurveys'] = true
                 surveys.loadIfEnabled()
@@ -531,6 +527,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should not initialize if surveys are disabled', () => {
+                surveys['_isSurveysEnabled'] = true
                 mockPostHog.config.disable_surveys = true
                 surveys.loadIfEnabled()
 
@@ -539,6 +536,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should not initialize if PostHog Extensions are not found', () => {
+                surveys['_isSurveysEnabled'] = true
                 delete assignableWindow.__PosthogExtensions__
                 surveys.loadIfEnabled()
 
@@ -561,6 +559,9 @@ describe('posthog-surveys', () => {
                 surveys.loadIfEnabled()
 
                 expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(mockGenerateSurveys).toHaveBeenCalledTimes(1)
+                expect(surveys['_surveyManager']).toBe(mockGenerateSurveys.mock.results[0].value)
+                expect(surveys._surveyEventReceiver).toBeDefined()
             })
 
             it('should set isInitializingSurveys to false after failed initialization', () => {
@@ -674,7 +675,7 @@ describe('posthog-surveys', () => {
 
             it('should not load surveys in cookieless mode without consent', () => {
                 mockPostHog.config.cookieless_mode = 'on_reject'
-                const mockIsOptedOut = mockPostHog.consent.isOptedOut as vi.Mock
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as VitestMock
                 mockIsOptedOut.mockReturnValue(true)
                 surveys['_isSurveysEnabled'] = true
 
@@ -686,7 +687,7 @@ describe('posthog-surveys', () => {
 
             it('should load surveys in cookieless mode after consent is given', () => {
                 mockPostHog.config.cookieless_mode = 'on_reject'
-                const mockIsOptedOut = mockPostHog.consent.isOptedOut as vi.Mock
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as VitestMock
                 mockIsOptedOut.mockReturnValue(false)
                 surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})

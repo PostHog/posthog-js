@@ -90,6 +90,11 @@ test.describe('V2 Trigger Groups - session rotation', () => {
             return ph?.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId
         })
         expect(sessionB).not.toBe(sessionA)
+        expect(
+            await page.evaluate(() =>
+                (window as WindowWithPostHog).posthog!.get_property('$posthog_sr_group_sampling_g-rot')
+            )
+        ).toEqual({ sessionId: sessionB, sampleRate: 1, sampled: true })
 
         // Status should be buffering again — trigger needs to fire in the new session
         const afterRotation = await page.evaluate(() => {
@@ -178,7 +183,7 @@ test.describe('V2 Trigger Groups - URL blocklist interaction', () => {
 
         // Navigate back to a non-blocked URL — should resume as sampled (activation persists)
         await page.evaluate(() => {
-            window.history.pushState({}, '', '/app/other-page')
+            window.history.pushState({}, '', '/settings/after-block')
         })
         await page.locator('[data-cy-input]').fill('back from blocked')
         await page.waitForTimeout(300)

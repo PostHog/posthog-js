@@ -16,6 +16,7 @@ test.describe('Identify', () => {
         expect(deviceIds.size).toEqual(1)
         const [deviceId] = deviceIds
         expect(deviceId.length).toEqual(36)
+        expect(deviceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     })
 
     test('opt out capturing does not fail after identify', async ({ page }) => {

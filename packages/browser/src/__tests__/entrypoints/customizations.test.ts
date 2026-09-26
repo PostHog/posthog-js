@@ -1,3 +1,5 @@
+import path from 'path'
+import { typeContractDiagnostics } from '../helpers/type-contract'
 import packageInfo from '../../../package.json'
 import { assignableWindow } from '../../utils/globals'
 import type { PostHogConfig } from '../../types'
@@ -72,5 +74,17 @@ describe('customizations entrypoints', () => {
         }
 
         expect(config.loaded).toBeDefined()
+        const fixture = path.resolve(__dirname, '__audit_contract__.ts')
+        const source = `import type { PostHogConfig } from '../../types'
+import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations'
+const config: Partial<PostHogConfig> = { loaded: (posthog) => setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog) }
+void config`
+        expect(typeContractDiagnostics(fixture, source)).toEqual([])
+        expect(
+            typeContractDiagnostics(
+                fixture,
+                source.replace('(posthog) => setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog)', '42')
+            )
+        ).not.toEqual([])
     })
 })

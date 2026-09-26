@@ -19,7 +19,7 @@ async function setupAndTriggerRequest(
     }
 ): Promise<Record<string, string>> {
     const { domain, method = 'fetch', startOptions = baseOptions } = config
-    let capturedHeaders: Record<string, string> = {}
+    let capturedHeaders: Record<string, string> | undefined
 
     page.on('request', (request: Request) => {
         if (request.url().includes(domain)) {
@@ -39,23 +39,34 @@ async function setupAndTriggerRequest(
     })
 
     if (method === 'fetch') {
-        await page.evaluate((d) => fetch(`https://${d}/api/test`), domain)
-    } else {
-        await page.evaluate((d) => {
-            const xhr = new XMLHttpRequest()
-            xhr.open('GET', `https://${d}/api/test`)
-            xhr.send()
+        const response = await page.evaluate(async (d) => {
+            const response = await fetch(`https://${d}/api/test`)
+            return { status: response.status, body: await response.text() }
         }, domain)
+        expect(response).toEqual({ status: 200, body: 'ok' })
+    } else {
+        const response = await page.evaluate(
+            (d) =>
+                new Promise<{ status: number; body: string }>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest()
+                    xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText })
+                    xhr.onerror = () => reject(new Error('customer XHR failed'))
+                    xhr.open('GET', `https://${d}/api/test`)
+                    xhr.send()
+                }),
+            domain
+        )
+        expect(response).toEqual({ status: 200, body: 'ok' })
     }
 
-    await page.waitForTimeout(500)
-    return capturedHeaders
+    expect(capturedHeaders).toBeDefined()
+    return capturedHeaders!
 }
 
 test.describe('tracing headers', () => {
     const casesWithHeaders = [
         { name: 'fetch to listed domain', domain: 'example.com' },
-        { name: 'fetch without session manager', domain: 'no-session.com', disableSession: true },
+        { name: 'fetch with session recording disabled', domain: 'no-session.com', disableSession: true },
     ]
 
     for (const { name, domain, disableSession } of casesWithHeaders) {
@@ -66,11 +77,16 @@ test.describe('tracing headers', () => {
 
             const headers = await setupAndTriggerRequest(page, context, { domain, startOptions })
 
-            expect(headers['x-posthog-distinct-id']).toBeTruthy()
-            if (!disableSession) {
-                expect(headers['x-posthog-session-id']).toBeTruthy()
-                expect(headers['x-posthog-window-id']).toBeTruthy()
-            }
+            const ids = await page.evaluate(() => {
+                const ph = (window as any).posthog
+                return { distinctId: ph.get_distinct_id(), ...ph.sessionManager.checkAndGetSessionAndWindowId(true) }
+            })
+            expect(ids.distinctId).toBeTruthy()
+            expect(ids.sessionId).toBeTruthy()
+            expect(ids.windowId).toBeTruthy()
+            expect(headers['x-posthog-distinct-id']).toBe(ids.distinctId)
+            expect(headers['x-posthog-session-id']).toBe(ids.sessionId)
+            expect(headers['x-posthog-window-id']).toBe(ids.windowId)
         })
     }
 

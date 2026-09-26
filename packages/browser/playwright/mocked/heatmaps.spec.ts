@@ -55,6 +55,18 @@ test.describe('Heatmaps', () => {
         expect(typeof firstEvent.y).toBe('number')
         expect(typeof firstEvent.target_fixed).toBe('boolean')
         expect(['click', 'mousemove', 'rageclick', 'deadclick']).toContain(firstEvent.type)
+        await expect
+            .poll(async () =>
+                (await page.capturedEvents())
+                    .filter((event) => event.event === '$$heatmap')
+                    .flatMap((event) => event.properties.$heatmap_data[page.url()] || [])
+            )
+            .toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ type: 'click' }),
+                    expect.objectContaining({ type: 'mousemove', x: 100, y: 100 }),
+                ])
+            )
     })
 
     test('captures rageclick events', async ({ page, context }) => {
@@ -149,8 +161,8 @@ test.describe('Heatmaps', () => {
         // Perform a mousemove
         await page.mouse.move(100, 100)
 
-        // Wait a bit
-        await page.waitForTimeout(2000)
+        // Exceed the default 5000ms flush used if the disabled option is ignored.
+        await page.waitForTimeout(6000)
 
         // Should not have captured any heatmap events
         const heatmapEvents = (await page.capturedEvents()).filter((event) => event.event === '$$heatmap')

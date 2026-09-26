@@ -21,7 +21,7 @@ test.beforeEach(async ({ page, context }) => {
         {
             options: { disable_surveys_automatic_display: true },
             flagsResponseOverrides: { surveys: true },
-            url: './playground/cypress/index.html',
+            url: '/playground/cypress/index.html',
         },
         page,
         context

@@ -1,3 +1,4 @@
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 import { startNetworkMetrics } from '../../extensions/network-metrics'
 import { PostHog } from '../../posthog-core'
 import { isPostHogXHR } from '../../request'
@@ -23,10 +24,10 @@ class FakeXHR extends EventTarget {
 describe('network metrics', () => {
     const originalFetch = window.fetch
     const originalXHR = window.XMLHttpRequest
-    let fetchMock: vi.Mock
-    let openSpy: vi.SpyInstance
-    let sendSpy: vi.SpyInstance
-    let histogram: vi.Mock
+    let fetchMock: VitestMock
+    let openSpy: VitestSpyInstance
+    let sendSpy: VitestSpyInstance
+    let histogram: VitestMock
     let mockPostHog: PostHog
     let stop: (() => void) | undefined
 
@@ -124,13 +125,13 @@ describe('network metrics', () => {
             ],
         ])('records the request duration for %s', async (_, args, method) => {
             start()
-
+            vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValueOnce(137)
             await window.fetch(...(args as [string]))
 
             expect(recorded()).toEqual([
                 [
                     'http.client.request.duration',
-                    expect.any(Number),
+                    37,
                     {
                         unit: 'ms',
                         attributes: {
@@ -245,9 +246,11 @@ describe('network metrics', () => {
             async (_, failure, errorType) => {
                 fetchMock.mockRejectedValue(failure)
                 start()
-
+                vi.spyOn(performance, 'now').mockReturnValueOnce(300).mockReturnValueOnce(371)
                 await expect(window.fetch('https://api.example.com/things')).rejects.toBe(failure)
 
+                expect(recorded()[0][1]).toBe(71)
+                expect(recorded()[0][2].unit).toBe('ms')
                 const attributes = recorded()[0][2].attributes
                 expect(attributes['error.type']).toBe(errorType)
                 expect('http.response.status_code' in attributes).toBe(false)
@@ -297,7 +300,7 @@ describe('network metrics', () => {
         it('records nothing after stop even when a third-party wrapper keeps it in place', async () => {
             start()
             const downstream = window.fetch
-            setWindowFetch(function (...args: unknown[]) {
+            setWindowFetch(function (...args: Parameters<typeof downstream>) {
                 return downstream(...args)
             })
 
@@ -317,13 +320,13 @@ describe('network metrics', () => {
             ['delete', 0, 'DELETE', { 'error.type': '_OTHER' }],
         ])('records %s with status %s', (method, status, expectedMethod, outcome) => {
             start()
-
+            vi.spyOn(performance, 'now').mockReturnValueOnce(200).mockReturnValueOnce(253)
             sendXHR(method, 'https://api.example.com/things/42', status)
 
             expect(recorded()).toEqual([
                 [
                     'http.client.request.duration',
-                    expect.any(Number),
+                    53,
                     {
                         unit: 'ms',
                         attributes: {
@@ -353,7 +356,7 @@ describe('network metrics', () => {
         it("does not record the SDK's own XHRs", () => {
             start()
             const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
-            ;(isPostHogXHR as vi.Mock).mockImplementation((candidate: unknown) => candidate === xhr)
+            ;(isPostHogXHR as VitestMock).mockImplementation((candidate: unknown) => candidate === xhr)
 
             xhr.open('POST', 'https://us.i.posthog.com/e/')
             xhr.send()

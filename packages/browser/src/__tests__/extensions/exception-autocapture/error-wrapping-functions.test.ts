@@ -102,7 +102,7 @@ describe('error wrapping functions', () => {
             expect(captureFn).toHaveBeenCalled()
         })
 
-        it('does not throw when the handler property cannot be read or written', () => {
+        it('does not throw when reading the handler property throws', () => {
             Object.defineProperty(win, 'onerror', {
                 configurable: true,
                 get() {

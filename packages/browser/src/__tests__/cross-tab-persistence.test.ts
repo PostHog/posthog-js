@@ -435,14 +435,24 @@ describe('cross-tab persistence interactions', () => {
 
         describe('onSessionId handlers', () => {
             it('fires on a local rotation', () => {
+                const initial = makeTab({ sessionId: 'session-A-old', windowId: 'window-A' })
+                initial.manager.checkAndGetSessionAndWindowId(false, T0)
+                initial.persistence.flush()
+                initial.persistence.destroy()
+                initial.manager.destroy()
                 const rotated = makeTab({ sessionId: 'session-A-new', windowId: 'window-A' })
                 const handler = vi.fn()
                 rotated.manager.onSessionId(handler)
                 handler.mockClear()
 
-                rotated.manager.checkAndGetSessionAndWindowId(false, T0 + TIMEOUT_MS + 5_000)
+                const result = rotated.manager.checkAndGetSessionAndWindowId(false, T0 + TIMEOUT_MS + 5_000)
 
-                expect(handler).toHaveBeenCalled()
+                expect(result.sessionId).toBe('session-A-new')
+                expect(result.changeReason?.activityTimeout).toBe(true)
+                expect(handler).toHaveBeenCalledTimes(1)
+                expect(handler.mock.calls[0][0]).toBe('session-A-new')
+                rotated.persistence.destroy()
+                rotated.manager.destroy()
             })
 
             it('does NOT fire on a same-session continuation', () => {

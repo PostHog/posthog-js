@@ -48,8 +48,22 @@ test.describe('Web Vitals', () => {
             {
                 ...startOptions,
                 options: {
+                    ...startOptions.options,
+                    capture_performance: { web_vitals: true, web_vitals_delayed_flush_ms: 100 },
+                },
+            },
+            page,
+            context
+        )
+        await pollUntilEventCaptured(page, '$web_vitals')
+        await start(
+            {
+                ...startOptions,
+                type: 'reload',
+                options: {
                     capture_performance: {
                         web_vitals: false,
+                        web_vitals_delayed_flush_ms: 100,
                     },
                 },
             },
@@ -57,8 +71,9 @@ test.describe('Web Vitals', () => {
             context
         )
 
-        // Wait a bit to ensure no web vitals events are captured
-        await page.waitForTimeout(5000)
+        await page.waitForFunction(() => performance.getEntriesByName('first-contentful-paint').length > 0)
+        // Buffered FCP is available; exceed lazy loading and the configured 100ms flush.
+        await page.waitForTimeout(2000)
 
         const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === '$web_vitals')
         expect(webVitalsEvents.length).toBe(0)

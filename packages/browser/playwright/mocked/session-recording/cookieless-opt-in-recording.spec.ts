@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { trackRecordingRequests } from '../utils/recording-requests'
 import { BrowserContext, Page } from '@playwright/test'
 import { PostHogConfig } from '@/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
@@ -42,9 +43,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             opt_out_capturing_persistence_type: 'localStorage',
         }
 
-        // No recorder or snapshot call initially because we're opted out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        const recordingRequests = trackRecordingRequests(page)
 
         await startWith(customerConfig, page, context)
 
@@ -52,6 +51,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview'])
+        expect(recordingRequests).toEqual([])
 
         // Now the user gives consent and opts in
         await page.waitingForNetworkCausedBy({
@@ -92,9 +92,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             capture_pageview: true,
         }
 
-        // No recorder should load initially because on_reject treats pending consent as opted out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        const recordingRequests = trackRecordingRequests(page)
 
         await startWith(config, page, context)
 
@@ -102,6 +100,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe([])
+        expect(recordingRequests).toEqual([])
 
         // Now opt in - recording should start automatically
         await page.waitingForNetworkCausedBy({
