@@ -938,6 +938,86 @@ describe('web vitals', () => {
         })
     })
 
+    describe('set_config after start', () => {
+        const webVitalsEvents = () => beforeSendMock.mock.calls.filter((call) => call[0].event === '$web_vitals')
+
+        beforeEach(async () => {
+            beforeSendMock = vi.fn().mockImplementation((e) => e)
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            loadScriptMock.mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                    [kind]: {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
+                    },
+                }
+                callback()
+            })
+
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
+        })
+
+        it('stops capturing when capture_performance is turned off', () => {
+            posthog.set_config({ capture_performance: false })
+
+            emitAllMetrics()
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(webVitalsEvents()).toHaveLength(0)
+        })
+
+        it('stops capturing when only web_vitals is turned off', () => {
+            posthog.set_config({ capture_performance: { web_vitals: false } })
+
+            emitAllMetrics()
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(webVitalsEvents()).toHaveLength(0)
+        })
+
+        it('drops metrics that are already buffered', () => {
+            onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+
+            posthog.set_config({ capture_performance: false })
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(webVitalsEvents()).toHaveLength(0)
+        })
+
+        it('captures again when capture_performance is turned back on', () => {
+            posthog.set_config({ capture_performance: false })
+            posthog.set_config({ capture_performance: { web_vitals: true } })
+
+            emitAllMetrics()
+
+            expect(webVitalsEvents()).toHaveLength(1)
+        })
+    })
+
     describe('onRemoteConfig empty config handling', () => {
         beforeEach(async () => {
             beforeSendMock = vi.fn()

@@ -62,16 +62,18 @@ type WebVitalsEventBuffer = {
     firstMetricTimestamp: number | undefined
 }
 
+const emptyBuffer = (): WebVitalsEventBuffer => ({
+    navigationKey: undefined,
+    url: undefined,
+    metrics: [],
+    firstMetricTimestamp: undefined,
+})
+
 export class WebVitalsAutocapture {
     private _enabledServerSide: boolean = false
     private _initialized = false
 
-    private _buffer: WebVitalsEventBuffer = {
-        navigationKey: undefined,
-        url: undefined,
-        metrics: [],
-        firstMetricTimestamp: undefined,
-    }
+    private _buffer: WebVitalsEventBuffer = emptyBuffer()
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -156,6 +158,19 @@ export class WebVitalsAutocapture {
             logger.info('enabled, starting...')
             this._loadScript(this._startCapturing)
         }
+    }
+
+    public startIfEnabledOrStop(): void {
+        if (this.isEnabled) {
+            this.startIfEnabled()
+            return
+        }
+
+        // web-vitals gives us no way to release its observers, so the registered callbacks can
+        // still fire. `_addToBuffer` and `_flushToCapture` re-check `isEnabled` to drop them.
+        clearTimeout(this._delayedFlushTimer)
+        this._delayedFlushTimer = undefined
+        this._buffer = emptyBuffer()
     }
 
     public onRemoteConfig(result: RemoteConfigResult) {
@@ -245,6 +260,10 @@ export class WebVitalsAutocapture {
     private _flushToCapture = () => {
         clearTimeout(this._delayedFlushTimer)
         this._delayedFlushTimer = undefined
+        if (!this.isEnabled) {
+            this._buffer = emptyBuffer()
+            return
+        }
         if (this._buffer.metrics.length === 0) {
             return
         }
@@ -261,16 +280,15 @@ export class WebVitalsAutocapture {
                 {}
             ),
         })
-        this._buffer = { navigationKey: undefined, url: undefined, metrics: [], firstMetricTimestamp: undefined }
+        this._buffer = emptyBuffer()
     }
 
     private _addToBuffer = (metric: any) => {
-        this._buffer = this._buffer || {
-            navigationKey: undefined,
-            url: undefined,
-            metrics: [],
-            firstMetricTimestamp: undefined,
+        if (!this.isEnabled) {
+            return
         }
+
+        this._buffer = this._buffer || emptyBuffer()
 
         if (isNullish(metric?.name) || isNullish(metric?.value)) {
             logger.error('Invalid metric received', metric)
