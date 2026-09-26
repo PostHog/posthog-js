@@ -764,6 +764,7 @@
         "_resyncTimer",
         "_retryAfter",
         "_retryQueue",
+        "_rrwebAttached",
         "_rrwebError",
         "_rrwebStartAttempted",
         "_runBeforeSend",
