@@ -976,6 +976,27 @@ export interface SessionRecordingOptions {
     __mutationBytesBucketSize?: number
 
     /**
+     * ADVANCED: the largest `adds` payload, in bytes, that is not treated as a whole
+     * subtree being re-serialized. Repeats beyond `__mutationOversizedAddBudget` are
+     * dropped and the recording resyncs with a full snapshot.
+     * Only takes effect while the byte budget is off, which subsumes it.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default 1048576
+     */
+    __mutationOversizedAddBytes?: number
+
+    /**
+     * ADVANCED: how many oversized `adds` payloads are recorded before repeats are
+     * dropped. One token is returned per full-snapshot interval. 0 drops every
+     * oversized add. Only takes effect while the byte budget is off.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default 3
+     */
+    __mutationOversizedAddBudget?: number
+
+    /**
      * When true, minimum duration is checked against the actual buffer data (first to last timestamp)
      * rather than session duration. This ensures recordings are not sent until they contain the minimum
      * duration of actual data, even across page navigations.
