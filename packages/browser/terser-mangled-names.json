@@ -483,6 +483,8 @@
         "_linkedFlagMatching",
         "_listenForReconnect",
         "_listenToReloadWindow",
+        "_listenerDocument",
+        "_listenerWindow",
         "_listeningForReconnect",
         "_loadEditor",
         "_loadFailed",

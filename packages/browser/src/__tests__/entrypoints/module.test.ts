@@ -230,7 +230,9 @@ import posthog from '${distPath}/module.slim'
 import type { PostHog, PostHogConfig } from '${distPath}/module.slim.no-external'
 
 const instance: PostHog = posthog
-void instance
+if (instance.autocapture) {
+    instance.getExtension(instance.autocapture.name)?.setElementSelectors(new Set(['button']))
+}
 
 const extensionClasses = {
     ...SessionReplayExtensions,
