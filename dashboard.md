@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2012](https://github.com/PostHog/posthog-js/issues/2012) | Valid feature request, but the proposed browser and React APIs need an explicit asynchronous, isolated-evaluation contract before implementation. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-26T08:37:05.219Z |
 | PostHog/posthog-js | [issue 2141](https://github.com/PostHog/posthog-js/issues/2141) | Valid Node SDK feature gap, although the existing person-property APIs can already support the enrollment portion of the invitation-email workflow. | enhancement, feature, feature/flags, team/feature-flags, node |  | no | 2026-09-26T08:35:46.397Z |
 | PostHog/posthog-js | [issue 5114](https://github.com/PostHog/posthog-js/issues/5114) | Confirmed replay-player regression introduced by the large-add detached-subtree optimization. | feature/replay, javascript, bug |  | no | 2026-09-25T17:44:18.044Z |
 | PostHog/posthog-js | [issue 5109](https://github.com/PostHog/posthog-js/issues/5109) | Confirmed browser SDK bug: history-based SPA pageviews are captured before frameworks such as Next.js update document.title. | javascript, web, team/client-libraries, bug |  | no | 2026-09-25T10:38:55.880Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2383](https://github.com/PostHog/posthog-js/issues/2383) | Likely already fixed in current @posthog/nextjs-config via CSS sourcemap processing | frameworks/next-js, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/3949 | no | 2026-06-24T13:09:44.107Z |
 | PostHog/posthog-js | [issue 2036](https://github.com/PostHog/posthog-js/issues/2036) | Valid selector-trigger survey lifecycle bug; keep open. | feature/surveys |  | no | 2026-06-24T12:28:14.000Z |
 | PostHog/posthog-js | [issue 2292](https://github.com/PostHog/posthog-js/issues/2292) | Plausible web replay textarea masking bug, but not yet reproducible enough for a safe code change. | bug, feature/replay, web |  | no | 2026-06-24T12:06:10.186Z |
-| PostHog/posthog-js | [issue 2241](https://github.com/PostHog/posthog-js/issues/2241) | Valid enhancement request for quieter @posthog/nextjs-config sourcemap upload output, but likely needs CLI/logging behavior design rather than a tiny config-only tweak. | enhancement, frameworks/next-js, feature/error-tracking, team/error-tracking |  | no | 2026-06-24T11:57:54.317Z |
