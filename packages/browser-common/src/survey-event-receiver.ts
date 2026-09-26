@@ -4,6 +4,7 @@ import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION, SURVEYS_ACTIVATED_TIMESTA
 import type { Survey } from './types/surveys'
 import { SurveyEventName } from './survey-constants'
 import type { Client } from './client'
+import type { SurveyActionHost } from './survey-event-host'
 import type { Extension } from './extension'
 import { SURVEY_LOGGER as logger } from './utils/survey-utils'
 import { type ActivationOutcome, EventReceiver } from './survey-event-receiver-base'
@@ -17,7 +18,8 @@ export interface SurveyTriggerHost {
 export class SurveyEventReceiver extends EventReceiver<Survey> {
     constructor(
         private readonly _client: Client,
-        private readonly _surveys: SurveyTriggerHost
+        private readonly _surveys: SurveyTriggerHost,
+        actions?: Pick<SurveyActionHost, 'getActionUrl' | 'setElementSelectors'>
     ) {
         super({
             subscribeCapture: (listener) => {
@@ -30,14 +32,17 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
             },
             getSessionId: () => _client.session?.sessionId,
             getProperty: (key) => _client.kv.get(key),
-            setElementSelectors: (selectors) =>
-                _client
-                    .getExtension<
-                        Extension & {
-                            setElementSelectors(selectors: Set<string>): void
-                        }
-                    >('autocapture')
-                    ?.setElementSelectors(selectors),
+            getActionUrl: actions?.getActionUrl,
+            setElementSelectors:
+                actions?.setElementSelectors ??
+                ((selectors) =>
+                    _client
+                        .getExtension<
+                            Extension & {
+                                setElementSelectors(selectors: Set<string>): void
+                            }
+                        >('autocapture')
+                        ?.setElementSelectors(selectors)),
         })
         this._subscribeSession()
     }
