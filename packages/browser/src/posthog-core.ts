@@ -187,6 +187,11 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+// replay capture is debugged from SDK events only, minus the high-volume ones nobody reads for it
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
+// the diagnostics read the latest event that carries them, so one every 30s is enough
+const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 // `fb.<subdomainIndex>.<creationTimeMs>.<randomNumber>`, the shape of Meta's _fbp cookie.
@@ -526,6 +531,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
@@ -2142,8 +2148,17 @@ export class PostHog implements PostHogInterface {
         }
 
         try {
-            if (this.sessionRecording) {
+            if (
+                this.sessionRecording &&
+                !this._replayDebugPropertiesPaused &&
+                eventName.startsWith('$') &&
+                !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+            ) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
+                if (!readOnly) {
+                    this._replayDebugPropertiesPaused = true
+                    setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+                }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {

@@ -835,6 +835,19 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
     return issues
 }
 
+// were event-visible before; now hidden and added by SessionRecording.sdkDebugProperties instead
+const REPLAY_DEBUG_SESSION_KEYS = new Set<string>([
+    constants.SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    constants.SDK_DEBUG_REPLAY_STALE_CONFIG,
+    constants.SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    constants.SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    constants.SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    constants.SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    constants.SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
+    constants.SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
+    constants.SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
+])
+
 describe('persistence key policy', () => {
     it('matches legacy exact-key event visibility from before the policy migration', () => {
         const extensionOwnedFeatureFlagKeys = new Set([
@@ -849,7 +862,7 @@ describe('persistence key policy', () => {
                 key,
                 extensionOwnedFeatureFlagKeys.has(key)
                     ? 'hidden'
-                    : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+                    : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key) || REPLAY_DEBUG_SESSION_KEYS.has(key)
                       ? 'hidden'
                       : 'event',
                 policy.exposure,

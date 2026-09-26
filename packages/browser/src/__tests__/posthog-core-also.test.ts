@@ -682,10 +682,34 @@ describe('posthog core', () => {
                 $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
+        })
+
+        it('adds replay debug properties only to SDK events, at most once per 30 seconds', () => {
+            const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+            const pauseTimers = () => setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 30_000)
+            const recordingStatus = (readOnly?: boolean) =>
+                posthog.calculateEventProperties('$pageview', {}, new Date(), uuid, readOnly).$recording_status
+            try {
+                expect(
+                    posthog.calculateEventProperties('$feature_flag_called', {}, new Date(), uuid).$recording_status
+                ).toBe(undefined)
+                expect(posthog.calculateEventProperties('custom_event', {}, new Date(), uuid).$recording_status).toBe(
+                    undefined
+                )
+                expect(recordingStatus(true)).toEqual('disabled')
+                expect(pauseTimers()).toHaveLength(0)
+                expect(recordingStatus()).toEqual('disabled')
+                expect(recordingStatus()).toBe(undefined)
+
+                expect(pauseTimers()).toHaveLength(1)
+                ;(pauseTimers()[0][0] as () => void)()
+                expect(recordingStatus()).toEqual('disabled')
+            } finally {
+                setTimeoutSpy.mockRestore()
+            }
         })
 
         it('uses a sibling subdomain identity change for the next event and reloads flags', () => {
@@ -831,7 +855,6 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'disabled',
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
