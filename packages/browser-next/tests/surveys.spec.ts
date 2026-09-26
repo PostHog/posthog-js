@@ -122,6 +122,32 @@ describe('surveys', () => {
         }
     )
 
+    it('clears persisted survey progress and seen state on client reset', async () => {
+        const client = await create({
+            extensions: [createSurveys({ automaticDisplay: false }, async () => ({ generateSurveys }))],
+            fetch: async () => new Response(JSON.stringify({ surveys: [definition] })),
+        })
+        await getSurveys(client)
+        setInProgressSurveyState(definition, {
+            surveySubmissionId: 'previous-user',
+            lastQuestionIndex: 0,
+            responses: { $survey_response: 'Previous user answer' },
+        })
+        localStorage.setItem('seenSurvey_survey-test', 'true')
+        localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        localStorage.setItem('abandonedSurvey_survey-test', 'true')
+        localStorage.setItem('unrelated', 'keep')
+
+        client.reset()
+
+        expect(getInProgressSurveyState(definition)).toBeNull()
+        expect(localStorage.getItem('inProgressSurvey_survey-test')).toBeNull()
+        expect(localStorage.getItem('seenSurvey_survey-test')).toBeNull()
+        expect(localStorage.getItem('lastSeenSurveyDate')).toBeNull()
+        expect(localStorage.getItem('abandonedSurvey_survey-test')).toBe('true')
+        expect(localStorage.getItem('unrelated')).toBe('keep')
+    })
+
     it('reads live person language and evaluation configuration through the renderer client', async () => {
         let context!: SurveyRenderContext
         const client = await create({
