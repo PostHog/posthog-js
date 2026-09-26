@@ -2,6 +2,7 @@ import packageInfo from '../../../package.json'
 import { assignableWindow } from '../../utils/globals'
 import type { PostHogConfig } from '../../types'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations'
+import { installCustomizationsQueue } from '../../customizations/deferred'
 
 // everything the `src/customizations` barrel exports — keep in sync with customizations/index.ts
 const EXPECTED_EXPORTS = [
@@ -39,6 +40,51 @@ describe('customizations entrypoints', () => {
         for (const name of EXPECTED_EXPORTS) {
             expect(typeof assignableWindow.posthogCustomizations?.[name]).toBe('function')
         }
+    })
+
+    it('installs the queue stub from the snippet bootstrap', async () => {
+        assignableWindow.posthog = { _i: [] } as any
+        try {
+            const { init_from_snippet } = await import('../../posthog-core')
+
+            init_from_snippet()
+
+            expect(
+                typeof assignableWindow.posthogCustomizations?.setAllPersonProfilePropertiesAsPersonPropertiesForFlags
+            ).toBe('function')
+        } finally {
+            assignableWindow.posthog = undefined as any
+        }
+    })
+
+    it('replays calls queued before a deferred script entrypoint runs', async () => {
+        // a page that loads customizations.full.js with `defer` calls the customization from
+        // `loaded` before the bundle runs, so the snippet bootstrap queues the call
+        installCustomizationsQueue()
+
+        const posthog = {
+            config: {},
+            setPersonPropertiesForFlags: vi.fn(),
+        }
+        assignableWindow.posthogCustomizations.setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog)
+
+        expect(posthog.setPersonPropertiesForFlags).not.toHaveBeenCalled()
+
+        await import('../../entrypoints/customizations.full')
+
+        expect(posthog.setPersonPropertiesForFlags).toHaveBeenCalledTimes(1)
+        for (const name of EXPECTED_EXPORTS) {
+            expect(typeof assignableWindow.posthogCustomizations?.[name]).toBe('function')
+        }
+    })
+
+    it('keeps the customizations already published by a non-deferred script entrypoint', async () => {
+        await import('../../entrypoints/customizations.full')
+        const published = assignableWindow.posthogCustomizations
+
+        installCustomizationsQueue()
+
+        expect(assignableWindow.posthogCustomizations).toBe(published)
     })
 
     it('initializes the shared config with the posthog-js identity', async () => {

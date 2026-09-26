@@ -1,5 +1,6 @@
 import Config from './config'
 import { ConsentManager, ConsentStatus } from './consent'
+import { installCustomizationsQueue } from './customizations/deferred'
 import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
@@ -5199,6 +5200,10 @@ const add_dom_loaded_handler = function () {
 
 export function init_from_snippet(): void {
     Config.SDK_DIST_CHANNEL = 'cdn'
+
+    // a deferred customizations.full.js publishes `window.posthogCustomizations` after the
+    // snippet's `init` runs, so queue the calls the `loaded` callback makes until it lands
+    installCustomizationsQueue()
 
     const snippetPostHog = assignableWindow['posthog']
 
