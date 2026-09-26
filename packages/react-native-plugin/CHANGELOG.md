@@ -1,5 +1,22 @@
 # @posthog/react-native-plugin
 
+## 2.12.0
+
+### Minor Changes
+
+- [#5111](https://github.com/PostHog/posthog-js/pull/5111) [`f8d7db4`](https://github.com/PostHog/posthog-js/commit/f8d7db4f4bf990e24ef46aeb33fcd0871c9aabab) Thanks [@ioannisj](https://github.com/ioannisj)! - Add `getSessionReplayDebugProperties()` to read the native SDK's session replay debug map
+  (2026-09-25)
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android 12+ (requires `@posthog/react-native-plugin` 2.12.0). Update `posthog-android` to 3.71.1 so these crashes are stamped at the right time when the device clock disagrees with network time.
+  (2026-09-25)
+
+## 2.11.0
+
+### Minor Changes
+
+- [#5100](https://github.com/PostHog/posthog-js/pull/5100) [`17fb79b`](https://github.com/PostHog/posthog-js/commit/17fb79b4b5cb5c06460b7d4ac6c693547e9ecf1f) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach the native session replay debug properties to native crash `$exception` events; requires posthog-ios 3.83.0 and posthog-android 3.70.0.
+  (2026-09-25)
+
 ## 2.10.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.18.1
+
+### Patch Changes
+
+- [#5112](https://github.com/PostHog/posthog-js/pull/5112) [`74295fd`](https://github.com/PostHog/posthog-js/commit/74295fd632aa3eeab67f243938b7a1633e6ecd68) Thanks [@gesh](https://github.com/gesh)! - Keep MCP conversation sessions consistent across user messages.
+  (2026-09-25)
+
 ## 0.18.0
 
 ### Minor Changes

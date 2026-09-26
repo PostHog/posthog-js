@@ -19,6 +19,7 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
@@ -76,6 +77,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = getMap(sessionReplayConfig, "sdkReplayConfig"),
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
+      androidNdkCrashes = getBoolean(errorTrackingConfig, "androidNdkCrashes", false),
       exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       pushConfig = getMap(pluginConfig, "push"),
       promise = promise,
@@ -98,6 +100,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = sdkReplayConfig,
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
+      androidNdkCrashes = false,
       exceptionStepsConfig = null,
       pushConfig = null,
       promise = promise,
@@ -112,6 +115,7 @@ class PosthogReactNativePluginModule(
     sdkReplayConfig: ReadableMap?,
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
+    androidNdkCrashes: Boolean,
     exceptionStepsConfig: ReadableMap?,
     pushConfig: ReadableMap?,
     promise: Promise,
@@ -155,7 +159,7 @@ class PosthogReactNativePluginModule(
               captureScreenViews = false
               flushAt = theFlushAt
               theRequestHeaders?.let { requestHeaders = it }
-              errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+              applyErrorTrackingConfig(nativeErrorTrackingAutocapture, androidNdkCrashes)
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.
@@ -270,6 +274,22 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("isEnabled", e)
       promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      // Read the config the SDK runs, not the one this module built: the SDK ignores a second setup().
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      promise.resolve(Arguments.makeNativeMap(integration?.debugProperties() ?: emptyMap()))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
     }
   }
 
@@ -740,6 +760,16 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// Two separate native features: autoCapture covers JVM crashes, while captureNativeCrashes
+// installs the tombstone scanner that reports NDK crashes on the next launch.
+internal fun PostHogAndroidConfig.applyErrorTrackingConfig(
+  nativeAutocapture: Boolean,
+  androidNdkCrashes: Boolean,
+) {
+  errorTrackingConfig.autoCapture = nativeAutocapture
+  errorTrackingConfig.captureNativeCrashes = androidNdkCrashes
+}
 
 internal fun applyScreenshotConfig(
   map: ReadableMap?,
