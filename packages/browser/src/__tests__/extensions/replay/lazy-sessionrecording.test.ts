@@ -2002,6 +2002,36 @@ describe('Lazy SessionRecording', () => {
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
 
+                it('ships a held epoch born from reset() on a clean unload', () => {
+                    // reset() clears the stored session id, so the next check mints a new one with
+                    // changeReason.noSessionId. That is the app rotating, not an untouched tab timing
+                    // out, so the epoch behaves like any other fresh visit
+                    sessionIdGeneratorMock.mockImplementation(() => 'reset-born-session-id')
+                    const resetTimestamp = startingTimestamp + 1000
+                    vi.useFakeTimers().setSystemTime(new Date(resetTimestamp))
+                    sessionManager.resetSessionId()
+                    sessionManager.checkAndGetSessionAndWindowId(false, resetTimestamp)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'reset-born-session-id'
+                    )
+                    ;(posthog.capture as Mock).mockClear()
+
+                    const snapshot = emitInactiveEvent(resetTimestamp + 100, 'unknown')
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: 'reset-born-session-id',
+                            $snapshot_data: expect.arrayContaining([snapshot]),
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
                 it('holds a fresh start after stop until interaction, then ships', () => {
                     const rotationTimestamp = rotateExternallyWhileUnknown()
                     emitInactiveEvent(rotationTimestamp + 100, 'unknown')
