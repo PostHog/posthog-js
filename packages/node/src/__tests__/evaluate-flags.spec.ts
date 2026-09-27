@@ -389,7 +389,7 @@ describe('evaluateFlags', () => {
     it('capture({ flags }) attaches $feature/* and $active_feature_flags from the snapshot', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags })
-      await waitForPromises()
+      await posthog.flush()
 
       const pageViewed = captures.find((m) => m.event === 'page_viewed')
       expect(pageViewed).toBeDefined()
@@ -405,7 +405,7 @@ describe('evaluateFlags', () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('boolean-flag')
       posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags: flags.onlyAccessed() })
-      await waitForPromises()
+      await posthog.flush()
 
       const pageViewed = captures.find((m) => m.event === 'page_viewed')
       expect(pageViewed.properties).toMatchObject({
@@ -466,13 +466,7 @@ describe('evaluateFlags', () => {
 
       posthog.captureException(new Error('boom'), 'user-1', undefined, undefined, flags.onlyAccessed())
 
-      // captureException → addPendingPromise(buildEventMessage().then(msg => capture(...)))
-      // → capture itself queues async work via prepareEventMessage. The 'capture' event
-      // fires inside captureStateless before the network flush, so we just need enough
-      // microtask cycles to let the chain resolve.
-      await waitForPromises()
-      await waitForPromises()
-      await waitForPromises()
+      await posthog.flush()
 
       const exception = captures.find((m) => m.event === '$exception')
       expect(exception).toBeDefined()
