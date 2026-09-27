@@ -403,9 +403,9 @@ describe('config', () => {
             })
         })
 
-        it('mask request fn replaces scrubPayload functionality', () => {
+        it('custom mask transforms a request after enforced header and body cleaning', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+            const mask = vi.fn((data: CapturedNetworkRequest) => {
                 return {
                     ...data,
                     requestHeaders: {
@@ -414,28 +414,49 @@ describe('config', () => {
                     },
                     requestBody: 'the provided function ran',
                 }
-            }
+            })
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = mask
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
             const cleaned = networkOptions.maskRequestFn!({
                 name: 'something',
+                entryType: 'resource',
+                startTime: 0,
+                duration: 5,
                 requestHeaders: {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-                requestBody: 'the original value',
-                responseBody: 'the original value',
-            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+                requestBody: 'password=secret-request',
+                responseBody: 'password=secret-response',
+            })
 
             expect(cleaned).toEqual({
                 name: 'something',
+                entryType: 'resource',
+                startTime: 0,
+                duration: 5,
                 requestHeaders: {
                     Authorization: 'redacted',
                     'content-type': 'edited',
                 },
                 requestBody: 'the provided function ran',
-                responseBody: 'the original value',
+                responseBody: '[SessionRecording] Response body redacted as might contain: password',
             })
+            expect(mask).toHaveBeenCalledTimes(1)
+            expect(mask).toHaveBeenCalledWith({
+                name: 'something',
+                entryType: 'resource',
+                startTime: 0,
+                duration: 5,
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                },
+                requestBody: '[SessionRecording] Request body redacted as might contain: password',
+                responseBody: '[SessionRecording] Response body redacted as might contain: password',
+            })
+            expect(JSON.stringify(mask.mock.calls)).not.toContain('secret-')
         })
 
         it('case insensitively removes headers on the deny list', () => {

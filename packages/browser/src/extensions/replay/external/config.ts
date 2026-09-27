@@ -323,7 +323,7 @@ export const buildNetworkRequestOptions = (
 
     config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
-              const cleanedRequest = enforcedCleaningFn(data)
+              const cleanedRequest = scrubPayloads(enforcedCleaningFn(data))
               if (!cleanedRequest) {
                   return undefined
               }
