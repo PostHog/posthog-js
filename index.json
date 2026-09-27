@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/1699": {
+    "key": "PostHog/posthog-js/issue/1699",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 1699",
+    "url": "https://github.com/PostHog/posthog-js/issues/1699",
+    "conclusion": "Valid feature-flag API gap: the browser SDK exposes no public awaitable reload operation.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/flags",
+      "team/feature-flags",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-27T08:36:04.147Z"
+  },
   "PostHog/posthog-js/issue/2012": {
     "key": "PostHog/posthog-js/issue/2012",
     "repo": "PostHog/posthog-js",
@@ -2886,19 +2902,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-24T12:28:14.000Z"
-  },
-  "PostHog/posthog-js/issue/2292": {
-    "key": "PostHog/posthog-js/issue/2292",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2292",
-    "url": "https://github.com/PostHog/posthog-js/issues/2292",
-    "conclusion": "Plausible web replay textarea masking bug, but not yet reproducible enough for a safe code change.",
-    "labels": [
-      "bug",
-      "feature/replay",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-24T12:06:10.186Z"
   }
 }
