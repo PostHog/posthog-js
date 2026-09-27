@@ -102,7 +102,7 @@ test('scrubs bodies before custom masking after a legacy persisted cold start', 
         await expect.poll(() => configRequested).toBe(true)
         await page.waitForFunction(() => {
             const status = (window as WindowWithPostHog).posthog?.sessionRecording?.status
-            return status !== undefined && status !== 'lazy_loading'
+            return Boolean(status) && status !== 'lazy_loading'
         })
         expect(
             await page.evaluate((key) => {
