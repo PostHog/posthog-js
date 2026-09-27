@@ -38,8 +38,14 @@ export function extractPrefillParamsFromUrl(searchString: string): {
             continue
         }
 
-        const decodedKey = decodeURIComponent(pair.slice(0, separator))
-        const decodedValue = decodeURIComponent(pair.slice(separator + 1))
+        let decodedKey: string
+        let decodedValue: string
+        try {
+            decodedKey = decodeURIComponent(pair.slice(0, separator))
+            decodedValue = decodeURIComponent(pair.slice(separator + 1))
+        } catch {
+            continue
+        }
 
         // Check for auto_submit parameter
         if (decodedKey === 'auto_submit' && decodedValue === 'true') {

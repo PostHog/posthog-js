@@ -154,6 +154,16 @@ describe('extractPrefillParamsFromUrl', () => {
             })
         })
 
+        it.each(['unused=a=%', 'q1=a=%', 'q1=a=%E0%A4', '%ZZ=value', 'auto_submit=true=%'])(
+            'ignores malformed encoding in %s without losing valid parameters',
+            (malformed) => {
+                expect(extractPrefillParamsFromUrl(`?q0=1&${malformed}&q2=a%3Db`)).toEqual({
+                    params: { 0: ['1'], 2: ['a=b'] },
+                    autoSubmit: false,
+                })
+            }
+        )
+
         it('should handle empty parameter values', () => {
             const result = extractPrefillParamsFromUrl('?q0=&q1=1')
             expect(result.params).toEqual({
