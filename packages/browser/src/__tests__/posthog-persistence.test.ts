@@ -1,6 +1,7 @@
 // @vitest-environment-options {"url": "https://app.example.com/"}
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
+import { isNumber } from '@posthog/core'
 import {
     DEVICE_ID,
     ENABLED_FEATURE_FLAGS,
@@ -2739,13 +2740,81 @@ describe('flag and survey storage split', () => {
     })
 })
 
+describe('initial persistence disabled state', () => {
+    const key = 'ph_initial-consent_posthog'
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        localStore._remove(key)
+        cookieStore._remove(key)
+        sessionStore._remove(`${key}_cookie_identity_change_pending`)
+    })
+
+    it.each([
+        { disablePersistence: false, consentDisabled: true },
+        { disablePersistence: true, consentDisabled: false },
+        { disablePersistence: false, consentDisabled: false },
+    ])(
+        'gates cookie migration and registration with $disablePersistence / $consentDisabled',
+        ({ disablePersistence, consentDisabled }) => {
+            cookieStore._set(key, { distinct_id: 'cookie-user' })
+            localStore._remove(key)
+            const localSpy = vi.spyOn(localStore, '_set')
+            const cookieSpy = vi.spyOn(cookieStore, '_set')
+            const sessionSpy = vi.spyOn(sessionStore, '_set')
+            const disabled = disablePersistence || consentDisabled
+            const persistence = new PostHogPersistence(
+                {
+                    ...makePostHogConfig('initial-consent', 'localStorage+cookie'),
+                    token: 'initial-consent',
+                    disable_persistence: disablePersistence,
+                    cookieWinsOnConflict: true,
+                },
+                consentDisabled
+            )
+
+            try {
+                expect(persistence.props.distinct_id).toBe(disabled ? undefined : 'cookie-user')
+                persistence.register({ distinct_id: 'registered-user', verify_write: 'yes' })
+                expect(persistence.props.verify_write).toBe('yes')
+                const localWrites = localSpy.mock.calls.filter(([name]) => name === key)
+                const cookieWrites = cookieSpy.mock.calls.filter(
+                    ([name, , days]) => name === key && !(isNumber(days) && days < 0)
+                )
+                const sessionWrites = sessionSpy.mock.calls.filter(([name]) => name.startsWith(key))
+                if (disabled) {
+                    expect(localWrites).toEqual([])
+                    expect(cookieWrites).toEqual([])
+                    expect(sessionWrites).toEqual([])
+                    expect(localStore._get(key)).toBeNull()
+                    expect(cookieStore._get(key)).toBeNull()
+                } else {
+                    expect(localWrites.some(([, value]) => value.verify_write === 'yes')).toBe(true)
+                    expect(cookieWrites.some(([, value]) => value.distinct_id === 'registered-user')).toBe(true)
+                    expect(localStore._parse(key).verify_write).toBe('yes')
+                    expect(cookieStore._parse(key).distinct_id).toBe('registered-user')
+                }
+            } finally {
+                persistence.clear()
+                persistence.destroy()
+            }
+        }
+    )
+})
+
 describe('posthog instance persistence', () => {
     beforeEach(() => {
         resetSessionStorageSupported()
         resetLocalStorageSupported()
     })
-    it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('does not write analytics state during initialization or registration when opted out', () => {
         const sessionSpy = vi.spyOn(sessionStore, '_set')
+        const localSpy = vi.spyOn(localStore, '_set')
+        const cookieSpy = vi.spyOn(cookieStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -2758,21 +2827,23 @@ describe('posthog instance persistence', () => {
             uuidv7()
         )
 
-        // Spy on the created store instance's _set method
-        // Note: We spy after initialization, so we're checking that no further calls are made
-        const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
+        posthog.register({ verify_no_write: 'yes' })
+        expect(posthog.persistence?.props.verify_no_write).toBe('yes')
 
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
         // a fix which prevented this
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
 
-        // Check that no calls were made to the created store (spy captures future calls)
-        const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
+        const localCalls = localSpy.mock.calls.filter(([key]) => key !== '__mplssupport__')
+        // Capability probes and expiry writes do not persist analytics data.
+        const cookieCalls = cookieSpy.mock.calls.filter(
+            ([key, , days]) => !key.startsWith('__ph_cookie_support_') && !(isNumber(days) && days < 0)
+        )
 
         expect(sessionCalls).toEqual([])
-        expect(localPlusCookieCalls).toEqual([])
+        expect(localCalls).toEqual([])
+        expect(cookieCalls).toEqual([])
     })
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
@@ -2790,7 +2861,7 @@ describe('posthog instance persistence', () => {
         )
 
         // Spy on the created store instance's _set method
-        const createdStore = (posthog.persistence as any)._storage
+        const createdStore = posthog.persistence!['_storage']
         const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // Trigger a save to verify storage is called. We force a real
@@ -2804,6 +2875,7 @@ describe('posthog instance persistence', () => {
 
         expect(sessionCalls.length).toBeGreaterThan(0)
         expect(localPlusCookieCalls.length).toBeGreaterThan(0)
+        expect(localStore._parse(`ph_${posthog.config.token}_posthog`).verify_write).toBe('yes')
     })
 })
 
