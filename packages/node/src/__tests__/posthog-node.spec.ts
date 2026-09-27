@@ -1916,7 +1916,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         // Should make local evaluation call during initialization
         expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -1974,7 +1974,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2025,7 +2025,7 @@ describe('PostHog Node.js', () => {
           groups: { organization: 'org123' },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
@@ -2063,7 +2063,7 @@ describe('PostHog Node.js', () => {
           },
         })
 
-        await waitForFlushTimer()
+        await posthog.flush()
 
         const batchEvents = getLastBatchEvents()
         expect(batchEvents?.[0]).toEqual(
