@@ -1,6 +1,110 @@
 /* oxlint-disable posthog-js/no-direct-function-check, no-console, typescript/no-unused-vars */
-import { expect, test } from './utils/posthog-playwright-test-base'
+import { decompressSync, strFromU8 } from 'fflate'
+import type { OtlpLogsPayload } from '@/types'
+import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
+
+// Runs with both the current core and the published core selected by the compat fixture.
+test('delivers shared console values and true cycles after a persisted logs cold start with delayed config', async ({
+    page,
+    context,
+    staticOverrides,
+}, testInfo) => {
+    const payloads: OtlpLogsPayload[] = []
+    const assets: { url: string; source: string | undefined }[] = []
+    page.on('response', (response) => {
+        if (/\/static\/(array|logs)\.js/.test(response.url())) {
+            assets.push({ url: response.url(), source: response.headers().source })
+        }
+    })
+    await page.route('**/i/v1/logs*', async (route) => {
+        const bytes = route.request().postDataBuffer()!
+        const body =
+            bytes[0] === 0x1f && bytes[1] === 0x8b ? strFromU8(decompressSync(new Uint8Array(bytes))) : bytes.toString()
+        payloads.push(JSON.parse(body))
+        await route.fulfill({ json: {} })
+    })
+    await page.route(/\/array\/[^/]+\/config\.js(\?|$)/, (route) =>
+        route.fulfill({ contentType: 'application/javascript', body: '' })
+    )
+    const options = {
+        url: '/playground/cypress/index.html',
+        options: {
+            persistence: 'localStorage' as const,
+            strict_script_versioning: false as const,
+            debug: false,
+            logs: { flushIntervalMs: 50 },
+        },
+        flagsResponseOverrides: {
+            logs: { captureConsoleLogs: true },
+            autocapture_opt_out: true,
+            capturePerformance: false,
+        },
+    }
+    const firstLogsScript = page.waitForResponse(/\/static\/logs\.js/)
+    await start(options, page, context)
+    await firstLogsScript
+    const key = '$logs_capture_enabled_server_side'
+    expect(await page.evaluate((key) => (window as WindowWithPostHog).posthog!.get_property(key), key)).toBe(true)
+
+    let releaseConfig!: () => void
+    let configRequested!: () => void
+    const gate = new Promise<void>((resolve) => {
+        releaseConfig = resolve
+    })
+    const requested = new Promise<void>((resolve) => {
+        configRequested = resolve
+    })
+    await page.route(/\/array\/[^/]+\/config(\?|$)/, async (route) => {
+        configRequested()
+        await gate
+        await route.fulfill({ json: options.flagsResponseOverrides })
+    })
+    try {
+        await start({ ...options, type: 'reload', waitForFlags: false }, page, context)
+        await requested
+        expect(await page.evaluate((key) => (window as WindowWithPostHog).posthog!.get_property(key), key)).toBe(true)
+        // A persisted true is only a hint: console arguments are buffered until fresh config confirms it.
+        await page.evaluate(() => {
+            const shared = { value: 'shared-cold-start' }
+            const log: Record<string, unknown> = { marker: 'logs-shared-compat', a: shared, b: shared }
+            log.self = log
+            console.log(log)
+        })
+        const logsScript = page.waitForResponse(/\/static\/logs\.js/)
+        releaseConfig()
+        await logsScript
+        const records = () =>
+            payloads
+                .flatMap((payload) => payload.resourceLogs)
+                .flatMap((resource) => resource.scopeLogs)
+                .flatMap((scope) => scope.logRecords)
+                .filter((record) => record.body?.stringValue?.includes('logs-shared-compat'))
+        await expect.poll(() => records().length).toBe(1)
+        const record = records()[0]
+        expect(JSON.parse(record.body!.stringValue!)).toEqual({
+            marker: 'logs-shared-compat',
+            a: { value: 'shared-cold-start' },
+            b: { value: 'shared-cold-start' },
+            self: '[Circular]',
+        })
+        expect(record.attributes).toEqual(
+            expect.arrayContaining([
+                { key: 'a.value', value: { stringValue: 'shared-cold-start' } },
+                { key: 'b.value', value: { stringValue: 'shared-cold-start' } },
+            ])
+        )
+        expect(record.attributes?.some((attribute) => attribute.key.startsWith('self.'))).toBe(false)
+        expect(assets.filter((asset) => asset.source === (staticOverrides['array.js'] ?? 'array.js'))).toHaveLength(2)
+        expect(assets.filter((asset) => asset.source === 'logs.js')).toHaveLength(2)
+    } finally {
+        releaseConfig()
+        await testInfo.attach('loaded-core-and-logs-assets', {
+            body: JSON.stringify({ compatVersion: process.env.COMPAT_VERSION, assets }, null, 2),
+            contentType: 'application/json',
+        })
+    }
+})
 
 test.describe('logs extension', () => {
     test('should load logs extension when enabled in remote config', async ({ page, context }) => {

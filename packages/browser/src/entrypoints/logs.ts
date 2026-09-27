@@ -20,6 +20,7 @@ type StringifyBudget = {
 type AttributeCollector = {
     result: Record<string, any>
     keysRemaining: number
+    nodesRemaining: number
     sizeRemaining: number
     truncated: boolean
     seen: WeakSet<object>
@@ -102,6 +103,12 @@ const collectFlattenedAttributes = (value: any, key: string, collector: Attribut
     if (collector.truncated) {
         return
     }
+    // Shared graphs can expand exponentially without producing any attribute leaves.
+    if (collector.nodesRemaining-- <= 0) {
+        collector.truncated = true
+        collector.result['attributes_truncated'] = true
+        return
+    }
 
     if (isObject(value)) {
         if (collector.seen.has(value)) {
@@ -127,6 +134,8 @@ const collectFlattenedAttributes = (value: any, key: string, collector: Attribut
             }
         } catch {
             // we'll omit this object's properties considering we can't enumerate them
+        } finally {
+            collector.seen.delete(value)
         }
         return
     }
@@ -164,136 +173,140 @@ const stringifyValueWithLimit = (
     seen.add(value)
 
     try {
-        const toJSON = (value as any).toJSON
-        if (isFunction(toJSON)) {
-            return stringifyValueWithLimit(toJSON.call(value), parts, budget, seen, inArray)
-        }
-    } catch {
-        // If toJSON can't be read or throws, fall through to safe property enumeration.
-    }
-
-    try {
-        const objectTag = Object.prototype.toString.call(value)
-        if (objectTag === '[object String]') {
-            return stringifyStringWithLimit(String(value.valueOf()), parts, budget)
-        }
-
-        if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
-            return appendWithLimit(parts, JSON.stringify(value.valueOf()), budget)
-        }
-    } catch {
-        // If Object.prototype.toString or valueOf throws, fall through to safe property enumeration.
-    }
-
-    if (value instanceof Error) {
-        const errorObject: Record<string, any> = {}
         try {
-            for (const key in value) {
-                if (Object.prototype.hasOwnProperty.call(value, key)) {
-                    errorObject[key] = value[key as keyof Error]
+            const toJSON = (value as any).toJSON
+            if (isFunction(toJSON)) {
+                return stringifyValueWithLimit(toJSON.call(value), parts, budget, seen, inArray)
+            }
+        } catch {
+            // If toJSON can't be read or throws, fall through to safe property enumeration.
+        }
+
+        try {
+            const objectTag = Object.prototype.toString.call(value)
+            if (objectTag === '[object String]') {
+                return stringifyStringWithLimit(String(value.valueOf()), parts, budget)
+            }
+
+            if (objectTag === '[object Number]' || objectTag === '[object Boolean]') {
+                return appendWithLimit(parts, JSON.stringify(value.valueOf()), budget)
+            }
+        } catch {
+            // If Object.prototype.toString or valueOf throws, fall through to safe property enumeration.
+        }
+
+        if (value instanceof Error) {
+            const errorObject: Record<string, any> = {}
+            try {
+                for (const key in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, key)) {
+                        errorObject[key] = value[key as keyof Error]
+                    }
+                }
+            } catch {}
+            try {
+                errorObject.name = value.name
+            } catch {}
+            try {
+                errorObject.message = value.message
+            } catch {}
+            try {
+                errorObject.stack = value.stack
+            } catch {}
+            return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray, attributeCollector)
+        }
+
+        if (isArray(value)) {
+            if (!appendWithLimit(parts, '[', budget)) {
+                return false
+            }
+            for (let i = 0; i < value.length; i++) {
+                if (i > 0 && !appendWithLimit(parts, ',', budget)) {
+                    return false
+                }
+                let item
+                try {
+                    item = value[i]
+                } catch {
+                    item = undefined
+                }
+                if (!stringifyValueWithLimit(item, parts, budget, seen, true)) {
+                    return false
                 }
             }
-        } catch {}
-        try {
-            errorObject.name = value.name
-        } catch {}
-        try {
-            errorObject.message = value.message
-        } catch {}
-        try {
-            errorObject.stack = value.stack
-        } catch {}
-        return stringifyValueWithLimit(errorObject, parts, budget, seen, inArray, attributeCollector)
-    }
+            return appendWithLimit(parts, ']', budget)
+        }
 
-    if (isArray(value)) {
-        if (!appendWithLimit(parts, '[', budget)) {
+        if (!appendWithLimit(parts, '{', budget)) {
             return false
         }
-        for (let i = 0; i < value.length; i++) {
-            if (i > 0 && !appendWithLimit(parts, ',', budget)) {
-                return false
-            }
-            let item
-            try {
-                item = value[i]
-            } catch {
-                item = undefined
-            }
-            if (!stringifyValueWithLimit(item, parts, budget, seen, true)) {
-                return false
-            }
-        }
-        return appendWithLimit(parts, ']', budget)
-    }
-
-    if (!appendWithLimit(parts, '{', budget)) {
-        return false
-    }
-    let isFirst = true
-    try {
-        for (const key in value) {
-            if (!Object.prototype.hasOwnProperty.call(value, key)) {
-                continue
-            }
-            if (budget.remaining <= 0) {
-                budget.truncated = true
-                return false
-            }
-
-            let propertyValue
-            try {
-                propertyValue = value[key]
-            } catch {
-                continue
-            }
-            if (attributeCollector) {
-                try {
-                    collectFlattenedAttributes(propertyValue, key, attributeCollector)
-                } catch {
-                    // we'll omit this object's attributes considering we can't read them safely
+        let isFirst = true
+        try {
+            for (const key in value) {
+                if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                    continue
                 }
-            }
+                if (budget.remaining <= 0) {
+                    budget.truncated = true
+                    return false
+                }
 
-            if (!isJSONSerializablePrimitive(propertyValue)) {
-                continue
-            }
+                let propertyValue
+                try {
+                    propertyValue = value[key]
+                } catch {
+                    continue
+                }
+                if (attributeCollector) {
+                    try {
+                        collectFlattenedAttributes(propertyValue, key, attributeCollector)
+                    } catch {
+                        // we'll omit this object's attributes considering we can't read them safely
+                    }
+                }
 
-            const propertyPrefix = `${isFirst ? '' : ','}${JSON.stringify(key)}:`
-            if (propertyPrefix.length >= budget.remaining) {
-                budget.truncated = true
-                return false
-            }
+                if (!isJSONSerializablePrimitive(propertyValue)) {
+                    continue
+                }
 
-            const partsBeforeProperty = parts.length
-            const remainingBeforeProperty = budget.remaining
-            const truncatedBeforeProperty = budget.truncated
-            if (!appendWithLimit(parts, propertyPrefix, budget)) {
-                return false
-            }
+                const propertyPrefix = `${isFirst ? '' : ','}${JSON.stringify(key)}:`
+                if (propertyPrefix.length >= budget.remaining) {
+                    budget.truncated = true
+                    return false
+                }
 
-            const partsBeforeValue = parts.length
-            const serialized = stringifyValueWithLimit(propertyValue, parts, budget, seen, false)
-            const truncatedAfterValue = budget.truncated
-            if (parts.length === partsBeforeValue) {
-                parts.length = partsBeforeProperty
-                budget.remaining = remainingBeforeProperty
-                budget.truncated = serialized ? truncatedBeforeProperty : truncatedAfterValue
+                const partsBeforeProperty = parts.length
+                const remainingBeforeProperty = budget.remaining
+                const truncatedBeforeProperty = budget.truncated
+                if (!appendWithLimit(parts, propertyPrefix, budget)) {
+                    return false
+                }
+
+                const partsBeforeValue = parts.length
+                const serialized = stringifyValueWithLimit(propertyValue, parts, budget, seen, false)
+                const truncatedAfterValue = budget.truncated
+                if (parts.length === partsBeforeValue) {
+                    parts.length = partsBeforeProperty
+                    budget.remaining = remainingBeforeProperty
+                    budget.truncated = serialized ? truncatedBeforeProperty : truncatedAfterValue
+                    if (!serialized) {
+                        return false
+                    }
+                    continue
+                }
+
+                isFirst = false
                 if (!serialized) {
                     return false
                 }
-                continue
             }
-
-            isFirst = false
-            if (!serialized) {
-                return false
-            }
+        } catch {
+            // we'll omit this object's properties considering we can't enumerate them
         }
-    } catch {
-        // we'll omit this object's properties considering we can't enumerate them
+        return appendWithLimit(parts, '}', budget)
+    } finally {
+        seen.delete(value)
     }
-    return appendWithLimit(parts, '}', budget)
 }
 
 const stringifyArgsSafely = (
@@ -306,6 +319,7 @@ const stringifyArgsSafely = (
         ? {
               result: {},
               keysRemaining: LOG_ATTRIBUTES_LIMIT,
+              nodesRemaining: LOG_BODY_SIZE_LIMIT,
               sizeRemaining: LOG_BODY_SIZE_LIMIT,
               truncated: false,
               seen: new WeakSet<object>([args[0]]),
