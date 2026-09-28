@@ -110,6 +110,32 @@ describe('RequestQueue', () => {
             ])
         })
 
+        it('passes the delivery outcome of a batch to the callback of each request in it', () => {
+            const firstCallback = vi.fn()
+            const secondCallback = vi.fn()
+            queue.enqueue({ data: { event: 'foo', timestamp: EPOCH - 2000 }, url: '/e' })
+            queue.enqueue({
+                data: { event: 'bar', timestamp: EPOCH - 1000 },
+                url: '/e',
+                callback: firstCallback,
+                fireCallbackOnDrop: true,
+            })
+            queue.enqueue({ data: { event: 'baz', timestamp: EPOCH }, url: '/e', callback: secondCallback })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(sendRequest).toHaveBeenCalledTimes(1)
+            const batch = vi.mocked(sendRequest).mock.calls[0][0]
+            expect(batch.data).toHaveLength(3)
+            expect(batch.fireCallbackOnDrop).toBe(true)
+
+            batch.callback?.({ statusCode: 200 })
+
+            expect(firstCallback).toHaveBeenCalledWith({ statusCode: 200 })
+            expect(secondCallback).toHaveBeenCalledWith({ statusCode: 200 })
+        })
+
         it('does not merge requests that share a batch key but not a batch group', () => {
             queue.enqueue({
                 data: { event: '$snapshot', timestamp: EPOCH - 2000 },

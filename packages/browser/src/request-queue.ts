@@ -92,16 +92,29 @@ export class RequestQueue {
 
     private _formatQueue(): Record<string, QueuedRequestWithOptions> {
         const requests: Record<string, QueuedRequestWithOptions> = {}
+        const callbacks: Record<string, NonNullable<QueuedRequestWithOptions['callback']>[]> = {}
         each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
             const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { ...req, data: [] }
+                requests[key] = { ...req, data: [], callback: undefined }
             }
 
             requests[key].data?.push(req.data)
+            if (req.callback) {
+                callbacks[key] = [...(callbacks[key] ?? []), req.callback]
+                if (req.fireCallbackOnDrop) {
+                    requests[key].fireCallbackOnDrop = true
+                }
+            }
         })
+
+        for (const key in callbacks) {
+            // Every batched request needs its own delivery outcome, e.g. to confirm a pending Meta identifier
+            const batchCallbacks = callbacks[key]
+            requests[key].callback = (response) => each(batchCallbacks, (callback) => callback(response))
+        }
 
         this._queue = []
         return requests

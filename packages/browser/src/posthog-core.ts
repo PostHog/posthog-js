@@ -1982,12 +1982,7 @@ export class PostHog implements PostHogInterface {
 
         // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
         // options are unbatched already and `send_instantly` changes nothing for them
-        if (
-            this.config.request_batching &&
-            (!options || options?._batchKey) &&
-            !options?.send_instantly &&
-            !metaIdentifiersToConfirm.length
-        ) {
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             let transportOverride: QueuedRequestWithOptions['transport']
