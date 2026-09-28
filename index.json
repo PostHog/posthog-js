@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/1657": {
+    "key": "PostHog/posthog-js/issue/1657",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 1657",
+    "url": "https://github.com/PostHog/posthog-js/issues/1657",
+    "conclusion": "Valid browser SDK type-gap enhancement: the early-access response is forwarded at runtime, but its public `EarlyAccessFeature` type does not declare a creation timestamp.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/flags",
+      "team/feature-flags",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-28T08:48:53.884Z"
+  },
   "PostHog/posthog-js/issue/1699": {
     "key": "PostHog/posthog-js/issue/1699",
     "repo": "PostHog/posthog-js",
@@ -2890,17 +2906,5 @@
     "prUrl": "https://github.com/PostHog/posthog-js/pull/3949",
     "closed": false,
     "updatedAt": "2026-06-24T13:09:44.107Z"
-  },
-  "PostHog/posthog-js/issue/2036": {
-    "key": "PostHog/posthog-js/issue/2036",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2036",
-    "url": "https://github.com/PostHog/posthog-js/issues/2036",
-    "conclusion": "Valid selector-trigger survey lifecycle bug; keep open.",
-    "labels": [
-      "feature/surveys"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-24T12:28:14.000Z"
   }
 }
