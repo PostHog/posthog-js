@@ -193,6 +193,13 @@ export interface MCPAnalyticsOptions {
    */
   shouldRecordInputKey?: ShouldRecordInputKeyFn
   /**
+   * Return the alternative argument names accepted by one tool. The map is
+   * canonical name to aliases in the order the server tries them. Automatic
+   * instrumentation uses it for `$mcp_input_keys` and
+   * `$mcp_input_aliases_used`; it never changes the tool arguments.
+   */
+  resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */

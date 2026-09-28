@@ -103,6 +103,17 @@ The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod ob
 A pipe reports the names of its input schema.
 It does not resolve JSON Schema references or inspect fields inside unions.
 
+Servers with declared input aliases can provide them to automatic instrumentation:
+
+```ts
+instrument(server, posthog, {
+  resolveInputAliases: (toolName) => aliasesByTool[toolName],
+})
+```
+
+The resolver returns canonical name to aliases in the order the server tries them.
+The SDK uses the map only for telemetry and never changes the tool arguments.
+
 Custom dispatchers use the same helper through the existing `properties` argument:
 
 ```ts

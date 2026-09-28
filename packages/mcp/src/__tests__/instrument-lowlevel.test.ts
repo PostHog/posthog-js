@@ -89,7 +89,7 @@ async function setupLowLevelServer(realToolName?: string) {
       return { isError: true, content: [{ type: 'text', text: 'nope' }] }
     }
     if (name === 'echo') {
-      const text = (request.params?.arguments?.text as string) ?? ''
+      const text = (request.params?.arguments?.text as string) ?? (request.params?.arguments?.message as string) ?? ''
       return { content: [{ type: 'text', text: `echo: ${text}` }] }
     }
     if (name === 'owned_reserved') {
@@ -487,6 +487,30 @@ describe('Low-level Server tracing (e2e)', () => {
 
       // No exception sibling for a successful call.
       expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(0)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('captures server-declared input aliases', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog(), {
+        resolveInputAliases: (toolName) => (toolName === 'echo' ? { text: ['message'] } : undefined),
+      })
+      await connect()
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'echo', arguments: { message: 'hi' } } },
+        CallToolResultSchema
+      )
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1))
+
+      expect((result.content as { text: string }[])[0].text).toBe('echo: hi')
+      const properties = eventCapture.findCapturesByEvent('$mcp_tool_call')[0].properties
+      expect(properties.$mcp_input_keys).toEqual(['message'])
+      expect(properties.$mcp_input_aliases_used).toEqual(['message:text'])
     } finally {
       await cleanup()
     }
