@@ -1,5 +1,5 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
-import { each } from '@posthog/browser-common/utils/general-utils'
+import { each, eachArray } from '@posthog/browser-common/utils/general-utils'
 
 import { isUndefined, clampToRange } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
@@ -50,7 +50,10 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this._sendRequestSafely(req, 'sendBeacon')
+            // Each fallback part of a split beacon reports to this callback, so a 2xx for one part could confirm
+            // an identifier that only a failed part carried. Without it, the identifier stays pending and goes
+            // out again with a later event.
+            this._sendRequestSafely({ ...req, callback: undefined }, 'sendBeacon')
         })
     }
 
@@ -65,13 +68,17 @@ export class RequestQueue {
         }
         this._flushTimeout = setTimeout(() => {
             this._clearFlushTimeout()
-            if (this._queue.length > 0) {
-                const requests = this._formatQueue()
-                for (const key in requests) {
-                    this._sendRequestSafely(requests[key])
-                }
-            }
+            this._flush()
         }, this._flushTimeoutMs)
+    }
+
+    private _flush(): void {
+        if (this._queue.length > 0) {
+            const requests = this._formatQueue()
+            for (const key in requests) {
+                this._sendRequestSafely(requests[key])
+            }
+        }
     }
 
     private _sendRequestSafely(
@@ -98,22 +105,24 @@ export class RequestQueue {
             const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { ...req, data: [], callback: undefined }
+                // callback and fireCallbackOnDrop belong to each request, not to the first one. fireCallbackOnDrop
+                // stays off, because the batch callback also reaches requests that did not ask for drop notifications.
+                requests[key] = { ...req, data: [], callback: undefined, fireCallbackOnDrop: undefined }
             }
 
             requests[key].data?.push(req.data)
             if (req.callback) {
-                callbacks[key] = [...(callbacks[key] ?? []), req.callback]
-                if (req.fireCallbackOnDrop) {
-                    requests[key].fireCallbackOnDrop = true
+                if (!callbacks[key]) {
+                    callbacks[key] = []
                 }
+                callbacks[key].push(req.callback)
             }
         })
 
         for (const key in callbacks) {
             // Every batched request needs its own delivery outcome, e.g. to confirm a pending Meta identifier
             const batchCallbacks = callbacks[key]
-            requests[key].callback = (response) => each(batchCallbacks, (callback) => callback(response))
+            requests[key].callback = (response) => eachArray(batchCallbacks, (callback) => callback(response))
         }
 
         this._queue = []

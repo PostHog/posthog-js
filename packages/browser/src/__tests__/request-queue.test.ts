@@ -113,13 +113,13 @@ describe('RequestQueue', () => {
         it('passes the delivery outcome of a batch to the callback of each request in it', () => {
             const firstCallback = vi.fn()
             const secondCallback = vi.fn()
-            queue.enqueue({ data: { event: 'foo', timestamp: EPOCH - 2000 }, url: '/e' })
             queue.enqueue({
-                data: { event: 'bar', timestamp: EPOCH - 1000 },
+                data: { event: 'foo', timestamp: EPOCH - 2000 },
                 url: '/e',
                 callback: firstCallback,
                 fireCallbackOnDrop: true,
             })
+            queue.enqueue({ data: { event: 'bar', timestamp: EPOCH - 1000 }, url: '/e' })
             queue.enqueue({ data: { event: 'baz', timestamp: EPOCH }, url: '/e', callback: secondCallback })
 
             queue.enable()
@@ -128,7 +128,8 @@ describe('RequestQueue', () => {
             expect(sendRequest).toHaveBeenCalledTimes(1)
             const batch = vi.mocked(sendRequest).mock.calls[0][0]
             expect(batch.data).toHaveLength(3)
-            expect(batch.fireCallbackOnDrop).toBe(true)
+            expect(batch.fireCallbackOnDrop).toBeUndefined()
+            expect(batch.callback).toBeDefined()
 
             batch.callback?.({ statusCode: 200 })
 
@@ -234,13 +235,15 @@ describe('RequestQueue', () => {
         })
 
         it('handles unload', () => {
+            const callback = vi.fn()
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
-            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, callback })
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
             queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
             queue.unload()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
+            expect(vi.mocked(sendRequest).mock.calls[0][0].callback).toBeUndefined()
             expect(sendRequest).toHaveBeenNthCalledWith(
                 1,
                 {
