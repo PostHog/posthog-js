@@ -195,6 +195,21 @@ class PosthogReactNativePluginModuleTest {
   }
 
   @Test
+  fun `JS fatal capture drops person processing values JS set to null`() {
+    // Mirrors `ReadableMap.toHashMap()`, whose values can be null despite the cast.
+    @Suppress("UNCHECKED_CAST")
+    val jsProperties = mapOf("\$process_person_profile" to null, "\$is_identified" to true) as Map<String, Any>
+
+    val event =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent())
+      }
+
+    assertFalse(event.properties!!.containsKey("\$process_person_profile"))
+    assertEquals(true, event.properties!!["\$is_identified"])
+  }
+
+  @Test
   fun `events outside the JS fatal capture keep native person processing values`() {
     val jsProperties = mapOf<String, Any>("\$process_person_profile" to true, "\$is_identified" to true)
 

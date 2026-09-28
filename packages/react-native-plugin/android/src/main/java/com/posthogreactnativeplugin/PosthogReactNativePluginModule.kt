@@ -754,7 +754,17 @@ internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent 
     return event
   }
   for (key in JS_OWNED_FATAL_CAPTURE_KEYS) {
-    jsProperties[key]?.let { event.properties?.put(key, it) }
+    if (!jsProperties.containsKey(key)) {
+      continue
+    }
+    // The JS map can hold nulls despite its type (`toHashMap()`); a null is omitted on the
+    // wire, so drop native's value rather than send it.
+    val value: Any? = jsProperties[key]
+    if (value == null) {
+      event.properties?.remove(key)
+    } else {
+      event.properties?.put(key, value)
+    }
   }
   return event
 }
