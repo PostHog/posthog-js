@@ -70,7 +70,7 @@ type FeatureFlagsPollerOptions = {
   personalApiKey: string
   projectApiKey: string
   host: string
-  pollingInterval: number
+  pollingInterval: number | null
   timeout?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
@@ -115,7 +115,7 @@ type ComputeFlagAndPayloadOptions = {
 }
 
 class FeatureFlagsPoller {
-  pollingInterval: number
+  pollingInterval: number | null
   personalApiKey: string
   projectApiKey: string
   featureFlags: Array<PostHogFeatureFlag>
@@ -863,11 +863,13 @@ class FeatureFlagsPoller {
    * @returns The polling interval to use for the next request.
    */
   private getPollingInterval(): number {
+    // Keep on-demand error backoff even when automatic polling is disabled.
+    const interval = this.pollingInterval ?? 30_000
     if (!this.shouldBeginExponentialBackoff) {
-      return this.pollingInterval
+      return interval
     }
 
-    return Math.min(SIXTY_SECONDS, this.pollingInterval * 2 ** this.backOffCount)
+    return Math.min(SIXTY_SECONDS, interval * 2 ** this.backOffCount)
   }
 
   /**
@@ -1059,7 +1061,7 @@ class FeatureFlagsPoller {
         this.onError?.(err)
       }
     } finally {
-      if (!this.pollerStopped) {
+      if (!this.pollerStopped && this.pollingInterval !== null) {
         this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
       }
     }

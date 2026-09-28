@@ -231,7 +231,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options.featureFlagsPollingInterval =
       typeof normalizedOptions.featureFlagsPollingInterval === 'number'
         ? Math.max(normalizedOptions.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
-        : THIRTY_SECONDS
+        : normalizedOptions.featureFlagsPollingInterval === null
+          ? null
+          : THIRTY_SECONDS
 
     if (typeof normalizedOptions.waitUntilDebounceMs === 'number') {
       this.options.waitUntilDebounceMs = Math.max(normalizedOptions.waitUntilDebounceMs, 0)
