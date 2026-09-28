@@ -43,7 +43,13 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
-import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionId,
+  getSessionInfo,
+  isModernEraRequest,
+  newSessionId,
+} from './session'
 import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -62,6 +68,13 @@ type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHand
 
 /** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
+
+function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string {
+  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  if (token) return token.sessionId
+  if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
+  return data.sessionId
+}
 
 interface TraceToolCallParams {
   server: MCPServerLike
@@ -149,6 +162,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   const canCaptureContextIntent = ownership.read.context
   const conversation = resolveToolConversation(ownership.read.conversationId, request.params?.arguments, extra)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
+  const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
@@ -166,9 +180,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     canCaptureContextIntent
   )
   if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
-    const sessionSchemas = preparedEvent.event.sessionId
-      ? (data.toolInputSchemas.get(preparedEvent.event.sessionId) ?? data.toolInputSchemas.get(data.sessionId))
-      : undefined
+    const sessionSchemas =
+      (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
+      data.toolInputSchemas.get(schemaSessionId)
     const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
     preparedEvent.event.properties = {
       ...preparedEvent.event.properties,
@@ -843,9 +857,6 @@ async function getTracedToolsList(
           if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
         }
         data.toolInputSchemas.set(event.sessionId, sessionSchemas)
-        if (data.sessionId !== event.sessionId) {
-          data.toolInputSchemas.set(data.sessionId, sessionSchemas)
-        }
       }
     }
     if (data && isContextEnabled(data.options.context)) {
