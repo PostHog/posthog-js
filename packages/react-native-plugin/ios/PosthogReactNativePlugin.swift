@@ -274,9 +274,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 // `buildProperties` keeps its own value on a key clash (`{ current, _ in
                 // current }`), so native's enrichment silently wins over what JS decided —
                 // `$process_person_profile` from `personProfiles: 'never'`, or any value the
-                // app's `before_send` rewrote. Put the JS-approved values back. Android has
-                // the opposite precedence (`putAll` after its own context), so this keeps the
-                // two platforms agreeing.
+                // app's `before_send` rewrote. Put the JS-approved values back. On Android,
+                // caller properties already win apart from SDK debug properties, so the
+                // module there only restores `$process_person_profile` and `$is_identified`.
                 for (key, value) in jsProperties {
                     event.properties[key] = value
                 }
