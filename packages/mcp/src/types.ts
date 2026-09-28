@@ -95,6 +95,13 @@ export interface McpAnalytics {
 
 export interface MCPAnalyticsOptions {
   /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest.
+   * MCP does not advertise this value, so the host must supply it. The value
+   * must contain 1 to 256 characters.
+   */
+  serverBuild?: string
+  /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.
    */
@@ -400,6 +407,7 @@ export interface Event {
   response?: unknown
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
   sessionId: string
@@ -522,6 +530,7 @@ export interface SessionInfo {
   protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
 }

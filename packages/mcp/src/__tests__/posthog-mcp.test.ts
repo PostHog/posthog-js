@@ -45,6 +45,38 @@ describe('PostHogMCP', () => {
 
   // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
 
+  it('adds the configured server build to captured events', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('does not let custom properties replace the configured server build', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({
+        toolName: 'execute-sql',
+        isError: false,
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('rejects a server build that cannot be recorded exactly', () => {
+    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({

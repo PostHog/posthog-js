@@ -208,7 +208,7 @@ describe('truncateEvent - field-level string limits', () => {
     expect(result.resourceName!.endsWith('...')).toBe(true)
   })
 
-  it('should truncate serverName, serverVersion, clientName, clientVersion exceeding 256 chars', () => {
+  it('should truncate serverName, serverVersion, clientName, and clientVersion exceeding 256 chars', () => {
     const event = makeEvent({
       serverName: 's'.repeat(300),
       serverVersion: 'v'.repeat(300),
@@ -220,6 +220,14 @@ describe('truncateEvent - field-level string limits', () => {
     expect(result.serverVersion!.length).toBe(256 + 3)
     expect(result.clientName!.length).toBe(256 + 3)
     expect(result.clientVersion!.length).toBe(256 + 3)
+  })
+
+  it('preserves the exact serverBuild while reducing an oversized event', () => {
+    const serverBuild = 'b'.repeat(256)
+    const response = { chunks: Array.from({ length: 5 }, () => 'r'.repeat(30_000)) }
+    const result = truncateEvent(makeEvent({ serverBuild, response }))
+
+    expect(result.serverBuild).toBe(serverBuild)
   })
 
   it('should leave short field values unchanged', () => {
