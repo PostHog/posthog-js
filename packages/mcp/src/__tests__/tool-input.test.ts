@@ -81,6 +81,52 @@ describe('getToolInputProperties', () => {
     })
   })
 
+  describe('inputAliases', () => {
+    const schema = { properties: { id: {}, key: {}, name: {} } }
+    const inputAliases = { id: ['experimentId', 'experiment_id'], key: ['flagKey'], name: ['title'] }
+
+    it('shows alias names and records each alias the server needed', () => {
+      expect(
+        getToolInputProperties({ experimentId: 1, experiment_id: 2, flagKey: 'k', person_email: 'x' }, schema, {
+          inputAliases,
+        })
+      ).toEqual({
+        $mcp_input_keys: ['experimentId', 'experiment_id', 'flagKey', '[redacted]'],
+        $mcp_input_aliases_used: ['experimentId:id', 'flagKey:key'],
+      })
+    })
+
+    it('does not record an alias when the canonical name was also sent', () => {
+      expect(getToolInputProperties({ id: 1, experiment_id: 2 }, schema, { inputAliases })).toEqual({
+        $mcp_input_keys: ['experiment_id', 'id'],
+      })
+    })
+
+    it('does not read argument values', () => {
+      const input = Object.defineProperty({}, 'experimentId', {
+        enumerable: true,
+        get() {
+          throw new Error('must not read values')
+        },
+      })
+      expect(getToolInputProperties(input, schema, { inputAliases })).toEqual({
+        $mcp_input_keys: ['experimentId'],
+        $mcp_input_aliases_used: ['experimentId:id'],
+      })
+    })
+
+    it('ignores malformed alias maps', () => {
+      expect(
+        getToolInputProperties({ id: 1, other: 1 }, schema, {
+          inputAliases: { id: 'experimentId', key: [1, null] } as never,
+        })
+      ).toEqual({ $mcp_input_keys: ['id', '[redacted]'] })
+      expect(getToolInputProperties({ id: 1 }, schema, { inputAliases: 'x' as never })).toEqual({
+        $mcp_input_keys: ['id'],
+      })
+    })
+  })
+
   it.each([undefined, null, 'invalid', ['id'], new Date()])('omits names for non-object arguments %j', (input) => {
     expect(getToolInputProperties(input, { properties: { id: {} } })).toEqual({})
   })
