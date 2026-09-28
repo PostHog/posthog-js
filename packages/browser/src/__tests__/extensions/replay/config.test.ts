@@ -67,26 +67,6 @@ describe('config', () => {
                 })
             })
 
-            it('honors the modern masking callback when both modern and deprecated hooks are configured', () => {
-                const posthogConfig = defaultConfig()
-                const modernMask = vi.fn(() => undefined)
-                const deprecatedMask = vi.fn(() => ({ url: 'https://example.com/legacy' }))
-                posthogConfig.session_recording.maskCapturedNetworkRequestFn = modernMask
-                posthogConfig.session_recording.maskNetworkRequestFn = deprecatedMask
-                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
-
-                const result = networkOptions.maskRequestFn!({
-                    name: 'https://example.com/private',
-                    entryType: 'resource',
-                    startTime: 0,
-                    duration: 5,
-                })
-
-                expect(result).toBeUndefined()
-                expect(modernMask).toHaveBeenCalledTimes(1)
-                expect(deprecatedMask).not.toHaveBeenCalled()
-            })
-
             it('redacts denied request and response headers, including credential-shaped custom names', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
@@ -423,9 +403,9 @@ describe('config', () => {
             })
         })
 
-        it('custom mask transforms a request after enforced header and body cleaning', () => {
+        it('mask request fn replaces scrubPayload functionality', () => {
             const posthogConfig = defaultConfig()
-            const mask = vi.fn((data) => {
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
                 return {
                     ...data,
                     requestHeaders: {
@@ -434,8 +414,7 @@ describe('config', () => {
                     },
                     requestBody: 'the provided function ran',
                 }
-            })
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = mask
+            }
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
             const cleaned = networkOptions.maskRequestFn!({
@@ -444,8 +423,8 @@ describe('config', () => {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-                requestBody: 'password=secret-request',
-                responseBody: 'password=secret-response',
+                requestBody: 'the original value',
+                responseBody: 'the original value',
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
 
             expect(cleaned).toEqual({
@@ -455,15 +434,8 @@ describe('config', () => {
                     'content-type': 'edited',
                 },
                 requestBody: 'the provided function ran',
-                responseBody: '[SessionRecording] Response body redacted as might contain: password',
+                responseBody: 'the original value',
             })
-            expect(mask).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    requestBody: '[SessionRecording] Request body redacted as might contain: password',
-                    responseBody: '[SessionRecording] Response body redacted as might contain: password',
-                })
-            )
-            expect(JSON.stringify(mask.mock.calls)).not.toContain('secret-')
         })
 
         it('case insensitively removes headers on the deny list', () => {

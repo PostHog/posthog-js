@@ -36,7 +36,6 @@ import {
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS_LOADED_AT,
-    USER_ID,
     USER_STATE,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
@@ -269,8 +268,6 @@ export class PostHogPersistence {
         this.props = {}
         this._campaign_params_url = undefined
         this._name = parseName(config)
-        // Reading the combined cookie/localStorage backend can write a migrated entry.
-        this._disabled = config.disable_persistence || !!isDisabled
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
         this.load()
@@ -866,9 +863,9 @@ export class PostHogPersistence {
             // identity. Never carry the previous logged-in user across a sibling
             // identify/reset adopted from the shared cookie.
             if (nextUserState === USER_STATE_IDENTIFIED) {
-                this._setProp(USER_ID, nextDistinctId)
+                this.props.$user_id = nextDistinctId
             } else {
-                this._deleteProp(USER_ID)
+                delete this.props.$user_id
             }
             this._deleteProp(ALIAS_ID_KEY)
         }

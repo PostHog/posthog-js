@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
-import { isFunction, isNull, isNullish, isString, isUndefined } from '@posthog/core'
+import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
@@ -302,13 +302,15 @@ export const buildNetworkRequestOptions = (
         logger.warn(
             'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
         )
-    } else if (hasDeprecatedMaskFunction) {
+    }
+
+    if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
             // Preserve the nullish signal for initial entries so the required-metadata fallback below can
             // remove all customer-controlled content. Keep the deprecated URL-only behavior otherwise.
             if (!cleanedURL && data.isInitial) {
-                return isNull(cleanedURL) ? null : undefined
+                return cleanedURL
             }
             // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
             // oxlint-disable-next-line typescript/consistent-type-assertions
@@ -321,7 +323,7 @@ export const buildNetworkRequestOptions = (
 
     config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
-              const cleanedRequest = scrubPayloads(enforcedCleaningFn(data))
+              const cleanedRequest = enforcedCleaningFn(data)
               if (!cleanedRequest) {
                   return undefined
               }
