@@ -7,6 +7,7 @@ import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   CompatibleToolsListLike,
+  InputAliasMap,
   JsonRecord,
   MCPAnalyticsData,
   MCPRequestLike,
@@ -74,6 +75,16 @@ function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRe
   if (token) return token.sessionId
   if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
   return data.sessionId
+}
+
+function resolveInputAliases(data: MCPAnalyticsData, toolName: string | undefined): InputAliasMap | undefined {
+  if (!toolName || !data.options.resolveInputAliases) return undefined
+  try {
+    return data.options.resolveInputAliases(toolName)
+  } catch (error) {
+    data.logger(`Warning: resolveInputAliases failed for tool ${toolName} - ${error}`)
+    return undefined
+  }
 }
 
 interface TraceToolCallParams {
@@ -188,6 +199,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
       ...preparedEvent.event.properties,
       ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
         shouldRecordInputKey: data.options.shouldRecordInputKey,
+        inputAliases: resolveInputAliases(data, request.params?.name),
       }),
     }
   }
