@@ -60,6 +60,7 @@ describe('beforeSend option', () => {
       beforeSend: (event) => {
         if (event.properties.$mcp_parameters) {
           event.properties.$mcp_parameters = '[redacted]'
+          delete event.properties.$mcp_input_keys
         }
         return event
       },
@@ -70,6 +71,25 @@ describe('beforeSend option', () => {
 
     const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
     expect(toolCall.properties.$mcp_parameters).toBe('[redacted]')
+    expect(toolCall.properties).not.toHaveProperty('$mcp_input_keys')
+  })
+
+  it('lets shouldRecordInputKey record undeclared argument names', async () => {
+    instrument(server, fakePostHog(), {
+      shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z_]+$/.test(key),
+    })
+
+    await client.request(
+      {
+        method: 'tools/call',
+        params: { name: 'add_todo', arguments: { text: 'secret-value', todoText: 'x', 'person@example.com': 1 } },
+      },
+      CallToolResultSchema
+    )
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall.properties.$mcp_input_keys).toEqual(['text', 'todoText', '[redacted]'])
   })
 
   it('drops an event when beforeSend returns null', async () => {

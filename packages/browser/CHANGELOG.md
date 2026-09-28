@@ -1,5 +1,29 @@
 # posthog-js
 
+## 1.434.17
+
+### Patch Changes
+
+- [#5063](https://github.com/PostHog/posthog-js/pull/5063) [`799e84c`](https://github.com/PostHog/posthog-js/commit/799e84ccd9fc830db733033093d0382aec023025) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): keep a held recording epoch's buffered data when it hits the size cap
+  (2026-09-28)
+
+- [#5118](https://github.com/PostHog/posthog-js/pull/5118) [`3212630`](https://github.com/PostHog/posthog-js/commit/3212630d9fea54dad35c31b9eba8c66175f517ad) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): keep CSS-in-JS styles after a large DOM change in the page head
+  (2026-09-28)
+
+## 1.434.16
+
+### Patch Changes
+
+- [#5127](https://github.com/PostHog/posthog-js/pull/5127) [`d48c783`](https://github.com/PostHog/posthog-js/commit/d48c7838fde1fb5fc7d3c1b96b8c02c003c3db76) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor the modern replay network masking callback when both modern and deprecated hooks are configured.
+  (2026-09-28)
+
+## 1.434.15
+
+### Patch Changes
+
+- [#5115](https://github.com/PostHog/posthog-js/pull/5115) [`8531e40`](https://github.com/PostHog/posthog-js/commit/8531e4029d04f4f1ddf2ca02b129534c3ddd9dae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix SPA `$pageview` events from `pushState`/`replaceState` navigations carrying the previous page's `title`
+  (2026-09-26)
+
 ## 1.434.14
 
 ### Patch Changes

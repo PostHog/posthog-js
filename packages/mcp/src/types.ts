@@ -6,7 +6,7 @@
 import type { ErrorTracking } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
-import type { IdentityCache } from './extensions/internal'
+import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
@@ -187,6 +187,19 @@ export interface MCPAnalyticsOptions {
    */
   beforeSend?: BeforeSendFn
   /**
+   * Decide which argument names `$mcp_input_keys` records on tool-call events.
+   * By default only names the tool's input schema declares are recorded; every
+   * other name becomes one `[redacted]` entry, because a name can carry private data.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * Return the alternative argument names accepted by one tool. The map is
+   * canonical name to aliases in the order the server tries them. Automatic
+   * instrumentation uses it for `$mcp_input_keys` and
+   * `$mcp_input_aliases_used`; it never changes the tool arguments.
+   */
+  resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */
@@ -303,6 +316,30 @@ export type RegisteredTool = {
  * Return the event (optionally mutated) to send it, or a nullish value to drop it.
  */
 export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
+
+/**
+ * Decides whether one top-level argument name appears in `$mcp_input_keys`.
+ * `declared` is true when the server's input schema declares the name.
+ * Return `true` to record the name; any other result, or a throw, records `[redacted]`.
+ */
+export type ShouldRecordInputKeyFn = (key: string, details: { declared: boolean }) => boolean
+
+export interface ToolInputOptions {
+  /**
+   * Replace the default rule, which records only declared names. The SDK still
+   * drops names longer than 64 characters and records at most 20 names.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * The alternative argument names the server accepts, as canonical name to aliases in the
+   * order the server tries them, for example `{ id: ['experimentId'] }`. Must be owned by the
+   * server, never taken from the caller. Alias names count as declared in `$mcp_input_keys`,
+   * and `$mcp_input_aliases_used` records each alias the server needed, as `alias:canonical`.
+   */
+  inputAliases?: InputAliasMap
+}
+
+export type InputAliasMap = Readonly<Record<string, readonly string[]>>
 
 export interface Event {
   actorId?: string
@@ -515,6 +552,7 @@ export interface MCPAnalyticsData {
   toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
+  toolInputSchemas: BoundedCache<Map<string, unknown>>
 }
 
 export interface CaptureEventData {
