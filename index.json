@@ -1,4 +1,22 @@
 {
+  "PostHog/posthog-js/issue/5137": {
+    "key": "PostHog/posthog-js/issue/5137",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5137",
+    "url": "https://github.com/PostHog/posthog-js/issues/5137",
+    "conclusion": "Confirmed React Native accessibility bug; the proposed localization prop is a reasonable public API shape but needs maintainer agreement before an external contribution.",
+    "labels": [
+      "react-native",
+      "feature/mobile",
+      "feature/surveys",
+      "team/client-libraries",
+      "iOS",
+      "Android",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-28T15:47:24.429Z"
+  },
   "PostHog/posthog-js/issue/1657": {
     "key": "PostHog/posthog-js/issue/1657",
     "repo": "PostHog/posthog-js",
@@ -2891,20 +2909,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-24T15:24:14.075Z"
-  },
-  "PostHog/posthog-js/issue/2383": {
-    "key": "PostHog/posthog-js/issue/2383",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2383",
-    "url": "https://github.com/PostHog/posthog-js/issues/2383",
-    "conclusion": "Likely already fixed in current @posthog/nextjs-config via CSS sourcemap processing",
-    "labels": [
-      "frameworks/next-js",
-      "feature/error-tracking",
-      "team/error-tracking"
-    ],
-    "prUrl": "https://github.com/PostHog/posthog-js/pull/3949",
-    "closed": false,
-    "updatedAt": "2026-06-24T13:09:44.107Z"
   }
 }
