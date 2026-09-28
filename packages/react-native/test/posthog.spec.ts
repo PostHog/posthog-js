@@ -1,5 +1,5 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
-import { Linking, AppState, AppStateStatus } from 'react-native'
+import { Linking, AppState, AppStateStatus, Dimensions, Platform } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { FeatureFlagError, JsonType } from '@posthog/core'
@@ -289,6 +289,31 @@ describe('PostHog React Native', () => {
     })
 
     await posthog2.shutdown()
+  })
+
+  describe('$screen_width and $screen_height', () => {
+    const originalOS = Platform.OS
+
+    afterEach(() => {
+      Platform.OS = originalOS
+      vi.mocked(Dimensions.get).mockRestore()
+    })
+
+    it.each([
+      { os: 'ios', expected: { $screen_width: 951, $screen_height: 669 } },
+      { os: 'android', expected: { $screen_width: 466, $screen_height: 678 } },
+      { os: 'web', expected: { $screen_width: 466, $screen_height: 678 } },
+    ])('on $os reports $expected', async ({ os, expected }) => {
+      Platform.OS = os as typeof Platform.OS
+      vi.spyOn(Dimensions, 'get').mockImplementation((dim) =>
+        dim === 'window'
+          ? { width: 951, height: 669, scale: 3, fontScale: 1 }
+          : { width: 466, height: 678, scale: 3, fontScale: 1 }
+      )
+      posthog = new PostHog('test-token', { flushInterval: 0 })
+
+      expect(posthog.getCommonEventProperties()).toMatchObject(expected)
+    })
   })
 
   describe('screen', () => {
