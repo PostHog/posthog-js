@@ -546,12 +546,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushHoldReason: FlushHoldReason | undefined
     private _lastLoggedFlushHold: string | undefined
     // fresh-start holds ship on a clean unload (passive visits are captured, matching
-    // pre-hold behavior); holds born from an idle rotation don't — that unload ship was the incident
+    // pre-hold behavior); holds born from an idle rotation don't, because that unload ship was the incident
     private _heldEpochShipsOnUnload = false
-    // set for a rotation the app caused (reset(), cleared storage) rather than one the session
-    // manager forced on an untouched tab. Only the forced kind repeats on a timer, so an
-    // app-driven rotation opens a fresh visit and its held epoch ships on unload like any other
+    // set for a rotation that posthog.reset() caused. The forced idle reset also clears the
+    // session id and reports noSessionId, but it repeats on an untouched tab, so only the
+    // core's reset path (which calls flushBeforeIdentityReset first) may ship on unload
     private _rotationHoldShipsOnUnload = false
+    private _sessionIdResetByApp: string | undefined
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
@@ -1405,7 +1406,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const wasLikelyReset = changeReason.noSessionId
-        this._rotationHoldShipsOnUnload = wasLikelyReset
+        this._rotationHoldShipsOnUnload =
+            wasLikelyReset && !isUndefined(this._sessionId) && this._sessionIdResetByApp === this._sessionId
+        this._sessionIdResetByApp = undefined
         const shouldLinkSessions =
             !wasLikelyReset && (changeReason.activityTimeout || changeReason.sessionPastMaximumLength)
 
@@ -1613,6 +1616,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     flushBeforeIdentityReset(): void {
+        this._sessionIdResetByApp = this._sessionId
         // a deferred stop has already torn rrweb down but still holds the tail for a later flush
         if (!this.isStarted && !this._isStoppingAfterCompression) {
             return
@@ -2619,8 +2623,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
         // but only if the document was ever visible. Rotation-born holds stay held unless
-        // posthog.reset() caused the rotation. An
-        // overflowed hold takes its recovery snapshot here, not in _releaseHoldAndFlush:
+        // posthog.reset() caused the rotation. An overflowed hold takes its recovery
+        // snapshot here, not in _releaseHoldAndFlush:
         // that path early-returns once the hold is cleared, so a cancelled navigation
         // would never heal the gap between cap and the resumed recording.
         if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {

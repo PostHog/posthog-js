@@ -807,6 +807,7 @@
         "_sessionIdChangedHandlers",
         "_sessionIdGenerator",
         "_sessionIdManager",
+        "_sessionIdResetByApp",
         "_sessionIdUnsubscribe",
         "_sessionIdleThresholdMilliseconds",
         "_sessionManager",
