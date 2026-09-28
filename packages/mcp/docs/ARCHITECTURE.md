@@ -93,6 +93,7 @@ instrument(server, posthog, {
   shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
 })
 ```
+
 SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
 Non-object arguments do not produce this property.
 
@@ -103,16 +104,50 @@ The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod ob
 A pipe reports the names of its input schema.
 It does not resolve JSON Schema references or inspect fields inside unions.
 
-Servers with declared input aliases can provide them to automatic instrumentation:
+Servers with declared input aliases can provide them to automatic instrumentation.
+For example, this server accepts `city` or `place` instead of `location` for one tool.
+It also accepts `orderId` or `id` instead of `order_id` for another tool:
 
 ```ts
+import { instrument, type InputAliasMap } from '@posthog/mcp'
+
+const inputAliasesByTool: Record<string, InputAliasMap> = {
+  'weather-current': {
+    location: ['city', 'place'],
+  },
+  'order-get': {
+    order_id: ['orderId', 'id'],
+  },
+}
+
 instrument(server, posthog, {
-  resolveInputAliases: (toolName) => aliasesByTool[toolName],
+  resolveInputAliases: (toolName) => inputAliasesByTool[toolName],
 })
 ```
 
 The resolver returns canonical name to aliases in the order the server tries them.
-The SDK uses the map only for telemetry and never changes the tool arguments.
+The server must already accept and normalize these aliases.
+The SDK uses the map only for telemetry and does not change the tool arguments.
+
+For this tool call:
+
+```json
+{
+  "name": "weather-current",
+  "arguments": {
+    "city": "Berlin"
+  }
+}
+```
+
+The SDK adds these properties to the `$mcp_tool_call` event:
+
+```json
+{
+  "$mcp_input_keys": ["city"],
+  "$mcp_input_aliases_used": ["city:location"]
+}
+```
 
 Custom dispatchers use the same helper through the existing `properties` argument:
 
