@@ -108,8 +108,8 @@ function initPerformanceObserver(
     win: IWindow,
     options: Required<NetworkRecordOptions>
 ): listenerHandler | undefined {
-    // the customer's `maskRequestFn` runs synchronously in here. rrweb tears down every observer it has
-    // registered when a plugin throws, so a throw would cost the whole recording, not just this batch
+    // Masking errors are isolated per record. Guard initial entry collection/preparation too:
+    // rrweb tears down all registered observers if plugin initialization throws.
     try {
         cb({
             requests: initialEntries(win, options).flatMap((entry) =>
@@ -947,6 +947,7 @@ function initNetworkObserver(
     ) as Required<NetworkRecordOptions>
 
     let active = true
+    let maskingFailureLogged = false
     const cb: networkCallback = (data) => {
         // Body reads and timing lookups can finish after this observer is replaced.
         if (!active) {
@@ -967,6 +968,12 @@ function initNetworkObserver(
             try {
                 maskedRequest = networkOptions.maskRequestFn(request)
             } catch {
+                if (!maskingFailureLogged) {
+                    maskingFailureLogged = true
+                    logger.warn(
+                        'Network capture masking callback failed; dropping the record. Further masking failures will not be logged for this observer.'
+                    )
+                }
                 if (!isServerTiming) {
                     parentRequestDropped = true
                 }

@@ -762,6 +762,46 @@ describe('network plugin', () => {
                 ).toEqual(['https://example.com/later', 'later-timing'])
             })
 
+            it('warns once per observer about masking failures without logging private data', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const debugWindow = window as Window & { POSTHOG_DEBUG?: boolean }
+                const previousDebug = debugWindow.POSTHOG_DEBUG
+                debugWindow.POSTHOG_DEBUG = true
+                const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const callback = vi.fn()
+                const options = {
+                    maskRequestFn: () => {
+                        throw new Error('private exception contents')
+                    },
+                }
+                const emit = () =>
+                    observerCallbacks[0]({
+                        getEntries: () => [
+                            createResourceTimingEntry('https://example.com/private', 'private-timing', 1),
+                        ],
+                    } as any)
+                try {
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, options)
+                    emit()
+                    emit()
+                    expect(warning.mock.calls).toEqual([
+                        [
+                            '[PostHog.js] [Recorder]',
+                            'Network capture masking callback failed; dropping the record. Further masking failures will not be logged for this observer.',
+                        ],
+                    ])
+                    expect(callback).not.toHaveBeenCalled()
+                    cleanup()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, options)
+                    emit()
+                    expect(warning).toHaveBeenCalledTimes(2)
+                } finally {
+                    warning.mockRestore()
+                    debugWindow.POSTHOG_DEBUG = previousDebug
+                }
+            })
+
             it('keeps observing when the mask function throws on the initial entries', () => {
                 const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -1100,6 +1140,51 @@ describe('network plugin', () => {
                 // the wrapper must not throw and the host's original fetch must still run
                 await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
                 expect(fetchCallCount).toBe(1)
+            })
+
+            it.each(['request', 'server timing'])('isolates a throwing %s mask in wrapped fetch', async (failure) => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.performance.now = () => 10
+                const url = 'https://example.com/broken'
+                const entry = createResourceTimingEntry(url, 'broken-timing', 1)
+                entry.serverTiming.push({ name: 'retained-timing', duration: 2 })
+                performanceEntries.push(entry as any)
+                const response = { status: 200, headers: { forEach: () => {} } }
+                mockWindow.fetch = vi.fn(async () => response)
+                const hostFetch = mockWindow.fetch
+                const callback = vi.fn()
+                const maskRequestFn = vi.fn((request: CapturedNetworkRequest) => {
+                    if (request.name === (failure === 'request' ? url : 'broken-timing')) {
+                        throw new Error('mask failed')
+                    }
+                    return request
+                })
+                cleanupObserver = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    recordHeaders: true,
+                    maskRequestFn,
+                })
+
+                await expect(mockWindow.fetch(url)).resolves.toBe(response)
+                if (failure === 'request') {
+                    expect(callback).not.toHaveBeenCalled()
+                    expect(maskRequestFn.mock.calls.map(([request]) => request.name)).toEqual([url])
+                } else {
+                    expect(callback).toHaveBeenCalledTimes(1)
+                    expect(
+                        callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                    ).toEqual([url, 'retained-timing'])
+                }
+                callback.mockClear()
+                performanceEntries.push(
+                    createResourceTimingEntry('https://example.com/later', 'later-timing', 3) as any
+                )
+                await expect(mockWindow.fetch('https://example.com/later')).resolves.toBe(response)
+                expect(hostFetch).toHaveBeenCalledTimes(2)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(
+                    callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/later', 'later-timing'])
             })
 
             it('fetch still delegates to the host when request recording throws', async () => {
