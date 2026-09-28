@@ -99,7 +99,8 @@ Non-object arguments do not produce this property.
 
 High-level servers use the registered tool's schema.
 Low-level servers use schemas from prior `tools/list` responses on the same server instance.
-Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]`.
+Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]` by default.
+Alias names from `resolveInputAliases` remain visible because the server owns and declares them.
 The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod object schemas, including objects wrapped by refinements, transforms, preprocessors, pipes, and optional, nullable, default, catch, or readonly wrappers.
 A pipe reports the names of its input schema.
 It does not resolve JSON Schema references or inspect fields inside unions.
