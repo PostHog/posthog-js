@@ -723,6 +723,45 @@ describe('network plugin', () => {
                 ])
             })
 
+            it.each(['initial', 'live'])('isolates masking exceptions in %s entries', (phase) => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const entries = [
+                    createResourceTimingEntry('https://example.com/before', 'before-timing', 1),
+                    createResourceTimingEntry('https://example.com/broken', 'private-timing', 2),
+                    createResourceTimingEntry('https://example.com/after', 'after-timing', 3),
+                ]
+                if (phase === 'initial') {
+                    performanceEntries.push(...(entries as any))
+                }
+                const callback = vi.fn()
+                const maskRequestFn = vi.fn((request: CapturedNetworkRequest) => {
+                    if (request.name === 'https://example.com/broken') {
+                        throw new Error('mask failed')
+                    }
+                    return request
+                })
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    recordInitialRequests: true,
+                    maskRequestFn,
+                })
+                if (phase === 'live') {
+                    expect(() => observerCallbacks[0]({ getEntries: () => entries } as any)).not.toThrow()
+                }
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(
+                    callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/before', 'before-timing', 'https://example.com/after', 'after-timing'])
+                expect(maskRequestFn.mock.calls.some(([request]) => request.name === 'private-timing')).toBe(false)
+                observerCallbacks[0]({
+                    getEntries: () => [createResourceTimingEntry('https://example.com/later', 'later-timing', 4)],
+                } as any)
+                expect(callback).toHaveBeenCalledTimes(2)
+                expect(
+                    callback.mock.calls[1][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/later', 'later-timing'])
+            })
+
             it('keeps observing when the mask function throws on the initial entries', () => {
                 const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver

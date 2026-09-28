@@ -963,7 +963,15 @@ function initNetworkObserver(
                 return
             }
 
-            const maskedRequest = networkOptions.maskRequestFn(request)
+            let maskedRequest: CapturedNetworkRequest | null | undefined
+            try {
+                maskedRequest = networkOptions.maskRequestFn(request)
+            } catch {
+                if (!isServerTiming) {
+                    parentRequestDropped = true
+                }
+                return
+            }
             if (!isServerTiming) {
                 // A null-filtered initial parent is replaced by a strict URL-less fallback so replay keeps its
                 // required timing metadata. Treat that fallback as dropped for derived server timings, which
