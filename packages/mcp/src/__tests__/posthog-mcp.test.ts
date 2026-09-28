@@ -74,9 +74,7 @@ describe('PostHogMCP', () => {
   })
 
   it('rejects a server build that cannot be recorded exactly', () => {
-    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow(
-      'serverBuild must not exceed 256 characters.'
-    )
+    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
   })
 
   describe('captureToolCall', () => {
