@@ -54,6 +54,7 @@ export function captureEvent(
     ipAddress: sessionInfo.ipAddress,
     sdkLanguage: sessionInfo.sdkLanguage,
     sdkVersion: sessionInfo.sdkVersion,
+    serverBuild: eventInput.serverBuild ?? sessionInfo.serverBuild,
     serverName: sessionInfo.serverName,
     serverVersion: sessionInfo.serverVersion,
     // Prefer client metadata stamped onto this event from the request's `_meta`

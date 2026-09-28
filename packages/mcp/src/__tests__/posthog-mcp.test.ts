@@ -45,6 +45,18 @@ describe('PostHogMCP', () => {
 
   // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
 
+  it('adds the configured server build to captured events', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({

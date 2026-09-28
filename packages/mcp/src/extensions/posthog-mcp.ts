@@ -62,6 +62,11 @@ import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
  */
 export interface PostHogMCPOptions extends PostHogOptions {
   /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest.
+   */
+  serverBuild?: string
+  /**
    * Name of the virtual "report a missing capability" tool injected by
    * {@link PostHogMCP.prepareToolList} and detected by
    * {@link PostHogMCP.prepareToolCall}. Set once here so injection and detection
@@ -151,6 +156,7 @@ export class PostHogMCP extends PostHog {
   readonly #feedbackOptions: CollectFeedbackOptions | undefined
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #enableConversationId: boolean
+  readonly #serverBuild: string | undefined
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
@@ -167,6 +173,7 @@ export class PostHogMCP extends PostHog {
     }
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
+    this.#serverBuild = options.serverBuild
     applyMcpLibIdentity(this)
   }
 
@@ -485,6 +492,7 @@ export class PostHogMCP extends PostHog {
    * must not break the host request.
    */
   #emit(event: McpEvent): void {
+    event.serverBuild = this.#serverBuild
     void this.#sink
       .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))

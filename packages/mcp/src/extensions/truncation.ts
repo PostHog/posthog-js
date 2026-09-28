@@ -426,6 +426,7 @@ export function truncateEvent<T extends Event | McpEvent>(event: T): T {
   // Layer 1: Field-level string limits
   result.userIntent = truncateString(result.userIntent, MAX_USER_INTENT_LENGTH)
   result.resourceName = truncateString(result.resourceName, MAX_RESOURCE_NAME_LENGTH)
+  result.serverBuild = truncateString(result.serverBuild, MAX_METADATA_LENGTH)
   result.serverName = truncateString(result.serverName, MAX_METADATA_LENGTH)
   result.serverVersion = truncateString(result.serverVersion, MAX_METADATA_LENGTH)
   result.clientName = truncateString(result.clientName, MAX_METADATA_LENGTH)
