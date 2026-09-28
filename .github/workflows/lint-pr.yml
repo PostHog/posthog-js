@@ -11,8 +11,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   lint-pr:
+    permissions:
+      pull-requests: read
     name: Validate PR title against Conventional Commits
     runs-on: ubuntu-22.04
     steps:

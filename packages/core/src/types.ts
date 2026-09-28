@@ -292,6 +292,7 @@ export enum PostHogPersistedProperty {
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
+  SurveysInProgress = 'surveys_in_progress', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native
   Surveys = 'surveys', // only used by posthog-react-native
   RemoteConfig = 'remote_config',
@@ -912,6 +913,7 @@ export type Survey = {
   current_iteration?: number | null
   current_iteration_start_date?: string | null
   schedule?: SurveySchedule | null
+  enable_partial_responses?: boolean | null
 }
 
 export type SurveyActionType = {

@@ -1149,6 +1149,45 @@ describe('Autocapture system', () => {
             expect(props['$external_click_url']).toEqual('https://test.com')
         })
 
+        describe.each([false, true])('attribute masking with elementsChainAsString=%s', (elementsChainAsString) => {
+            it.each(['none', 'href', 'class', 'all', 'title'])(
+                'respects %s masking on anchors and their descendants',
+                (mask) => {
+                    const anchor = document.createElement('a')
+                    const href = 'https://test.com/private-link#fragment'
+                    anchor.setAttribute('href', href)
+                    anchor.className = 'private-class'
+                    anchor.innerHTML = '<span>Public text</span>'
+                    document.body.appendChild(anchor)
+
+                    for (const target of [anchor, anchor.firstElementChild!]) {
+                        const { props } = autocapturePropertiesForElement(target, {
+                            e: makeMouseEvent({ target }),
+                            maskAllElementAttributes: mask === 'all',
+                            maskAllText: false,
+                            elementAttributeIgnoreList: mask === 'none' || mask === 'all' ? [] : [mask],
+                            elementsChainAsString,
+                            disableCaptureUrlHashes: false,
+                        })
+                        const maskHref = mask === 'href' || mask === 'all'
+                        const maskClass = mask === 'class' || mask === 'all'
+                        expect(props.$el_text).toBe('Public text')
+                        expect(props.$external_click_url).toBe(maskHref ? undefined : href)
+                        expect(props.$elements_chain.includes('private-link')).toBe(!maskHref)
+                        expect(props.$elements_chain.includes('private-class')).toBe(!maskClass)
+                        if (elementsChainAsString) {
+                            expect(props.$elements).toBeUndefined()
+                        } else {
+                            expect(props.$elements[0].attr__href).toBe(maskHref ? undefined : href)
+                            const anchorProps = props.$elements.find((element: any) => element.tag_name === 'a')
+                            expect(anchorProps.classes).toEqual(maskClass ? undefined : ['private-class'])
+                            expect(anchorProps.attr__class).toBe(maskClass ? undefined : 'private-class')
+                        }
+                    }
+                }
+            )
+        })
+
         it('truncate any element property value to 1024 bytes', () => {
             const elTarget = document.createElement('a')
             elTarget.setAttribute('href', 'https://test.com')

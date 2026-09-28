@@ -777,7 +777,7 @@ export class Mirror implements IMirror<Node> {
 
   // removes the node from idNodeMap
   // doesn't remove the node from nodeMetaMap
-  removeNodeFromMap(n: Node) {
+  removeNodeFromMap(n: Node): void {
     const id = this.getId(n);
     this.idNodeMap.delete(id);
 
@@ -808,13 +808,13 @@ export class Mirror implements IMirror<Node> {
     return this.nodeMetaMap.has(node);
   }
 
-  add(n: Node, meta: serializedNodeWithId) {
+  add(n: Node, meta: serializedNodeWithId): void {
     const id = meta.id;
     this.idNodeMap.set(id, n);
     this.nodeMetaMap.set(n, meta);
   }
 
-  replace(id: number, n: Node) {
+  replace(id: number, n: Node): void {
     const oldNode = this.getNode(id);
     if (oldNode) {
       const meta = this.nodeMetaMap.get(oldNode);
@@ -823,7 +823,7 @@ export class Mirror implements IMirror<Node> {
     this.idNodeMap.set(id, n);
   }
 
-  reset() {
+  reset(): void {
     this.idNodeMap = new Map();
     this.nodeMetaMap = new WeakMap();
   }
@@ -939,15 +939,22 @@ export function is2DCanvasBlank(canvas: HTMLCanvasElement): boolean {
       // `getImageData` call that retrieves everything
       // even if we can already tell from the first chunk(s) that
       // the canvas isn't blank
-      const pixelBuffer = new Uint32Array(
-        originalGetImageData.call(
+      let imageData: ImageData;
+      try {
+        imageData = originalGetImageData.call(
           ctx,
           x,
           y,
           Math.min(chunkSize, canvas.width - x),
           Math.min(chunkSize, canvas.height - y),
-        ).data.buffer,
-      );
+        );
+      } catch {
+        // a cross-origin draw taints the canvas and the browser then refuses to
+        // read it back. We cannot prove it is blank, so call it painted and
+        // leave the caller to handle the `toDataURL` that follows.
+        return false;
+      }
+      const pixelBuffer = new Uint32Array(imageData.data.buffer);
       if (pixelBuffer.some((pixel) => pixel !== 0)) return false;
     }
   }

@@ -13,6 +13,7 @@ const mockPosthog = createMockPostHog({
         isFeatureEnabled: vi.fn().mockReturnValue(true),
     } as Partial<PostHogFeatureFlags> as unknown as PostHogFeatureFlags,
     get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    is_capturing: vi.fn(() => true),
 })
 
 // Base mock survey for widget type

@@ -1,5 +1,12 @@
 # @posthog/webpack-plugin
 
+## 1.7.1
+
+### Patch Changes
+
+- [#4939](https://github.com/PostHog/posthog-js/pull/4939) [`2b5a77d`](https://github.com/PostHog/posthog-js/commit/2b5a77dc7c5a8bcb70ab28906e834fe6ae9707bd) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve script Subresource Integrity when uploading source maps, including Next.js builds.
+  (2026-09-14)
+
 ## 1.7.0
 
 ### Minor Changes

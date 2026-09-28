@@ -10,6 +10,7 @@ import { MCPAnalyticsEventType } from './event-types'
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
   [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
+  [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,
@@ -68,6 +69,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
 
   addCommonEventProperties(event, properties)
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: event.eventName ?? BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
@@ -218,6 +220,12 @@ function addCustomEventProperties(event: Event, properties: Record<string, unkno
   }
 }
 
+function addServerBuildProperty(event: Event, properties: Record<string, unknown>): void {
+  if (event.serverBuild) {
+    properties[PostHogMCPAnalyticsProperty.ServerBuild] = event.serverBuild
+  }
+}
+
 function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
@@ -269,6 +277,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
 
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: PostHogMCPAnalyticsEvent.Exception,

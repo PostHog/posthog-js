@@ -9,6 +9,8 @@ export type PostHogErrorBoundaryFallbackProps = {
     error: unknown
     exceptionEvent: unknown
     componentStack: string
+    /** Retry rendering after the application repairs the error. This does not reset PostHog identity or session. */
+    resetError?: () => void
 }
 
 export type PostHogErrorBoundaryProps = {
@@ -61,6 +63,10 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         })
     }
 
+    private _resetError = (): void => {
+        this.setState(INITIAL_STATE)
+    }
+
     public render(): React.ReactNode {
         const { children, fallback } = this.props
         const state = this.state
@@ -74,6 +80,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
                   error: state.error,
                   componentStack: state.componentStack,
                   exceptionEvent: state.exceptionEvent,
+                  resetError: this._resetError,
               }) as React.ReactNode)
             : fallback
 

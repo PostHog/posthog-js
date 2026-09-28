@@ -101,6 +101,92 @@ const mitt = mittProxy.default || mittProxy;
 
 const REPLAY_CONSOLE_PREFIX = '[replayer]';
 
+/**
+ * Add batches at least this large apply against a detached ancestor. Small
+ * batches keep the plain path: the detach only pays off when per-insert
+ * document updates dominate, and it costs one extra reflow on reattach.
+ */
+const DETACH_ADDS_THRESHOLD = 1000;
+
+type DetachedStyleRules = {
+  style: HTMLStyleElement;
+  text: string | null;
+  rules: string[];
+};
+
+// A reconnected <style> rebuilds its sheet from text, which drops rules the
+// player added through the CSSOM. Cross-origin <link> sheets are skipped: the
+// player cannot insert rules into them.
+function captureStyleRules(
+  root: Node,
+  cssomStyles: Set<HTMLStyleElement>,
+): DetachedStyleRules[] {
+  const captured: DetachedStyleRules[] = [];
+  for (const style of cssomStyles) {
+    // A disconnected style rebuilds from text when it comes back.
+    if (!style.isConnected) {
+      cssomStyles.delete(style);
+      continue;
+    }
+    const sheet = style.sheet;
+    if (!sheet || !isInSubtree(root, style)) continue;
+    captured.push({
+      style,
+      text: style.textContent,
+      rules: Array.from(sheet.cssRules, (rule) => rule.cssText),
+    });
+  }
+  return captured;
+}
+
+// Detaching a shadow host also reconnects the styles in its shadow root.
+function isInSubtree(root: Node, node: Node): boolean {
+  let current: Node | null = node;
+  while (current) {
+    if (root.contains(current)) return true;
+    const rootNode = current.getRootNode();
+    current = rootNode !== current ? (rootNode as ShadowRoot).host || null : null;
+  }
+  return false;
+}
+
+function restoreStyleRules(captured: DetachedStyleRules[]): void {
+  for (const { style, text, rules } of captured) {
+    const sheet = style.sheet;
+    // Changed text means the live path would also have rebuilt the sheet.
+    if (!sheet || style.textContent !== text) continue;
+    // Keep rebuilt rules that still match: a cssText round-trip is lossy, for
+    // example for var() shorthands with an overridden longhand.
+    const remaining = new Map<string, number>();
+    for (const rule of rules) {
+      remaining.set(rule, (remaining.get(rule) || 0) + 1);
+    }
+    let index = 0;
+    for (const rule of rules) {
+      while (
+        index < sheet.cssRules.length &&
+        sheet.cssRules[index].cssText !== rule &&
+        !remaining.get(sheet.cssRules[index].cssText)
+      ) {
+        sheet.deleteRule(index);
+      }
+      remaining.set(rule, (remaining.get(rule) || 0) - 1);
+      if (sheet.cssRules[index]?.cssText === rule) {
+        index++;
+        continue;
+      }
+      try {
+        sheet.insertRule(rule, index);
+      } catch (e) {
+        // A placeholder keeps later recorded rule indexes aligned.
+        sheet.insertRule('@media not all {}', index);
+      }
+      index++;
+    }
+    while (sheet.cssRules.length > index) sheet.deleteRule(index);
+  }
+}
+
 const defaultMouseTailConfig = {
   duration: 500,
   lineCap: 'round',
@@ -123,7 +209,7 @@ export class Replayer {
 
   public service: ReturnType<typeof createPlayerService>;
   public speedService: ReturnType<typeof createSpeedService>;
-  public get timer() {
+  public get timer(): Timer {
     return this.service.state.context.timer;
   }
 
@@ -153,6 +239,9 @@ export class Replayer {
 
   // Used to track StyleSheetObjects adopted on multiple document hosts.
   private styleMirror: StyleSheetMirror = new StyleSheetMirror();
+  // <style> elements whose sheet no longer matches their text.
+  private cssomStyles: Set<HTMLStyleElement> = new Set();
+  private cssomStylesPruneAt = 64;
 
   // Hosts whose AdoptedStyleSheet event was applied before their shadow root
   // was attached, keyed by node id; adopted when the shadow root appears.
@@ -206,6 +295,7 @@ export class Replayer {
   // play/seek superseded the rebuild and its pending chunks must stop.
   private applyGeneration = 0;
   private seekRebuildInFlight = false;
+  private seekNeedsFullRebuild = false;
   private styleSheetLoadListeners: Map<HTMLLinkElement, () => void> = new Map();
 
   constructor(
@@ -388,6 +478,7 @@ export class Replayer {
       this.firstFullSnapshot = null;
       this.mirror.reset();
       this.styleMirror.reset();
+      this.cssomStyles.clear();
       this.pendingAdoptedStyleSheets.clear();
       this.lastAdoptedStyleIds.clear();
       this.adoptedStyleSheetTokens.clear();
@@ -398,6 +489,7 @@ export class Replayer {
 
     const timer = new Timer([], {
       speed: this.config.speed,
+      onActionError: (error) => this.warn('Exception in timer action', error),
     });
     this.service = createPlayerService(
       {
@@ -484,12 +576,12 @@ export class Replayer {
     }
   }
 
-  public on(event: string, handler: Handler) {
+  public on(event: string, handler: Handler): this {
     this.emitter.on(event, handler);
     return this;
   }
 
-  public off(event: string, handler: Handler) {
+  public off(event: string, handler: Handler): this {
     this.emitter.off(event, handler);
     return this;
   }
@@ -517,7 +609,7 @@ export class Replayer {
     return timeout;
   }
 
-  public setConfig(config: Partial<playerConfig>) {
+  public setConfig(config: Partial<playerConfig>): void {
     Object.keys(config).forEach((key) => {
       const newConfigValue = config[key as keyof playerConfig];
       (this.config as Record<keyof playerConfig, typeof newConfigValue>)[
@@ -594,11 +686,12 @@ export class Replayer {
    * and cast event after the offset asynchronously with timer.
    * @param timeOffset - number
    */
-  public play(timeOffset = 0) {
-    if (this.seekRebuildInFlight) {
-      // the superseded rebuild left the DOM with only part of
-      // lastPlayedEvent's history, so a full rebuild is needed
+  public play(timeOffset = 0): void {
+    if (this.seekRebuildInFlight || this.seekNeedsFullRebuild) {
+      // A superseded or failed rebuild is not a reliable seek delta base,
+      // even if later events were successfully applied to it.
       this.service.send({ type: 'RESET_LAST_PLAYED' });
+      this.seekNeedsFullRebuild = false;
     }
     if (this.service.state.matches('paused')) {
       this.service.send({ type: 'PLAY', payload: { timeOffset } });
@@ -612,7 +705,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Start);
   }
 
-  public pause(timeOffset?: number) {
+  public pause(timeOffset?: number): void {
     if (timeOffset === undefined && this.service.state.matches('playing')) {
       this.service.send({ type: 'PAUSE' });
     }
@@ -626,7 +719,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Pause);
   }
 
-  public resume(timeOffset = 0) {
+  public resume(timeOffset = 0): void {
     this.warn(
       `The 'resume' was deprecated in 1.0. Please use 'play' method which has the same interface.`,
     );
@@ -638,9 +731,9 @@ export class Replayer {
    * Totally destroy this replayer and please be careful that this operation is irreversible.
    * Memory occupation can be released by removing all references to this replayer.
    */
-  public destroy() {
-    // Make destroy() idempotent - return early if already destroyed
-    if (!this.wrapper || !this.wrapper.parentNode) {
+  public destroy(): void {
+    // Teardown clears this subscription; a missing DOM parent does not mean destroyed.
+    if (!this.serviceSubscription) {
       return;
     }
 
@@ -679,6 +772,7 @@ export class Replayer {
     // Reset caches and mirrors
     this.mirror.reset();
     this.styleMirror.reset();
+    this.cssomStyles.clear();
     this.pendingAdoptedStyleSheets.clear();
     this.lastAdoptedStyleIds.clear();
     this.adoptedStyleSheetTokens.clear();
@@ -686,13 +780,13 @@ export class Replayer {
     this.resetCache();
 
     // Remove DOM elements
-    this.config.root.removeChild(this.wrapper);
+    this.wrapper.parentNode?.removeChild(this.wrapper);
 
     // Emit destroy event last
     this.emitter.emit(ReplayerEvents.Destroy);
   }
 
-  public startLive(baselineTime?: number) {
+  public startLive(baselineTime?: number): void {
     // cancel any chunked seek rebuild still in flight — its remaining
     // chunks would interleave stale seek-time events with live DOM writes
     this.applyGeneration++;
@@ -716,7 +810,7 @@ export class Replayer {
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
 
-  public addEvent(rawEvent: eventWithTime | string) {
+  public addEvent(rawEvent: eventWithTime | string): void {
     const event = this.config.unpackFn
       ? this.config.unpackFn(rawEvent as string)
       : (rawEvent as eventWithTime);
@@ -734,12 +828,12 @@ export class Replayer {
     );
   }
 
-  public enableInteract() {
+  public enableInteract(): void {
     this.iframe.setAttribute('scrolling', 'auto');
     this.iframe.style.pointerEvents = 'auto';
   }
 
-  public disableInteract() {
+  public disableInteract(): void {
     this.iframe.setAttribute('scrolling', 'no');
     this.iframe.style.pointerEvents = 'none';
   }
@@ -748,7 +842,7 @@ export class Replayer {
    * Empties the replayer's cache and reclaims memory.
    * The replayer will use this cache to speed up the playback.
    */
-  public resetCache() {
+  public resetCache(): void {
     this.cache = createCache();
   }
 
@@ -870,7 +964,16 @@ export class Replayer {
     this.discardStaleFlushBuffers();
     applyEventsWithYield({
       events: events.filter(this.shouldCastInSyncMode),
-      castEvent: (event) => this.getCastFn(event, true)(),
+      castEvent: (event) => {
+        try {
+          this.getCastFn(event, true)();
+        } catch (error) {
+          if (generation === this.applyGeneration) {
+            this.seekNeedsFullRebuild = true;
+          }
+          this.warn('Exception in fast-forward event', error);
+        }
+      },
       yieldBudgetMs: this.config.seekYieldBudgetMs ?? 0,
       // addTimeout so destroy() cancels any pending continuation
       schedule: (continueApplying) => void this.addTimeout(continueApplying, 0),
@@ -944,6 +1047,7 @@ export class Replayer {
           }
           this.mediaManager.reset();
           this.styleMirror.reset();
+          this.cssomStyles.clear();
           this.pendingAdoptedStyleSheets.clear();
           this.lastAdoptedStyleIds.clear();
           this.adoptedStyleSheetTokens.clear();
@@ -1373,6 +1477,12 @@ export class Replayer {
     isSync: boolean,
   ) {
     const { data: d } = e;
+    // the player can be torn down while events are still queued: no document
+    // is left to apply them to, and Firefox turns its nodes into dead wrappers
+    // that throw on any access
+    if (!this.iframe.contentDocument) {
+      return;
+    }
     switch (d.source) {
       case IncrementalSource.Mutation: {
         try {
@@ -1630,8 +1740,15 @@ export class Replayer {
         break;
       }
       case IncrementalSource.Font: {
+        const iframeWindow = this.iframe.contentWindow as IWindow | null;
+        if (!iframeWindow) {
+          break;
+        }
         try {
-          const fontFace = new FontFace(
+          // A FontFace fetches its source under the CSP of the realm that
+          // built it. Built in the embedding page's realm, the recorded font
+          // would be judged by that page's policy instead of the iframe's.
+          const fontFace = new iframeWindow.FontFace(
             d.family,
             d.buffer
               ? new Uint8Array(JSON.parse(d.fontSource) as Iterable<number>)
@@ -1659,6 +1776,61 @@ export class Replayer {
       }
       default:
     }
+  }
+
+  /**
+   * When a mutation carries a huge number of adds, detach the subtree they
+   * land in so the adds run against a detached DOM, and return what is
+   * needed to reattach it. Returns null when the batch is small or cannot
+   * be applied detached; the caller then uses the normal live-DOM path.
+   */
+  private detachRootForLargeAddBatch(
+    d: mutationData,
+    mirror: Mirror | RRDOMMirror,
+  ): {
+    node: Node;
+    parent: Node;
+    nextSibling: Node | null;
+    styleRules: DetachedStyleRules[];
+  } | null {
+    if (this.usingVirtualDom) return null;
+    if (d.adds.length < DETACH_ADDS_THRESHOLD) return null;
+    // Not on the virtual dom path, so this is the real-DOM mirror.
+    const realMirror = mirror as Mirror;
+    const rootId = d.adds[0].parentId;
+    const root = realMirror.getNode(rootId);
+    if (!root || root.nodeType !== Node.ELEMENT_NODE || !root.parentNode) {
+      return null;
+    }
+    const node = root;
+    // Detaching the <html> element would tear down the document itself.
+    if (node.ownerDocument?.documentElement === node) return null;
+    const parent = node.parentNode as Node;
+    const parentId = realMirror.getId(parent);
+    for (const add of d.adds) {
+      // Iframes and documents must attach against a live contentDocument.
+      if (
+        add.node.type === NodeType.Document ||
+        (add.node.type === NodeType.Element &&
+          toLowerCase(add.node.tagName) === 'iframe')
+      ) {
+        return null;
+      }
+      // An add positioned relative to the detached root, or into its
+      // parent, would resolve its siblings against the detached state and
+      // land out of order once the root reattaches.
+      if (
+        add.parentId === parentId ||
+        add.previousId === rootId ||
+        add.nextId === rootId
+      ) {
+        return null;
+      }
+    }
+    const styleRules = captureStyleRules(node, this.cssomStyles);
+    const nextSibling = node.nextSibling;
+    parent.removeChild(node);
+    return { node, parent, nextSibling, styleRules };
   }
 
   /**
@@ -1752,6 +1924,12 @@ export class Replayer {
       ...this.legacy_missingNodeRetryMap,
     };
     const queue: addedNodeMutation[] = [];
+    /**
+     * A dialog appended while its subtree is detached (the large-add-batch
+     * path below) cannot show(): applyDialogToTopLevel needs a connected
+     * node. Hold such dialogs here and apply them after the reattach.
+     */
+    const pendingDialogs: Node[] = [];
 
     const appendNode = (mutation: addedNodeMutation) => {
       if (!this.iframe.contentDocument) {
@@ -1835,7 +2013,11 @@ export class Replayer {
       const afterAppend = (node: Node | RRNode, id: number) => {
         // Skip the plugin onBuild callback for virtual dom
         if (this.usingVirtualDom) return;
-        applyDialogToTopLevel(node);
+        if (node.nodeName === 'DIALOG' && !(node as Node).isConnected) {
+          pendingDialogs.push(node as Node);
+        } else {
+          applyDialogToTopLevel(node);
+        }
         for (const plugin of this.config.plugins || []) {
           if (plugin.onBuild) plugin.onBuild(node, { id, replayer: this });
         }
@@ -1990,39 +2172,67 @@ export class Replayer {
       }
     };
 
-    d.adds.forEach((mutation) => {
-      appendNode(mutation);
-    });
+    /**
+     * Inserting into a live document makes the browser update style and
+     * layout state per insert, and that update grows with what the document
+     * already holds. A single huge batch (tens of thousands of <style>
+     * nodes) turns this into minutes of blocked main thread. Detaching the
+     * batch's target ancestor first lets the adds land in a detached
+     * subtree, so the document pays that cost once, on reattach. Sibling
+     * resolution is unaffected because nodes still insert into their real
+     * parent. Skipped when the batch carries an iframe or document node:
+     * attaching those needs a live contentDocument. Note that on this path
+     * plugin onBuild hooks receive detached nodes (isConnected === false,
+     * element.sheet === null).
+     */
+    const detachedRoot = this.detachRootForLargeAddBatch(d, mirror);
 
-    const startTime = performance.now();
+    try {
+      d.adds.forEach((mutation) => {
+        appendNode(mutation);
+      });
 
-    while (queue.length) {
-      // transform queue to resolve tree
-      const resolveTrees = queueToResolveTrees(queue);
+      const startTime = performance.now();
 
-      queue.length = 0;
+      while (queue.length) {
+        // transform queue to resolve tree
+        const resolveTrees = queueToResolveTrees(queue);
 
-      if (performance.now() - startTime > 150) {
-        this.warn(
-          'Timeout in the loop, please check the resolve tree data:',
-          resolveTrees,
-        );
-        break;
-      }
+        queue.length = 0;
 
-      for (const tree of resolveTrees) {
-        const parent = mirror.getNode(tree.value.parentId);
-        if (!parent) {
-          this.debug(
-            'Drop resolve tree since there is no parent for the root node.',
-            tree,
+        if (performance.now() - startTime > 150) {
+          this.warn(
+            'Timeout in the loop, please check the resolve tree data:',
+            resolveTrees,
           );
-        } else {
-          iterateResolveTree(tree, (mutation) => {
-            appendNode(mutation);
-          });
+          break;
+        }
+
+        for (const tree of resolveTrees) {
+          const parent = mirror.getNode(tree.value.parentId);
+          if (!parent) {
+            this.debug(
+              'Drop resolve tree since there is no parent for the root node.',
+              tree,
+            );
+          } else {
+            iterateResolveTree(tree, (mutation) => {
+              appendNode(mutation);
+            });
+          }
         }
       }
+    } finally {
+      if (detachedRoot) {
+        detachedRoot.parent.insertBefore(
+          detachedRoot.node,
+          detachedRoot.nextSibling,
+        );
+        restoreStyleRules(detachedRoot.styleRules);
+      }
+      pendingDialogs.forEach((dialog) => {
+        applyDialogToTopLevel(dialog);
+      });
     }
 
     if (Object.keys(legacy_missingNodeMap).length) {
@@ -2061,6 +2271,15 @@ export class Replayer {
       for (const attributeName in mutation.attributes) {
         if (typeof attributeName === 'string') {
           const value = mutation.attributes[attributeName];
+          // rebuild forces autocomplete="off" on inputs and textareas so the
+          // viewer's browser never offers autofill inside the replay; a
+          // recorded change to that attribute must not undo it
+          if (
+            attributeName === 'autocomplete' &&
+            (target.nodeName === 'INPUT' || target.nodeName === 'TEXTAREA')
+          ) {
+            continue;
+          }
           if (value === null) {
             (target as Element | RRElement).removeAttribute(attributeName);
             if (attributeName === 'open')
@@ -2281,10 +2500,24 @@ export class Replayer {
       this.applyStyleDeclaration(data, styleSheet);
   }
 
+  private trackCssomStyle(styleSheet: CSSStyleSheet) {
+    const owner = styleSheet.ownerNode;
+    if (!owner || owner.nodeName !== 'STYLE') return;
+    this.cssomStyles.add(owner as HTMLStyleElement);
+    // Removed styles would otherwise stay referenced until the next reset.
+    if (this.cssomStyles.size > this.cssomStylesPruneAt) {
+      this.cssomStyles.forEach((style) => {
+        if (!style.isConnected) this.cssomStyles.delete(style);
+      });
+      this.cssomStylesPruneAt = Math.max(64, this.cssomStyles.size * 2);
+    }
+  }
+
   private applyStyleSheetRule(
     data: styleSheetRuleData,
     styleSheet: CSSStyleSheet,
   ) {
+    this.trackCssomStyle(styleSheet);
     data.adds?.forEach(({ rule, index: nestedIndex }) => {
       try {
         if (Array.isArray(nestedIndex)) {
@@ -2345,6 +2578,7 @@ export class Replayer {
     data: styleDeclarationData,
     styleSheet: CSSStyleSheet,
   ) {
+    this.trackCssomStyle(styleSheet);
     if (data.set) {
       const rule = getNestedRule(
         styleSheet.rules,

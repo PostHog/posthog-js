@@ -1388,6 +1388,9 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     })
 
     expect(capturedServiceTier()).toBe('flex')
+    // The explicit signal cost processing prices from, next to the telemetry copy.
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureArgs[0].properties['$ai_service_tier']).toBe('flex')
   })
 
   test('prefers the final response tier for streaming chat completions', async () => {

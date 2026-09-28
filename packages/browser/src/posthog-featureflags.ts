@@ -1,4 +1,4 @@
-import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
+import { addEventListener, eachArray, entries, extend } from '@posthog/browser-common/utils/general-utils'
 import type { ApiResponse, Client, Disposable, Extension } from '@posthog/browser-common'
 import {
     FlagsResponse,
@@ -66,6 +66,32 @@ const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // deterministically blocked (ad blocker, CORS, extension). Stop periodic /flags
 // refreshes after this many consecutive failures until connectivity changes.
 const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
+
+// Gateway statuses worth a second attempt. `@posthog/core` also retries every
+// transport-level failure, but the browser cannot copy that wholesale: a status-0
+// response here is usually an ad blocker, an extension or CORS, which is precisely why
+// MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES exists. Retrying those would just add a
+// second doomed request for the users who are already worst served.
+//
+// The exception is a timeout, which the browser can tell apart by its AbortError and
+// which is genuinely transient, so that one case is retried alongside 502/504.
+const RETRYABLE_FLAGS_HTTP_STATUSES = [502, 504]
+// Shorter than core's 3s `fetchRetryDelay`: `/flags` gates what the page renders, so the
+// budget here is a user waiting on UI rather than a server batching a flush. With the
+// default single retry the worst case stays bounded at timeout + this + timeout.
+const FLAGS_RETRY_DELAY_MS = 500
+
+const isFlagsTimeout = (response: ApiResponse): boolean =>
+    response.statusCode === 0 && response.error instanceof Error && response.error.name === 'AbortError'
+
+const isRetryableFlagsResponse = (response: ApiResponse): boolean =>
+    RETRYABLE_FLAGS_HTTP_STATUSES.includes(response.statusCode) || isFlagsTimeout(response)
+
+/** Longest interval the automatic refresh backs off to while the page has no user interaction. */
+const MAX_IDLE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+// Input-origin events only: a `scroll` event also fires for scrollTo/scrollTop/scrollIntoView,
+// so an auto-scrolling carousel on a signage page would keep cancelling the idle backoff.
+const USER_INTERACTION_EVENTS = ['click', 'keydown', 'wheel', 'touchstart', 'pointerdown']
 
 type FeatureFlagsState = {
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]?: string[]
@@ -288,6 +314,8 @@ export class PostHogFeatureFlags implements Extension {
     private _consecutiveStatusZeroFailures: number = 0
     private _refreshInterval?: ReturnType<typeof setInterval>
     private _refreshIntervalMs?: number
+    private _dueRefreshIntervalMs?: number
+    private _hadUserInteraction: boolean = false
     private _lastRefreshAt?: number
     private readonly _configSource: FeatureFlagsConfigSource
     private readonly _mutableConfigSource?: MutableFeatureFlagsConfigSource
@@ -358,24 +386,48 @@ export class PostHogFeatureFlags implements Extension {
 
     private _refreshIfDue = (): void => {
         const refreshIntervalMs = this._refreshIntervalMs
+        const dueIntervalMs = this._dueRefreshIntervalMs ?? refreshIntervalMs
         if (
             isUndefined(refreshIntervalMs) ||
+            isUndefined(dueIntervalMs) ||
             this._config.remoteRequestsDisabled ||
             !document ||
             document.visibilityState === 'hidden' ||
-            Date.now() - (this._lastRefreshAt ?? 0) < refreshIntervalMs
+            Date.now() - (this._lastRefreshAt ?? 0) < dueIntervalMs
         ) {
             return
         }
 
+        // An idle page (a kiosk or a signage screen) would otherwise poll forever, so back off
+        // while nobody interacts with it and return to the configured interval when somebody does.
+        this._dueRefreshIntervalMs =
+            this._hadUserInteraction || !this._config.idleRefreshBackoff
+                ? refreshIntervalMs
+                : Math.min(dueIntervalMs * 2, MAX_IDLE_REFRESH_INTERVAL_MS)
+        this._hadUserInteraction = false
         this.reloadFeatureFlags()
         this._scheduleNextRefresh()
     }
 
+    private _onUserInteraction = (): void => {
+        if (this._hadUserInteraction && this._dueRefreshIntervalMs === this._refreshIntervalMs) {
+            return
+        }
+        this._resumeConfiguredInterval()
+    }
+
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {
-            this._refreshIfDue()
+            // Deliberately not through _onUserInteraction: refreshes fall due while the page is
+            // hidden, and an interaction from before it was hidden would skip the due check here.
+            this._resumeConfiguredInterval()
         }
+    }
+
+    private _resumeConfiguredInterval(): void {
+        this._hadUserInteraction = true
+        this._dueRefreshIntervalMs = this._refreshIntervalMs
+        this._refreshIfDue()
     }
 
     private _syncAutomaticRefresh(): void {
@@ -387,6 +439,9 @@ export class PostHogFeatureFlags implements Extension {
             configuredIntervalMs > 0
                 ? configuredIntervalMs
                 : undefined
+        if (!this._config.idleRefreshBackoff) {
+            this._dueRefreshIntervalMs = refreshIntervalMs
+        }
         if (refreshIntervalMs === this._refreshIntervalMs) {
             return
         }
@@ -397,9 +452,13 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         this._refreshIntervalMs = refreshIntervalMs
+        this._dueRefreshIntervalMs = refreshIntervalMs
         this._scheduleNextRefresh()
         if (document?.addEventListener) {
             addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            eachArray(USER_INTERACTION_EVENTS, (eventName) => {
+                addEventListener(document, eventName, this._onUserInteraction, { capture: true })
+            })
         }
     }
 
@@ -419,8 +478,13 @@ export class PostHogFeatureFlags implements Extension {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
             document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            eachArray(USER_INTERACTION_EVENTS, (eventName) => {
+                document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
+            })
         }
         this._refreshIntervalMs = undefined
+        this._dueRefreshIntervalMs = undefined
+        this._hadUserInteraction = false
         this._lastRefreshAt = undefined
     }
 
@@ -1020,21 +1084,54 @@ export class PostHogFeatureFlags implements Extension {
             requestAdditionalReload()
         }
 
-        try {
-            void client
-                .sendRequest(path, {
-                    target: 'flags',
-                    method: 'POST',
-                    body: data,
-                    compression: this._config.compression,
-                    sentAt: 'body',
-                    timeoutMs: this._config.requestTimeoutMs,
-                })
-                .then(handleResponse)
-                .catch(handleError)
-        } catch (error) {
-            handleError(error)
+        // A transport failure resolves with `statusCode: 0` rather than rejecting, so the
+        // retry decision lives on the success path; the catch only covers a throw from
+        // `sendRequest` itself, which carries no status to classify and stays terminal.
+        //
+        // Retries are deliberately invisible to the rest of the class: `_requestInFlight`
+        // stays true and neither `handleResponse` nor `handleError` runs until the last
+        // attempt, so one logical reload still counts once towards the status-zero
+        // circuit breaker and fires its callbacks once.
+        let attemptsLeft = this._config.requestMaxRetries
+
+        const shouldRetry = (): boolean => attemptsLeft > 0 && requestGeneration === this._requestGeneration
+
+        const attempt = (): void => {
+            if (requestGeneration !== this._requestGeneration || !this._client || this._config.remoteRequestsDisabled) {
+                this._requestInFlight = false
+                requestAdditionalReload()
+                return
+            }
+
+            const retryLater = (): void => {
+                attemptsLeft--
+                setTimeout(attempt, FLAGS_RETRY_DELAY_MS)
+            }
+
+            try {
+                void client
+                    .sendRequest(path, {
+                        target: 'flags',
+                        method: 'POST',
+                        body: data,
+                        compression: this._config.compression,
+                        sentAt: 'body',
+                        timeoutMs: this._config.requestTimeoutMs,
+                    })
+                    .then((response) => {
+                        if (isRetryableFlagsResponse(response) && shouldRetry()) {
+                            retryLater()
+                            return
+                        }
+                        handleResponse(response)
+                    })
+                    .catch(handleError)
+            } catch (error) {
+                handleError(error)
+            }
         }
+
+        attempt()
     }
 
     private _hasStatusZeroCircuitBreakerTripped(): boolean {
@@ -1282,9 +1379,7 @@ export class PostHogFeatureFlags implements Extension {
 
     private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
         try {
-            void this._client?.capture('$feature_flag_called', properties).catch((error) => {
-                this._logger.error('Failed to capture feature flag call', error)
-            })
+            this._client?.capture('$feature_flag_called', properties)
         } catch (error) {
             this._logger.error('Failed to capture feature flag call', error)
         }
@@ -1632,9 +1727,7 @@ export class PostHogFeatureFlags implements Extension {
         })
         this._fireFeatureFlagsCallbacks()
         try {
-            void this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
-                this._logger.error('Failed to capture early access feature enrollment', error)
-            })
+            this._client?.capture('$feature_enrollment_update', properties)
         } catch (error) {
             this._logger.error('Failed to capture early access feature enrollment', error)
         }

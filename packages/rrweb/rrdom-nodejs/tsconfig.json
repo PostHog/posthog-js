@@ -5,6 +5,7 @@
   ],
   "compilerOptions": {
     "rootDir": "src",
+    "isolatedDeclarations": true,
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
     "types": ["node", "vite/client"]
   },

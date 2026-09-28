@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { Mock } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { render, renderHook, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { useThumbSurvey } from '../useThumbSurvey'
 import { SurveyEventName, SurveyEventProperties } from 'posthog-js'
@@ -101,6 +101,35 @@ describe('useThumbSurvey hook', () => {
             })
 
             expect(onResponse).toHaveBeenCalledWith('down')
+        })
+    })
+
+    describe('across separately bundled entrypoints', () => {
+        afterEach(() => {
+            vi.resetModules()
+        })
+
+        it('lets a hook from one module copy read the client from a provider in another', async () => {
+            vi.resetModules()
+            const providerCopy = await vi.importActual<typeof import('../../context')>('../../context')
+            vi.resetModules()
+            const hookCopy = await vi.importActual<typeof import('../useThumbSurvey')>('../useThumbSurvey')
+
+            const client = { capture: vi.fn(), surveys: { displaySurvey: vi.fn() } } as unknown as PostHog
+            let respond: (value: 'up' | 'down') => void = () => {}
+            function ThumbSurvey() {
+                respond = hookCopy.useThumbSurvey({ surveyId: 'survey-id' }).respond
+                return null
+            }
+            render(
+                <providerCopy.PostHogProvider client={client}>
+                    <ThumbSurvey />
+                </providerCopy.PostHogProvider>
+            )
+            act(() => respond('up'))
+
+            expect(client.capture).toHaveBeenCalledWith(SurveyEventName.SHOWN, expect.anything())
+            expect(client.surveys.displaySurvey).toHaveBeenCalledTimes(1)
         })
     })
 })

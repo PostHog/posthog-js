@@ -12,7 +12,7 @@ import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
 import { isNullish, isNumber, isUndefined } from '../utils'
 import { sanitizeString, UNSERIALIZABLE_VALUE } from '../utils/json-utils'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
-import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
+import { buildOtlpResourceAttributes, toOtlpResourceKeyValueList } from '../utils/otlp-resource'
 
 // ============================================================================
 // Severity mapping
@@ -206,7 +206,7 @@ export function buildOtlpLogsPayload(
   return {
     resourceLogs: [
       {
-        resource: { attributes: toOtlpKeyValueList(resourceAttributes) },
+        resource: { attributes: toOtlpResourceKeyValueList(resourceAttributes) },
         scopeLogs: [
           {
             scope: { name: scopeName, version: scopeVersion },

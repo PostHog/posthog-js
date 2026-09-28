@@ -24,7 +24,6 @@ const TS_NODE = fileURLToPath(new URL('../../node_modules/.bin/ts-node', import.
 const EXPLICIT_PORT = process.env.PORT ? Number(process.env.PORT) : null
 const LEVEL = process.env.LEVEL === 'low' ? 'low' : 'high'
 const TOKEN = 'acceptance-token'
-let BASE
 
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
@@ -234,7 +233,7 @@ if (EXPLICIT_PORT) {
 // Spawn the binary directly, not through a runner: an extra process layer would
 // orphan the ts-node grandchild that actually holds the port when killed.
 // `detached` puts the child in its own group so the whole tree dies with it.
-const child = spawn(TS_NODE, ['src/main.ts'], {
+const child = spawn(TS_NODE, ['--compiler', 'typescript-legacy', 'src/main.ts'], {
   cwd: DIR,
   env: { ...process.env, PORT: String(EXPLICIT_PORT ?? 0), LEVEL },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -277,7 +276,7 @@ if (!port) {
   killServer()
   process.exit(1)
 }
-BASE = `http://localhost:${port}`
+const BASE = `http://localhost:${port}`
 
 if (!(await waitUp())) {
   console.error('server never came up')

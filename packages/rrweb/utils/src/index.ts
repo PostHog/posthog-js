@@ -415,4 +415,19 @@ export default {
   querySelectorAll,
   mutationObserver: mutationObserverCtor,
   patch,
+} as {
+  childNodes: typeof childNodes;
+  parentNode: typeof parentNode;
+  parentElement: typeof parentElement;
+  textContent: typeof textContent;
+  isConnected: typeof isConnected;
+  contains: typeof contains;
+  getRootNode: typeof getRootNode;
+  host: typeof host;
+  styleSheets: typeof styleSheets;
+  shadowRoot: typeof shadowRoot;
+  querySelector: typeof querySelector;
+  querySelectorAll: typeof querySelectorAll;
+  mutationObserver: typeof mutationObserverCtor;
+  patch: typeof patch;
 };

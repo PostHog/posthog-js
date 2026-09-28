@@ -1,7 +1,9 @@
 package com.posthogreactnativeplugin
 
+import android.app.Activity
 import android.content.Intent
 import android.util.Log
+import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -9,22 +11,53 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.JavascriptException
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
+import com.posthog.android.replay.PostHogScreenshotColorMode
+import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
 import com.posthog.internal.PostHogSessionManager
+import java.text.ParseException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
-) : ReactContextBaseJavaModule(reactContext) {
+) : ReactContextBaseJavaModule(reactContext),
+  ActivityEventListener {
   override fun getName(): String = NAME
+
+  override fun initialize() {
+    super.initialize()
+    // ReactActivity forwards onNewIntent to its listeners, so unlike a plain Android host the
+    // app needs no code of its own for warm-start taps.
+    reactApplicationContext.addActivityEventListener(this)
+  }
+
+  override fun onActivityResult(
+    activity: Activity,
+    requestCode: Int,
+    resultCode: Int,
+    data: Intent?,
+  ) = Unit
+
+  // A tap delivered while the process is alive never reaches onActivityCreated, so the native
+  // integration cannot see it. Deduplicated by message id against the cold-start path.
+  override fun onNewIntent(intent: Intent) {
+    PostHogAndroid.capturePushNotificationOpened(intent)
+  }
 
   @ReactMethod
   fun setup(
@@ -44,6 +77,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = getMap(sessionReplayConfig, "sdkReplayConfig"),
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
+      androidNdkCrashes = getBoolean(errorTrackingConfig, "androidNdkCrashes", false),
       exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       pushConfig = getMap(pluginConfig, "push"),
       promise = promise,
@@ -66,6 +100,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = sdkReplayConfig,
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
+      androidNdkCrashes = false,
       exceptionStepsConfig = null,
       pushConfig = null,
       promise = promise,
@@ -80,6 +115,7 @@ class PosthogReactNativePluginModule(
     sdkReplayConfig: ReadableMap?,
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
+    androidNdkCrashes: Boolean,
     exceptionStepsConfig: ReadableMap?,
     pushConfig: ReadableMap?,
     promise: Promise,
@@ -114,13 +150,16 @@ class PosthogReactNativePluginModule(
             PostHogAndroidConfig(apiKey, host).apply {
               debug = debugValue
               optOut = theOptOut
+              // JS owns consent: posthog-js core keeps its own store, so the value above is the
+              // answer, not a default the SDK may override from its own persisted copy.
+              persistOptOut = false
               preloadFeatureFlags = thePreloadFeatureFlags
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
               captureScreenViews = false
               flushAt = theFlushAt
               theRequestHeaders?.let { requestHeaders = it }
-              errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+              applyErrorTrackingConfig(nativeErrorTrackingAutocapture, androidNdkCrashes)
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.
@@ -153,6 +192,7 @@ class PosthogReactNativePluginModule(
 
               sessionReplay = sessionReplayEnabled
               sessionReplayConfig.screenshot = true
+              sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
               sessionReplayConfig.maskAllImages = maskAllImages
@@ -160,6 +200,7 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
               sessionReplayConfig.verifyScreenshotMaskAlignment =
                 getBoolean(sdkReplayConfig, "verifyScreenshotMaskAlignment", false)
+              applyScreenshotConfig(sdkReplayConfig, sessionReplayConfig)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -233,6 +274,22 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("isEnabled", e)
       promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      // Read the config the SDK runs, not the one this module built: the SDK ignores a second setup().
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      promise.resolve(Arguments.makeNativeMap(integration?.debugProperties() ?: emptyMap()))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
     }
   }
 
@@ -364,6 +421,54 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  /**
+   * Capture a fatal JavaScript exception through the native SDK.
+   *
+   * The JS layer has already run `before_send` and built the final payload; this only hands
+   * it to posthog-android. A `$exception` carrying `$exception_level: "fatal"` takes the
+   * SDK's fatal path, which writes the record to its own disk queue synchronously before
+   * returning — the durability the JS event queue cannot promise while AsyncStorage is still
+   * draining. Delivery, retry and the relaunch flush are then the native SDK's job.
+   *
+   * The JS side drops its own copy of the event when this path is taken, so this must not
+   * silently no-op: a rejection tells JS the capture did not happen.
+   */
+  @ReactMethod
+  fun captureFatalException(
+    distinctId: String,
+    timestamp: String,
+    properties: ReadableMap,
+    promise: Promise,
+  ) {
+    try {
+      val parsedTimestamp = parseIso8601(timestamp)
+      if (parsedTimestamp == null) {
+        promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: invalid timestamp '$timestamp'")
+        return
+      }
+      // capture() returns silently when the SDK was never set up. JS gives up its own copy of
+      // the event before calling this, so a false success would lose the crash without a
+      // trace; report it instead.
+      if (PostHog.getConfig<PostHogConfig>() == null) {
+        promise.reject(FATAL_CAPTURE_ERROR_CODE, "captureFatalException: the native SDK is not set up")
+        return
+      }
+      // ReadableMap.toHashMap() is HashMap<String, Any?>; the native API takes Map<String, Any>?.
+      @Suppress("UNCHECKED_CAST")
+      val nativeProperties = properties.toHashMap() as Map<String, Any>
+      PostHog.capture(
+        event = "\$exception",
+        distinctId = distinctId.takeIf { it.isNotEmpty() },
+        properties = nativeProperties,
+        timestamp = parsedTimestamp,
+      )
+      promise.resolve(null)
+    } catch (e: Throwable) {
+      logError("captureFatalException", e)
+      promise.reject(FATAL_CAPTURE_ERROR_CODE, e)
+    }
+  }
+
   private fun getMap(
     map: ReadableMap?,
     key: String,
@@ -376,22 +481,11 @@ class PosthogReactNativePluginModule(
       }
     }.getOrNull()
 
-  private fun getString(
-    map: ReadableMap?,
-    key: String,
-    default: String,
-  ): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
-
   private fun getInt(
     map: ReadableMap?,
     key: String,
     default: Int,
   ): Int = runCatching { if (hasKey(map, key)) map?.getInt(key) ?: default else default }.getOrDefault(default)
-
-  private fun getDoubleOrNull(
-    map: ReadableMap?,
-    key: String,
-  ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
 
   private fun logError(
     method: String,
@@ -527,6 +621,7 @@ class PosthogReactNativePluginModule(
   fun removeListeners(count: Int) = Unit
 
   override fun invalidate() {
+    reactApplicationContext.removeActivityEventListener(this)
     if (pushModule === this) {
       // Decline mints fast after teardown instead of stalling the native 10s watchdog.
       pushModule = null
@@ -550,6 +645,7 @@ class PosthogReactNativePluginModule(
     const val DEFAULT_THROTTLE_DELAY_MS = 1000
 
     private const val PUSH_ERROR_CODE = "PosthogReactNativePluginError"
+    private const val FATAL_CAPTURE_ERROR_CODE = "PosthogReactNativePluginFatalCaptureError"
     private const val PUSH_IDENTITY_EVENT = "PostHogPushIdentityRequest"
     private const val PUSH_IDENTITY_REPLY_TTL_MS = 15_000L
 
@@ -626,6 +722,23 @@ class PosthogReactNativePluginModule(
   }
 }
 
+// The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly
+// rather than trusting a locale-dependent default, and treat anything unparseable as a
+// caller error: silently substituting "now" would attribute the crash to the wrong instant.
+internal fun parseIso8601(value: String): Date? {
+  if (value.isEmpty()) {
+    return null
+  }
+  val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+  format.timeZone = TimeZone.getTimeZone("UTC")
+  format.isLenient = false
+  return try {
+    format.parse(value)
+  } catch (_: ParseException) {
+    null
+  }
+}
+
 private fun hasKey(
   map: ReadableMap?,
   key: String,
@@ -636,3 +749,42 @@ internal fun getBoolean(
   key: String,
   default: Boolean,
 ): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
+
+private fun getString(
+  map: ReadableMap?,
+  key: String,
+  default: String,
+): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
+
+private fun getDoubleOrNull(
+  map: ReadableMap?,
+  key: String,
+): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// Two separate native features: autoCapture covers JVM crashes, while captureNativeCrashes
+// installs the tombstone scanner that reports NDK crashes on the next launch.
+internal fun PostHogAndroidConfig.applyErrorTrackingConfig(
+  nativeAutocapture: Boolean,
+  androidNdkCrashes: Boolean,
+) {
+  errorTrackingConfig.autoCapture = nativeAutocapture
+  errorTrackingConfig.captureNativeCrashes = androidNdkCrashes
+}
+
+internal fun applyScreenshotConfig(
+  map: ReadableMap?,
+  config: PostHogSessionReplayConfig,
+) {
+  getDoubleOrNull(map, "screenshotScale")?.let { scale ->
+    // Keep finite values within Float range; the native setter clamps to its supported range.
+    val floatMax = Float.MAX_VALUE.toDouble()
+    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
+  }
+  getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
+    config.screenshotCompressionQuality = quality.toInt()
+  }
+  when (getString(map, "screenshotColorMode", "")) {
+    "ARGB_8888" -> config.screenshotColorMode = PostHogScreenshotColorMode.ARGB_8888
+    "RGB_565" -> config.screenshotColorMode = PostHogScreenshotColorMode.RGB_565
+  }
+}

@@ -207,27 +207,23 @@ describe('getModelParams', () => {
     expect(getModelParams(null)).toEqual({})
   })
 
-  it.each([
-    ['flex', { temperature: undefined }],
-    ['auto', { temperature: undefined }],
-    ['priority', { temperature: 0.7 }],
-  ])('includes service_tier "%s" alongside other model params', (service_tier, extra) => {
-    const params = { model: 'gpt-4o', service_tier, ...extra } as any
+  it.each(['flex', 'auto', 'priority'])('never captures the requested service_tier ("%s")', (service_tier) => {
+    // A requested tier can be refused; cost processing prices from this value, so only the
+    // tier the response reported may appear.
+    const params = { model: 'gpt-4o', service_tier, temperature: 0.7 } as any
     const result = getModelParams(params)
-    expect(result.service_tier).toBe(service_tier)
-    if (extra.temperature !== undefined) {
-      expect(result.temperature).toBe(extra.temperature)
-    }
+    expect(result.service_tier).toBeUndefined()
+    expect(result.temperature).toBe(0.7)
   })
 
-  it('prefers the response service_tier over the requested service_tier', () => {
+  it('records the response service_tier', () => {
     const params = { model: 'gpt-4o', service_tier: 'auto' } as any
     expect(getModelParams(params, 'flex')).toEqual({ service_tier: 'flex' })
   })
 
-  it.each([null, undefined])('keeps the requested service_tier when the response tier is %s', (responseTier) => {
+  it.each([null, undefined])('omits service_tier when the response tier is %s', (responseTier) => {
     const params = { model: 'gpt-4o', service_tier: 'auto' } as any
-    expect(getModelParams(params, responseTier)).toEqual({ service_tier: 'auto' })
+    expect(getModelParams(params, responseTier)).toEqual({})
   })
 
   it('omits service_tier when not provided', () => {

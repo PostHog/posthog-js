@@ -131,6 +131,8 @@ export interface CachedPrompt {
   label?: string
   config: Record<string, unknown> | null
   fetchedAt: number
+  /** Epoch ms before which a refetch of this entry is skipped. Set after a failed refetch. */
+  retryNotBefore?: number
 }
 
 /**

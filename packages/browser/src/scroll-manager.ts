@@ -32,6 +32,7 @@ export class ScrollManager {
 
     resetContext(): ScrollContext | undefined {
         const ctx = this._context
+        this._context = undefined
 
         // update the scroll properties for the new page, but wait until the next tick
         // of the event loop

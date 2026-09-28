@@ -1,11 +1,11 @@
 import { PostHogMetrics } from '../posthog-metrics'
 import { PostHog } from '../posthog-core'
 
-const mockLogger = {
+const mockLogger = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-}
+}))
 
 vi.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: vi.fn(() => mockLogger),
@@ -148,5 +148,73 @@ describe('posthog-metrics', () => {
 
         const resourceAttrs = sentRequests()[1].data.resourceMetrics[0].resource.attributes
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'renamed-service' } })
+    })
+
+    describe('network metrics', () => {
+        const originalFetch = window.fetch
+        const isFetchWrapped = (): boolean => !!(window.fetch as any).__posthog_wrapped__
+
+        beforeEach(() => {
+            Object.defineProperty(window, 'fetch', { configurable: true, value: vi.fn(), writable: true })
+        })
+
+        afterEach(() => {
+            metrics.dispose()
+            Object.defineProperty(window, 'fetch', { configurable: true, value: originalFetch, writable: true })
+        })
+
+        it.each([
+            [undefined, false],
+            [false, false],
+            [true, true],
+            [{ name: 'api.duration' }, true],
+        ])('with metrics.network = %j wraps fetch on initialize: %s', (network, wrapped) => {
+            ;(mockPostHog.config as any).metrics = { network }
+
+            metrics.initialize()
+
+            expect(isFetchWrapped()).toBe(wrapped)
+        })
+
+        it('stops wrapping on dispose, so shutdown leaves no wrapper behind', () => {
+            ;(mockPostHog.config as any).metrics = { network: true }
+            metrics.initialize()
+            expect(isFetchWrapped()).toBe(true)
+
+            metrics.dispose()
+
+            expect(isFetchWrapped()).toBe(false)
+        })
+
+        it('does not reinstall wrappers when initialize runs after dispose', () => {
+            ;(mockPostHog.config as any).metrics = { network: true }
+
+            metrics.dispose()
+            metrics.initialize()
+
+            expect(isFetchWrapped()).toBe(false)
+        })
+
+        it('does not reinstall wrappers when config changes after dispose', () => {
+            metrics.dispose()
+            ;(mockPostHog.config as any).metrics = { network: true }
+
+            metrics.onConfigChange()
+
+            expect(isFetchWrapped()).toBe(false)
+        })
+
+        it.each([
+            [[true, false], false],
+            [[true, false, true], true],
+            [[false, true], true],
+        ])('after network config changes %j fetch is wrapped: %s', (changes, wrapped) => {
+            metrics.initialize()
+            for (const network of changes) {
+                ;(mockPostHog.config as any).metrics = { network }
+                metrics.onConfigChange()
+            }
+            expect(isFetchWrapped()).toBe(wrapped)
+        })
     })
 })

@@ -66,6 +66,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
         } as PostHogConfig,
         get_distinct_id: () => 'test-distinct-id',
         capture: vi.fn(),
+        is_capturing: vi.fn(() => true),
         reloadFeatureFlags: vi.fn(),
         _send_request: vi.fn(),
         onFeatureFlags: vi.fn().mockReturnValue(() => {}),

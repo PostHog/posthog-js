@@ -31,6 +31,7 @@ import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
@@ -258,7 +259,13 @@ function serializeForCompression(data: unknown): string {
         // fast path: plain native stringify, since a replacer callback is expensive on
         // large snapshots and circular event data is rare
         return JSON.stringify(data)
-    } catch {
+    } catch (e) {
+        // data past the engine's maximum string length is not something the replacer can
+        // shorten, and the retry would build the string up to that limit all over again
+        // before failing the same way - on unload that stall is paid before the final flush
+        if (e instanceof RangeError) {
+            throw e
+        }
         // circular event data (e.g. a leaked instance graph) degrades gracefully to
         // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
         return JSON.stringify(data, circularReferenceReplacer())
@@ -400,7 +407,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
             )
         }
     } catch (e) {
-        logger.error('could not compress event - will use uncompressed event', e)
+        logger.warn('could not compress event - will use uncompressed event', e)
     }
     return { event, size: estimateSize(event) }
 }
@@ -430,7 +437,7 @@ async function compressEventAsync(event: eventWithTime): Promise<CompressedEvent
         if (isNativeAsyncGzipError(e)) {
             _nativeAsyncSessionRecordingGzipDisabled = true
         }
-        logger.error('could not compress event asynchronously - trying synchronous compression', e)
+        logger.warn('could not compress event asynchronously - trying synchronous compression', e)
         return compressEventSync(event)
     }
     return { event, size: estimateSize(event) }
@@ -530,6 +537,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _throttledMutationsDropped = 0
     private _oversizedMutationsDropped = 0
     private _oversizedMutationBytesDropped = 0
+    // events dropped because their JSON is longer than the engine's maximum string length. The
+    // page keeps running and the recording loses them silently, so the count has to ship
+    private _unstringifiableEventsDropped = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -541,8 +551,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
-    // set when a held buffer hit the size cap and was dropped to bound memory; a release
-    // then takes a fresh full snapshot so the recording resumes playable
+    // set when a held buffer hit the size cap and stopped collecting to bound memory; a
+    // release ships what was held and takes a fresh full snapshot to resume playable
     private _heldBufferOverflowed = false
     // a release while the recorder is stopped (e.g. an override during startSessionRecording's
     // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
@@ -660,11 +670,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._eventTriggerMatching = new EventTriggerMatching(this._instance)
 
         this._buffer = this._clearBuffer()
-        // the sessionid manager's key scheme, repeated rather than read from it because this
-        // recorder is loaded from the CDN and can run against a core that does not expose it.
-        // Two apps on one origin park separately, as they already do for the window id
+        // A shared persistence_name also shares session/window IDs, but must not share replay
+        // data across project tokens. Encode the pair without ambiguous separators and use a
+        // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
         const persistenceName = this._instance.config.persistence_name || this._instance.config.token
-        this._pendingBufferStorageKey = 'ph_' + persistenceName + PENDING_BUFFER_STORAGE_SUFFIX
+        this._pendingBufferStorageKey =
+            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(
@@ -1166,7 +1177,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     cacheTimestamp,
                     persistedConfig,
                 })
-                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                // Core needs the persisted config to reach its refresh path when recording restarts.
                 return undefined
             }
         }
@@ -1621,10 +1632,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // belongs to the old session) and before the new one takes its first snapshot
             this._slowestFullSnapshot = undefined
             this._lastSeenSnapshotCost = undefined
-            // the throttler drop counts are per-session too, so the new session starts at zero
+            // the drop counts are per-session too, so the new session starts at zero
             this._throttledMutationsDropped = 0
             this._oversizedMutationsDropped = 0
             this._oversizedMutationBytesDropped = 0
+            this._unstringifiableEventsDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
@@ -1679,6 +1691,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._heldEpochShipsOnUnload = false
         if (this._heldBufferOverflowed) {
             this._heldBufferOverflowed = false
+            // the overflowed hold retained its data, so the release ships it; a fresh full
+            // snapshot bridges the gap between the cap and this release
             this._tryTakeFullSnapshot()
         }
         this._scheduleFlushBuffer()
@@ -1713,6 +1727,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         targetSessionId: string,
         targetWindowId: string
     ) {
+        // the request encoder stringifies the whole batch, and the request queue merges every
+        // queued recording chunk into one request, so buffering an event that cannot be
+        // stringified would take every chunk queued alongside it down too. Drop only this event.
+        if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
+            this._unstringifiableEventsDropped += 1
+            logger.warn('could not stringify event - dropping it to keep the rest of the recording')
+            return
+        }
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
@@ -1822,19 +1845,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
         try {
             let eventToSend: eventWithTime | compressedEventWithTime = queuedEvent.event
-            let size = estimateSize(queuedEvent.event)
+            let size: number | undefined
             if (queuedEvent.compressionEnabled) {
                 try {
                     ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
                 } catch (e) {
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                 }
+            }
+            // only size the raw event when compression did not already report a size: this drain
+            // runs on unload, and a discarded estimate costs a full stringify of every event
+            if (isUndefined(size)) {
+                size = estimateSize(queuedEvent.event)
             }
             try {
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } catch (e) {
                 // the async path swallows this too, a throw here would abort the rotation restart
-                logger.error('could not capture queued compression event', e)
+                logger.warn('could not capture queued compression event', e)
             }
         } finally {
             this._finishQueuedCompressionEvent(queuedEvent)
@@ -1844,7 +1872,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _drainCompressionQueueSync() {
         const queuedEvents = [...this._pendingCompressionEvents]
         queuedEvents.forEach((queuedEvent) => {
-            this._processQueuedCompressionEventSync(queuedEvent)
+            try {
+                this._processQueuedCompressionEventSync(queuedEvent)
+            } catch (e) {
+                // this drain runs on unload: a throw here would skip the remaining
+                // queued events and the final flush, truncating the recording
+                logger.warn('could not drain queued compression event', e)
+            }
         })
     }
 
@@ -1885,7 +1919,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 } catch (e) {
                     // a compression failure must never reject the queue promise chain, since the
                     // rejection would surface as an unhandled rejection and drop the event
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                     eventToSend = event
                     size = estimateSize(event)
                 }
@@ -2067,6 +2101,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
+
+        if (event.type === EventType.Custom && event.data.tag === JSON_LD_EVENT_TAG) {
+            let href: string | undefined
+            try {
+                href = window ? this._maskReplayUrl(window.location.href) : undefined
+            } catch {
+                // A masking callback failure must not expose the original URL or interrupt recording.
+            }
+            event.data.href = href
+        }
 
         if (
             this._queuedCompressionEvents > 0 ||
@@ -2372,6 +2416,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         $lib: Config.LIB_NAME,
                         $lib_version: Config.LIB_VERSION,
                         $snapshot_host: snapshotHostname,
+                        ...(this._unstringifiableEventsDropped > 0
+                            ? { $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped }
+                            : {}),
                     })
                 } catch (e) {
                     // one chunk that cannot be captured must not drop the chunks after it
@@ -2482,17 +2529,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._buffer.windowId = properties.$window_id as string
         }
 
-        // a held buffer can't ship at the cap, so bound memory instead: drop the epoch's data
-        // and stop collecting; a release takes a fresh full snapshot to resume playable
+        // a held buffer can't ship at the cap, so bound memory instead: stop collecting but
+        // keep what is held, so a release still ships the epoch from its start; the release
+        // takes a fresh full snapshot to bridge the gap between cap and interaction
         if (
             this._holdFlushUntilInteraction &&
             (this._heldBufferOverflowed ||
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
-            if (!this._heldBufferOverflowed) {
-                this._heldBufferOverflowed = true
-                this._buffer = this._clearBuffer()
-            }
+            this._heldBufferOverflowed = true
             return
         }
 
@@ -2567,15 +2612,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
-        // but only if the document was ever visible. Rotation-born holds stay held, and an
-        // overflowed hold has nothing playable left to ship.
-        if (
-            this._holdFlushUntilInteraction &&
-            this._heldEpochShipsOnUnload &&
-            this._documentWasEverVisible &&
-            !this._heldBufferOverflowed
-        ) {
+        // but only if the document was ever visible. Rotation-born holds stay held. An
+        // overflowed hold takes its recovery snapshot here, not in _releaseHoldAndFlush:
+        // that path early-returns once the hold is cleared, so a cancelled navigation
+        // would never heal the gap between cap and the resumed recording.
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {
             this._setFlushHold(undefined)
+            if (this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = false
+                this._tryTakeFullSnapshot()
+            }
         }
 
         // beforeunload cannot wait for async CompressionStream work. Synchronously
@@ -2787,7 +2833,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
             $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
             $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
+            // cumulative across the session: events too large to stringify, each one a gap in
+            // the recording that nothing else reports
+            $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
+            // observers that failed to start: the recorder's error handler swallows those
+            // errors, so without this a frame that records almost nothing still reports
+            // every other health signal as good
+            $sdk_debug_replay_observer_init_failures: getRRWeb()?.getObserverInitFailures?.(),
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }
@@ -3008,6 +3061,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             !this._jsonLdCapture
         ) {
             this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                maskUrl: (url) => this._maskReplayUrl(url),
                 attributeFilter: sessionRecordingOptions.attributeFilter,
                 blockClass: sessionRecordingOptions.blockClass,
                 blockSelector: sessionRecordingOptions.blockSelector,

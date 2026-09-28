@@ -1,8 +1,6 @@
 name: Changeset hygiene
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 on:
   pull_request:
@@ -14,6 +12,9 @@ concurrency:
 
 jobs:
   check:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@1fb05c67b091cd3bcfb392ca100e498aa31995a5
     with:
       script-ref: 1fb05c67b091cd3bcfb392ca100e498aa31995a5

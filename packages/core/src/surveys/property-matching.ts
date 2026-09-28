@@ -70,6 +70,6 @@ export function matchPropertyFilters(
       return false
     }
 
-    return comparisonFunction(filter.values, [String(eventPropertyValue)])
+    return comparisonFunction(filter.values.map(String), [String(eventPropertyValue)])
   })
 }

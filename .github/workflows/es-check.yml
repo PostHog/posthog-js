@@ -10,8 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   ssr:
+    permissions:
+      contents: read
     name: Build and check ES5/ES6 support
     runs-on: ubuntu-22.04
     steps:

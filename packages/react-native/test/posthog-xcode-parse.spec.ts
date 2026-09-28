@@ -368,15 +368,17 @@ describe('posthog-xcode.sh release version resolution', () => {
   })
 })
 
-describe('posthog-xcode.sh skipOnConflict upload flag', () => {
-  it('passes --skip-on-conflict only to hermes upload', () => {
+describe('posthog-xcode.sh conflict upload flags', () => {
+  it('passes --skip-on-conflict and --force only to hermes upload', () => {
     const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
 
     expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)')
+    expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--force)')
     expect(contents).toContain(
       'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)'
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
+    expect(contents).not.toContain('hermes clone --force')
   })
 })
 
@@ -523,6 +525,32 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(invocations[0]).toContain('--release-mode event')
     expect(invocations[1]).toContain('hermes upload')
     expect(invocations[1]).toContain('--release-mode event')
+  })
+
+  it.each([
+    ['the POSTHOG_SKIP_ON_CONFLICT env var', [] as string[], { POSTHOG_SKIP_ON_CONFLICT: '1' }, '--skip-on-conflict'],
+    ['the --posthog-skip-on-conflict argument', ['--posthog-skip-on-conflict', '--'], {}, '--skip-on-conflict'],
+    ['the POSTHOG_FORCE env var', [] as string[], { POSTHOG_FORCE: '1' }, '--force'],
+    ['the --posthog-force argument', ['--posthog-force', '--'], {}, '--force'],
+  ])('passes %s to the upload alone', (_source, args, env, flag) => {
+    const { status, invocations } = runWrapper(args, env)
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('hermes clone')
+    expect(invocations[0]).not.toContain(flag)
+    expect(invocations[1]).toContain('hermes upload')
+    expect(invocations[1]).toContain(flag)
+  })
+
+  it('refuses to keep and overwrite a conflicting symbol set at once', () => {
+    // posthog-cli declares the two flags mutually exclusive, so the pair has to fail with a
+    // message naming them rather than with an argument-parser error after the bundle is built.
+    const { status, invocations, output } = runWrapper([], { POSTHOG_SKIP_ON_CONFLICT: '1', POSTHOG_FORCE: '1' })
+
+    expect(status).not.toBe(0)
+    expect(output).toContain('skip-on-conflict and force cannot both be set')
+    expect(invocations.join('\n')).not.toContain('hermes')
   })
 
   it('pins the same posthog-cli floor as posthog.gradle', () => {

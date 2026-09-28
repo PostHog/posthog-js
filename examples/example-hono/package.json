@@ -1,5 +1,6 @@
 {
     "name": "example-hono",
+    "packageManager": "pnpm@11.7.0",
     "type": "module",
     "engines": {
         "node": ">=22.22"

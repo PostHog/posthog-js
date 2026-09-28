@@ -36,7 +36,14 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose }: 
         $process_person_profile: false,
       }
       if (request?.path) {
-        props.path = request.path
+        try {
+          // Prefix origin-form targets to preserve leading double slashes as part of the path.
+          const target = request.path.startsWith('/') ? `http://localhost${request.path}` : request.path
+          const url = new URL(target, 'http://localhost')
+          props.path = url.pathname + (posthogServerConfig.disable_capture_url_hashes === true ? '' : url.hash)
+        } catch {
+          // A malformed request URL must not prevent capturing the original exception.
+        }
       }
       if (request?.method) {
         props.method = request.method

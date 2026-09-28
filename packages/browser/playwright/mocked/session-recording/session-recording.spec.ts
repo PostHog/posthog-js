@@ -267,7 +267,7 @@ test.describe('Session recording - array.js', () => {
             ph?.reset()
         })
 
-        // First request may flush old session buffer
+        // The old session buffer and the new session snapshot ship as separate requests
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
@@ -275,13 +275,8 @@ test.describe('Session recording - array.js', () => {
             },
         })
 
-        // Second request gets new session snapshot
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/ses/*'],
-            action: async () => {
-                await page.locator('[data-cy-input]').type('more activity')
-            },
-        })
+        await page.locator('[data-cy-input]').type('more activity')
+        await expect.poll(async () => (await page.capturedEvents()).length).toBe(3)
 
         const capturedEvents = await page.capturedEvents()
 

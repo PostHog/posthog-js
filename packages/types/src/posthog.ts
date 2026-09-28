@@ -145,7 +145,7 @@ export interface PostHog {
      * Set HMAC-based identity verification.
      *
      * @param distinctId - The verified user distinct_id
-     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     * @param hash - HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings
      */
     setIdentity(distinctId: string, hash: string): void
 

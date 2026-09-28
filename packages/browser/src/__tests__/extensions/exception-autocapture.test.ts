@@ -57,6 +57,29 @@ describe('ExceptionObserver', () => {
             }
         )
 
+        it('captures an aggregate and its children in one event with their own stacks', () => {
+            const child = new TypeError('alternative')
+            child.stack = 'TypeError: alternative\n    at child (https://example.com/child.js:2:3)'
+            const aggregate = new AggregateError([child], 'group')
+            aggregate.stack = 'AggregateError: group\n    at root (https://example.com/root.js:4:5)'
+            const beforeSend = vi.fn((_event: CaptureResult | null) => null)
+            instance.set_config({ before_send: beforeSend })
+
+            instance.captureException(aggregate)
+
+            expect(beforeSend).toHaveBeenCalledTimes(1)
+            const event = beforeSend.mock.calls[0][0]!
+            expect(event.event).toBe('$exception')
+            expect(event.properties.$exception_list).toMatchObject([
+                { value: 'group', stacktrace: { frames: [{ filename: 'https://example.com/root.js' }] } },
+                { value: 'alternative', stacktrace: { frames: [{ filename: 'https://example.com/child.js' }] } },
+            ])
+            expect(event.properties.$exception_list.map((entry: { mechanism: unknown }) => entry.mechanism)).toEqual([
+                { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+                { type: 'chained', source: 'member', synthetic: false, exception_id: 1, parent_id: 0 },
+            ])
+        })
+
         function captureAdditionalProperties(additionalProperties: Record<string, unknown>) {
             const beforeSend = vi.fn((_event: CaptureResult | null) => null)
             instance.set_config({ before_send: beforeSend })

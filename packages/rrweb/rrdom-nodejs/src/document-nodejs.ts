@@ -1,5 +1,7 @@
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
-import type { NWSAPI } from 'nwsapi';
+import nwsapi, { type NWSAPI } from 'nwsapi';
+import cssom from 'cssom';
+import cssstyle from 'cssstyle';
 import type { CSSStyleDeclaration as CSSStyleDeclarationType } from 'cssstyle';
 import {
   BaseRRCDATASection,
@@ -13,15 +15,13 @@ import {
   ClassList,
   type IRRDocument,
   type CSSStyleDeclaration,
+  type IRRNode,
 } from '@posthog/rrdom';
-const nwsapi = require('nwsapi');
-const cssom = require('cssom');
-const cssstyle = require('cssstyle');
 
 export class RRWindow {
   scrollLeft = 0;
   scrollTop = 0;
-  scrollTo(options?: ScrollToOptions) {
+  scrollTo(options?: ScrollToOptions): void {
     if (!options) return;
     if (typeof options.left === 'number') this.scrollLeft = options.left;
     if (typeof options.top === 'number') this.scrollTop = options.top;
@@ -74,11 +74,11 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     return this.documentElement;
   }
 
-  appendChild(childNode: BaseRRNode) {
+  appendChild(childNode: BaseRRNode): IRRNode {
     return super.appendChild(childNode);
   }
 
-  insertBefore(newChild: BaseRRNode, refChild: BaseRRNode | null) {
+  insertBefore(newChild: BaseRRNode, refChild: BaseRRNode | null): IRRNode {
     return super.insertBefore(newChild, refChild);
   }
 
@@ -108,7 +108,7 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     _namespace: string | null,
     _qualifiedName: string | null,
     _doctype?: DocumentType | null,
-  ) {
+  ): RRDocument {
     return new RRDocument();
   }
 
@@ -116,7 +116,7 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     qualifiedName: string,
     publicId: string,
     systemId: string,
-  ) {
+  ): RRDocumentType {
     const documentTypeNode = new RRDocumentType(
       qualifiedName,
       publicId,
@@ -158,23 +158,32 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     return element;
   }
 
-  createElementNS(_namespaceURI: string, qualifiedName: string) {
+  createElementNS(
+    _namespaceURI: string,
+    qualifiedName: string,
+  ):
+    | RRElement
+    | RRMediaElement
+    | RRCanvasElement
+    | RRIFrameElement
+    | RRImageElement
+    | RRStyleElement {
     return this.createElement(qualifiedName as keyof HTMLElementTagNameMap);
   }
 
-  createComment(data: string) {
+  createComment(data: string): RRComment {
     const commentNode = new RRComment(data);
     commentNode.ownerDocument = this;
     return commentNode;
   }
 
-  createCDATASection(data: string) {
+  createCDATASection(data: string): RRCDATASection {
     const sectionNode = new RRCDATASection(data);
     sectionNode.ownerDocument = this;
     return sectionNode;
   }
 
-  createTextNode(data: string) {
+  createTextNode(data: string): RRText {
     const textNode = new RRText(data);
     textNode.ownerDocument = this;
     return textNode;
@@ -216,17 +225,17 @@ export class RRElement extends BaseRRElement {
     return super.insertBefore(newChild, refChild) as BaseRRNode;
   }
 
-  getAttribute(name: string) {
+  getAttribute(name: string): string | null {
     const upperName = name && name.toLowerCase();
     if (upperName in this.attributes) return this.attributes[upperName];
     return null;
   }
 
-  setAttribute(name: string, attribute: string) {
+  setAttribute(name: string, attribute: string): void {
     this.attributes[name.toLowerCase()] = attribute;
   }
 
-  removeAttribute(name: string) {
+  removeAttribute(name: string): void {
     delete this.attributes[name.toLowerCase()];
   }
 
@@ -324,13 +333,13 @@ export class RRCanvasElement extends RRElement {
 export class RRStyleElement extends RRElement {
   private _sheet: CSSStyleSheet | null = null;
 
-  get sheet() {
+  get sheet(): CSSStyleSheet | null {
     if (!this._sheet) {
       let result = '';
       for (const child of this.childNodes)
         if (child.RRNodeType === RRNodeType.Text)
           result += (child as RRText).textContent;
-      this._sheet = cssom.parse(result);
+      this._sheet = cssom.parse(result) as unknown as CSSStyleSheet;
     }
     return this._sheet;
   }

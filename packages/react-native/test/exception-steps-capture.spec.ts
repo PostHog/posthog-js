@@ -76,6 +76,32 @@ describe('PostHog React Native exception steps capture', () => {
     expect(steps.map((s: any) => s.$message)).toEqual(['caller'])
   })
 
+  it('unsubscribes uncaught-error capture on shutdown without affecting another client', async () => {
+    const previous = vi.fn()
+    let handler = previous
+    vi.stubGlobal('ErrorUtils', {
+      getGlobalHandler: () => handler,
+      setGlobalHandler: (next: typeof handler) => {
+        handler = next
+      },
+    })
+    try {
+      const first = newPostHog({ autocapture: { uncaughtExceptions: true } })
+      const second = newPostHog({ autocapture: { uncaughtExceptions: true } })
+      const firstCapture = vi.spyOn(first, 'captureException')
+      const secondCapture = vi.spyOn(second, 'captureException')
+      await first.shutdown()
+      handler(new Error('app failed'), false)
+      expect(firstCapture).not.toHaveBeenCalled()
+      expect(secondCapture).toHaveBeenCalledTimes(1)
+      expect(previous).toHaveBeenCalledTimes(1)
+      await second.shutdown()
+      expect(handler).toBe(previous)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('attaches nothing when disabled', () => {
     const posthog = newPostHog({ exceptionSteps: { enabled: false } })
     const spy = captureSpy(posthog)

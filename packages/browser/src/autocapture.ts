@@ -103,7 +103,7 @@ export function getPropertiesFromElement(
     }
 
     const classes = getClassNames(elem)
-    if (classes.length > 0)
+    if (!maskAllAttributes && !elementAttributeIgnorelist?.includes('class') && classes.length > 0)
         props['classes'] = classes.filter(function (c) {
             return c !== ''
         })
@@ -220,7 +220,7 @@ export function autocapturePropertiesForElement(
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
-        if (isTag(el, 'a')) {
+        if (isTag(el, 'a') && !maskAllElementAttributes && !elementAttributeIgnoreList?.includes('href')) {
             const hrefAttr = el.getAttribute('href')
             href =
                 shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
@@ -717,9 +717,7 @@ export class Autocapture implements Extension {
                 props['$copy_type'] = clipType
             }
 
-            void this._client
-                ?.capture(eventName, props)
-                .catch((error) => logger.error('Failed to capture event', error))
+            this._client?.capture(eventName, props)
             return true
         }
     }

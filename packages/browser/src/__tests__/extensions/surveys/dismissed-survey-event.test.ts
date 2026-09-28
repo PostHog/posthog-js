@@ -30,7 +30,11 @@ describe('dismissedSurveyEvent', () => {
             responses: { $survey_response_q1: 'answer' },
             surveyLanguage: null,
         })
-        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
+        const mockPosthog = {
+            capture: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+        } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
@@ -45,7 +49,11 @@ describe('dismissedSurveyEvent', () => {
             responses: { $survey_response_q1: 'answer' },
             surveyLanguage: 'es',
         })
-        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
+        const mockPosthog = {
+            capture: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+        } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
@@ -56,7 +64,11 @@ describe('dismissedSurveyEvent', () => {
     it('falls back to the current display language when the survey was dismissed without answering', () => {
         // No in-progress state at all — nothing was ever answered, so there's no answer-time
         // language to prefer.
-        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
+        const mockPosthog = {
+            capture: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+        } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 

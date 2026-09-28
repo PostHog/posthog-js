@@ -1,5 +1,23 @@
 # @posthog/nuxt
 
+## 1.7.91
+
+### Patch Changes
+
+- [#4985](https://github.com/PostHog/posthog-js/pull/4985) [`d14b608`](https://github.com/PostHog/posthog-js/commit/d14b608e1260092b6abaf845ebf81f99f8553c22) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Nuxt runtime plugin type declarations.
+  (2026-09-16)
+- Updated dependencies [[`ec4062b`](https://github.com/PostHog/posthog-js/commit/ec4062bf42667a86f9daf84e744e253471a98a96)]:
+  - posthog-js@1.433.6
+
+## 1.7.90
+
+### Patch Changes
+
+- [#4942](https://github.com/PostHog/posthog-js/pull/4942) [`38e3453`](https://github.com/PostHog/posthog-js/commit/38e34539585f9454e62d8252328e07d91fcb4939) Thanks [@marandaneto](https://github.com/marandaneto)! - Strip queries from Nuxt server exception paths and honor serverConfig.disable_capture_url_hashes for fragments.
+  (2026-09-14)
+- Updated dependencies [[`a5d094f`](https://github.com/PostHog/posthog-js/commit/a5d094f44f722935b539c346a92ae98a797e8762)]:
+  - posthog-js@1.431.7
+
 ## 1.7.89
 
 ### Patch Changes

@@ -446,6 +446,19 @@ describe('sanitizeEvent - exception values', () => {
   })
 })
 
+describe('sanitizeEvent - resource name', () => {
+  // `$identify` names its request the same way a read does, so gating redaction
+  // on the read event type used to publish the raw address alongside the person.
+  it.each(['mcp:resources/read', 'identify', '$exception'])(
+    'redacts credentials from a %s resource name',
+    (eventType) => {
+      const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
+
+      expect(sanitizeEvent(event).resourceName).toBe('https://%5Bredacted%5D@example.com/guide')
+    }
+  )
+})
+
 describe('sanitizeEvent - intent PII redaction', () => {
   it('redacts structured PII from the agent-narrated intent', () => {
     const event = makeEvent({
@@ -465,6 +478,41 @@ describe('sanitizeEvent - intent PII redaction', () => {
     const result = sanitizeEvent(event)
 
     expect(result.userIntent).toBe('Rotating token [redacted] for user [redacted].')
+  })
+
+  it('redacts PII carried inside a URL the intent narrates', () => {
+    // PII has to be stripped before the URL rewrite: rewriting percent-encodes
+    // the `@` the email pattern anchors on, and `alice%40example.com` would ship.
+    const event = makeEvent({
+      userIntent: 'Open https://example.com/?email=alice@example.com&token=fakesecret',
+    })
+
+    const intent = sanitizeEvent(event).userIntent as string
+
+    expect(intent).not.toContain('alice@example.com')
+    expect(intent).not.toContain('fakesecret')
+    // The host is not PII and stays, so the intent is still readable.
+    expect(intent).toContain('example.com')
+  })
+
+  it('redacts a PostHog token whose shape a PII pattern would otherwise split', () => {
+    // The phone pattern matches the `-415-555-0142-` run inside this token. Run
+    // before the credential pass it would replace just that, leaving the two
+    // halves of the token behind.
+    const event = makeEvent({ userIntent: 'Rotating phx_AAAAAAAA-415-555-0142-AAAAAAAAAAAAAAAAAAAA' })
+
+    expect(sanitizeEvent(event).userIntent).toBe('Rotating [redacted]')
+  })
+
+  it('stubs a base64 blob narrated as the intent rather than PII-splicing it apart', () => {
+    // A Luhn-valid run inside the blob is enough for the card pass to splice
+    // `[redacted]` into it; the base64 detector would then reject it and the
+    // whole blob would be captured. The size gate has to read the raw value.
+    const blob = `${'AAAA/'.repeat(2_052)}4111111111111111/AAA`
+
+    expect(sanitizeEvent(makeEvent({ userIntent: blob })).userIntent).toBe(
+      '[binary data redacted - not supported by PostHog MCP analytics]'
+    )
   })
 
   it('does not redact the same PII shapes from structured parameters or responses', () => {

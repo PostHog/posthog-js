@@ -49,7 +49,7 @@ describe('identify option', () => {
       return identity
     })
 
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -67,7 +67,7 @@ describe('identify option', () => {
     await capture.start()
     const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
 
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -90,7 +90,7 @@ describe('identify option', () => {
     let call = 0
     const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { plan: plans[call++] } }))
 
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -112,7 +112,7 @@ describe('identify option', () => {
     await capture.start()
 
     const identify = vi.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
-    instrument(server, fakePostHog(), { context: true, identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, context: true, identify })
 
     server.tool!(
       'post_track_tool',
@@ -142,7 +142,7 @@ describe('identify option', () => {
   it('treats a null return as "no identity": no event published, no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, fakePostHog(), { identify: async () => null })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => null })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -187,7 +187,7 @@ describe('identify option', () => {
       distinctId: 'session-user',
       properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
     }
-    instrument(server, fakePostHog(), { identify: async () => identity })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => identity })
 
     await callAddTodo(client)
 
@@ -201,6 +201,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => ({
         distinctId: 'session-user',
         groups: { organization: 'org_123', project: 'proj_9' },
@@ -220,6 +221,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => ({
         distinctId: 'session-user',
         properties: { name: 'Session Alice', role: 'admin' },
@@ -247,7 +249,7 @@ describe('identify option', () => {
       distinctId: 'list-user',
       properties: { name: 'List Alice' },
     }))
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     // No tool call first: nothing has cached an identity on this instance, which
     // is the state every request sees under per-request instance lifetime.
@@ -268,6 +270,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
         return { distinctId: 'async-user' }
@@ -287,6 +290,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => {
         throw new Error('identify boom')
       },
@@ -303,6 +307,7 @@ describe('identify option', () => {
 
   it('stores whatever identify returns — no schema validation', async () => {
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       // The SDK does not validate the identity shape; whatever you return ends up cached.
       identify: async () => ({ invalidField: 'invalid' }) as unknown as UserIdentity,
     })

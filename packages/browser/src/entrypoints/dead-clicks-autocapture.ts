@@ -1,9 +1,10 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined } from '@posthog/core'
+import { isNull, isNumber, isUndefined, trySafe } from '@posthog/core'
 import {
     getEventTarget,
+    isTextSelectionTarget,
     shouldCaptureDeadClick,
     shouldSkipDeadClick,
 } from '@posthog/browser-common/utils/autocapture-utils'
@@ -24,6 +25,13 @@ function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCan
         }
     }
     return null
+}
+
+// Firefox denies property access on a node from another origin or from a realm that was torn
+// down, and both a composed path and a mutation record can hand us one. A node we cannot read
+// is a node we cannot inspect, so answer no instead of letting the denial escape.
+function isInspectableElement(node: Node | EventTarget | null | undefined): node is Element {
+    return !!trySafe(() => isElementNode(node as Node))
 }
 
 function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
@@ -61,24 +69,36 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 // a liveness transition only counts if it fired within the suppression window on one side of the
 // click. this is the single definition of "in window" — it gates every recorded delay, so once a
 // delay lands on a candidate `_checkClicks` can trust it is already in range.
-function livenessDelayInWindow(delay: number): number | undefined {
-    return delay >= 0 && delay < LIVENESS_SUPPRESSION_MS ? delay : undefined
+function livenessDelayInWindow(delay: number, windowMs = LIVENESS_SUPPRESSION_MS): number | undefined {
+    return delay >= 0 && delay < windowMs ? delay : undefined
 }
 
-// a liveness signal (visibility/focus) that fired shortly BEFORE the click — the click that woke
-// or refocused the tab. read once when the candidate is queued; only a change inside the
-// suppression window counts, so a long-ago transition can neither suppress the click nor (as it
-// once wrongly did) mark it dead. the AFTER-the-click direction is recorded separately, as the
-// event fires, by `_recordLivenessSignal`.
-function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
-    return lastSeenAt ? livenessDelayInWindow(clickTimestamp - lastSeenAt) : undefined
+// a liveness signal that fired shortly BEFORE the click. read once when the candidate is queued;
+// only a change inside the suppression window counts, so a long-ago transition cannot affect it.
+function priorLivenessDelay(
+    clickTimestamp: number,
+    lastSeenAt: number | undefined,
+    windowMs = LIVENESS_SUPPRESSION_MS
+): number | undefined {
+    return isNumber(lastSeenAt) ? livenessDelayInWindow(clickTimestamp - lastSeenAt, windowMs) : undefined
+}
+
+type ObservedDeadClick = DeadClickCandidate & { selectionChangedDuringGesture?: boolean }
+
+type MouseSelectionGesture = {
+    path: EventTarget[]
+    trusted: boolean
+    selectionChanged: boolean
+    selectionInitiallyRelated: boolean
+    clickTarget?: EventTarget
+    clickDetail?: number
 }
 
 // How dead-click detection works
 // ================================
 // A click (or swipe) is queued as a candidate, then re-examined ~1s later in `_checkClicks`. It is
-// reported as a `$dead_click` only if — after the click — NO liveness/suppression signal fired
-// within its window AND at least one timeout signal fired. In short: something-happened-fast wins
+// reported as a `$dead_click` only if NO liveness/suppression signal fired within its applicable
+// window AND at least one timeout signal fired. In short: something-happened-fast wins
 // (alive), otherwise nothing-happened-in-time loses (dead).
 //
 // Gate signals (checked in `_ignore` before the click is ever queued — never even a candidate):
@@ -89,21 +109,21 @@ function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefin
 //   - a modifier key is held (ctrl/meta/alt/shift) unless `capture_clicks_with_modifier_keys`
 //   - (clicks only) target is an anchor — a legitimate activation; swipes are still candidates
 //
-// Liveness / suppression signals (any one, within its window after the click => alive, dropped).
+// Liveness / suppression signals (any one, within its window => alive, dropped).
 // These say "the click did something", so they only ever suppress; none can mark a click dead:
 //   - mutation:   a DOM mutation           < mutation_threshold_ms (default 2500)
 //   - scroll:     the page/an element scrolled < scroll_threshold_ms (default 100)
-//   - selection:  a selectionchange        < selection_change_threshold_ms (default 100)
+//   - selection:  selecting/unselecting a range or moving an editable caret during the matching
+//                 mouse gesture, or < selection_change_threshold_ms (default 100) either side of the click
 //   - visibility: a visibilitychange (either direction — the tab going hidden because the click
 //                 opened a new tab, or becoming visible as the click woke/focused it)
 //                 < LIVENESS_SUPPRESSION_MS on either side of the click
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
 //                 the current window losing focus) < LIVENESS_SUPPRESSION_MS on either side
-// visibility/focus are recorded onto each queued candidate the instant they fire (like scroll), not
-// read from a single shared timestamp when the click is checked. that matters because a click that
-// hides/blurs the tab suspends the ~1s `_checkClicks` timer while hidden; by the time it resumes the
-// tab has usually come back, and a shared timestamp would have been overwritten by that later
-// transition, losing the click-correlated one and misjudging the click as dead.
+// selection/visibility/focus are recorded on each candidate, not read from a single shared
+// timestamp when the click is checked. A pre-click selection is stored only inside its window;
+// post-click changes keep the closest delay. For visibility/focus this also matters because
+// hiding/blurring the tab can suspend the check until a later transition overwrites it.
 //
 // Timeout signals (a click with no liveness signal is dead if any one fired). Note visibility and
 // focus are deliberately absent here — they are liveness-only and never mark a click dead:
@@ -113,13 +133,17 @@ function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefin
 //   - absolute timeout:  nothing at all within mutation_threshold_ms * 1.1 (the catch-all backstop)
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
     private _mutationObserver: MutationObserver | undefined
+    private _observedRoots = new WeakSet<Node>()
     private _lastMutation: number | undefined
     private _lastScroll: number | undefined
     private _lastSelectionChanged: number | undefined
+    private _hadSelection = false
     private _lastVisibilityChange: number | undefined
     private _lastFocusChange: number | undefined
-    private _clicks: DeadClickCandidate[] = []
+    private _clicks: ObservedDeadClick[] = []
     private _checkClickTimer: number | undefined
+    private _mouseSelection: MouseSelectionGesture | undefined
+    private _mouseSelectionTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
     private _deadSwipesCaptured = 0
     private _hasUnobservableSurfaces: boolean | undefined
@@ -189,21 +213,69 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this._onMutation(mutations)
             })
-            this._mutationObserver.observe(observerTarget, {
-                attributes: true,
-                characterData: true,
-                childList: true,
-                subtree: true,
-            })
+            this._observeRoot(observerTarget)
+        }
+    }
+
+    // An observed subtree stops at a shadow boundary, so a click that re-renders inside a shadow
+    // root looks like nothing happened. Each root we want changes from needs its own observe call.
+    private _observeRoot(root: Node | null | undefined): void {
+        if (!root || !this._mutationObserver) {
+            return
+        }
+        if (this._observedRoots.has(root)) {
+            return
+        }
+        this._mutationObserver.observe(root, {
+            attributes: true,
+            characterData: true,
+            childList: true,
+            subtree: true,
+        })
+        this._observedRoots.add(root)
+        this._observeShadowRoots(root)
+    }
+
+    // Observe every open shadow root this node hosts or contains. Nested roots are covered
+    // because each root observed here is scanned in turn. Every scanned element is added to
+    // `scanned`, when given, so a caller can skip nodes an earlier scan already covered.
+    private _observeShadowRoots(node: Node, scanned?: Set<Node>): void {
+        if (isElementNode(node) && node.shadowRoot) {
+            this._observeRoot(node.shadowRoot)
+        }
+        const descendants = (node as Element).querySelectorAll?.('*') ?? []
+        for (let i = 0; i < descendants.length; i++) {
+            scanned?.add(descendants[i])
+            this._observeRoot(descendants[i].shadowRoot)
+        }
+    }
+
+    // A gesture inside an open shadow root exposes that root in its composed path, so we can
+    // watch the root before the application's own handlers render into it.
+    private _observeGesturePath(event: Event): void {
+        const path = event.composedPath?.() ?? []
+        for (let i = 0; i < path.length; i++) {
+            const node = path[i]
+            if (isInspectableElement(node)) {
+                this._observeRoot(node.shadowRoot)
+            }
         }
     }
 
     stop() {
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
-        assignableWindow.removeEventListener('click', this._onClick)
+        this._observedRoots = new WeakSet()
+        assignableWindow.removeEventListener('click', this._onClick, { capture: true })
+        assignableWindow.removeEventListener('mousedown', this._onMouseDown, { capture: true })
+        assignableWindow.removeEventListener('mouseup', this._onMouseUp, { capture: true })
+        assignableWindow.removeEventListener('mouseout', this._onMouseOut, { capture: true })
+        assignableWindow.removeEventListener('dragstart', this._clearMouseSelection, { capture: true })
+        assignableWindow.removeEventListener('pointercancel', this._clearMouseSelection, { capture: true })
+        assignableWindow.removeEventListener('blur', this._clearMouseSelection)
+        this._clearMouseSelection()
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
-        assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
+        document?.removeEventListener('selectionchange', this._onSelectionChange)
         assignableWindow.removeEventListener('touchstart', this._onTouchStart, { capture: true })
         assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
         assignableWindow.removeEventListener('touchcancel', this._onTouchCancel, { capture: true })
@@ -214,27 +286,130 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._touchStart = undefined
     }
 
-    private _onMutation(_mutations: MutationRecord[]): void {
-        // we don't actually care about the content of the mutations, right now
-        this._lastMutation = Date.now()
+    private _onMutation(mutations: MutationRecord[]): void {
+        // every scan in this batch reads the DOM as it is now, so a node an earlier scan visited
+        // needs no scan of its own
+        const scanned = new Set<Node>()
+        for (const mutation of mutations) {
+            // one record we cannot read must not end the batch: every record behind it would lose
+            // its sign of life and the timeout backstop would report a false dead click
+            try {
+                // a root observed directly keeps reporting after its host leaves the page, and a change
+                // off the page is no sign of life. only an explicit `false` is skipped, since older
+                // browsers lack `isConnected`
+                if (mutation.target?.isConnected === false) {
+                    continue
+                }
+                this._lastMutation = Date.now()
+                // added content can bring a shadow root of its own, which the observer that reported
+                // the addition cannot see into
+                const addedNodes = mutation.addedNodes
+                for (let i = 0; i < addedNodes.length; i++) {
+                    const node = addedNodes[i]
+                    if (isInspectableElement(node) && !scanned.has(node)) {
+                        this._observeShadowRoots(node, scanned)
+                    }
+                }
+            } catch {}
+        }
     }
 
     private _startClickObserver() {
-        addEventListener(assignableWindow, 'click', this._onClick)
+        // Queue the click before application handlers can mutate the DOM and deliver mutation callbacks.
+        addEventListener(assignableWindow, 'click', this._onClick, { capture: true })
+        addEventListener(assignableWindow, 'mousedown', this._onMouseDown, { capture: true })
+        addEventListener(assignableWindow, 'mouseup', this._onMouseUp, { capture: true })
+        addEventListener(assignableWindow, 'mouseout', this._onMouseOut, { capture: true })
+        addEventListener(assignableWindow, 'dragstart', this._clearMouseSelection, { capture: true })
+        addEventListener(assignableWindow, 'pointercancel', this._clearMouseSelection, { capture: true })
+        addEventListener(assignableWindow, 'blur', this._clearMouseSelection)
+    }
+
+    private _clearMouseSelection = (): void => {
+        clearTimeout(this._mouseSelectionTimer)
+        this._mouseSelectionTimer = undefined
+        this._mouseSelection = undefined
+    }
+
+    private _onMouseDown = (event: Event): void => {
+        this._observeGesturePath(event)
+        this._clearMouseSelection()
+        if ((event as MouseEvent).button === 0) {
+            const gesture: MouseSelectionGesture = {
+                path: event.composedPath(),
+                trusted: event.isTrusted,
+                selectionChanged: false,
+                selectionInitiallyRelated: false,
+            }
+            const selection = document?.getSelection()
+            gesture.selectionInitiallyRelated =
+                selection?.type === 'Range' && this._selectionTouchesGesture(selection, gesture)
+            this._mouseSelection = gesture
+        }
+    }
+
+    private _onMouseOut = (event: Event): void => {
+        // A release outside the document may never reach our mouseup listener.
+        if (isNull((event as MouseEvent).relatedTarget)) {
+            this._clearMouseSelection()
+        }
+    }
+
+    private _onMouseUp = (event: Event): void => {
+        const gesture = this._mouseSelection
+        const mouseEvent = event as MouseEvent
+        if (!gesture || mouseEvent.button !== 0 || event.isTrusted !== gesture.trusted) {
+            return
+        }
+        const path = event.composedPath()
+        // Native clicks target the nearest common ancestor of the press and release targets.
+        // Composed paths preserve this relationship through accessible shadow boundaries.
+        for (const node of gesture.path) {
+            if (isInspectableElement(node) && path.indexOf(node) !== -1) {
+                gesture.clickTarget = node
+                break
+            }
+        }
+        gesture.clickDetail = mouseEvent.detail
+        // Mouseup and its native click are dispatched together. If no click follows, discard
+        // the released gesture before a later activation can inherit its selection activity.
+        this._mouseSelectionTimer = assignableWindow.setTimeout(this._clearMouseSelection, 0)
     }
 
     private _onClick = (event: Event): void => {
-        const click = asCandidate(event as MouseEvent, { type: 'click' })
+        // a click without a preceding mousedown, e.g. a keyboard activation, reaches us here first
+        this._observeGesturePath(event)
+        const mouseEvent = event as MouseEvent
+        const click: ObservedDeadClick | null = asCandidate(mouseEvent, { type: 'click' })
+        const gesture = this._mouseSelection
+        if (
+            click &&
+            gesture &&
+            mouseEvent.button === 0 &&
+            mouseEvent.detail > 0 &&
+            mouseEvent.detail === gesture.clickDetail &&
+            event.isTrusted === gesture.trusted &&
+            click.node === gesture.clickTarget
+        ) {
+            click.selectionChangedDuringGesture =
+                gesture.selectionChanged && this._config.selection_change_threshold_ms > 0
+            this._clearMouseSelection()
+        }
         if (!isNull(click) && !this._ignore(click)) {
             this._queueCandidate(click)
         }
         this._scheduleCheck()
     }
 
-    // queue a candidate, first recording any liveness signal that fired just BEFORE the click (the
-    // click that woke/refocused the tab). the AFTER-the-click direction is stamped later, as the
-    // event fires, by `_recordLivenessSignal`.
+    // Only store a pre-candidate selection delay when it is already inside the suppression window,
+    // so it can never feed the post-click selection timeout. Keep the candidate queued until the
+    // check so it can still deduplicate another click on the same node.
     private _queueCandidate(candidate: DeadClickCandidate): void {
+        candidate.selectionChangedDelayMs = priorLivenessDelay(
+            candidate.timestamp,
+            this._lastSelectionChanged,
+            this._config.selection_change_threshold_ms
+        )
         candidate.visibilityChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastVisibilityChange)
         candidate.focusChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastFocusChange)
         this._clicks.push(candidate)
@@ -276,11 +451,122 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
-        addEventListener(assignableWindow, 'selectionchange', this._onSelectionChange)
+        // A selection may already exist when the lazy-loaded detector starts.
+        this._hadSelection = document?.getSelection()?.type === 'Range'
+        // Document selections fire selectionchange directly on document and the event does not bubble.
+        addEventListener(document, 'selectionchange', this._onSelectionChange)
     }
 
-    private _onSelectionChange = (): void => {
-        this._lastSelectionChanged = Date.now()
+    private _selectionIsInGesture(node: Node | null | undefined, gesture: MouseSelectionGesture): boolean {
+        const target = gesture.path[0] as Node
+        try {
+            while (node) {
+                if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
+                    return true
+                }
+                // Firefox can expose selection endpoints behind a closed root while mouse events
+                // expose only its host. Compare both representations without traversing other content.
+                node = (node.getRootNode() as ShadowRoot).host
+            }
+        } catch {
+            // an endpoint we cannot read is an endpoint we cannot match to the gesture
+        }
+        return false
+    }
+
+    private _selectionTouchesGesture(selection: Selection, gesture: MouseSelectionGesture): boolean {
+        const target = gesture.path[0] as Node
+        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined
+        const sameRoot = !!range && trySafe(() => range.startContainer.getRootNode() === target.getRootNode())
+        if (range && sameRoot && isElementNode(target)) {
+            if (!range.collapsed) {
+                return range.intersectsNode(target)
+            }
+            // A shadow selection can be represented as a collapsed boundary immediately before
+            // its host. Resolve that boundary rather than associating its whole parent container.
+            const node = isElementNode(range.startContainer)
+                ? (range.startContainer.childNodes[range.startOffset] ?? range.startContainer)
+                : range.startContainer
+            return this._selectionIsInGesture(node, gesture)
+        }
+        return (
+            this._selectionIsInGesture(selection.focusNode, gesture) ||
+            this._selectionIsInGesture(selection.anchorNode, gesture)
+        )
+    }
+
+    private _onSelectionChange = (event: Event): void => {
+        const selection = document?.getSelection()
+        const hadSelection = this._hadSelection
+        // isCollapsed can be true for a range inside a shadow root; type reflects the actual selection.
+        this._hadSelection = selection?.type === 'Range'
+
+        const focusNode = selection?.focusNode
+        const focusElement = focusNode && (isElementNode(focusNode) ? focusNode : focusNode.parentElement)
+        // Selection endpoints may be retargeted outside an editor's shadow root.
+        const documentActiveElement = document?.activeElement
+        let activeElement = documentActiveElement
+        while (activeElement?.shadowRoot?.activeElement) {
+            activeElement = activeElement.shadowRoot.activeElement
+        }
+        const isEditing =
+            isTextSelectionTarget(getEventTarget(event)) ||
+            isTextSelectionTarget(focusElement ?? null) ||
+            isTextSelectionTarget(activeElement ?? null)
+        // A caret reported outside focused content may belong to a closed shadow root.
+        // Preserve that activity when its actual target cannot be inspected.
+        const hasRetargetedCaret =
+            selection?.type === 'Caret' &&
+            activeElement &&
+            !activeElement.shadowRoot &&
+            focusNode &&
+            focusNode !== documentActiveElement &&
+            focusNode.contains(documentActiveElement ?? null)
+
+        // Ordinary clicks can move an invisible caret on known non-editable content.
+        if (!hadSelection && !this._hadSelection && !isEditing && !hasRetargetedCaret) {
+            return
+        }
+
+        const firedAt = Date.now()
+        this._lastSelectionChanged = firedAt
+
+        const gesture = this._mouseSelection
+        // An opaque closed-root caret is only a possible editor. Keep its existing timed
+        // fallback, but do not extend that uncertainty across a long press on inert content.
+        if (gesture && (hadSelection || this._hadSelection || isEditing)) {
+            const eventTarget = getEventTarget(event)
+            let editor: Element | null | undefined
+            if (isTextSelectionTarget(eventTarget)) {
+                editor = eventTarget
+            } else if (selection?.type === 'Caret') {
+                if (isTextSelectionTarget(activeElement ?? null) || hasRetargetedCaret) {
+                    editor = activeElement
+                } else if (isEditing) {
+                    editor = focusElement
+                }
+            }
+            // Endpoint-less clearing must belong to the range present at press time; an
+            // unrelated range removed elsewhere in the document must not suppress this click.
+            const related = editor
+                ? this._selectionIsInGesture(editor, gesture)
+                : selection && (focusNode || selection.anchorNode)
+                  ? this._selectionTouchesGesture(selection, gesture)
+                  : hadSelection && !this._hadSelection && gesture.selectionInitiallyRelated
+            gesture.selectionChanged = gesture.selectionChanged || related
+        }
+
+        // Keep the closest selection change after each candidate. A nearby change suppresses the
+        // candidate; a later one retains the existing post-click timeout behavior.
+        this._clicks.forEach((candidate) => {
+            const delay = firedAt - candidate.timestamp
+            if (
+                delay >= 0 &&
+                (isUndefined(candidate.selectionChangedDelayMs) || delay < candidate.selectionChangedDelayMs)
+            ) {
+                candidate.selectionChangedDelayMs = delay
+            }
+        })
     }
 
     private _startVisibilityChangeObserver() {
@@ -288,6 +574,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'hidden') {
+            this._clearMouseSelection()
+        }
         // record both directions: a tab going _hidden_ right after a click (the click opened a new
         // tab) is as much a liveness signal as it becoming visible (the click that woke the tab).
         // stamp queued candidates now, before a hidden tab can suspend `_checkClicks`.
@@ -335,6 +624,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onTouchStart = (event: Event): void => {
+        this._observeGesturePath(event)
         const touches = (event as TouchEvent).touches
         // only single-finger gestures are swipes; a second finger (pinch/zoom) is not,
         // so a multi-touch start clears any tracked origin rather than measuring against it
@@ -486,15 +776,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     ? this._lastMutation - click.timestamp
                     : undefined)
             click.absoluteDelayMs = Date.now() - click.timestamp
-            click.selectionChangedDelayMs =
-                this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
-                    ? this._lastSelectionChanged - click.timestamp
-                    : undefined
-            // visibilityChangedDelayMs / focusChangedDelayMs are already recorded on the candidate as
-            // the events fire (see `_queueCandidate` for the before-the-click direction and
-            // `_recordLivenessSignal` for after) — nothing to compute here. both are liveness-only: a
-            // tab/window transition near a click is evidence the click did something, so they only
-            // ever _suppress_ a dead click and (unlike mutation/selection) feed no timeout branch.
+            // Selection/visibility/focus delays are recorded on each candidate as their events fire.
+            // The pre-candidate directions are handled in `_queueCandidate`. Nothing uses a shared
+            // timestamp here, so a later event cannot overwrite the change related to this candidate.
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
@@ -510,8 +794,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const hadMutation =
                 isNumber(click.mutationDelayMs) && click.mutationDelayMs < this._config.mutation_threshold_ms
             const hadSelectionChange =
-                isNumber(click.selectionChangedDelayMs) &&
-                click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
+                click.selectionChangedDuringGesture ||
+                (isNumber(click.selectionChangedDelayMs) &&
+                    click.selectionChangedDelayMs < this._config.selection_change_threshold_ms)
             // visibility/focus delays are only ever recorded when already inside the suppression
             // window (see `livenessDelayInWindow`), so their presence alone means "suppress"
             const hadVisibilityChange = isNumber(click.visibilityChangedDelayMs)

@@ -74,9 +74,7 @@ A floor ("≥35 of 37") would let a regression hide behind a coincidental improv
 that moves needs a reason, and the diff of the snapshot file is where the reason lives.
 
 Currently pinned: the four `v2 … 2025` `client` cells (`clientInfo` cannot reach a per-request
-instance on the v2 SDK's legacy leg — documented limitation), the two `v2 low … conv=on`
-`session` cells (parked: no tool registry to read ownership from on the low-level path), and
-nest-v2's `error message is clean` on both eras (NestJS's `RpcExceptionsHandler` flattens every
+instance on the v2 SDK's legacy leg — documented limitation), and nest-v2's `error message is clean` on both eras (NestJS's `RpcExceptionsHandler` flattens every
 thrown error to `"Internal server error"` — adapter behaviour, not ours).
 
 Standing regression assertions on every PR: the four `v1` matrix rows stay all-green, and
@@ -98,7 +96,7 @@ node client/run.mjs --url http://localhost:3222 --sdk v2 --lane 2026 --conv on
 | `PORT`              | explicit port; default 0 = ephemeral                                     |
 | `LEVEL=high\|low`   | high-level `McpServer` or bare low-level `Server`                        |
 | `MODE=`             | v1: `stateful`/`stateless` · v2: `perrequest`/`longlived`                |
-| `CONVERSATION_ID=1` | turn on `enableConversationId` (off by default)                          |
+| `CONVERSATION_ID=1` | explicitly enable `enableConversationId` (SDK default: on)               |
 | `CUSTOM_3ARG=1`     | register a custom method via v2's 3-argument form after `instrument()`   |
 | `--sdk v1\|v2`      | client-side: which SDK major serves the URL (era-conditional assertions) |
 | `--conv on`         | client-side: expect the injected parameter and echo the handle           |
@@ -131,9 +129,8 @@ resource, tool results, and captured analytics. Browser rendering and
 app-to-host `postMessage` traffic are host-side concerns and are intentionally
 outside this server harness.
 
-The final informational line reports how many resource analytics events were
-observed. That count is not a compatibility assertion yet: automatic
-`resources/list` and `resources/read` capture is a separate SDK feature.
+The final line asserts that a `resources/list` carrying its listing and a
+`resources/read` carrying no response were both captured, on both SDK majors.
 
 ## Why it is built this way
 

@@ -9,6 +9,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
+import { SEND_FEEDBACK_TOOL_NAME } from '../extensions/feedback'
+import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -21,15 +23,25 @@ import { EventCapture, fakePostHog } from './test-utils'
 const PAGE_ONE = [{ name: 'page_one_tool', description: 'On page one', inputSchema: { type: 'object' as const } }]
 const PAGE_TWO = [{ name: 'page_two_tool', description: 'On page two', inputSchema: { type: 'object' as const } }]
 
-/** A paginated catalogue: page one advertises a cursor, page two ends the enumeration. */
-function setupPaginatedServer(listResponses?: { firstPage?: Record<string, unknown> }) {
+/**
+ * A paginated catalogue: page one advertises a cursor, page two ends the
+ * enumeration. Pass `cursorToken: ''` to paginate by the empty-string cursor.
+ */
+function setupPaginatedServer(
+  options: {
+    firstPage?: Record<string, unknown>
+    secondPage?: Record<string, unknown>
+    cursorToken?: string
+  } = {}
+) {
+  const { firstPage, secondPage, cursorToken = 'page-2' } = options
   const server = new Server({ name: 'paginated test', version: '1.0.0' }, { capabilities: { tools: {} } })
 
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    if (request.params?.cursor === 'page-2') {
-      return { tools: PAGE_TWO }
+    if (request.params?.cursor === cursorToken) {
+      return secondPage ?? { tools: PAGE_TWO }
     }
-    return listResponses?.firstPage ?? { tools: PAGE_ONE, nextCursor: 'page-2' }
+    return firstPage ?? { tools: PAGE_ONE, nextCursor: cursorToken }
   })
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
@@ -50,6 +62,16 @@ function setupPaginatedServer(listResponses?: { firstPage?: Record<string, unkno
       await serverTransport.close?.()
     },
   }
+}
+
+/** Walk the whole enumeration, returning the names each page advertised. */
+const listBothPages = async (client: Client, cursorToken = 'page-2'): Promise<[string[], string[]]> => {
+  const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+  const secondPage = await client.request(
+    { method: 'tools/list', params: { cursor: cursorToken } },
+    ListToolsResultSchema
+  )
+  return [firstPage.tools.map((tool) => tool.name), secondPage.tools.map((tool) => tool.name)]
 }
 
 describe('tools/list response envelope', () => {
@@ -226,5 +248,182 @@ describe('tools/list response envelope', () => {
     } finally {
       await cleanup()
     }
+  })
+
+  /**
+   * A compliant client concatenates every page into one tool list, so the
+   * virtual feedback tool may appear on exactly one page — the first one, the
+   * page every client reads, including clients that never follow `nextCursor`.
+   *
+   * Collision detection is deliberately cheap: the served page at list time,
+   * the raw first page at call time. A real owner on a later page is the
+   * host's responsibility — the SDK shadows it, warns when a client fetches
+   * that page, and the host renames the SDK's tool with
+   * `collectFeedback: { toolName }`.
+   */
+  describe('send_feedback on a paginated catalogue', () => {
+    const REAL_FEEDBACK_TOOL = {
+      name: SEND_FEEDBACK_TOOL_NAME,
+      description: 'A real application tool that owns the name',
+      inputSchema: { type: 'object' as const },
+    }
+
+    it('appends the virtual tool only to the first page', async () => {
+      const { server, client, connect, cleanup } = await setupPaginatedServer()
+      try {
+        instrument(server, fakePostHog(), { reportMissing: false, collectFeedback: true })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', SEND_FEEDBACK_TOOL_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
+      } finally {
+        await cleanup()
+      }
+    })
+
+    it('a single un-paginated listing still gets the virtual tool', async () => {
+      const { server, client, connect, cleanup } = await setupPaginatedServer({
+        firstPage: { tools: PAGE_ONE },
+      })
+      try {
+        instrument(server, fakePostHog(), { reportMissing: false, collectFeedback: true })
+        await connect()
+
+        const page = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+        expect(page.tools.map((tool) => tool.name)).toEqual(['page_one_tool', SEND_FEEDBACK_TOOL_NAME])
+      } finally {
+        await cleanup()
+      }
+    })
+
+    // Read as "no cursor", `''` puts the virtual tool on this page as well as
+    // the first, so a client concatenating the pages sees it twice.
+    it('treats an empty-string cursor as a continuation page, not the first one', async () => {
+      const { server, client, connect, cleanup } = setupPaginatedServer({ cursorToken: '' })
+      try {
+        instrument(server, fakePostHog(), { reportMissing: false, collectFeedback: true })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client, '')
+        expect(pageOne).toEqual(['page_one_tool', SEND_FEEDBACK_TOOL_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
+      } finally {
+        await cleanup()
+      }
+    })
+
+    it('a real owner on page one blocks injection and keeps its calls', async () => {
+      const { server, client, connect, cleanup } = await setupPaginatedServer({
+        firstPage: { tools: [REAL_FEEDBACK_TOOL], nextCursor: 'page-2' },
+      })
+      const warnings: string[] = []
+      try {
+        instrument(server, fakePostHog(), {
+          reportMissing: false,
+          collectFeedback: true,
+          logger: (message: string) => warnings.push(message),
+        })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual([SEND_FEEDBACK_TOOL_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
+        expect(warnings.some((message) => message.includes('Cannot inject agent-feedback tool'))).toBe(true)
+
+        const result = await client.request(
+          { method: 'tools/call', params: { name: SEND_FEEDBACK_TOOL_NAME, arguments: {} } },
+          CallToolResultSchema
+        )
+        expect((result.content as { text: string }[])[0].text).toBe(`called: ${SEND_FEEDBACK_TOOL_NAME}`)
+        expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpFeedback)).toBeUndefined()
+      } finally {
+        await cleanup()
+      }
+    })
+
+    it('a real owner on a later page is shadowed, with a warning when its page is served', async () => {
+      const { server, client, connect, cleanup } = await setupPaginatedServer({
+        secondPage: { tools: [REAL_FEEDBACK_TOOL] },
+      })
+      const warnings: string[] = []
+      try {
+        instrument(server, fakePostHog(), {
+          reportMissing: false,
+          collectFeedback: true,
+          logger: (message: string) => warnings.push(message),
+        })
+        await connect()
+
+        // The first page cannot see page two, so the virtual tool is injected
+        // and the concatenated list carries the name twice.
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', SEND_FEEDBACK_TOOL_NAME])
+        expect(pageTwo).toEqual([SEND_FEEDBACK_TOOL_NAME])
+        expect(warnings.some((message) => message.includes('is shadowed by the SDK'))).toBe(true)
+
+        // Calls to the name go to the SDK, not the real tool.
+        const result = await client.request(
+          { method: 'tools/call', params: { name: SEND_FEEDBACK_TOOL_NAME, arguments: { summary: 'shadowed' } } },
+          CallToolResultSchema
+        )
+        expect((result.content as { text: string }[])[0].text).toContain('recorded')
+        expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpFeedback)).toBeDefined()
+      } finally {
+        await cleanup()
+      }
+    })
+  })
+
+  /** The same first-page rule, on the missing-capability virtual tool. */
+  describe('get_more_tools on a paginated catalogue', () => {
+    const REAL_MISSING_TOOL = {
+      name: GET_MORE_TOOLS_NAME,
+      description: 'A real application tool that owns the name',
+      inputSchema: { type: 'object' as const },
+    }
+
+    it('appends the virtual tool only to the first page', async () => {
+      const { server, client, connect, cleanup } = setupPaginatedServer()
+      try {
+        instrument(server, fakePostHog(), { reportMissing: true })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
+      } finally {
+        await cleanup()
+      }
+    })
+
+    it('a real owner on a later page is shadowed, with a warning when its page is served', async () => {
+      const { server, client, connect, cleanup } = setupPaginatedServer({
+        secondPage: { tools: [REAL_MISSING_TOOL] },
+      })
+      const warnings: string[] = []
+      try {
+        instrument(server, fakePostHog(), {
+          reportMissing: true,
+          logger: (message: string) => warnings.push(message),
+        })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual([GET_MORE_TOOLS_NAME])
+        expect(warnings.some((message) => message.includes('is shadowed by the SDK'))).toBe(true)
+
+        // Calls to the name go to the SDK, not the real tool.
+        const result = await client.request(
+          { method: 'tools/call', params: { name: GET_MORE_TOOLS_NAME, arguments: { context: 'need bulk delete' } } },
+          CallToolResultSchema
+        )
+        expect((result.content as { text: string }[])[0].text).not.toBe(`called: ${GET_MORE_TOOLS_NAME}`)
+        expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpMissingCapability)).toBeDefined()
+      } finally {
+        await cleanup()
+      }
+    })
   })
 })

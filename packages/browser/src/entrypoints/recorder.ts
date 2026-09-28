@@ -7,6 +7,7 @@ import {
     resetMaxDepthState,
     getLastSnapshotCost,
     getMutationCost,
+    getObserverInitFailures,
     resetSnapshotCostState,
 } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
@@ -22,6 +23,7 @@ assignableWindow.__PosthogExtensions__.rrweb = {
     resetMaxDepthState,
     getLastSnapshotCost,
     getMutationCost,
+    getObserverInitFailures,
     resetSnapshotCostState,
 }
 

@@ -7,13 +7,15 @@ import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/feedback'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
@@ -25,9 +27,9 @@ import type {
 } from './types'
 
 /**
- * Instruments an MCP server so PostHog auto-captures tool calls, tool listings, initialize
- * requests, identity, and exceptions. Returns a handle whose `capture()` method records
- * custom events, so you don't pass the server around after wiring it up.
+ * Instruments an MCP server so PostHog auto-captures tool calls, tool and resource listings,
+ * resource reads, initialize requests, identity, and exceptions. Returns a handle whose
+ * `capture()` method records custom events, so you don't pass the server around after wiring it up.
  *
  * **Idempotent per server instance.** Per-server tracking state lives in a module-level
  * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
@@ -52,6 +54,16 @@ import type {
  */
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   const logger = createLogger(options?.logger)
+
+  // Fail fast on config errors. Keep these checks above the graceful-degradation
+  // try so invalid config does not silently disable all analytics for the server.
+  // `options?.` — untyped JavaScript can pass null options (see logger-isolation.test.ts).
+  validateServerBuild(options?.serverBuild)
+  const feedbackOptions = resolveCollectFeedbackOptions(options?.collectFeedback)
+  if (feedbackOptions) {
+    getFeedbackToolDescriptor(feedbackOptions)
+  }
+
   try {
     if (!posthog) {
       logger('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
@@ -129,7 +141,9 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
  */
 const DEFAULT_OPTIONS = {
   reportMissing: false,
-  enableConversationId: false,
+  collectFeedback: false,
+  enableConversationId: true,
+  captureModel: true,
 } satisfies Partial<MCPAnalyticsOptions>
 
 function buildTrackingData(
@@ -147,8 +161,12 @@ function buildTrackingData(
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
+    toolInputSchemas: new BoundedCache(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
-    options: { ...DEFAULT_OPTIONS, ...options },
+    options: {
+      ...DEFAULT_OPTIONS,
+      ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)),
+    },
     sessionSource: 'generated',
   }
 }
@@ -213,17 +231,27 @@ export {
 // Host callbacks receive the SDK's `extra`/`ctx` unchanged, and the two SDK
 // majors carry HTTP headers in different places and shapes. This reads either.
 export { getRequestHeaders } from './extensions/request-headers'
+export { getToolInputProperties } from './extensions/tool-input'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
+export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"
 // posthog-node stays a peer dependency, so this resolves the host app's installed copy.
 export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
+  FeedbackCaptureData,
+  FeedbackExtraPropertySchema,
+  CollectFeedbackOptions,
+  FeedbackReport,
+  FeedbackSentiment,
+  FeedbackType,
   BeforeSendFn,
   CaptureEventData,
+  CollectFeedbackConfig,
   InitializeCaptureData,
+  InputAliasMap,
   McpAnalytics,
   McpCaptureCommon,
   MCPAnalyticsContextOptions,
@@ -233,10 +261,13 @@ export type {
   MCPAnalyticsOptions,
   MissingCapabilityCaptureData,
   PreparedToolCall,
+  PreparedToolResult,
   PrepareToolCallOptions,
   PrepareToolListOptions,
   RequestHeaderBag,
+  ShouldRecordInputKeyFn,
   ToolCallCaptureData,
+  ToolInputOptions,
   ToolsListCaptureData,
   UserIdentity,
 } from './types'

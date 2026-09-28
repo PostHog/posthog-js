@@ -1,4 +1,5 @@
 import record from '../record';
+export { getObserverInitFailures } from '../record/observer';
 export {
   wasMaxDepthReached,
   resetMaxDepthState,

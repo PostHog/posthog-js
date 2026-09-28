@@ -81,12 +81,24 @@ export type {
     RequestQueueConfig,
     LogCaptureOptions,
     MetricsConfig,
+    BrowserMetricsConfig,
+    NetworkMetricsConfig,
+    NetworkMetricsRequest,
+    NetworkMetricsResponse,
     CapturePageviewOptions,
     PostHogConfig,
 } from './posthog-config'
 
 // Segment integration types
-export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, SegmentFunction } from './segment'
+export type {
+    SegmentUser,
+    SegmentAnalytics,
+    SegmentPlugin,
+    SegmentContext,
+    SegmentFunction,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+} from './segment'
 
 // Survey types
 export type { SurveyRenderReason } from './survey'
@@ -128,3 +140,22 @@ export type {
     OtlpMetricsPayload,
 } from './capture-metric'
 export { OTLP_AGGREGATION_TEMPORALITY_DELTA } from './capture-metric'
+
+// Distributed tracing types
+export type {
+    SpanKind,
+    SpanStatusCode,
+    SpanAttributeValue,
+    SpanAttributes,
+    SpanTimeInput,
+    StartSpanOptions,
+    Span,
+    SpanRecord,
+    BeforeSpanSendFn,
+    TracesConfig,
+    OtlpSpanKeyValue,
+    OtlpSpanEvent,
+    OtlpSpanStatus,
+    OtlpSpan,
+    OtlpTracesPayload,
+} from './traces'

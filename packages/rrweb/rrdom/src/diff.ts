@@ -110,7 +110,7 @@ export function diff(
   replayer: ReplayerHandler,
   rrnodeMirror: Mirror = (newTree as RRDocument).mirror ||
     (newTree.ownerDocument as RRDocument).mirror,
-) {
+): void {
   oldTree = diffBeforeUpdatingChildren(
     oldTree,
     newTree,
@@ -592,7 +592,7 @@ export function createOrGetNode(
 /**
  * To check whether two nodes are the same type of node. If they are both Elements, check wether their tagNames are same or not.
  */
-export function sameNodeType(node1: Node, node2: IRRNode) {
+export function sameNodeType(node1: Node, node2: IRRNode): boolean {
   if (node1.nodeType !== node2.nodeType) return false;
   return (
     node1.nodeType !== node1.ELEMENT_NODE ||

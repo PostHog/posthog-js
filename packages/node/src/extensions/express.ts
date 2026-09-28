@@ -79,6 +79,27 @@ export function setupExpressErrorHandler(
   app.use(posthogErrorHandler(_posthog))
 }
 
+function getResponseStatusCode(res: Response): Promise<number | undefined> {
+  if (res.headersSent || res.destroyed) {
+    return Promise.resolve(res.headersSent ? res.statusCode : undefined)
+  }
+
+  return new Promise((resolve) => {
+    const complete = (statusCode: number | undefined): void => {
+      clearTimeout(timeout)
+      res.removeListener('finish', onComplete)
+      res.removeListener('close', onComplete)
+      resolve(statusCode)
+    }
+    const onComplete = (): void => complete(res.headersSent ? res.statusCode : undefined)
+    // A downstream handler may never finish the response; do not hold the exception indefinitely.
+    const timeout = setTimeout(() => complete(undefined), 1000)
+    timeout.unref()
+    res.once('finish', onComplete)
+    res.once('close', onComplete)
+  })
+}
+
 function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddleware {
   return (error: MiddlewareError, req, res, next: (error: MiddlewareError) => void): void => {
     if (ErrorTracking.isPreviouslyCapturedError(error)) {
@@ -92,17 +113,23 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
     const additionalProperties: Record<string, any> = {
       ...(contextData.sessionId !== undefined ? { $session_id: contextData.sessionId } : {}),
       ...(contextData.properties || {}),
-      $response_status_code: res.statusCode,
     }
 
     posthog.addPendingPromise(
-      ErrorTracking.buildEventMessage(
-        posthog.getErrorPropertiesBuilder(),
-        error,
-        hint,
-        contextData.distinctId,
-        additionalProperties
-      ).then((msg) => {
+      Promise.all([
+        ErrorTracking.buildEventMessage(
+          posthog.getErrorPropertiesBuilder(),
+          error,
+          hint,
+          contextData.distinctId,
+          additionalProperties
+        ),
+        // Downstream error handlers can choose a different status, even asynchronously.
+        getResponseStatusCode(res),
+      ]).then(([msg, statusCode]) => {
+        if (statusCode !== undefined) {
+          msg.properties = { ...msg.properties, $response_status_code: statusCode }
+        }
         return posthog._capturePreparedEvent(msg, false)
       })
     )

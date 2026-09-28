@@ -231,7 +231,7 @@ const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureG
         id: item.toolCallId,
         function: {
           name: item.toolName,
-          arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
+          arguments: toContentString(rawArgs),
         },
       }
     }

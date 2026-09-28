@@ -7,6 +7,7 @@ import {
   closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -27,9 +28,17 @@ export function QuestionHeader({
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.question, { color: textColor }]}>{question}</Text>
+      <Text
+        maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'question')}
+        style={[styles.question, { color: textColor }]}
+      >
+        {question}
+      </Text>
       {shouldRenderDescription(description, descriptionContentType) && (
-        <Text style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}>
+        <Text
+          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
+          style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}
+        >
           {description}
         </Text>
       )}

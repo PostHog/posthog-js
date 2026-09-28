@@ -1,4 +1,5 @@
 import { FetchLike } from '../types'
+import { isString } from './type-utils'
 
 export * from './bot-detection'
 export * from './browser-utils'
@@ -6,6 +7,7 @@ export * from './bucketed-rate-limiter'
 // Named rather than `export *`: the budgets, markers and `sanitizeString` are
 // shared with the OTLP encoder but are not public API.
 export { toJsonSafeValue } from './json-utils'
+export { parseRetryAfterMs } from './retry-after'
 export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
@@ -60,6 +62,11 @@ function isEmpty(truthyValue: string): boolean {
   return false
 }
 
+/** Detects HTTP(S) URLs and explicit relative paths by prefix; does not validate URL syntax. */
+export function isUrl(value: unknown): value is string {
+  return isString(value) && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
+}
+
 export function removeTrailingSlash(url: string): string {
   return url?.replace(/\/+$/, '')
 }
@@ -107,6 +114,14 @@ export function currentTimestamp(): number {
 
 export function currentISOTime(): string {
   return new Date().toISOString()
+}
+
+export function trySafe<T>(fn: () => T): T | undefined {
+  try {
+    return fn()
+  } catch {
+    return undefined
+  }
 }
 
 export function safeSetTimeout(fn: () => void, timeout: number): any {

@@ -1,5 +1,6 @@
 {
     "name": "next-ts-app",
+    "packageManager": "pnpm@11.7.0",
     "version": "0.1.0",
     "private": true,
     "scripts": {

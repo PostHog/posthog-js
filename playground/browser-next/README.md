@@ -28,6 +28,7 @@ pnpm dev
 - Leave explicit installation unchecked, capture an event, and watch default analytics load automatically.
 - Disable automatic loading to observe buffer-only capture, then restart with explicit installation enabled.
 - Install analytics explicitly during initialization to verify that it satisfies delivery without a duplicate dynamic load.
+- Use **Capture immediate** to bypass the queue and inspect the terminal Capture V1 persistence summary.
 - Enable gzip and send the 16 KiB event to inspect compressed delivery.
 - Dispatch offline, capture events, then dispatch online to redrive them.
 - Opt out to purge queued work, opt back in, and capture again.

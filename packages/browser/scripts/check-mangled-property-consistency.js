@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* oxlint-disable no-console, typescript/no-require-imports -- This CommonJS CLI reports validation results. */
 
 /**
  * Verify the private-property ABI between independently emitted slim cores and
@@ -33,10 +34,18 @@ function extractPropertyNames(jsFile, mapFile, includeDefinitions = false) {
                 return
             }
 
-            const generatedColumn = segment[0]
+            let generatedColumn = segment[0]
             const originalName = map.names[segment[4]]
             if (!originalName || !originalName.startsWith('_') || originalName.startsWith('__')) {
                 return
+            }
+
+            // Babel can map a class method's name to its opening parenthesis instead of the identifier.
+            if (includeDefinitions && line[generatedColumn] === '(') {
+                const method = line.substring(0, generatedColumn).match(/[{},;]([a-zA-Z_$][a-zA-Z0-9_$]*)$/)
+                if (method) {
+                    generatedColumn -= method[1].length
+                }
             }
 
             const previousCharacter = generatedColumn === 0 ? '' : line[generatedColumn - 1]

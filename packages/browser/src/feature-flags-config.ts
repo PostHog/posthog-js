@@ -16,7 +16,9 @@ export interface FeatureFlagsConfig {
     readonly deduplicateCallsPerSession: boolean
     readonly cacheTtlMs?: number
     readonly refreshIntervalMs?: number
+    readonly idleRefreshBackoff: boolean
     readonly requestTimeoutMs: number
+    readonly requestMaxRetries: number
     readonly compression?: Compression | 'best-available'
     readonly evaluationContexts: readonly string[]
     readonly flagKeys?: readonly string[]
@@ -28,8 +30,8 @@ export interface FeatureFlagsConfigSource {
 
 const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): FeatureFlagsConfig => ({
     bootstrap: {
-        featureFlags: config.bootstrap?.featureFlags,
-        featureFlagPayloads: config.bootstrap?.featureFlagPayloads,
+        featureFlags: config.bootstrap?.featureFlags ?? undefined,
+        featureFlagPayloads: config.bootstrap?.featureFlagPayloads ?? undefined,
     },
     remoteRequestsDisabled,
     featureFlagsDisabled: !!config.advanced_disable_feature_flags,
@@ -37,7 +39,9 @@ const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): Featu
     deduplicateCallsPerSession: !!config.advanced_feature_flags_dedup_per_session,
     cacheTtlMs: config.feature_flag_cache_ttl_ms,
     refreshIntervalMs: config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL_MS,
+    idleRefreshBackoff: isUndefined(config.remote_config_refresh_interval_ms),
     requestTimeoutMs: config.feature_flag_request_timeout_ms,
+    requestMaxRetries: Math.max(0, config.feature_flag_request_max_retries ?? 1),
     compression: config.disable_compression ? undefined : 'best-available',
     evaluationContexts: config.evaluation_contexts ?? config.evaluation_environments ?? [],
     flagKeys: isArray(config.flag_keys) ? config.flag_keys : undefined,

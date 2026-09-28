@@ -209,7 +209,7 @@ export class MediaManager {
     }
   }
 
-  public addMediaElements(node: Node, timeOffset: number, mirror: Mirror) {
+  public addMediaElements(node: Node, timeOffset: number, mirror: Mirror): void {
     if (!this.isSupportedMediaElement(node)) return;
     const target = node;
     const serializedNode = mirror.getMeta(target);
@@ -276,7 +276,7 @@ export class MediaManager {
     target: HTMLMediaElement | RRMediaElement;
     timeOffset: number;
     mutation: mediaInteractionData;
-  }) {
+  }): void {
     if (!SUPPORTED_MEDIA_ELEMENT_NAMES.includes(target.nodeName)) {
       return;
     }
@@ -297,7 +297,7 @@ export class MediaManager {
     return SUPPORTED_MEDIA_ELEMENT_NAMES.includes(node.nodeName);
   }
 
-  public reset() {
+  public reset(): void {
     this.mediaMap.clear();
   }
 }

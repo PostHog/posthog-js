@@ -197,6 +197,12 @@ export const cookieStore: PersistentStore = {
         if (!document?.cookie) {
             return
         }
+        // Resolving the cross-subdomain domain writes probe cookies that browsers
+        // reject on public suffix hosts, so skip it when no cookie by this name is
+        // visible to delete.
+        if (cross_subdomain && isNull(getCookieValue(name))) {
+            return
+        }
         try {
             cookieStore._set(name, '', -1, cross_subdomain)
         } catch {

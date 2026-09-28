@@ -9,11 +9,14 @@ import type {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   Properties,
+  Span,
+  StartSpanOptions,
+  TracesConfig,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
-import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
   distinctId: string
@@ -154,6 +157,13 @@ export type FeatureFlagCondition = {
 
 export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
 
+/**
+ * Where a feature flag is meant to be evaluated. Set per flag in PostHog and carried on
+ * every locally cached flag definition. `all` means the flag suits both client-side and
+ * server-side evaluation, so it matches either runtime.
+ */
+export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
+
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
@@ -181,6 +191,25 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * ```
    */
   metrics?: MetricsConfig
+  /**
+   * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
+   * off until this is set; supplying it is all that's needed to turn it on.
+   *
+   * Set `serviceName` so spans can be attributed and grouped per service — the
+   * product aggregates operations by service and span name.
+   *
+   * `shutdown()` drains spans that have already ended, within the shutdown
+   * timeout; spans still open at that point are discarded.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { traces: { serviceName: 'checkout-api' } })
+   * await client.withSpan('charge', () => stripe.charge(order))
+   * ```
+   *
+   * @experimental Subject to change in a minor release.
+   */
+  traces?: TracesConfig
   /**
    * Credential that enables local feature flag evaluation and remote config.
    *
@@ -232,7 +261,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * })
    * ```
    */
-  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
@@ -369,6 +398,12 @@ export type PostHogFeatureFlag = {
       }[]
     }
     payloads?: Record<string, string>
+    // Experiment holdout. Resolved before the release conditions, so a held-out value is
+    // excluded from the flag's targeting entirely.
+    holdout?: {
+      id: number
+      exclusion_percentage: number
+    } | null
     // Flag-level toggle: when true, condition evaluation stops and returns false as soon as a
     // group's property filters match but the rollout percentage excludes the user, rather than
     // continuing to evaluate later groups.
@@ -393,6 +428,11 @@ export type PostHogFeatureFlag = {
    * fallback so local-evaluation context filtering still works against those servers.
    */
   evaluation_tags?: string[]
+  /**
+   * Where the flag is meant to be evaluated. Absent or null on a flag that does not set a
+   * runtime, and on servers older than the field; both mean `all`, the default PostHog applies.
+   */
+  evaluation_runtime?: FeatureFlagEvaluationRuntime | null
 }
 
 /**
@@ -426,6 +466,10 @@ export type FeatureFlagResult = {
   enabled: boolean
   variant: string | undefined
   payload: JsonType | undefined
+  /** PostHog's evaluation explanation, when available. */
+  reason?: string
+  /** Stable evaluation reason code, when available (for example, `flag_disabled`). */
+  reasonCode?: string
 }
 
 export interface IPostHog {
@@ -842,6 +886,30 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description Starts a span without making it active, for work that can't wrap a callback.
+   * Prefer `withSpan`. Always returns a handle — an inert one when tracing is off — so calling
+   * code never has to branch.
+   * @experimental Subject to change in a minor release.
+   */
+  startSpan(name: string, options?: StartSpanOptions): Span
+
+  /**
+   * @description Runs a callback with a span active for its duration and ends the span at return
+   * (sync) or settle (async). Spans started inside nest automatically; a throw or rejection is
+   * recorded on the span and rethrown unchanged.
+   * @experimental Subject to change in a minor release.
+   */
+  withSpan<T>(name: string, fn: (span: Span) => T): T
+  withSpan<T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T
+
+  /**
+   * @description The span currently active on this async execution path, or null outside any
+   * `withSpan` callback.
+   * @experimental Subject to change in a minor release.
+   */
+  getActiveSpan(): Span | null
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

@@ -435,6 +435,15 @@ function buildNode(
           }
         }
       }
+
+      // The replay iframe is a live document, so the viewer's own browser
+      // offers autofill on these fields. Accepting a suggestion would write the
+      // viewer's saved data into the replay, where it reads as the recorded
+      // user's input.
+      if (tagName === 'input' || tagName === 'textarea') {
+        node.setAttribute('autocomplete', 'off');
+      }
+
       return node;
     }
     case NodeType.Text:

@@ -9,6 +9,7 @@
     "tsconfig.json"
   ],
   "compilerOptions": {
+    "isolatedDeclarations": true,
     "rootDir": ".",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },

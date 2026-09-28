@@ -49,6 +49,7 @@ function MessageBubble({
                 <RichContent
                     richContent={message.rich_content}
                     content={message.content}
+                    isGreeting={message.id === 'greeting'}
                     isCustomer={isCustomer}
                     primaryColor={primaryColor}
                 />

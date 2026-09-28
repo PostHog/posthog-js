@@ -12,6 +12,8 @@ interface RichContentProps {
     isCustomer: boolean
     /** Primary color for links */
     primaryColor: string
+    /** Recognize simple [label](url) links in the greeting's text fallback only. */
+    isGreeting?: boolean
 }
 
 /**
@@ -334,10 +336,32 @@ function isValidTipTapDoc(doc: unknown): doc is TipTapDoc {
     return d.type === 'doc' && (isUndefined(d.content) || isArray(d.content))
 }
 
+/** Render only simple inline greeting links, leaving images and nested syntax literal. */
+function renderGreetingLine(text: string, styles: ReturnType<typeof getStyles>) {
+    const links = /(!|\\)?\[([^\]\n]+)\]\(([^()\s]+)\)/g
+    const parts: (string | preact.JSX.Element)[] = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = links.exec(text))) {
+        parts.push(text.slice(lastIndex, match.index))
+        const [, prefix, label, url] = match
+        const safeUrl = !prefix && label.indexOf('[') === -1 && sanitizeUrl(url)
+        const literal = prefix === '\\' ? match[0].slice(1) : match[0]
+        parts.push(
+            safeUrl
+                ? renderTextWithMarks(label, [{ type: 'link', attrs: { href: safeUrl } }], styles, `${match.index}`)
+                : literal
+        )
+        lastIndex = links.lastIndex
+    }
+    parts.push(text.slice(lastIndex))
+    return <>{parts}</>
+}
+
 /**
  * Render plain text with line breaks preserved
  */
-function renderPlainText(text: string): preact.JSX.Element {
+function renderPlainText(text: string, styles: ReturnType<typeof getStyles>, isGreeting?: boolean): preact.JSX.Element {
     if (!text) {
         return <></>
     }
@@ -346,7 +370,7 @@ function renderPlainText(text: string): preact.JSX.Element {
         <>
             {lines.map((line, index) => (
                 <Fragment key={index}>
-                    {line}
+                    {isGreeting ? renderGreetingLine(line, styles) : line}
                     {index < lines.length - 1 && <br />}
                 </Fragment>
             ))}
@@ -359,10 +383,10 @@ function renderPlainText(text: string): preact.JSX.Element {
  *
  * Rendering logic:
  * 1. If richContent is present and valid, render as TipTap tree
- * 2. If richContent is missing or invalid, fall back to plain text content
+ * 2. Otherwise render text, recognizing simple inline links only for greetings
  * 3. Wrap TipTap rendering in try/catch for safety
  */
-export function RichContent({ richContent, content, isCustomer, primaryColor }: RichContentProps) {
+export function RichContent({ richContent, content, isCustomer, primaryColor, isGreeting }: RichContentProps) {
     const styles = useMemo(() => getStyles(isCustomer, primaryColor), [isCustomer, primaryColor])
 
     // Try to render rich content if available
@@ -380,5 +404,5 @@ export function RichContent({ richContent, content, isCustomer, primaryColor }: 
     }
 
     // Fallback: render plain text content
-    return renderPlainText(content)
+    return renderPlainText(content, styles, isGreeting)
 }

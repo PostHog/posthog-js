@@ -39,6 +39,7 @@ const renderFallbackIcon = ({
   height: number
 }): JSX.Element => (
   <Text
+    allowFontScaling={false}
     style={[
       styles.fallbackIcon,
       {

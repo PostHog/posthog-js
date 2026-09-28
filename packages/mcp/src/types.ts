@@ -6,7 +6,7 @@
 import type { ErrorTracking } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
-import type { IdentityCache } from './extensions/internal'
+import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
@@ -70,6 +70,7 @@ export interface MCPRequestParamsLike {
   _meta?: JsonRecord
   arguments?: JsonRecord
   name?: string
+  uri?: string
   [key: string]: unknown
 }
 
@@ -94,6 +95,13 @@ export interface McpAnalytics {
 
 export interface MCPAnalyticsOptions {
   /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest.
+   * MCP does not advertise this value, so the host must supply it. The value
+   * must contain 1 to 256 characters.
+   */
+  serverBuild?: string
+  /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.
    */
@@ -101,13 +109,27 @@ export interface MCPAnalyticsOptions {
   /** Enable the `get_more_tools` virtual tool so agents can report missing functionality. */
   reportMissing?: boolean
   /**
+   * Inject the `send_feedback` virtual tool so agents can send feedback about
+   * this server to its developers — a missing capability (the priority
+   * category), a tool that failed or confused them, or praise. Calls to it emit
+   * `$mcp_feedback` (never a `$mcp_tool_call`). Off by default.
+   *
+   * `true` uses the defaults; the object form renames the tool, replaces its
+   * description, declares host-specific `extraProperties`, or wires an
+   * `onFeedback` handler that routes reports to a real backend.
+   *
+   * Covers what `reportMissing` covers (as `feedback_type: "missing_capability"`),
+   * so new integrations should enable only one of the two.
+   */
+  collectFeedback?: CollectFeedbackConfig
+  /**
    * Rename the `get_more_tools` virtual tool (the `reportMissing` feature).
    * Defaults to `get_more_tools`. Set once here so the tool is advertised and
    * detected under the same name.
    */
   missingCapabilityToolName?: string
   /**
-   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * Enable session correlation for the MCP **2026-07-28** revision, which removed
    * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
    * server instance per HTTP request. With none of those left to anchor on, the only
    * thing that can carry a session across calls is the agent itself.
@@ -117,7 +139,7 @@ export interface MCPAnalyticsOptions {
    * that handle — so calls correlate across reconnects, restarts, and per-request
    * instances.
    *
-   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * On by default, and fully inert when disabled: no parameter is injected, no schema is
    * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
    * before (the request's own session id, else this instance's).
    */
@@ -133,7 +155,7 @@ export interface MCPAnalyticsOptions {
   /**
    * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
    * takes precedence, with an injected `llm_model` parameter as the fallback.
-   * Off by default.
+   * On by default; set to `false` to disable capture.
    *
    * MCP does not standardize model identity. Some clients expose it through
    * vendor metadata; other harnesses inject it into the agent's system prompt
@@ -172,6 +194,19 @@ export interface MCPAnalyticsOptions {
    */
   beforeSend?: BeforeSendFn
   /**
+   * Decide which argument names `$mcp_input_keys` records on tool-call events.
+   * By default only names the tool's input schema declares are recorded; every
+   * other name becomes one `[redacted]` entry, because a name can carry private data.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * Return the alternative argument names accepted by one tool. The map is
+   * canonical name to aliases in the order the server tries them. Automatic
+   * instrumentation uses it for `$mcp_input_keys` and
+   * `$mcp_input_aliases_used`; it never changes the tool arguments.
+   */
+  resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */
@@ -183,6 +218,78 @@ export interface MCPAnalyticsOptions {
 
 export interface MCPAnalyticsContextOptions {
   description?: string
+}
+
+export type FeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
+export type FeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
+
+/** The `collectFeedback` option: `true` for the defaults, or the object form. */
+export type CollectFeedbackConfig = boolean | CollectFeedbackOptions
+
+/**
+ * A host-declared input-schema fragment for one `send_feedback` extra property —
+ * plain JSON Schema, the same shape the MCP `tools/list` wire format uses.
+ */
+export interface FeedbackExtraPropertySchema {
+  type: string
+  description?: string
+  enum?: string[]
+  [key: string]: unknown
+}
+
+/** Object form of {@link CollectFeedbackConfig}. */
+export interface CollectFeedbackOptions {
+  /**
+   * Rename the `send_feedback` virtual tool. Set once so the tool is advertised
+   * and detected under the same name. Defaults to `send_feedback`.
+   */
+  toolName?: string
+  /** Replace the default tool description. */
+  description?: string
+  /**
+   * Host-specific fields merged into the tool's advertised input schema. Each
+   * declared key is captured as a `$mcp_feedback_<key>` event property (through
+   * the standard sanitize/truncate pipeline); arguments the agent invents beyond
+   * the schema are never captured. A key that collides with a core field or an
+   * SDK-injected argument throws at configuration time.
+   */
+  extraProperties?: Record<string, FeedbackExtraPropertySchema>
+  /** Keys of `extraProperties` to advertise as required. */
+  extraRequired?: string[]
+  /**
+   * Route each report to a real backend (`instrument()` path only — a custom
+   * dispatcher routes reports itself, see {@link PreparedToolCall.isFeedback}).
+   * Return a string to replace the default acknowledgement text. A throw is
+   * logged and falls back to the default reply; the `$mcp_feedback` event is
+   * captured either way. The returned string is captured as `$mcp_response`
+   * through the generic sanitize pipeline only — unlike `$mcp_feedback_summary`
+   * / `details`, it does not get structured-PII redaction, so avoid echoing
+   * the agent's raw report text back in it.
+   */
+  onFeedback?: (report: FeedbackReport) => MaybePromise<string | void>
+}
+
+/** One parsed `send_feedback` call, as handed to `onFeedback` and the dispatcher. */
+export interface FeedbackReport {
+  /** Invalid or missing values fall back to `other`. */
+  feedbackType: FeedbackType
+  /** One-sentence summary; empty string when the agent omitted it. */
+  summary: string
+  sentiment?: FeedbackSentiment
+  frictionPoints?: string
+  suggestedImprovement?: string
+  details?: string
+  /** The existing tool the feedback is about (`tool_name` argument). */
+  toolName?: string
+  taskCompleted?: boolean
+  /**
+   * Values of the declared `extraProperties` fields that match their declared
+   * `type`/`enum`. A value the agent sent with the wrong shape is left out
+   * (find it in `raw` if you need it), so these are safe to trust as declared.
+   */
+  extras: JsonRecord
+  /** The full raw arguments, for the handler only — never captured. */
+  raw: JsonRecord
 }
 
 export interface MCPAnalyticsModelOptions {
@@ -216,6 +323,30 @@ export type RegisteredTool = {
  * Return the event (optionally mutated) to send it, or a nullish value to drop it.
  */
 export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
+
+/**
+ * Decides whether one top-level argument name appears in `$mcp_input_keys`.
+ * `declared` is true when the server's input schema declares the name.
+ * Return `true` to record the name; any other result, or a throw, records `[redacted]`.
+ */
+export type ShouldRecordInputKeyFn = (key: string, details: { declared: boolean }) => boolean
+
+export interface ToolInputOptions {
+  /**
+   * Replace the default rule, which records only declared names. The SDK still
+   * drops names longer than 64 characters and records at most 20 names.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * The alternative argument names the server accepts, as canonical name to aliases in the
+   * order the server tries them, for example `{ id: ['experimentId'] }`. Must be owned by the
+   * server, never taken from the caller. Alias names count as declared in `$mcp_input_keys`,
+   * and `$mcp_input_aliases_used` records each alias the server needed, as `alias:canonical`.
+   */
+  inputAliases?: InputAliasMap
+}
+
+export type InputAliasMap = Readonly<Record<string, readonly string[]>>
 
 export interface Event {
   actorId?: string
@@ -276,6 +407,7 @@ export interface Event {
   response?: unknown
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
   sessionId: string
@@ -398,6 +530,7 @@ export interface SessionInfo {
   protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
 }
@@ -428,6 +561,7 @@ export interface MCPAnalyticsData {
   toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
+  toolInputSchemas: BoundedCache<Map<string, unknown>>
 }
 
 export interface CaptureEventData {
@@ -454,6 +588,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Conversation handle → `$mcp_conversation_id`. For custom dispatchers,
+   * use the value returned by {@link PostHogMCP.prepareToolResult} so a newly
+   * minted handle is captured only when it reached the client.
+   */
+  conversationId?: string
   /**
    * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
    * every capture for the session (like `sessionId`) so later events carry it too,
@@ -589,17 +729,34 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
    */
   reportMissing?: boolean
+  /**
+   * Append the `send_feedback` virtual tool so agents can send feedback.
+   * Defaults to `false`, and requires the `PostHogMCP` constructor's
+   * `collectFeedback` option (the enable switch that also gates detection).
+   * When the agent calls it, route the call to
+   * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
+   */
+  collectFeedback?: boolean
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
 export interface PrepareToolCallOptions {
   /**
-   * The tool descriptor before PostHog preparation. Pass this on stateless or
+   * The tool descriptor before PostHog preparation, from the host's own tool
+   * list (the SDK's virtual tools never exist there). Pass this on stateless or
    * multi-replica servers so SDK argument ownership is resolved per request.
+   * Passing it also disambiguates a feedback-tool name collision: a real tool
+   * by that name is dispatched normally instead of being flagged as feedback.
    */
-  originalTool?: { inputSchema?: unknown }
+  originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
   /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
   requestMeta?: JsonRecord
+  /**
+   * A session id carried by the request or transport. A valid echoed
+   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
+   * from minting a second session handle.
+   */
+  sessionId?: string
 }
 
 /**
@@ -616,10 +773,42 @@ export interface PreparedToolCall {
   llmModel?: string
   /** How the model id was obtained. */
   llmModelSource?: MCPAnalyticsModelSource
-  /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
+  /** The call arguments with SDK-owned analytics keys removed. */
   args?: Record<string, unknown>
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /**
+   * The resolved conversation handle. Use the value from
+   * {@link PostHogMCP.prepareToolResult} for capture because result delivery can
+   * remove a newly minted handle from analytics.
+   */
+  conversationId?: string
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
+  /**
+   * True when `name` is the `send_feedback` virtual tool AND the constructor's
+   * `collectFeedback` option is set AND no `originalTool` was supplied. Always
+   * false without that opt-in — and a supplied `originalTool` proves a real
+   * application tool owns the name — so a real tool that happens to use the
+   * name is never shadowed.
+   */
+  isFeedback: boolean
+  /**
+   * The parsed feedback report, set only when {@link PreparedToolCall.isFeedback}
+   * is true. Pass it to {@link PostHogMCP.captureFeedback} and to your own
+   * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
+   */
+  feedbackReport?: FeedbackReport
+}
+
+/** Result of {@link PostHogMCP.prepareToolResult}. */
+export interface PreparedToolResult<TResult = unknown> {
+  /** The result to return to the MCP client. */
+  result: TResult
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /** The conversation handle to capture, if it reached the client. */
+  conversationId?: string
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -635,4 +824,17 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
   llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */
+export interface FeedbackCaptureData extends McpCaptureCommon {
+  /**
+   * The parsed report (from {@link PreparedToolCall.feedbackReport}) →
+   * `$mcp_feedback_*` properties, with the summary and details as `$mcp_intent`.
+   */
+  report: FeedbackReport
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
 }

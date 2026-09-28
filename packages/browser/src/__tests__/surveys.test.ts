@@ -9,7 +9,9 @@ import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
+    getInProgressSurveyState,
     getSurveyContainerClass,
+    setInProgressSurveyState,
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
@@ -344,6 +346,32 @@ describe('surveys', () => {
         expect(localStorage.getItem('lastSeenSurveyDate')).toBeNull()
         expect(localStorage.getItem('seenSurvey_XYZ')).toBeNull()
         expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
+    })
+
+    it('posthog.reset() drops in-progress answers the extension holds in memory', () => {
+        // An opaque-origin document (`sandbox` CSP without `allow-same-origin`) throws on every
+        // access, so the write below never reaches localStorage and memory is the only record.
+        const throwingStorage = (['getItem', 'setItem', 'removeItem', 'key'] as const).map((method) =>
+            vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+                throw new Error('The document is sandboxed and lacks the allow-same-origin flag')
+            })
+        )
+
+        try {
+            const survey = { id: 'XYZ', current_iteration: null }
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: 'submission-1',
+                lastQuestionIndex: 1,
+                responses: { $survey_response_q1: 'typed but not submitted' },
+            } as any)
+            expect(getInProgressSurveyState(survey)).not.toBeNull()
+
+            surveys.reset()
+
+            expect(getInProgressSurveyState(survey)).toBeNull()
+        } finally {
+            throwingStorage.forEach((spy) => spy.mockRestore())
+        }
     })
 
     it('getSurveys registers the survey event receiver if a survey has events', async () => {
@@ -1160,10 +1188,18 @@ describe('surveys', () => {
             )
         })
 
-        it('should shuffle questions if shuffleQuestions is true', () => {
-            expect(surveyWithShufflingQuestions.questions).not.toEqual(
-                getDisplayOrderQuestions(surveyWithShufflingQuestions)
-            )
+        it('shuffles questions with Fisher-Yates without mutating configured order', () => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+            const questions = [...surveyWithShufflingQuestions.questions]
+            try {
+                expect(getDisplayOrderQuestions(surveyWithShufflingQuestions)).toEqual([
+                    ...questions.slice(1),
+                    questions[0],
+                ])
+                expect(surveyWithShufflingQuestions.questions).toEqual(questions)
+            } finally {
+                random.mockRestore()
+            }
         })
 
         const inProgress = (questionOrder?: string[]) =>
@@ -1301,6 +1337,16 @@ describe('surveys', () => {
             let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
+        })
+
+        it('shuffles frozen choices without mutation and keeps Other last', () => {
+            const question = {
+                ...questionWithOpenEndedChoice,
+                choices: Object.freeze(['A', 'B', 'Other']) as unknown as string[],
+            }
+            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
+            expect(getDisplayOrderChoices(question)).toEqual(['B', 'A', 'Other'])
+            expect(question.choices).toEqual(['A', 'B', 'Other'])
         })
 
         it('shuffle should preserve all elements', () => {

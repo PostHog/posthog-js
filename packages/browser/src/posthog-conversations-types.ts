@@ -393,7 +393,8 @@ export interface SendMessagePayload {
     identity_distinct_id?: string
 
     /**
-     * HMAC-SHA256 of identity_distinct_id using team secret_api_token
+     * HMAC-SHA256 of identity_distinct_id, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      */
     identity_hash?: string
 }

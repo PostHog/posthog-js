@@ -46,13 +46,13 @@ export class ShadowDomManager {
     this.init();
   }
 
-  public init() {
+  public init(): void {
     this.reset();
     // Patch 'attachShadow' to observe newly added shadow doms.
     this.patchAttachShadow(Element, document);
   }
 
-  public addShadowRoot(shadowRoot: ShadowRoot, doc: Document) {
+  public addShadowRoot(shadowRoot: ShadowRoot, doc: Document): void {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
     this.shadowDoms.add(shadowRoot);
@@ -120,7 +120,7 @@ export class ShadowDomManager {
   /**
    * Monkey patch 'attachShadow' of an IFrameElement to observe newly added shadow doms.
    */
-  public observeAttachShadow(iframeElement: HTMLIFrameElement) {
+  public observeAttachShadow(iframeElement: HTMLIFrameElement): void {
     if (!iframeElement.contentWindow || !iframeElement.contentDocument) return;
 
     this.patchAttachShadow(
@@ -164,7 +164,7 @@ export class ShadowDomManager {
     });
   }
 
-  public reset() {
+  public reset(): void {
     this.restoreHandlers.forEach(({ handler }) => {
       try {
         handler();
@@ -177,7 +177,7 @@ export class ShadowDomManager {
   }
 
   // Tear down only the shadow observers owned by `doc` (e.g. one iframe being removed), leaving the rest of the page's shadow observation intact.
-  public resetForDoc(doc: Document) {
+  public resetForDoc(doc: Document): void {
     const remaining: { doc: Document; handler: () => void }[] = [];
     for (const entry of this.restoreHandlers) {
       if (entry.doc === doc) {

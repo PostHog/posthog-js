@@ -7,19 +7,12 @@ import { assignableWindow } from '../../utils/globals'
 vi.useFakeTimers()
 vi.setSystemTime(1000)
 
-const triggerMouseEvent = function (
-    node: Node,
-    eventType: string,
-    options?: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }
-) {
+const triggerMouseEvent = function (node: EventTarget, eventType: string, options?: MouseEventInit) {
     node.dispatchEvent(
         new MouseEvent(eventType, {
             bubbles: true,
             cancelable: true,
-            ctrlKey: options?.ctrlKey,
-            metaKey: options?.metaKey,
-            altKey: options?.altKey,
-            shiftKey: options?.shiftKey,
+            ...options,
         })
     )
 }
@@ -27,9 +20,12 @@ const triggerMouseEvent = function (
 describe('LazyLoadedDeadClicksAutocapture', () => {
     let fakeInstance: PostHog
     let lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture
+    let selection: { type: 'None' | 'Caret' | 'Range'; focusNode: Node | null } | null
 
     beforeEach(async () => {
         vi.setSystemTime(1000)
+        selection = { type: 'Caret', focusNode: null }
+        vi.spyOn(document, 'getSelection').mockImplementation(() => selection as Selection | null)
 
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
         assignableWindow.__PosthogExtensions__.loadExternalDependency = vi
@@ -50,6 +46,11 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
         lazyLoadedDeadClicksAutocapture.start(document)
+    })
+
+    afterEach(() => {
+        lazyLoadedDeadClicksAutocapture.stop()
+        vi.mocked(document.getSelection).mockRestore()
     })
 
     describe('defaults', () => {
@@ -82,6 +83,16 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
 
+        it('tracks clicks again after restarting without retaining the stopped listener', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            triggerMouseEvent(document.body, 'click')
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+
+            lazyLoadedDeadClicksAutocapture.start(document)
+            triggerMouseEvent(document.body, 'click')
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+        })
+
         it('sets timer when detecting clicks', () => {
             expect(lazyLoadedDeadClicksAutocapture['_checkClickTimer']).toBe(undefined)
 
@@ -101,6 +112,534 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         triggerMouseEvent(document.body, 'scroll')
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).toBe(50)
+    })
+
+    it('tracks selection changes dispatched by document', () => {
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+
+        selection!.type = 'Range'
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+    })
+
+    it('stops tracking document selection changes after stop', () => {
+        lazyLoadedDeadClicksAutocapture.stop()
+
+        selection!.type = 'Range'
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+    })
+
+    it('does not suppress or time out a click for collapsed selection changes on non-editable content', () => {
+        vi.setSystemTime(950)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        vi.setSystemTime(1000)
+        triggerMouseEvent(document.body, 'click')
+
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+        vi.setSystemTime(1200)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+        expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBeUndefined()
+
+        vi.setSystemTime(4000)
+        lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+        expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        expect(fakeInstance.capture).toHaveBeenCalledWith(
+            '$dead_click',
+            expect.objectContaining({
+                $dead_click_absolute_timeout: true,
+                $dead_click_selection_changed_timeout: false,
+            }),
+            { timestamp: new Date(1000) }
+        )
+    })
+
+    it.each(['Caret', 'None', null] as const)('suppresses a click when a range selection becomes %s', (type) => {
+        selection!.type = 'Range'
+        vi.setSystemTime(500)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        selection = type ? { type, focusNode: null } : null
+        vi.setSystemTime(950)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        vi.setSystemTime(1000)
+        triggerMouseEvent(document.body, 'click')
+        expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBe(50)
+        lazyLoadedDeadClicksAutocapture['_checkClicks']()
+        expect(fakeInstance.capture).not.toHaveBeenCalled()
+
+        vi.setSystemTime(1200)
+        document.dispatchEvent(new Event('selectionchange'))
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(950)
+    })
+
+    it('recognizes clearing a selection that existed before the detector started', () => {
+        lazyLoadedDeadClicksAutocapture.stop()
+        selection!.type = 'Range'
+        lazyLoadedDeadClicksAutocapture.start(document)
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+
+        selection!.type = 'Caret'
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+    })
+
+    it('refreshes selection state on restart without counting a caret move as activity', () => {
+        selection!.type = 'Range'
+        vi.setSystemTime(500)
+        document.dispatchEvent(new Event('selectionchange'))
+        lazyLoadedDeadClicksAutocapture.stop()
+
+        selection!.type = 'Caret'
+        lazyLoadedDeadClicksAutocapture.start(document)
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(500)
+    })
+
+    it.each(['input', 'textarea'])('tracks caret changes dispatched by a %s', (tag) => {
+        const element = document.createElement(tag)
+        document.body.appendChild(element)
+        vi.setSystemTime(1050)
+        element.dispatchEvent(new Event('selectionchange', { bubbles: true }))
+        element.remove()
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+    })
+
+    it.each(['element', 'text'])('tracks an editable caret whose focus node is an %s node', (nodeType) => {
+        const editor = document.createElement('div')
+        editor.setAttribute('contenteditable', 'true')
+        selection!.focusNode = nodeType === 'element' ? editor : editor.appendChild(document.createTextNode('text'))
+
+        vi.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+    })
+
+    it.each([undefined, 'open', 'closed'] as const)(
+        'tracks the active editor with retargeted selection endpoints (shadow=%s)',
+        (mode) => {
+            const host = document.createElement('div')
+            const editor = document.createElement('input')
+            const root = mode ? host.attachShadow({ mode }) : host
+            root.appendChild(editor)
+            document.body.appendChild(host)
+            try {
+                editor.focus()
+                selection!.focusNode = document.body
+                vi.setSystemTime(1050)
+                document.dispatchEvent(new Event('selectionchange'))
+                expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+
+                host.remove()
+                vi.setSystemTime(1100)
+                document.dispatchEvent(new Event('selectionchange'))
+                expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+            } finally {
+                host.remove()
+            }
+        }
+    )
+
+    describe('selection during a mouse gesture', () => {
+        let target: HTMLElement
+        let other: HTMLElement
+
+        beforeEach(() => {
+            target = document.createElement('div')
+            other = document.createElement('div')
+            document.body.append(target, other)
+            selection!.focusNode = target
+        })
+
+        afterEach(() => {
+            target.remove()
+            other.remove()
+        })
+
+        function press() {
+            triggerMouseEvent(target, 'mousedown', { detail: 1 })
+        }
+
+        function select(node: Node = target) {
+            selection!.type = 'Range'
+            selection!.focusNode = node
+            document.dispatchEvent(new Event('selectionchange'))
+        }
+
+        function release(node: Node = target, detail = 1) {
+            triggerMouseEvent(node, 'mouseup', { detail })
+            triggerMouseEvent(node, 'click', { detail })
+        }
+
+        function checkAfterClick(timestamp: number) {
+            vi.setSystemTime(timestamp + 3005)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+        }
+
+        it.each([104, 2664])('remembers selection clearing %i ms before release', (delay) => {
+            select()
+            vi.setSystemTime(2000)
+            press()
+            vi.setSystemTime(2006)
+            selection!.type = 'Caret'
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(2006 + delay)
+            release()
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].timestamp).toBe(2006 + delay)
+            checkAfterClick(2006 + delay)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('remembers a range created late in a long press', () => {
+            press()
+            vi.setSystemTime(2000)
+            select()
+            vi.setSystemTime(4000)
+            release()
+            checkAfterClick(4000)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('remembers an input caret change during a long press', () => {
+            const input = document.createElement('input')
+            target.appendChild(input)
+            triggerMouseEvent(input, 'mousedown', { detail: 1 })
+            vi.setSystemTime(1006)
+            input.dispatchEvent(new Event('selectionchange', { bubbles: true }))
+            vi.setSystemTime(3670)
+            release(input)
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('matches the active editor when the caret is in a nested span', () => {
+            target.setAttribute('contenteditable', 'true')
+            target.tabIndex = 0
+            const span = document.createElement('span')
+            target.appendChild(span)
+            target.focus()
+            press()
+            selection!.focusNode = span.appendChild(document.createTextNode('Editable text'))
+            vi.setSystemTime(1006)
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('does not extend ambiguous closed-root caret suppression across a long press', () => {
+            target.attachShadow({ mode: 'closed' })
+            target.tabIndex = 0
+            target.focus()
+            press()
+            selection!.focusNode = document.body
+            vi.setSystemTime(1006)
+            document.dispatchEvent(new Event('selectionchange'))
+            expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1006)
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([true, false])('requires range ownership for endpoint-less clearing (related=%s)', (related) => {
+            select(related ? target : other)
+            vi.setSystemTime(2000)
+            press()
+            vi.setSystemTime(2006)
+            selection = { type: 'None', focusNode: null }
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(4670)
+            release()
+            checkAfterClick(4670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(related ? 0 : 1)
+        })
+
+        it.each([true, false])(
+            'resolves retargeted range boundaries without adopting siblings (related=%s)',
+            (related) => {
+                press()
+                const range = document.createRange()
+                range.setStartBefore(related ? target : other)
+                range.collapse(true)
+                Object.assign(selection!, {
+                    type: 'Range',
+                    focusNode: range.startContainer,
+                    anchorNode: range.startContainer,
+                    rangeCount: 1,
+                    getRangeAt: () => range,
+                })
+                vi.setSystemTime(1006)
+                document.dispatchEvent(new Event('selectionchange'))
+                vi.setSystemTime(3670)
+                release()
+                checkAfterClick(3670)
+                expect(fakeInstance.capture).toHaveBeenCalledTimes(related ? 0 : 1)
+            }
+        )
+
+        it('does not adopt a sibling range whose endpoints are in a shared parent', () => {
+            press()
+            const range = document.createRange()
+            range.selectNode(other)
+            Object.assign(selection!, {
+                type: 'Range',
+                focusNode: range.endContainer,
+                anchorNode: range.startContainer,
+                rangeCount: 1,
+                getRangeAt: () => range,
+            })
+            vi.setSystemTime(1006)
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('recognizes a nested text endpoint after pressing its container padding', () => {
+            const span = document.createElement('span')
+            const text = document.createTextNode('Nested selected text')
+            span.appendChild(text)
+            target.appendChild(span)
+            select(text)
+            vi.setSystemTime(2000)
+            press()
+            vi.setSystemTime(2006)
+            selection!.type = 'Caret'
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(4670)
+            release()
+            checkAfterClick(4670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('matches exposed selection endpoints behind a closed shadow host', () => {
+            const span = document.createElement('span')
+            target.attachShadow({ mode: 'closed' }).appendChild(span)
+            press()
+            vi.setSystemTime(1006)
+            select(span.appendChild(document.createTextNode('Selected text')))
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('does not associate another input’s selection event with the press', () => {
+            const input = document.createElement('input')
+            other.appendChild(input)
+            press()
+            vi.setSystemTime(1006)
+            input.dispatchEvent(new Event('selectionchange', { bubbles: true }))
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not associate a press with a different click target', () => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            triggerMouseEvent(target, 'mouseup', { detail: 1 })
+            triggerMouseEvent(other, 'click', { detail: 1 })
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('discards gesture state when the page is hidden', () => {
+            const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            try {
+                press()
+                vi.setSystemTime(1006)
+                select()
+                document.dispatchEvent(new Event('visibilitychange'))
+                vi.setSystemTime(3670)
+                release()
+                checkAfterClick(3670)
+                expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+            } finally {
+                visibility.mockRestore()
+            }
+        })
+
+        it('keeps inert caret movement dead and starts its timeout at release', () => {
+            press()
+            vi.setSystemTime(1006)
+            document.dispatchEvent(new Event('selectionchange'))
+            vi.setSystemTime(3670)
+            release()
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                expect.objectContaining({ $dead_click_absolute_timeout: true }),
+                { timestamp: new Date(3670) }
+            )
+        })
+
+        it('does not extend activity from a different element to the held click', () => {
+            press()
+            vi.setSystemTime(1006)
+            select(other)
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('matches a click on the common ancestor of different press/release descendants', () => {
+            const first = document.createElement('span')
+            const second = document.createElement('span')
+            target.append(first, second)
+            triggerMouseEvent(first, 'mousedown', { detail: 1 })
+            vi.setSystemTime(1006)
+            select(first)
+            vi.setSystemTime(3670)
+            triggerMouseEvent(second, 'mouseup', { detail: 1 })
+            triggerMouseEvent(target, 'click', { detail: 1 })
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it.each(['blur', 'dragstart', 'pointercancel', 'mouseout'])('discards the gesture on %s', (event) => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            triggerMouseEvent(assignableWindow, event)
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not cancel a press when the window gains focus', () => {
+            press()
+            assignableWindow.dispatchEvent(new Event('focus'))
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('does not transfer a completed gesture to a later click', () => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            triggerMouseEvent(target, 'click', { detail: 1 })
+            checkAfterClick(6675)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', expect.anything(), {
+                timestamp: new Date(6675),
+            })
+        })
+
+        it('expires a release that does not produce a click', () => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            triggerMouseEvent(target, 'mouseup', { detail: 1 })
+            vi.advanceTimersByTime(0)
+            triggerMouseEvent(target, 'click', { detail: 1 })
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not let keyboard/programmatic activation consume the mouse gesture', () => {
+            other.id = 'unrelated-activation'
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            triggerMouseEvent(target, 'mouseup', { detail: 1 })
+            triggerMouseEvent(other, 'click', { detail: 0 })
+            triggerMouseEvent(target, 'click', { detail: 1 })
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+            expect(vi.mocked(fakeInstance.capture).mock.calls[0][1]?.$elements[0].attr__id).toBe('unrelated-activation')
+        })
+
+        it('preserves repeated-click deduplication for a gesture with selection activity', () => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            release()
+            vi.setSystemTime(3800)
+            triggerMouseEvent(target, 'click', { detail: 1 })
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('does not carry a press across stop/restart', () => {
+            press()
+            vi.setSystemTime(1006)
+            select()
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([1, 500])('retains gesture activity with a custom %i ms window', (threshold) => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                selection_change_threshold_ms: threshold,
+            })
+            lazyLoadedDeadClicksAutocapture.start(document)
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('keeps a zero selection threshold from suppressing gesture clicks', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                selection_change_threshold_ms: 0,
+            })
+            lazyLoadedDeadClicksAutocapture.start(document)
+            press()
+            vi.setSystemTime(1006)
+            select()
+            vi.setSystemTime(3670)
+            release()
+            checkAfterClick(3670)
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+        })
     })
 
     // i think there's some kind of jsdom fangling happening where the mutation observer
@@ -331,12 +870,67 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 999
+
+            selection!.type = 'Range'
+            vi.setSystemTime(999)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            // A later selection change must not overwrite the click-correlated one.
+            vi.setSystemTime(1200)
+            document.dispatchEvent(new Event('selectionchange'))
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('selection change just before a click suppresses it without bypassing repeated-click deduplication', () => {
+            selection!.type = 'Range'
+            vi.setSystemTime(900)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            vi.setSystemTime(950)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBe(50)
+
+            // The selection window has elapsed, but this is still a repeat click on the same node.
+            vi.setSystemTime(1051)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('a stale pre-click selection change does not suppress or time out the click', () => {
+            selection!.type = 'Range'
+            vi.setSystemTime(500)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            vi.setSystemTime(1000)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBeUndefined()
+
+            vi.setSystemTime(4000)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                expect.objectContaining({
+                    $dead_click_absolute_timeout: true,
+                    $dead_click_selection_changed_delay_ms: undefined,
+                    $dead_click_selection_changed_timeout: false,
+                }),
+                { timestamp: new Date(1000) }
+            )
         })
 
         it('visibility change shortly after click, not a dead click', () => {
@@ -502,8 +1096,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
+                selectionChangedDelayMs: 100,
             })
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1000
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -751,6 +1345,175 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             triggerMouseEvent(document.body, 'click', { ctrlKey: true, shiftKey: true })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
+    })
+
+    describe('shadow roots', () => {
+        let host: HTMLElement
+        let shadowRoot: ShadowRoot
+        let shadowButton: HTMLButtonElement
+
+        const attachHost = (): void => {
+            host = document.createElement('div')
+            document.body.appendChild(host)
+            shadowRoot = host.attachShadow({ mode: 'open' })
+            shadowButton = document.createElement('button')
+            shadowButton.textContent = 'shadow control'
+            shadowRoot.appendChild(shadowButton)
+        }
+
+        afterEach(() => {
+            host?.remove()
+        })
+
+        it('observes an open shadow root that exists when detection starts', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            attachHost()
+
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes an open shadow root attached after detection starts when a click happens inside it', () => {
+            attachHost()
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
+
+            // a real click crosses the shadow boundary, so the root is in its composed path
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the shadow root of added content', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const wrapper = document.createElement('div')
+            wrapper.appendChild(host)
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([{ addedNodes: [wrapper] } as unknown as MutationRecord])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes a shadow root nested in content added parent first within one batch', () => {
+            const outer = document.createElement('div')
+            document.body.appendChild(outer)
+            attachHost()
+            outer.appendChild(host)
+            const querySelectorAll = vi.spyOn(Element.prototype, 'querySelectorAll')
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [outer] },
+                { target: outer, addedNodes: [host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+            expect(querySelectorAll.mock.instances.filter((context) => context === host)).toHaveLength(0)
+            querySelectorAll.mockRestore()
+            outer.remove()
+        })
+
+        it('does not treat a change inside a detached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            host.remove()
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(undefined)
+        })
+
+        it('treats a change inside an attached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
+        it('keeps the sign of life for the rest of the batch when a record cannot be read', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            // Firefox denies property access on a node from another origin or a dead realm
+            const denied = {
+                get isConnected(): boolean {
+                    throw new Error('Permission denied to access property "isConnected"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: denied, addedNodes: [] },
+                { target: shadowButton, addedNodes: [] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
+        it('scans the other added nodes when one added node cannot be read', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [denied, host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the other roots in a gesture path when one entry cannot be read', () => {
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+            const event = {
+                composedPath: () => [denied, host],
+            } as unknown as Event
+
+            lazyLoadedDeadClicksAutocapture['_observeGesturePath'](event)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('does not throw when a selection endpoint cannot be read', () => {
+            attachHost()
+            const denied = document.createElement('div')
+            Object.defineProperty(denied, 'getRootNode', {
+                value: () => {
+                    throw new Error('Permission denied to access property "getRootNode"')
+                },
+            })
+
+            expect(() =>
+                lazyLoadedDeadClicksAutocapture['_selectionIsInGesture'](denied, {
+                    path: [shadowButton],
+                    trusted: true,
+                    selectionChanged: false,
+                } as any)
+            ).not.toThrow()
+        })
+
+        it('forgets observed roots after stopping', () => {
+            attachHost()
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            lazyLoadedDeadClicksAutocapture.stop()
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
         })
     })
 })

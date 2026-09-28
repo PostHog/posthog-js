@@ -10,4 +10,8 @@ const postHogNodeExperimentalDeprecationWarning =
 
 console.warn(postHogNodeExperimentalDeprecationWarning)
 
-export type { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './extensions/feature-flags/cache'
+export type {
+  FlagDefinitionCacheProvider,
+  FlagDefinitionCacheData,
+  FlagDefinitionCacheInput,
+} from './extensions/feature-flags/cache'

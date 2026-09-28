@@ -1,6 +1,7 @@
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -303,6 +304,9 @@ export class SessionRecording implements Extension {
         if (!response || !('sessionRecording' in response)) {
             if (this._recordingStatus === AWAITING_CONFIG) {
                 this._recordingStatus = MISSING_CONFIG
+                this._instance.register_for_session({
+                    [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+                })
                 logger.warn('config refresh failed, recording will not start until page reload')
             }
             this.startIfEnabledOrStop()

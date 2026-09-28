@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react'
+import { Keyboard, Platform } from 'react-native'
 import { act, fireEvent, render, cleanup } from '@testing-library/react'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 
@@ -35,7 +36,7 @@ vi.mock('react-native', async () => {
   return {
     View: Box,
     Modal: Box,
-    KeyboardAvoidingView: Box,
+    KeyboardAvoidingView: (props: any) => RealReact.createElement(Box, { ...props, testID: 'keyboard-avoiding-view' }),
     Pressable,
     TouchableOpacity: Pressable,
     Text: Box,
@@ -136,6 +137,28 @@ const clickCancel = (getByTestId: (id: string) => HTMLElement) => {
     fireEvent.click(getByTestId('cancel-stub'))
   })
 }
+
+describe('SurveyModal keyboard touches', () => {
+  afterEach(cleanup)
+
+  it.each(['ios', 'android'] as const)('only dismisses the keyboard for backdrop touches on %s', (platform) => {
+    const originalOS = Platform.OS
+    Platform.OS = platform
+    try {
+      const { getByTestId } = renderSurveyModal()
+
+      fireEvent.mouseDown(getByTestId('questions-stub'))
+      expect(Keyboard.dismiss).not.toHaveBeenCalled()
+
+      // The backdrop is the direct child of the keyboard-avoiding container.
+      const backdrop = getByTestId('keyboard-avoiding-view').firstElementChild!
+      fireEvent.mouseDown(backdrop)
+      expect(Keyboard.dismiss).toHaveBeenCalledTimes(1)
+    } finally {
+      Platform.OS = originalOS
+    }
+  })
+})
 
 describe('SurveyModal close behavior', () => {
   afterEach(() => {
@@ -318,6 +341,27 @@ describe('SurveyModal intro screen', () => {
         onClose={vi.fn()}
       />
     )
+
+  it('skips the intro when restoring an answered survey', () => {
+    const { queryByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithIntro}
+        onShow={vi.fn()}
+        onClose={vi.fn()}
+        initialProgress={{
+          submissionId: 'saved',
+          questionIndex: 0,
+          questionOrder: [0],
+          responses: { $survey_response_q1: 'saved' },
+          questionSnapshots: {},
+        }}
+      />
+    )
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
 
   it('renders the intro screen before the questions and advances on start', () => {
     const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)

@@ -67,6 +67,7 @@ try {
     })
   )
   delete packageManifest.scripts
+  delete packageManifest.devDependencies
   cpSync(join(packageRoot, 'dist'), join(packageStageDir, 'dist'), { recursive: true })
   writeFileSync(join(packageStageDir, 'package.json'), JSON.stringify(packageManifest, null, 2))
 

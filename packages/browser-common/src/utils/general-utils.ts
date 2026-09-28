@@ -3,6 +3,8 @@ import type { PostHogConfig, Properties } from '@posthog/types'
 
 import { logger } from './logger'
 
+export { trySafe } from '@posthog/core'
+
 export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
     for (let i = 0; i < value.length; i++) {
         if (predicate(value[i]!)) {
@@ -61,14 +63,6 @@ export function entries<T = any>(obj: Record<string, T>): [string, T][] {
         resArray[i] = [ownProps[i]!, obj[ownProps[i]!] as T]
     }
     return resArray
-}
-
-export const trySafe = function <T>(fn: () => T): T | undefined {
-    try {
-        return fn()
-    } catch {
-        return undefined
-    }
 }
 
 export const safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {

@@ -170,6 +170,18 @@ describe('reset()', () => {
             expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
         })
 
+        it.each([null, undefined, ''])('generates an anonymous identity when distinctID is %j', (distinctID) => {
+            const initialDistinctId = instance.get_distinct_id()
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ bootstrap: { distinctID, isIdentifiedID: true } })
+
+            expect(instance.get_distinct_id()).toEqual(expect.any(String))
+            expect(instance.get_distinct_id()).not.toBe(initialDistinctId)
+            expect(instance.get_property('$device_id')).toBe(initialDeviceId)
+            expect(instance.persistence!.get_property(USER_STATE)).toBe('anonymous')
+        })
+
         it('applies a custom anonymous distinct ID and preserves the device ID', () => {
             const initialDeviceId = instance.get_property('$device_id')
 
@@ -262,6 +274,14 @@ describe('reset()', () => {
 
             expect(instance.config.bootstrap).toEqual({ featureFlags: { 'init-flag': true } })
             expect(instance.featureFlags.getFlags()).toEqual([])
+        })
+
+        it.each([null, undefined])('ignores an absent bootstrap session ID: %j', (sessionID) => {
+            const setBootstrapSessionId = vi.spyOn(instance.sessionManager!, 'setBootstrapSessionId')
+
+            instance.reset({ bootstrap: { sessionID } })
+
+            expect(setBootstrapSessionId).not.toHaveBeenCalled()
         })
 
         it('logs an invalid bootstrap session ID but still resets', () => {

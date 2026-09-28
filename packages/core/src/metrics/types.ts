@@ -20,8 +20,16 @@ import type { BeforeSendMetricFn, MetricAttributeValue, OtlpMetricsPayload } fro
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for both signals. */
 export type SendMetricsBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'retry-later'; error: unknown }
-  | { kind: 'too-large' }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
+  | {
+      kind: 'too-large'
+      /**
+       * True when the SDK measured the body itself rather than the endpoint
+       * refusing it, so the caller can split this drain without lowering the
+       * batch size it keeps between them.
+       */
+      measuredLocally?: boolean
+    }
   | { kind: 'fatal'; error: unknown }
 
 /**

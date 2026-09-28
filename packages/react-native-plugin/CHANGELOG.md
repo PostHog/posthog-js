@@ -1,5 +1,96 @@
 # @posthog/react-native-plugin
 
+## 2.12.0
+
+### Minor Changes
+
+- [#5111](https://github.com/PostHog/posthog-js/pull/5111) [`f8d7db4`](https://github.com/PostHog/posthog-js/commit/f8d7db4f4bf990e24ef46aeb33fcd0871c9aabab) Thanks [@ioannisj](https://github.com/ioannisj)! - Add `getSessionReplayDebugProperties()` to read the native SDK's session replay debug map
+  (2026-09-25)
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android 12+ (requires `@posthog/react-native-plugin` 2.12.0). Update `posthog-android` to 3.71.1 so these crashes are stamped at the right time when the device clock disagrees with network time.
+  (2026-09-25)
+
+## 2.11.0
+
+### Minor Changes
+
+- [#5100](https://github.com/PostHog/posthog-js/pull/5100) [`17fb79b`](https://github.com/PostHog/posthog-js/commit/17fb79b4b5cb5c06460b7d4ac6c693547e9ecf1f) Thanks [@ioannisj](https://github.com/ioannisj)! - Attach the native session replay debug properties to native crash `$exception` events; requires posthog-ios 3.83.0 and posthog-android 3.70.0.
+  (2026-09-25)
+
+## 2.10.0
+
+### Minor Changes
+
+- [#5040](https://github.com/PostHog/posthog-js/pull/5040) [`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce) Thanks [@hpouillot](https://github.com/hpouillot)! - Capture fatal React Native JavaScript exceptions through the embedded native SDK, which persists them to its own disk queue synchronously, so a crash is not lost when the process terminates before AsyncStorage finishes writing. The JS queue copy is dropped when native takes the event, so each crash is still sent once.
+
+  Enabling `errorTracking.autocapture.uncaughtExceptions` now initializes the native PostHog SDK on its own, since that queue is what makes the fatal path durable. Apps that previously enabled neither session replay, native crash autocapture nor push will see one additional `/config` request per launch as a result: the native SDKs fetch remote config at setup regardless of `preloadFeatureFlags`. (2026-09-23)
+
+## 2.9.4
+
+### Patch Changes
+
+- [#4973](https://github.com/PostHog/posthog-js/pull/4973) [`d59ac46`](https://github.com/PostHog/posthog-js/commit/d59ac4625a9c80487d96ff483f27cd921b5aa7a2) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop the native SDKs keeping their own opt-out state, so the consent the JS client resolves is the one they use at setup. Requires `posthog-android` 3.66.0 and `posthog-ios` 3.76.0.
+  (2026-09-16)
+
+## 2.9.3
+
+### Patch Changes
+
+- [#4929](https://github.com/PostHog/posthog-js/pull/4929) [`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Android: a notification tap that launched the app is no longer captured as `$push_notification_opened` while the JS client is opted out, even if an earlier launch had opted the native SDK in.
+  (2026-09-15)
+
+## 2.9.2
+
+### Patch Changes
+
+- [#4921](https://github.com/PostHog/posthog-js/pull/4921) [`197a212`](https://github.com/PostHog/posthog-js/commit/197a21252befe38dcd652c3fc49c5b30710adf35) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - iOS: a notification tap that launched the app is no longer captured as `$push_notification_opened` while the JS client is opted out, even if an earlier launch had opted the native SDK in.
+  (2026-09-15)
+
+- [#4921](https://github.com/PostHog/posthog-js/pull/4921) [`197a212`](https://github.com/PostHog/posthog-js/commit/197a21252befe38dcd652c3fc49c5b30710adf35) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on iOS when a notification tap cold-launches the app, or set `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` to `false` in `Info.plist` to opt out before any PostHog code runs, as in posthog-flutter.
+  (2026-09-15)
+
+## 2.9.1
+
+### Patch Changes
+
+- [#4919](https://github.com/PostHog/posthog-js/pull/4919) [`61ef6a6`](https://github.com/PostHog/posthog-js/commit/61ef6a6f2d7e8387d7c316fbd88fdf447fd7de8d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Count a PostHog notification tap once when both `capturePushNotificationOpened` and automatic capture report it, using the dedupe added in `posthog-android` 3.65.0 and `posthog-ios` 3.75.0. Update the native SDKs to `posthog-android` 3.65.2 and `posthog-ios` 3.75.2.
+  (2026-09-15)
+
+## 2.9.0
+
+### Minor Changes
+
+- [#4928](https://github.com/PostHog/posthog-js/pull/4928) [`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591) Thanks [@marandaneto](https://github.com/marandaneto)! - Add initialization-only `sessionReplayConfig.captureTouches` to disable replay touch coordinates without stopping screenshots on Android and iOS.
+  (2026-09-14)
+
+## 2.8.1
+
+### Patch Changes
+
+- [#4925](https://github.com/PostHog/posthog-js/pull/4925) [`ffea9f7`](https://github.com/PostHog/posthog-js/commit/ffea9f76ac434ce0c335d92c83f8110c19ccc5ba) Thanks [@aramslegit](https://github.com/aramslegit)! - Require posthog-ios 3.73.3 so React Native apps get the session replay masking fixes shipped in posthog-ios 3.73.2 and 3.73.3.
+  (2026-09-12)
+
+## 2.8.0
+
+### Minor Changes
+
+- [#4907](https://github.com/PostHog/posthog-js/pull/4907) [`fa6381b`](https://github.com/PostHog/posthog-js/commit/fa6381b072f2411460ff305aa7b9b230f351efa4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add experimental Android-only `screenshotScale`, `screenshotCompressionQuality`, and `screenshotColorMode` options to `sessionReplayConfig`, and bump `com.posthog:posthog-android` to 3.63.1.
+  (2026-09-11)
+
+## 2.7.0
+
+### Minor Changes
+
+- [#4886](https://github.com/PostHog/posthog-js/pull/4886) [`652a5bc`](https://github.com/PostHog/posthog-js/commit/652a5bc2b7a5c4c66d82ed886482f854c41be87d) Thanks [@itsalysialynn](https://github.com/itsalysialynn)! - Expose rageClickConfig for tuning or disabling native iOS rage click detection from React Native.
+  (2026-09-11)
+
+## 2.6.0
+
+### Minor Changes
+
+- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start. Remove any manual `capturePushNotificationOpened` call you wired to `messaging().onNotificationOpenedApp` for Android: that tap is now captured automatically, so the manual call counts it a second time.
+  (2026-09-10)
+
 ## 2.5.2
 
 ### Patch Changes

@@ -12,7 +12,8 @@ vi.mock('@posthog/core', () => ({
     createLogger: () => ({ error: mockLoggerError }),
 }))
 
-vi.mock('@posthog/plugin-utils', () => ({
+vi.mock('@posthog/plugin-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/plugin-utils')>()),
     runSourcemapCli: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -39,6 +40,7 @@ function createCompilation(outputDirectory: string, chunks: TestChunk[], assets:
         outputOptions: { path: outputDirectory },
         chunks: new Set(chunks),
         getAssets: () => assets,
+        getAsset: () => ({ info: { posthogChunkId: 'test-id' } }),
     } as unknown as webpack.Compilation
 }
 
@@ -58,7 +60,7 @@ function createCompiler(version: string | undefined): {
     const sourceMapDevToolPlugin = vi.fn().mockImplementation(() => ({ apply: vi.fn() }))
     const compiler = {
         webpack: { SourceMapDevToolPlugin: sourceMapDevToolPlugin, version },
-        hooks: { done: { tapAsync: vi.fn() } },
+        hooks: { done: { tapAsync: vi.fn() }, compilation: { tap: vi.fn() } },
     } as unknown as webpack.Compiler
     return { compiler, sourceMapDevToolPlugin }
 }
@@ -166,6 +168,55 @@ describe('PosthogWebpackPlugin', () => {
             // Absent rather than false: webpacks predating the option reject unknown keys.
             expect(options).not.toHaveProperty('debugIds')
         }
+    })
+
+    it('uploads only instrumented JavaScript and deletes only its adjacent maps', async () => {
+        const files = ['app.js', 'app.js.map', 'untouched.js.map', 'style.css']
+        await Promise.all(files.map((file) => fs.writeFile(path.join(outputDirectory, file), 'unchanged')))
+        const compilation = createCompilation(outputDirectory, [{ files: new Set(['app.js', 'style.css']) }], [])
+        await new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)
+        expect(runSourcemapCliMock).toHaveBeenCalledWith(config, {
+            filePaths: [path.join(outputDirectory, 'app.js')],
+            command: 'upload',
+        })
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(false)
+        expect(await fs.readFile(path.join(outputDirectory, 'app.js'), 'utf8')).toBe('unchanged')
+        expect(await exists(path.join(outputDirectory, 'untouched.js.map'))).toBe(true)
+    })
+
+    it('retains JavaScript and CSS maps when upload fails', async () => {
+        await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
+        await fs.writeFile(path.join(outputDirectory, 'app.css.map'), '{}')
+        runSourcemapCliMock.mockRejectedValueOnce(new Error('upload failed'))
+        const compilation = createCompilation(
+            outputDirectory,
+            [{ files: new Set(['app.js']) }],
+            [{ name: 'app.css.map' }]
+        )
+        await expect(new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)).rejects.toThrow(
+            'upload failed'
+        )
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(true)
+        expect(await exists(path.join(outputDirectory, 'app.css.map'))).toBe(true)
+    })
+
+    it('logs JavaScript map deletion failures without failing the successful upload', async () => {
+        await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
+        const originalRm = fs.rm.bind(fs)
+        vi.spyOn(fs, 'rm').mockImplementation(async (file, options) => {
+            if (file === path.join(outputDirectory, 'app.js.map')) throw new Error('permission denied')
+            return originalRm(file, options)
+        })
+        const compilation = createCompilation(outputDirectory, [{ files: new Set(['app.js']) }], [])
+        await expect(
+            new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)
+        ).resolves.toBeUndefined()
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(true)
+        expect(mockLoggerError).toHaveBeenCalledWith(
+            'PostHog sourcemaps uploaded, but failed to delete source map:',
+            path.join(outputDirectory, 'app.js.map'),
+            expect.any(Error)
+        )
     })
 
     it('continues deleting CSS source maps and logs each deletion failure', async () => {

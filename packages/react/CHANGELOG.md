@@ -1,5 +1,33 @@
 # @posthog/react
 
+## 1.11.2
+
+### Patch Changes
+
+- [#5097](https://github.com/PostHog/posthog-js/pull/5097) [`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `useThumbSurvey` from `@posthog/react/surveys` and `posthog-js/react/surveys` ignoring the client passed to `PostHogProvider`, which left it capturing no survey events.
+  (2026-09-25)
+- Updated dependencies [[`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09)]:
+  - posthog-js@1.434.14
+
+## 1.11.1
+
+### Patch Changes
+
+- [#5003](https://github.com/PostHog/posthog-js/pull/5003) [`18b77a5`](https://github.com/PostHog/posthog-js/commit/18b77a5a0a56f6cc02b1be20910385213e085e1c) Thanks [@posthog](https://github.com/apps/posthog)! - Set the React error boundary's component-stack error name with `Object.defineProperty`, so the boundary still reports the original error on pages where a browser extension has made `Error.prototype.name` non-writable.
+  (2026-09-18)
+
+## 1.11.0
+
+### Minor Changes
+
+- [#4958](https://github.com/PostHog/posthog-js/pull/4958) [`4a46fab`](https://github.com/PostHog/posthog-js/commit/4a46fabe04b9caf6e040a43dcc3294ee95fd08c1) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a resetError callback to React error-boundary fallbacks so applications can retry rendering without remounting the boundary.
+  (2026-09-14)
+
+### Patch Changes
+
+- Updated dependencies [[`4a46fab`](https://github.com/PostHog/posthog-js/commit/4a46fabe04b9caf6e040a43dcc3294ee95fd08c1), [`62fc60b`](https://github.com/PostHog/posthog-js/commit/62fc60b642170cce4a50a78c8e3a02f9f98f30e6)]:
+  - posthog-js@1.432.0
+
 ## 1.10.6
 
 ### Patch Changes

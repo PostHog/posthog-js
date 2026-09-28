@@ -1,7 +1,5 @@
-/// <reference types="vite/client" />
-import dts from 'vite-plugin-dts'
-import { copyFileSync } from 'node:fs'
-import { defineConfig, LibraryOptions, LibraryFormats, Plugin } from 'vite'
+import { defineConfig, type LibraryOptions, type LibraryFormats, type Plugin } from '../../tooling/rrweb-build/index'
+import { watchDeclarations } from './vite.declarations'
 import { build, Format } from 'esbuild'
 import { resolve } from 'path'
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper'
@@ -103,6 +101,7 @@ export default function (
         outputDir?: string
         fileName?: string
         plugins?: Plugin[]
+        declarationConfig?: string
         generateDeclarations?: boolean
         external?: string[]
     }
@@ -111,7 +110,8 @@ export default function (
         fileName,
         outputDir: outDir = 'dist',
         plugins = [],
-        generateDeclarations = true,
+        generateDeclarations = false,
+        declarationConfig,
         external = [],
     } = options || {}
 
@@ -163,22 +163,7 @@ export default function (
             sourcemap: true,
         },
         plugins: [
-            generateDeclarations &&
-                dts({
-                    insertTypesEntry: true,
-                    bundleTypes: true,
-                    afterBuild: (emittedFiles: Map<string, string>) => {
-                        // To pass publint (`npm x publint@latest`) and ensure the
-                        // package is supported by all consumers, we must export types that are
-                        // read as ESM. To do this, there must be duplicate types with the
-                        // correct extension supplied in the package.json exports field.
-                        const files: string[] = Array.from(emittedFiles.keys())
-                        files.forEach((file) => {
-                            const ctsFile = file.replace('.d.ts', '.d.cts')
-                            copyFileSync(file, ctsFile)
-                        })
-                    },
-                }),
+            watchDeclarations(declarationConfig, generateDeclarations),
             minifyAndUMDPlugin({ name, outDir }),
             visualizer({
                 filename: resolve(__dirname, name + '-bundle-analysis.html'), // Path for the HTML report

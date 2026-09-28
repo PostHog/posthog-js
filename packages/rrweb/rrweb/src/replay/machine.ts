@@ -107,7 +107,7 @@ type PlayerAssets = {
 export function createPlayerService(
   context: PlayerContext,
   { getCastFn, applyEvents, emitter }: PlayerAssets,
-) {
+): StateMachine.Service<PlayerContext, PlayerEvent, PlayerState> {
   const playerMachine = createMachine<PlayerContext, PlayerEvent, PlayerState>(
     {
       id: 'player',
@@ -389,7 +389,9 @@ export type SpeedState =
       context: SpeedContext;
     };
 
-export function createSpeedService(context: SpeedContext) {
+export function createSpeedService(
+  context: SpeedContext,
+): StateMachine.Service<SpeedContext, SpeedEvent, SpeedState> {
   const speedMachine = createMachine<SpeedContext, SpeedEvent, SpeedState>(
     {
       id: 'speed',
