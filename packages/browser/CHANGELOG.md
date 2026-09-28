@@ -1,5 +1,116 @@
 # posthog-js
 
+## 1.434.17
+
+### Patch Changes
+
+- [#5063](https://github.com/PostHog/posthog-js/pull/5063) [`799e84c`](https://github.com/PostHog/posthog-js/commit/799e84ccd9fc830db733033093d0382aec023025) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): keep a held recording epoch's buffered data when it hits the size cap
+  (2026-09-28)
+
+- [#5118](https://github.com/PostHog/posthog-js/pull/5118) [`3212630`](https://github.com/PostHog/posthog-js/commit/3212630d9fea54dad35c31b9eba8c66175f517ad) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): keep CSS-in-JS styles after a large DOM change in the page head
+  (2026-09-28)
+
+## 1.434.16
+
+### Patch Changes
+
+- [#5127](https://github.com/PostHog/posthog-js/pull/5127) [`d48c783`](https://github.com/PostHog/posthog-js/commit/d48c7838fde1fb5fc7d3c1b96b8c02c003c3db76) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor the modern replay network masking callback when both modern and deprecated hooks are configured.
+  (2026-09-28)
+
+## 1.434.15
+
+### Patch Changes
+
+- [#5115](https://github.com/PostHog/posthog-js/pull/5115) [`8531e40`](https://github.com/PostHog/posthog-js/commit/8531e4029d04f4f1ddf2ca02b129534c3ddd9dae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix SPA `$pageview` events from `pushState`/`replaceState` navigations carrying the previous page's `title`
+  (2026-09-26)
+
+## 1.434.14
+
+### Patch Changes
+
+- [#5097](https://github.com/PostHog/posthog-js/pull/5097) [`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `useThumbSurvey` from `@posthog/react/surveys` and `posthog-js/react/surveys` ignoring the client passed to `PostHogProvider`, which left it capturing no survey events.
+  (2026-09-25)
+
+## 1.434.13
+
+### Patch Changes
+
+- [#5098](https://github.com/PostHog/posthog-js/pull/5098) [`a7250f0`](https://github.com/PostHog/posthog-js/commit/a7250f07f10fa0d52860f3c21351051e3c2a0b63) Thanks [@Piccirello](https://github.com/Piccirello)! - Replay loads a recorded font under the replay iframe's content security policy, not the embedding page's.
+  (2026-09-24)
+
+## 1.434.12
+
+### Patch Changes
+
+- [#5073](https://github.com/PostHog/posthog-js/pull/5073) [`60bd968`](https://github.com/PostHog/posthog-js/commit/60bd9685c199c0cd0b9134682053fffac41edb1f) Thanks [@ksvat](https://github.com/ksvat)! - The replayer no longer freezes the tab on a mutation that adds tens of thousands of nodes at once. It now applies a batch of 1,000 or more adds against a detached subtree, so the document updates style and layout once instead of per insert. A recorded batch of 25,746 style elements went from 92 seconds of blocked main thread to 1.5 seconds.
+  (2026-09-23)
+
+## 1.434.11
+
+### Patch Changes
+
+- [#5051](https://github.com/PostHog/posthog-js/pull/5051) [`1549919`](https://github.com/PostHog/posthog-js/commit/1549919965d909ce58e5804e70fc7c28a66a2da5) Thanks [@DeepanshuPal](https://github.com/DeepanshuPal)! - Avoid cross-domain cookie probes when cross-subdomain cookies are disabled.
+  (2026-09-23)
+
+## 1.434.10
+
+### Patch Changes
+
+- [#5060](https://github.com/PostHog/posthog-js/pull/5060) [`a9c40ec`](https://github.com/PostHog/posthog-js/commit/a9c40ec93ce38b11b17a69ff01d3e7b8677f7121) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix SDK initialization when a script loader pre-creates window.posthog as a placeholder object.
+  (2026-09-23)
+
+## 1.434.9
+
+### Patch Changes
+
+- [#4970](https://github.com/PostHog/posthog-js/pull/4970) [`708a5f7`](https://github.com/PostHog/posthog-js/commit/708a5f757d9da9dad2a3b0a892708a1fbfcb9de9) Thanks [@Christian2702](https://github.com/Christian2702)! - Session replay no longer defers its input setter hooks on zone.js's patched `setTimeout`. In Angular apps each of those timers ended a zone task and triggered another change detection, so any component writing an input property on every cycle drove the tab into an endless loop at 100% CPU.
+  (2026-09-22)
+
+## 1.434.8
+
+### Patch Changes
+
+- [#5054](https://github.com/PostHog/posthog-js/pull/5054) [`36f356d`](https://github.com/PostHog/posthog-js/commit/36f356dac9ff06131ece2c45ec22e0a991fb3ff8) Thanks [@posthog](https://github.com/apps/posthog)! - fix(dead-clicks): survive a denied property access in Firefox
+
+  Firefox denies property access on a DOM node from another origin or from a realm that was torn down. The detector reads `isConnected` and `nodeType` on mutation records and on composed paths, and reads `getRootNode` on selection endpoints, so the denial escaped the MutationObserver callback and stopped the rest of the batch from refreshing the liveness timestamp. A node that cannot be read is now treated as a node that cannot be inspected. (2026-09-22)
+
+## 1.434.7
+
+### Patch Changes
+
+- [#5001](https://github.com/PostHog/posthog-js/pull/5001) [`c551218`](https://github.com/PostHog/posthog-js/commit/c5512189b915c6ee2543258455fa3a025a1442d6) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay network capture no longer fails to start in frames without `PerformanceObserver` or its `supportedEntryTypes`; those frames record without live network timing.
+  (2026-09-22)
+
+## 1.434.6
+
+### Patch Changes
+
+- [#5016](https://github.com/PostHog/posthog-js/pull/5016) [`4770179`](https://github.com/PostHog/posthog-js/commit/47701797d420bf48b5e002cfe265d373d51647bb) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording active when a cross-origin image or video taints a canvas.
+  (2026-09-22)
+
+## 1.434.5
+
+### Patch Changes
+
+- [#5021](https://github.com/PostHog/posthog-js/pull/5021) [`9cd834c`](https://github.com/PostHog/posthog-js/commit/9cd834c429a3562d9e4cc428dd0d9604987487e7) Thanks [@posthog](https://github.com/apps/posthog)! - Stop reporting dead clicks on controls inside open shadow roots (such as web components or micro-frontends) when the click updates content inside the shadow root.
+  (2026-09-21)
+
+## 1.434.4
+
+### Patch Changes
+
+- [#5042](https://github.com/PostHog/posthog-js/pull/5042) [`ed9fc04`](https://github.com/PostHog/posthog-js/commit/ed9fc0422a028942101e560dda2d28ef43e381a2) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `$session_id` being sent as `null` when a sibling tab resets the session before this tab captures its first event (#5036)
+  (2026-09-21)
+
+## 1.434.3
+
+### Patch Changes
+
+- [#5008](https://github.com/PostHog/posthog-js/pull/5008) [`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c) Thanks [@nachogarcia](https://github.com/nachogarcia)! - Retry `/flags` in the browser SDK on HTTP 502/504 and on request timeouts, bounded by the new `feature_flag_request_max_retries` config (default 1, set 0 to disable). Plain transport failures are deliberately left to the existing status-zero circuit breaker.
+  (2026-09-21)
+- Updated dependencies [[`3a8035f`](https://github.com/PostHog/posthog-js/commit/3a8035f3c52699fe07773536b1c3bc32f4fbea2c)]:
+  - @posthog/types@1.412.4
+
 ## 1.434.2
 
 ### Patch Changes

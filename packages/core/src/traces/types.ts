@@ -133,8 +133,8 @@ export interface ResolvedTracesConfig extends TracesConfig {
   maxEventsPerSpan: number
   maxAttributesPerEvent: number
   maxAttributeValueLength: number
-  /** Bound on spans started but not yet ended. At the bound `startSpan` returns a no-op handle. */
+  /** Bound on spans started but not yet ended. At the bound `startSpan` evicts aged spans, then returns a no-op handle if still at the bound. */
   maxLiveSpans: number
-  /** How long a span may stay live before it stops being accounted for and can never export. */
+  /** Age at which a live span counts as leaked. Checked only at `maxLiveSpans`, where aged spans are evicted and never exported. */
   maxSpanAgeMs: number
 }

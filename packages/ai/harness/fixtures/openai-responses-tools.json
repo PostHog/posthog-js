@@ -1,0 +1,163 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:12.900Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_output_tokens": 128,
+          "input": "Call get_weather for Paris. Do not answer with text.",
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "tool_choice": {
+            "type": "function",
+            "name": "get_weather"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_a0e19de457f245a7b1daf2a3cb284242"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "resp_0c5de16024873e17016aaf40851dc887d2b7bac0a0f9c95e65",
+            "object": "response",
+            "created_at": 1789870213,
+            "status": "completed",
+            "background": false,
+            "billing": {
+              "payer": "developer"
+            },
+            "completed_at": 1789870214,
+            "error": null,
+            "frequency_penalty": 0,
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 128,
+            "max_tool_calls": null,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "moderation": null,
+            "output": [
+              {
+                "id": "fc_0c5de16024873e17016aaf40861fd087d2bc3a9db133b595f1",
+                "type": "function_call",
+                "status": "completed",
+                "arguments": "{\"city\":\"Paris\"}",
+                "call_id": "call_r5aXzEBOBhrkxUfpqWfQlwB4",
+                "name": "get_weather"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "presence_penalty": 0,
+            "previous_response_id": null,
+            "prompt_cache_key": null,
+            "prompt_cache_retention": "in_memory",
+            "reasoning": {
+              "context": null,
+              "effort": null,
+              "summary": null
+            },
+            "safety_identifier": null,
+            "service_tier": "default",
+            "store": false,
+            "temperature": 1,
+            "text": {
+              "format": {
+                "type": "text"
+              },
+              "verbosity": "medium"
+            },
+            "tool_choice": {
+              "type": "function",
+              "name": "get_weather"
+            },
+            "tool_usage": {
+              "image_gen": {
+                "input_tokens": 0,
+                "input_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "output_tokens": 0,
+                "output_tokens_details": {
+                  "image_tokens": 0,
+                  "text_tokens": 0
+                },
+                "total_tokens": 0
+              },
+              "web_search": {
+                "num_requests": 0
+              }
+            },
+            "tools": [
+              {
+                "type": "function",
+                "description": null,
+                "name": "get_weather",
+                "output_schema": null,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["city"],
+                  "additionalProperties": false
+                },
+                "strict": true
+              }
+            ],
+            "top_logprobs": 0,
+            "top_p": 1,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 52,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 6,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 58
+            },
+            "user": null,
+            "metadata": {}
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:20.633Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data"
+        },
+        "body": {
+          "fields": [
+            ["language", "en"],
+            ["model", "gpt-4o-mini-transcribe-2025-12-15"],
+            ["response_format", "json"]
+          ],
+          "files": [
+            {
+              "name": "file",
+              "filename": "openai-audio.wav",
+              "type": "audio/wav",
+              "size": 60078,
+              "sha256": "4caafa4ec93a87ca344d0cd44082ef99cbf3c24a1ace90111bc3b1a09806b4b1"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_8d72cfa3e766472ba8f8593c316de80e"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "text": "The weather in Paris is sunny.",
+            "usage": {
+              "type": "tokens",
+              "total_tokens": 27,
+              "input_tokens": 18,
+              "input_token_details": {
+                "text_tokens": 0,
+                "audio_tokens": 18
+              },
+              "output_tokens": 9
+            }
+          }
+        }
+      }
+    }
+  ]
+}

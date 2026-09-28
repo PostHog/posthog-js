@@ -778,6 +778,61 @@ describe('canvas rr_dataURL with a configured canvas mask provider', () => {
     expect(prototypeToDataURL).toHaveBeenCalled();
   });
 
+  it('serializes a tainted 2d canvas without its pixels instead of throwing', () => {
+    // a cross-origin draw taints the canvas, and the browser then refuses both
+    // the blank check and the read
+    const canvas = document.createElement('canvas');
+    (canvas as { __context?: string }).__context = '2d';
+    const taint = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    canvas.getContext = (() => ({
+      getImageData: taint,
+    })) as unknown as typeof canvas.getContext;
+    canvas.toDataURL = taint;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    // the node still serializes, so the full snapshot survives
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(sn.tagName).toBe('canvas');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    serializeCanvas(canvas, () => false);
+    serializeCanvas(canvas, () => false);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    warn.mockRestore();
+  });
+
+  it('serializes a tainted unobserved-context canvas without its pixels', () => {
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(sn.tagName).toBe('canvas');
+    warn.mockRestore();
+  });
+
   it('never reads pixels from an unobserved-context canvas when a provider is configured', () => {
     const prototypeToDataURL = vi
       .spyOn(HTMLCanvasElement.prototype, 'toDataURL')

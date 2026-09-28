@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.11.2
+
+### Patch Changes
+
+- [#5097](https://github.com/PostHog/posthog-js/pull/5097) [`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `useThumbSurvey` from `@posthog/react/surveys` and `posthog-js/react/surveys` ignoring the client passed to `PostHogProvider`, which left it capturing no survey events.
+  (2026-09-25)
+- Updated dependencies [[`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09)]:
+  - posthog-js@1.434.14
+
 ## 1.11.1
 
 ### Patch Changes

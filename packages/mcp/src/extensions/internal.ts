@@ -18,32 +18,31 @@ import { stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 
 /**
- * Bounded LRU cache for session identities, capped at `maxSize` entries so a
- * long-lived server can't accumulate identities for unboundedly many sessions.
- * One instance lives on each server's tracking data — it is NOT shared across
- * server instances, so identities never bleed between servers.
+ * Bounded LRU cache, capped at `maxSize` entries so a long-lived server cannot
+ * accumulate state for unboundedly many sessions. One instance lives on each
+ * server's tracking data and is never shared across server instances.
  */
-export class IdentityCache {
-  private readonly _cache = new Map<string, UserIdentity>()
+export class BoundedCache<T> {
+  private readonly _cache = new Map<string, T>()
   private readonly _maxSize: number
 
   constructor(maxSize = 1000) {
     this._maxSize = maxSize
   }
 
-  get(sessionId: string): UserIdentity | undefined {
-    const identity = this._cache.get(sessionId)
-    if (identity === undefined) {
+  get(key: string): T | undefined {
+    const value = this._cache.get(key)
+    if (value === undefined) {
       return
     }
     // Touch: re-insert so it counts as most-recently-used.
-    this._cache.delete(sessionId)
-    this._cache.set(sessionId, identity)
-    return identity
+    this._cache.delete(key)
+    this._cache.set(key, value)
+    return value
   }
 
-  set(sessionId: string, identity: UserIdentity): void {
-    this._cache.delete(sessionId)
+  set(key: string, value: T): void {
+    this._cache.delete(key)
 
     if (this._cache.size >= this._maxSize) {
       const oldestKey = this._cache.keys().next().value
@@ -52,17 +51,19 @@ export class IdentityCache {
       }
     }
 
-    this._cache.set(sessionId, identity)
+    this._cache.set(key, value)
   }
 
-  has(sessionId: string): boolean {
-    return this._cache.has(sessionId)
+  has(key: string): boolean {
+    return this._cache.has(key)
   }
 
   size(): number {
     return this._cache.size
   }
 }
+
+export class IdentityCache extends BoundedCache<UserIdentity> {}
 
 const _serverTracking = new WeakMap<MCPServerLike, MCPAnalyticsData>()
 

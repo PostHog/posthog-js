@@ -1,0 +1,74 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-23T04:03:44.073Z",
+    "providerSdkVersion": "1.52.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Reply with a short greeting."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "maxOutputTokens": 256
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "candidates": [
+              {
+                "content": {
+                  "parts": [
+                    {
+                      "text": "Hello! How can I help you today?",
+                      "thoughtSignature": "EnEKbwFpFH0TaqxHbVv5mDv+YjrEBWzEYtJPgnpS2COiwNCx2o6/ia6EovMS/Uz+/9M297BnvASG9jc7mLuqp4jCV97YGS3+Z3i16BztAkecfvFXOB5OnirMjZSSunzf6KVXgIMviB8o2mIakfAUak2MGQ=="
+                    }
+                  ],
+                  "role": "model"
+                },
+                "finishReason": "STOP",
+                "index": 0
+              }
+            ],
+            "usageMetadata": {
+              "promptTokenCount": 7,
+              "candidatesTokenCount": 9,
+              "totalTokenCount": 16,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 7
+                }
+              ],
+              "serviceTier": "standard"
+            },
+            "modelVersion": "gemini-3.1-flash-lite",
+            "responseId": "oE-zatX-Efmfz7IPz8m5yQM"
+          }
+        }
+      }
+    }
+  ]
+}

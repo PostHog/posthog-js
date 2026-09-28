@@ -1,5 +1,6 @@
 import {
   type blockClass,
+  type CanvasArg,
   CanvasContext,
   type canvasManagerMutationCallback,
   type IWindow,
@@ -47,12 +48,14 @@ export default function initCanvas2DMutationObserver(
               // Using setTimeout as toDataURL can be heavy
               // and we'd rather not block the main thread
               setTimeout(() => {
-                const recordArgs = serializeArgs(
-                  args,
-                  win,
-                  this,
-                  dataURLOptions,
-                );
+                let recordArgs: CanvasArg[];
+                try {
+                  recordArgs = serializeArgs(args, win, this, dataURLOptions);
+                } catch {
+                  // an argument such as a tainted canvas cannot be read, so
+                  // skip this mutation and let replay keep the last frame
+                  return;
+                }
                 cb(this.canvas, {
                   type: CanvasContext['2D'],
                   property: prop,

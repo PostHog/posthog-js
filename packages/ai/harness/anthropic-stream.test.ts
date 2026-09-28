@@ -23,16 +23,16 @@ const scenarios = [
 // Independently checked against the provider's live message_start/message_delta usage.
 // Columns: fixture, text, input, output, cache read, 5-minute write, 1-hour write.
 const cacheCases = [
-  ['cache-5m-write', 'OK.', 10, 5, 0, 9649, 0],
-  ['cache-5m-hit', 'OK.', 10, 5, 9649, 0, 0],
-  ['cache-5m-extend', 'OK', 11, 4, 9649, 1201, 0],
-  ['cache-1h-write', 'OK.', 10, 5, 0, 0, 9649],
-  ['cache-1h-hit', 'OK.', 10, 5, 9649, 0, 0],
-  ['cache-1h-extend', 'OK', 11, 4, 9649, 0, 1201],
-  ['cache-mixed-write', 'OK.', 11, 5, 0, 1501, 9648],
-  ['cache-mixed-hit', 'OK.', 11, 5, 11149, 0, 0],
-  ['cache-mixed-extend', 'OK.', 11, 5, 9649, 1501, 1500],
-  ['cache-below-minimum', 'OK', 16, 4, 0, 0, 0],
+  ['cache-5m-write', 'OK.', 10, 5, 0, 9650, 0],
+  ['cache-5m-hit', 'OK.', 10, 5, 9650, 0, 0],
+  ['cache-5m-extend', 'OK', 11, 4, 9650, 1201, 0],
+  ['cache-1h-write', 'OK.', 10, 5, 0, 0, 9650],
+  ['cache-1h-hit', 'OK.', 10, 5, 9650, 0, 0],
+  ['cache-1h-extend', 'OK', 11, 4, 9650, 0, 1201],
+  ['cache-mixed-write', 'OK.', 11, 5, 0, 1501, 9649],
+  ['cache-mixed-hit', 'OK.', 11, 5, 11150, 0, 0],
+  ['cache-mixed-extend', 'OK.', 11, 5, 9650, 1501, 1500],
+  ['cache-below-minimum', 'OK.', 16, 5, 0, 0, 0],
   ['max-tokens', '', 13, 1, 0, 0, 0],
 ] as const
 for (const [name, text, input, output, cacheRead, cache5m, cache1h] of cacheCases) {

@@ -1,5 +1,6 @@
 import {
   type blockClass,
+  type CanvasArg,
   CanvasContext,
   type canvasManagerMutationCallback,
   type canvasMutationWithType,
@@ -55,14 +56,22 @@ function patchGLPrototype(
               'tagName' in this.canvas &&
               !isBlocked(this.canvas, blockClass, blockSelector, true)
             ) {
-              const recordArgs = serializeArgs(args, win, this, dataURLOptions);
-              const mutation: canvasMutationWithType = {
-                type,
-                property: prop,
-                args: recordArgs,
-              };
-              // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
-              cb(this.canvas, mutation);
+              let recordArgs: CanvasArg[] | undefined;
+              try {
+                recordArgs = serializeArgs(args, win, this, dataURLOptions);
+              } catch {
+                // this runs inside the page's own call, so an argument such as
+                // a tainted canvas must not throw into it. Skip the mutation
+              }
+              if (recordArgs) {
+                const mutation: canvasMutationWithType = {
+                  type,
+                  property: prop,
+                  args: recordArgs,
+                };
+                // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
+                cb(this.canvas, mutation);
+              }
             }
 
             return result;

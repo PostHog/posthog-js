@@ -1,3 +1,4 @@
+// @vitest-environment-options {"url": "https://app.example.com/"}
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
 import {
@@ -39,6 +40,7 @@ import {
     memoryStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
+    resetSubDomainCache,
     sessionStore,
 } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
@@ -121,6 +123,59 @@ describe('persistence', () => {
         document.cookie = ''
         referrer = ''
         vi.restoreAllMocks()
+    })
+
+    describe.each(['cookie', 'localStorage+cookie'])('cookie scope cleanup: %s', (persistenceMode) => {
+        const config = (crossSubdomain: boolean): PostHogConfig =>
+            ({
+                ...makePostHogConfig('scope-cleanup', persistenceMode),
+                token: 'scope-cleanup',
+                cross_subdomain_cookie: crossSubdomain,
+                secure_cookie: false,
+            }) as PostHogConfig
+
+        beforeEach(() => {
+            resetSubDomainCache()
+            window?.localStorage.clear()
+            document.cookie = 'origin_cookie=1; path=/'
+        })
+
+        afterEach(() => {
+            cookieStore._remove('ph_scope-cleanup_posthog', false)
+            cookieStore._remove('ph_scope-cleanup_posthog', true)
+            document.cookie = 'origin_cookie=; max-age=0; path=/'
+            window?.localStorage.clear()
+            resetSubDomainCache()
+        })
+
+        it('cleans up a previous cross-subdomain cookie without probing on later host-only loads', () => {
+            const crossSubdomainPage = new PostHogPersistence(config(true))
+            crossSubdomainPage.register({ distinct_id: 'old-user' })
+
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'old-user' })
+
+            const cookieWrites: string[] = []
+            const cookieSetter = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')?.set
+            const setCookieSpy = vi.spyOn(document, 'cookie', 'set').mockImplementation((value) => {
+                cookieWrites.push(value)
+                cookieSetter?.call(document, value)
+            })
+
+            resetSubDomainCache()
+            const firstHostOnlyPage = new PostHogPersistence(config(false))
+            firstHostOnlyPage.register({ distinct_id: 'new-user' })
+
+            resetSubDomainCache()
+            const writesBeforeSecondLoad = cookieWrites.length
+            const secondHostOnlyPage = new PostHogPersistence(config(false))
+
+            expect(secondHostOnlyPage.get_property('distinct_id')).toBe('new-user')
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'new-user' })
+            expect(document.cookie.match(/ph_scope-cleanup_posthog=/g)).toHaveLength(1)
+            expect(cookieWrites.slice(writesBeforeSecondLoad).some((value) => value.startsWith('dmn_chk_'))).toBe(false)
+
+            setCookieSpy.mockRestore()
+        })
     })
 
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']

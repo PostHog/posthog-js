@@ -36,6 +36,7 @@ import {
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
+  FeatureFlagEvaluationRuntime,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
   FlagEvaluationOptions,
@@ -1327,6 +1328,53 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Get where a locally loaded feature flag is meant to be evaluated.
+   *
+   * @remarks
+   * Read from the definitions local evaluation already holds, so no request is made. A
+   * definition that carries no runtime reports `all`, the default PostHog applies.
+   *
+   * @example
+   * ```ts
+   * const runtime = client.getFeatureFlagEvaluationRuntime('my-flag')
+   * // Returns: 'client'
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param key - The feature flag key
+   * @returns The flag's evaluation runtime, or undefined when local evaluation has not loaded a
+   * definition for this key
+   */
+  getFeatureFlagEvaluationRuntime(key: string): FeatureFlagEvaluationRuntime | undefined {
+    return this.featureFlagsPoller?.getEvaluationRuntimeForFlag(key)
+  }
+
+  /**
+   * Get the keys of locally loaded flags that a runtime can evaluate.
+   *
+   * @remarks
+   * A flag set to `all` suits either runtime, so it is returned for `client` and for `server`,
+   * and asking for `all` returns every loaded flag. Use this to decide which flags to hand to a
+   * browser when a backend serves flags to its own frontend.
+   *
+   * @example
+   * ```ts
+   * const clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')
+   * // Returns: ['web-banner', 'shared-copy']
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param evaluationRuntime - The runtime to match
+   * @returns The matching flag keys, in the order local evaluation loaded them. Empty when no
+   * definitions are loaded
+   */
+  getFeatureFlagKeysByEvaluationRuntime(evaluationRuntime: FeatureFlagEvaluationRuntime): string[] {
+    return this.featureFlagsPoller?.getFlagKeysByEvaluationRuntime(evaluationRuntime) ?? []
+  }
+
+  /**
    * Wait for local evaluation of feature flags to be ready.
    *
    * @example
@@ -1458,7 +1506,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
     let featureFlagError: FeatureFlagErrorType | undefined = undefined
-    // Track metadata for event tracking (not exposed in FeatureFlagResult)
+    // Track metadata for feature-flag-called events.
     let flagId: number | undefined = undefined
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
@@ -1486,6 +1534,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               enabled: value !== false,
               variant: typeof value === 'string' ? value : undefined,
               payload: localResult.payload ?? undefined,
+              reason: flagReason,
+              reasonCode: flag.active === false ? 'flag_disabled' : undefined,
             }
           }
         } catch (e) {
@@ -1555,6 +1605,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             // The flags API serializes missing variants as null
             variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
+            reason: flagReason,
+            reasonCode: flagDetail.reason?.code,
           }
         }
 

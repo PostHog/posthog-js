@@ -1,0 +1,154 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:04.986Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_completion_tokens": 16,
+          "temperature": 0,
+          "prompt_cache_key": "posthog-cassette-ab5df7e9-53bb-4693-97dc-91207a4c91a0",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Recording ab5df7e9-53bb-4693-97dc-91207a4c91a0.\nTest record 0: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 1: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 2: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 3: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 4: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 5: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 6: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 7: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 8: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 9: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 10: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 11: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 12: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 13: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 14: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 15: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 16: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 17: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 18: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 19: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 20: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 21: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 22: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 23: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 24: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 25: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 26: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 27: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 28: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 29: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 30: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 31: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 32: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 33: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 34: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 35: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 36: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 37: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 38: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 39: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 40: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 41: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 42: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 43: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 44: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 45: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 46: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 47: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 48: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 49: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 50: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 51: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 52: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 53: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 54: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 55: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 56: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 57: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 58: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 59: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 60: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 61: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 62: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 63: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 64: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 65: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 66: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 67: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 68: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 69: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 70: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 71: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 72: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 73: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 74: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 75: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 76: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 77: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 78: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 79: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 80: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 81: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 82: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 83: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 84: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 85: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 86: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 87: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 88: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 89: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 90: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 91: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 92: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 93: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 94: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 95: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 96: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 97: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 98: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 99: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 100: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 101: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 102: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 103: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 104: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 105: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 106: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 107: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 108: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 109: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 110: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 111: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 112: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 113: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 114: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 115: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 116: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 117: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 118: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 119: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 120: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 121: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 122: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 123: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 124: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 125: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 126: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 127: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 128: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 129: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 130: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 131: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 132: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 133: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 134: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 135: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 136: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 137: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 138: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 139: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 140: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 141: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 142: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 143: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 144: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 145: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 146: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 147: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 148: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 149: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 150: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 151: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 152: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 153: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 154: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 155: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 156: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 157: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 158: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 159: The weather in Paris is sunny and the weather in Oslo is cloudy."
+            },
+            {
+              "role": "user",
+              "content": "Reply with exactly OK."
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_f47b73854c0e431bbb04788e06c3bbd4"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "chatcmpl-EQ1IDxNheqdS25sHHqBaNIlGYVQCA",
+            "object": "chat.completion",
+            "created": 1789870205,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "OK",
+                  "refusal": null,
+                  "annotations": []
+                },
+                "logprobs": null,
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3082,
+              "completion_tokens": 1,
+              "total_tokens": 3083,
+              "prompt_tokens_details": {
+                "cached_tokens": 0,
+                "audio_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0,
+                "audio_tokens": 0,
+                "accepted_prediction_tokens": 0,
+                "rejected_prediction_tokens": 0
+              }
+            },
+            "service_tier": "default",
+            "system_fingerprint": "fp_6adc023d19"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_completion_tokens": 16,
+          "temperature": 0,
+          "prompt_cache_key": "posthog-cassette-ab5df7e9-53bb-4693-97dc-91207a4c91a0",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Recording ab5df7e9-53bb-4693-97dc-91207a4c91a0.\nTest record 0: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 1: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 2: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 3: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 4: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 5: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 6: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 7: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 8: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 9: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 10: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 11: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 12: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 13: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 14: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 15: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 16: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 17: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 18: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 19: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 20: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 21: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 22: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 23: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 24: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 25: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 26: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 27: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 28: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 29: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 30: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 31: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 32: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 33: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 34: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 35: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 36: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 37: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 38: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 39: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 40: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 41: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 42: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 43: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 44: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 45: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 46: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 47: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 48: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 49: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 50: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 51: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 52: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 53: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 54: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 55: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 56: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 57: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 58: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 59: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 60: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 61: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 62: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 63: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 64: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 65: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 66: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 67: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 68: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 69: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 70: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 71: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 72: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 73: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 74: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 75: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 76: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 77: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 78: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 79: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 80: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 81: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 82: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 83: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 84: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 85: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 86: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 87: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 88: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 89: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 90: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 91: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 92: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 93: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 94: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 95: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 96: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 97: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 98: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 99: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 100: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 101: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 102: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 103: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 104: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 105: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 106: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 107: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 108: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 109: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 110: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 111: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 112: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 113: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 114: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 115: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 116: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 117: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 118: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 119: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 120: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 121: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 122: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 123: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 124: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 125: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 126: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 127: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 128: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 129: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 130: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 131: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 132: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 133: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 134: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 135: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 136: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 137: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 138: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 139: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 140: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 141: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 142: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 143: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 144: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 145: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 146: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 147: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 148: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 149: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 150: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 151: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 152: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 153: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 154: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 155: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 156: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 157: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 158: The weather in Paris is sunny and the weather in Oslo is cloudy.\nTest record 159: The weather in Paris is sunny and the weather in Oslo is cloudy."
+            },
+            {
+              "role": "user",
+              "content": "Reply with exactly OK."
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_f93512d2e176421994f337c840b6ee7e"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "chatcmpl-EQ1IGnCO8AWpFygSVemGf6qIT2Qse",
+            "object": "chat.completion",
+            "created": 1789870208,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "OK",
+                  "refusal": null,
+                  "annotations": []
+                },
+                "logprobs": null,
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3082,
+              "completion_tokens": 1,
+              "total_tokens": 3083,
+              "prompt_tokens_details": {
+                "cached_tokens": 2944,
+                "audio_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0,
+                "audio_tokens": 0,
+                "accepted_prediction_tokens": 0,
+                "rejected_prediction_tokens": 0
+              }
+            },
+            "service_tier": "default",
+            "system_fingerprint": "fp_6adc023d19"
+          }
+        }
+      }
+    }
+  ]
+}

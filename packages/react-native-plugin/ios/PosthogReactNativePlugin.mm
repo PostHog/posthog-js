@@ -23,6 +23,9 @@ RCT_EXTERN_METHOD(startSession:(NSString)sessionId
 RCT_EXTERN_METHOD(isEnabled:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(getSessionReplayDebugProperties:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(endSession:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
 
@@ -42,6 +45,12 @@ RCT_EXTERN_METHOD(addExceptionStep:(NSString)message
                  withProperties:(NSDictionary)properties
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(captureFatalException:(NSString)distinctId
+                  withTimestamp:(NSString)timestamp
+                  withProperties:(NSDictionary)properties
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  withRejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(reset:(NSString)distinctId
                  withAnonymousId:(NSString)anonymousId

@@ -555,7 +555,7 @@ export const refreshFlagDefinitions = action({
       return { status: 'error' as const, reason: 'unexpected-status' as const }
     }
 
-    let body: { flags?: unknown; group_type_mapping?: unknown; cohorts?: unknown }
+    let body: { flags?: unknown; group_type_mapping?: unknown; cohorts?: unknown; property_matching_version?: number }
     try {
       body = (await response.json()) as typeof body
     } catch (err) {
@@ -571,6 +571,7 @@ export const refreshFlagDefinitions = action({
       flags: body.flags ?? [],
       groupTypeMapping: body.group_type_mapping ?? {},
       cohorts: body.cohorts ?? {},
+      propertyMatchingVersion: body.property_matching_version,
     })
 
     await ctx.runMutation(internal.lib._setFlagDefinitions, {

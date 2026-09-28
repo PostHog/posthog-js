@@ -1,5 +1,36 @@
 # @posthog/mcp
 
+## 0.20.0
+
+### Minor Changes
+
+- [#5130](https://github.com/PostHog/posthog-js/pull/5130) [`4d58499`](https://github.com/PostHog/posthog-js/commit/4d584990e5d9e331193e07c4ccda1592d414abb1) Thanks [@gesh](https://github.com/gesh)! - Record declared input aliases in automatic MCP instrumentation.
+  (2026-09-28)
+
+## 0.19.0
+
+### Minor Changes
+
+- [#5117](https://github.com/PostHog/posthog-js/pull/5117) [`51699b4`](https://github.com/PostHog/posthog-js/commit/51699b4b575505a1378fc6766767b9ef636063c2) Thanks [@pauldambra](https://github.com/pauldambra)! - Record which declared parameter aliases a tool call relied on as `$mcp_input_aliases_used`, from a server-owned `inputAliases` map.
+  (2026-09-28)
+
+- [#5048](https://github.com/PostHog/posthog-js/pull/5048) [`466da07`](https://github.com/PostHog/posthog-js/commit/466da07b12730515be7f933d3f7367a29e422898) Thanks [@pauldambra](https://github.com/pauldambra)! - Record safe tool input field names for automatic and custom MCP servers. Unknown names are `[redacted]` by default; `shouldRecordInputKey` replaces that rule.
+  (2026-09-28)
+
+## 0.18.1
+
+### Patch Changes
+
+- [#5112](https://github.com/PostHog/posthog-js/pull/5112) [`74295fd`](https://github.com/PostHog/posthog-js/commit/74295fd632aa3eeab67f243938b7a1633e6ecd68) Thanks [@gesh](https://github.com/gesh)! - Keep MCP conversation sessions consistent across user messages.
+  (2026-09-25)
+
+## 0.18.0
+
+### Minor Changes
+
+- [#5074](https://github.com/PostHog/posthog-js/pull/5074) [`7133bdb`](https://github.com/PostHog/posthog-js/commit/7133bdb7e5eb4a15f834f6f4d634cfab2de64ee2) Thanks [@gesh](https://github.com/gesh)! - Add conversation and session correlation helpers for custom MCP dispatchers.
+  (2026-09-23)
+
 ## 0.17.0
 
 ### Minor Changes

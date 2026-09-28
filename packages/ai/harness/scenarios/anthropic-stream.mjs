@@ -22,7 +22,10 @@ try {
   })
   let text = ''
   for await (const item of stream) {
-    if (item.type === 'content_block_delta' && item.delta.type === 'text_delta') text += item.delta.text
+    if (item.type === 'content_block_delta' && item.delta.type === 'text_delta') {
+      text += item.delta.text
+      process.send?.({ type: 'text', text: item.delta.text })
+    }
   }
   const deadline = Date.now() + 5000
   while (true) {

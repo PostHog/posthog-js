@@ -355,6 +355,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     advanced_enable_surveys: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
+    feature_flag_request_max_retries: 1,
     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
@@ -5204,7 +5205,7 @@ export function init_from_snippet(): void {
     // The snippet stub always has an _i initialization queue, while a materialized SDK instance does not.
     // Multiple snippet init() calls can insert array.js more than once, so do not let a later execution replace
     // the live global instance (including an unloaded primary with loaded named instances).
-    if (snippetPostHog && !isArray(snippetPostHog['_i'])) {
+    if (snippetPostHog && !isArray(snippetPostHog['_i']) && isFunction(snippetPostHog['init'])) {
         return
     }
 
