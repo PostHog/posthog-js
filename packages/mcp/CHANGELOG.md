@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.21.0
+
+### Minor Changes
+
+- [#5136](https://github.com/PostHog/posthog-js/pull/5136) [`be66818`](https://github.com/PostHog/posthog-js/commit/be66818539cc1bd16cbd969f3b3e8072026206ed) Thanks [@gesh](https://github.com/gesh)! - Add optional MCP server build metadata
+  (2026-09-28)
+
 ## 0.20.0
 
 ### Minor Changes
