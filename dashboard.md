@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 1657](https://github.com/PostHog/posthog-js/issues/1657) | Valid browser SDK type-gap enhancement: the early-access response is forwarded at runtime, but its public `EarlyAccessFeature` type does not declare a creation timestamp. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-28T08:48:53.884Z |
 | PostHog/posthog-js | [issue 1699](https://github.com/PostHog/posthog-js/issues/1699) | Valid feature-flag API gap: the browser SDK exposes no public awaitable reload operation. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-27T08:36:04.147Z |
 | PostHog/posthog-js | [issue 2012](https://github.com/PostHog/posthog-js/issues/2012) | Valid feature request, but the proposed browser and React APIs need an explicit asynchronous, isolated-evaluation contract before implementation. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-26T08:37:05.219Z |
 | PostHog/posthog-js | [issue 2141](https://github.com/PostHog/posthog-js/issues/2141) | Valid Node SDK feature gap, although the existing person-property APIs can already support the enrollment portion of the invitation-email workflow. | enhancement, feature, feature/flags, team/feature-flags, node |  | no | 2026-09-26T08:35:46.397Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 3956](https://github.com/PostHog/posthog-js/issues/3956) | Valid React Native mobile logs feature request; keep open for demand/design. | enhancement, feature, feature/mobile, react-native, iOS, Android, team/logs |  | no | 2026-06-24T17:34:12.357Z |
 | PostHog/posthog-js | [issue 3950](https://github.com/PostHog/posthog-js/issues/3950) | Valid bug: the no-external full module bundle cannot load the toolbar because the toolbar still depends on an external toolbar.js loader. | feature/toolbar, web |  | no | 2026-06-24T15:24:14.075Z |
 | PostHog/posthog-js | [issue 2383](https://github.com/PostHog/posthog-js/issues/2383) | Likely already fixed in current @posthog/nextjs-config via CSS sourcemap processing | frameworks/next-js, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/3949 | no | 2026-06-24T13:09:44.107Z |
-| PostHog/posthog-js | [issue 2036](https://github.com/PostHog/posthog-js/issues/2036) | Valid selector-trigger survey lifecycle bug; keep open. | feature/surveys |  | no | 2026-06-24T12:28:14.000Z |
