@@ -107,6 +107,10 @@ describe('MCP analytics defaults', () => {
     expect(capture.findCapturesByEvent('$mcp_tool_call')[0].properties.$mcp_server_build).toBe('abc123')
   })
 
+  it('rejects a server build that cannot be recorded exactly', () => {
+    expect(() => fresh({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
+  })
+
   it.each(['transport', 'token'] as const)(
     'preserves a carried %s session until the agent echoes a handle',
     async (source) => {

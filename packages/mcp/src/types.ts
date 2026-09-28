@@ -97,7 +97,8 @@ export interface MCPAnalyticsOptions {
   /**
    * Exact server build identifier → `$mcp_server_build`. Use an immutable
    * deployment value such as a Git commit SHA or container image digest.
-   * MCP does not advertise this value, so the host must supply it.
+   * MCP does not advertise this value, so the host must supply it. The value
+   * must contain 1 to 256 characters.
    */
   serverBuild?: string
   /**

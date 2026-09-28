@@ -185,6 +185,21 @@ describe('buildPostHogCaptureEvents', () => {
     })
   })
 
+  it('keeps the configured server build authoritative on primary and exception events', () => {
+    const events = buildPostHogCaptureEvents(
+      makeEvent({
+        isError: true,
+        error: makeError('boom'),
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+    )
+
+    expect(events).toHaveLength(2)
+    for (const event of events) {
+      expect(event.properties.$mcp_server_build).toBe('abc123')
+    }
+  })
+
   it('does not build an $exception event when isError is false', () => {
     const events = buildPostHogCaptureEvents(makeEvent({ isError: false }))
 

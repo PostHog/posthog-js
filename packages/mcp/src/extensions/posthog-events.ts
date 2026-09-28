@@ -69,6 +69,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
 
   addCommonEventProperties(event, properties)
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: event.eventName ?? BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
@@ -139,9 +140,6 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   }
   if (event.duration !== undefined) {
     properties[PostHogMCPAnalyticsProperty.DurationMs] = event.duration
-  }
-  if (event.serverBuild) {
-    properties[PostHogMCPAnalyticsProperty.ServerBuild] = event.serverBuild
   }
   if (event.serverName) {
     properties[PostHogMCPAnalyticsProperty.ServerName] = event.serverName
@@ -222,6 +220,12 @@ function addCustomEventProperties(event: Event, properties: Record<string, unkno
   }
 }
 
+function addServerBuildProperty(event: Event, properties: Record<string, unknown>): void {
+  if (event.serverBuild) {
+    properties[PostHogMCPAnalyticsProperty.ServerBuild] = event.serverBuild
+  }
+}
+
 function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
@@ -250,9 +254,6 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   if (event.toolCategory && event.eventType === MCPAnalyticsEventType.mcpToolsCall) {
     properties[PostHogMCPAnalyticsProperty.ToolCategory] = event.toolCategory
   }
-  if (event.serverBuild) {
-    properties[PostHogMCPAnalyticsProperty.ServerBuild] = event.serverBuild
-  }
   if (event.serverName) {
     properties[PostHogMCPAnalyticsProperty.ServerName] = event.serverName
   }
@@ -276,6 +277,7 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
 
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: PostHogMCPAnalyticsEvent.Exception,

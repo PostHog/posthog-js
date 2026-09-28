@@ -54,6 +54,7 @@ import {
 import { McpEventSink } from './sink'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { deriveSessionIdFromConversation } from './session'
+import { validateServerBuild } from './server-build'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
 /**
@@ -63,7 +64,8 @@ import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 export interface PostHogMCPOptions extends PostHogOptions {
   /**
    * Exact server build identifier → `$mcp_server_build`. Use an immutable
-   * deployment value such as a Git commit SHA or container image digest.
+   * deployment value such as a Git commit SHA or container image digest. The
+   * value must contain 1 to 256 characters.
    */
   serverBuild?: string
   /**
@@ -160,6 +162,7 @@ export class PostHogMCP extends PostHog {
   readonly #analyticsParameterOwnership = new Map<string, AnalyticsParameterOwnership>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
+    const serverBuild = validateServerBuild(options.serverBuild)
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
     this.#feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
@@ -173,7 +176,7 @@ export class PostHogMCP extends PostHog {
     }
     this.#captureModel = options.captureModel
     this.#enableConversationId = options.enableConversationId ?? true
-    this.#serverBuild = options.serverBuild
+    this.#serverBuild = serverBuild
     applyMcpLibIdentity(this)
   }
 
