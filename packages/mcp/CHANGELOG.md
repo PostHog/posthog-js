@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.20.0
+
+### Minor Changes
+
+- [#5130](https://github.com/PostHog/posthog-js/pull/5130) [`4d58499`](https://github.com/PostHog/posthog-js/commit/4d584990e5d9e331193e07c4ccda1592d414abb1) Thanks [@gesh](https://github.com/gesh)! - Record declared input aliases in automatic MCP instrumentation.
+  (2026-09-28)
+
 ## 0.19.0
 
 ### Minor Changes
