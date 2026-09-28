@@ -6,9 +6,12 @@ import { formDataToQuery, getQueryParam, jsonStringify } from '@posthog/browser-
 import { logger } from '@posthog/browser-common/utils/logger'
 import {
     AbortController,
+    clearTimeout,
     CompressionStream,
     fetch,
     navigator,
+    setTimeout,
+    TimeoutID,
     XMLHttpRequest,
 } from '@posthog/browser-common/utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
@@ -340,7 +343,7 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
         headers.append('Content-Type', contentType)
     }
 
-    let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
+    let aborter: { signal: any; timeout: TimeoutID | undefined } | null = null
     // Set the instant our own timeout fires, before the abort propagates. This is the source of
     // truth for "we timed out ourselves" - see the `.catch` below for why we can't rely on the
     // abort reason.
