@@ -147,6 +147,38 @@ describe('error wrapping functions', () => {
                 colno: 13,
             })
         })
+
+        it('keeps the reported location when the Error carries no stack', () => {
+            // Safari reports an extension content script error with no stack and a masked URL.
+            // Without the location the exception has no frame, and the extension filter that runs
+            // later has nothing to test.
+            win.onerror = null
+            unwrap = wrapOnError(captureFn)
+            const error = new TypeError("undefined is not an object (evaluating 'message.response')")
+            error.stack = ''
+
+            win.onerror(error.message, 'webkit-masked-url://hidden/', 27, 33, error)
+
+            const exception = captureFn.mock.calls[0][0].$exception_list[0]
+            expect(exception.type).toBe('TypeError')
+            expect(exception.stacktrace?.frames?.[0]).toMatchObject({
+                filename: 'webkit-masked-url://hidden/',
+                in_app: false,
+                lineno: 27,
+            })
+        })
+
+        it('keeps the stack of an Error that has one', () => {
+            win.onerror = null
+            unwrap = wrapOnError(captureFn)
+            const error = new Error('boom')
+            error.stack = 'appCode@https://example.com/app.js:1:2'
+
+            win.onerror('boom', 'webkit-masked-url://hidden/', 27, 33, error)
+
+            const frames = captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames
+            expect(frames).toEqual([expect.objectContaining({ filename: 'https://example.com/app.js' })])
+        })
     })
 
     describe('wrapUnhandledRejection', () => {

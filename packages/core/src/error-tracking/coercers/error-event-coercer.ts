@@ -29,7 +29,14 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
 
   coerce(err: ErrorEventLike, ctx: CoercingContext): ExceptionLike {
     if (err.error != undefined) {
-      return ctx.apply(err.error)
+      const exceptionLike = ctx.apply(err.error)
+      if (exceptionLike.stack) {
+        return exceptionLike
+      }
+      // Safari hands `onerror` an extension content script error with no stack at all. The report
+      // still names the script, and that location is the only evidence of which script threw, so
+      // keep it rather than reporting the exception with no frame.
+      return { ...exceptionLike, stack: this._buildLocationStack(err) }
     }
 
     const exceptionLike = ctx.apply(err.message)

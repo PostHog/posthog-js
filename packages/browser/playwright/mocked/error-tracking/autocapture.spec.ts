@@ -221,6 +221,30 @@ test.describe('ErrorTracking autocapture', () => {
             ])
         })
 
+        test('should drop a stackless extension error reported with a masked location', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                const extensionError = new TypeError("undefined is not an object (evaluating 'message.response')")
+                extensionError.stack = ''
+                window.onerror?.(extensionError.message, 'webkit-masked-url://hidden/', 27, 33, extensionError)
+                const pageError = new TypeError('page error')
+                pageError.stack = 'pageCode@https://example.com/app.js:1:2'
+                window.onerror?.(pageError.message, 'https://example.com/app.js', 1, 2, pageError)
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].value).toBe('page error')
+            expect(events.countByName('$exception')).toBe(1)
+        })
+
         test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
