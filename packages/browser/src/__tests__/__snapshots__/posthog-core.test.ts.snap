@@ -146,7 +146,6 @@ exports[`posthog core > capture() > produces a representative custom event captu
     "$pathname": "/",
     "$process_person_profile": false,
     "$raw_user_agent": "<user-agent>",
-    "$recording_status": "disabled",
     "$referrer": "https://referrer.com",
     "$referring_domain": "referrer.com",
     "$screen_height": 0,

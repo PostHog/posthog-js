@@ -100,12 +100,28 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$sess_rec_flush_size',
 ])
 
-const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS].filter(
+// were event-visible before; now hidden and added by SessionRecording.sdkDebugProperties instead
+const REPLAY_DEBUG_SESSION_KEYS = new Set([
+    '$sdk_debug_recording_script_not_loaded',
+    '$sdk_debug_replay_stale_config',
+    '$sdk_debug_replay_event_trigger_status',
+    '$sdk_debug_replay_linked_flag_trigger_status',
+    '$sdk_debug_replay_matched_recording_trigger_groups',
+    '$sdk_debug_replay_pending_trigger_conditions',
+    '$sdk_debug_replay_remote_trigger_matching_config',
+    '$sdk_debug_replay_trigger_groups_count',
+    '$sdk_debug_replay_url_trigger_status',
+])
+
+const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS, ...REPLAY_DEBUG_SESSION_KEYS].filter(
     (key) => key !== ENABLED_FEATURE_FLAGS
 )
 
 const LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS = Object.keys(PERSISTENCE_KEY_POLICY).filter(
-    (key) => key !== ENABLED_FEATURE_FLAGS && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+    (key) =>
+        key !== ENABLED_FEATURE_FLAGS &&
+        !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key) &&
+        !REPLAY_DEBUG_SESSION_KEYS.has(key)
 )
 
 function makePostHogConfig(name: string, persistenceMode: string): PostHogConfig {

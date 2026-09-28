@@ -30,7 +30,6 @@ exports[`PostHog final decoded request envelopes > serializes complete enriched 
         "$pathname": "/",
         "$process_person_profile": false,
         "$raw_user_agent": "<user-agent>",
-        "$recording_status": "disabled",
         "$referrer": "$direct",
         "$referring_domain": "$direct",
         "$screen_height": 0,

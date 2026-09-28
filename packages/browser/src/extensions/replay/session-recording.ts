@@ -1,7 +1,14 @@
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
     SDK_DEBUG_REPLAY_STALE_CONFIG,
+    SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -39,6 +46,20 @@ import type { Extension } from '../types'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
+
+// replay state that is stored for the session but hidden from event properties, so it goes on
+// only the events that get replay debug properties
+const SESSION_DEBUG_PROPERTY_KEYS = [
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
+    SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
+    SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
+    SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
+]
 
 const hasDocumentEverBeenVisible = (): boolean => {
     if (!document?.visibilityState || document.visibilityState === 'visible') {
@@ -465,11 +486,17 @@ export class SessionRecording implements Extension {
      * when looking at the event feed for a session
      */
     get sdkDebugProperties(): Properties {
-        return (
-            this._lazyLoadedSessionRecording?.sdkDebugProperties || {
-                $recording_status: this.status,
+        const properties: Properties = {}
+        for (const key of SESSION_DEBUG_PROPERTY_KEYS) {
+            const value = this._instance.sessionPersistence?.get_property(key)
+            if (!isUndefined(value)) {
+                properties[key] = value
             }
-        )
+        }
+        return {
+            ...properties,
+            ...(this._lazyLoadedSessionRecording?.sdkDebugProperties || { $recording_status: this.status }),
+        }
     }
 
     /**
