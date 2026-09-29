@@ -1,8 +1,10 @@
+import type { Mock as VitestMock } from 'vitest'
 import { gzipSync, strToU8 } from 'fflate'
+import { gunzipSync } from 'node:zlib'
 
 type SetupOptions = {
     gzipSupported: boolean
-    gzipCompress?: vi.Mock
+    gzipCompress?: VitestMock
 }
 
 const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
@@ -93,18 +95,21 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
     )
 
     const simpleEventEmitter = new SimpleEventEmitter()
-    const posthog = {
+    const posthog = createMockPostHog({
         get_property: (propertyKey: string) => persistence.props[propertyKey],
         config,
         capture: vi.fn(),
         persistence,
         sessionManager,
-        requestRouter: new RequestRouter({ config } as any),
-        consent: { isOptedOut: () => false },
+        requestRouter: new RequestRouter(createMockPostHog({ config })),
         register_for_session: vi.fn(),
         _internalEventEmitter: simpleEventEmitter,
         on: vi.fn((event, cb) => simpleEventEmitter.on(event, cb)),
-    }
+    })
+
+    const { ConsentManager } = await import('../../../consent')
+    posthog.consent = new ConsentManager(posthog)
+    vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(false)
 
     let emit: (event: any) => void = () => {}
     const stopRrweb = vi.fn()
@@ -142,7 +147,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         emit: context.emit as (event: any) => void,
         posthog: context.posthog,
         lazyLoadedSessionRecording: context.lazyLoadedSessionRecording,
-        stopRrweb: context.stopRrweb as vi.Mock,
+        stopRrweb: context.stopRrweb as VitestMock,
         assignableWindow: context.assignableWindow,
     }
 }
@@ -205,6 +210,14 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         lazyLoadedSessionRecording['_flushBuffer']()
 
+        const snapshot = posthog.capture.mock.calls
+            .filter(([event]: any[]) => event === '$snapshot')
+            .flatMap(([, properties]: any[]) => properties.$snapshot_data)
+            .find((event: any) => event.type === 2)
+        expect(snapshot).toBeDefined()
+        expect(JSON.parse(gunzipSync(new Uint8Array(Buffer.from(snapshot.data, 'binary'))).toString('utf8'))).toEqual({
+            content: testCase.content,
+        })
         const expectedSnapshotData = [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })]
         if (testCase.shouldQueueCustomEvent) {
             expectedSnapshotData.push(createCustomSnapshot() as any)

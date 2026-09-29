@@ -190,6 +190,11 @@ function runAttributionOracle(
 
     const oldBatches = batches.filter((b) => b.sessionId === oldSessionId)
     const newBatches = batches.filter((b) => b.sessionId === newSessionId)
+    expect(batches.every((b) => [oldSessionId, newSessionId].includes(b.sessionId))).toBe(true)
+    expect(
+        newBatches.flatMap((b) => b.events).filter((e) => e.timestamp < rotationTime - ROTATION_SLACK_MS),
+        `pre-rotation events attributed to NEW session${evidence()}`
+    ).toEqual([])
 
     expect(oldBatches.length, `expected old-session batches${evidence()}`).toBeGreaterThan(0)
     expect(newBatches.length, `expected new-session batches${evidence()}`).toBeGreaterThan(0)
@@ -220,7 +225,7 @@ function runAttributionOracle(
     // a NEW-session batch contains a FullSnapshot within 2s of rotation
     const newSessionFullSnapshots = newBatches.flatMap((b) => b.events.filter((e) => e.type === 2))
     const timelyFullSnapshot = newSessionFullSnapshots.find(
-        (e) => e.timestamp <= rotationTime + FULL_SNAPSHOT_DEADLINE_MS
+        (e) => e.timestamp >= rotationTime && e.timestamp <= rotationTime + FULL_SNAPSHOT_DEADLINE_MS
     )
     expect(
         timelyFullSnapshot,

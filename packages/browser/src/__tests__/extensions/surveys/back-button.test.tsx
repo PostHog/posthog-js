@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
@@ -13,7 +14,7 @@ vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOrig
     dismissedSurveyEvent: vi.fn(),
 }))
 
-const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as VitestMock
 
 vi.mock('@posthog/browser-common/utils/uuidv7')
 
@@ -53,9 +54,9 @@ const baseSurvey: Survey = {
     schedule: null,
 }
 
-const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
-const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
-const mockedUuidv7 = uuid.uuidv7 as vi.Mock
+const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as VitestMock
+const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as VitestMock
+const mockedUuidv7 = uuid.uuidv7 as VitestMock
 
 describe('Surveys: back button', () => {
     beforeEach(() => {

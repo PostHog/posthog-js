@@ -1,3 +1,4 @@
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 import {
     filterActiveFeatureFlags,
     parseFlagsResponse as normalizeFlagsResponse,
@@ -6,10 +7,12 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { assignableWindow } from '../utils/globals'
 import { BrowserClientAdapter } from '../extensions/browser-client'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
-import { isNumber, isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
+import { isArray, isNumber, isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
+import type { PostHog } from '../posthog-core'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -23,6 +26,10 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
 }))
 
 vi.useFakeTimers()
+afterEach(() => {
+    vi.clearAllTimers()
+    assignableWindow.POSTHOG_DEBUG = false
+})
 vi.spyOn(global, 'setTimeout')
 
 const expectedFeatureFlagDebugMessages = new Set([
@@ -190,7 +197,7 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
-        window.POSTHOG_DEBUG = true
+        assignableWindow.POSTHOG_DEBUG = true
         mockExpectedFeatureFlagDebugLogs()
 
         const internalEventEmitter = new SimpleEventEmitter()
@@ -219,6 +226,7 @@ describe('featureflags', () => {
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
+        instance.persistence.clear()
         featureFlags = createFeatureFlags(instance)
 
         vi.spyOn(instance, 'capture').mockReturnValue(undefined)
@@ -242,6 +250,13 @@ describe('featureflags', () => {
         })
 
         instance.persistence.unregister('$flag_call_reported')
+    })
+
+    afterEach(() => {
+        featureFlags.dispose()
+        instance.persistence?.clear()
+        instance.persistence?.destroy()
+        vi.clearAllTimers()
     })
 
     it('should return flags from persistence even if /flags endpoint was not hit', () => {
@@ -824,14 +839,15 @@ describe('featureflags', () => {
                     { suppressWarning: true }
                 )
 
-                expect(window.console.warn).not.toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flags!'
-                )
                 expect(featureFlags.getFlagVariants()).toEqual({
                     'beta-feature': true,
                     'alpha-feature-2': false,
                 })
+                expect(
+                    mockWarn.mock.calls.filter(
+                        ([, message]) => typeof message === 'string' && message.startsWith(' Overriding feature flag')
+                    )
+                ).toEqual([])
             })
 
             it('shows deprecation warning', () => {
@@ -871,14 +887,15 @@ describe('featureflags', () => {
                     suppressWarning: true,
                 })
 
-                expect(window.console.warn).not.toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flags!'
-                )
                 expect(featureFlags.getFlagVariants()).toEqual({
                     'beta-feature': true,
                     'alpha-feature-2': false,
                 })
+                expect(
+                    mockWarn.mock.calls.filter(
+                        ([, message]) => typeof message === 'string' && message.startsWith(' Overriding feature flag')
+                    )
+                ).toEqual([])
             })
 
             it('supports basic flag details overrides with warning behavior', () => {
@@ -940,10 +957,6 @@ describe('featureflags', () => {
                     suppressWarning: true,
                 })
 
-                expect(window.console.warn).not.toHaveBeenCalledWith(
-                    '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flags!'
-                )
                 expect(featureFlags.getFeatureFlagDetails('alpha-feature-2')).toEqual({
                     key: 'alpha-feature-2',
                     enabled: false,
@@ -952,6 +965,11 @@ describe('featureflags', () => {
                     reason: undefined,
                     metadata: { payload: 200 },
                 })
+                expect(
+                    mockWarn.mock.calls.filter(
+                        ([, message]) => typeof message === 'string' && message.startsWith(' Overriding feature flag')
+                    )
+                ).toEqual([])
             })
 
             it('supports payload overrides', () => {
@@ -971,7 +989,8 @@ describe('featureflags', () => {
 
                 expect(window.console.warn).not.toHaveBeenCalledWith(
                     '[PostHog.js] [FeatureFlags]',
-                    ' Overriding feature flag payloads!'
+                    ' Overriding feature flag payloads!',
+                    expect.any(Object)
                 )
 
                 // Test without suppressing warning
@@ -1238,7 +1257,7 @@ describe('featureflags', () => {
         })
 
         describe('callback behavior', () => {
-            let callbackSpy: vi.Mock
+            let callbackSpy: VitestMock
 
             beforeEach(() => {
                 callbackSpy = vi.fn()
@@ -1914,10 +1933,11 @@ describe('featureflags', () => {
         })
 
         it('getEarlyAccessFeatures requests early access features if not present', async () => {
-            featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-            })
+            const callback1 = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback1)
             await vi.runAllTimersAsync()
+            expect(callback1).toHaveBeenCalledTimes(1)
+            expect(callback1).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
 
             expect(instance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -1941,18 +1961,20 @@ describe('featureflags', () => {
             )
 
             // request again, shouldn't call _send_request again
-            featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-            })
+            const callback2 = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback2)
             await vi.runAllTimersAsync()
+            expect(callback2).toHaveBeenCalledTimes(1)
+            expect(callback2).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
         it('getEarlyAccessFeatures force reloads early access features when asked to', async () => {
-            featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-            })
+            const callback1 = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback1)
             await vi.runAllTimersAsync()
+            expect(callback1).toHaveBeenCalledTimes(1)
+            expect(callback1).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
 
             expect(instance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -1976,21 +1998,20 @@ describe('featureflags', () => {
             )
 
             // request again, should call _send_request because we're forcing a reload
-            featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
-            }, true)
+            const callback2 = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback2, true)
             await vi.runAllTimersAsync()
+            expect(callback2).toHaveBeenCalledTimes(1)
+            expect(callback2).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_SECOND])
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('getEarlyAccessFeatures can request specific stages', () => {
-            featureFlags.getEarlyAccessFeatures(
-                (data) => {
-                    expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-                },
-                false,
-                ['concept', 'beta']
-            )
+        it('getEarlyAccessFeatures can request specific stages', async () => {
+            const callback = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback, false, ['concept', 'beta'])
+            await vi.runAllTimersAsync()
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
 
             expect(instance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -2041,10 +2062,11 @@ describe('featureflags', () => {
             ]
             const registerSpy = vi.spyOn(instance.persistence, 'register')
 
-            featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-            }, true)
+            const callback = vi.fn()
+            featureFlags.getEarlyAccessFeatures(callback, true)
             await vi.runAllTimersAsync()
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
 
             expect(registerSpy).toHaveBeenCalledWith({
                 $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
@@ -2055,34 +2077,21 @@ describe('featureflags', () => {
             )
         })
 
-        it('getEarlyAccessFeatures handles persistence absence gracefully', () => {
-            // Save original get_property function
+        it('getEarlyAccessFeatures handles persistence absence gracefully', async () => {
+            const originalPersistence = instance.persistence
             const originalGetProperty = instance.get_property
-
-            // Remove persistence and update get_property to handle undefined persistence
+            const callback = vi.fn()
             instance.persistence = undefined
-            instance.get_property = (key) => {
-                if (!instance.persistence) {
-                    return undefined
-                }
-                return originalGetProperty.call(instance, key)
-            }
-
-            // Should not throw error
-            expect(() => {
-                featureFlags.getEarlyAccessFeatures((data) => {
-                    expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
-                }, true)
-            }).not.toThrow()
-
-            expect(instance._send_request).toHaveBeenCalled()
-
-            // Restore persistence for afterEach cleanup
-            instance.persistence = {
-                props: {},
-                register: vi.fn(),
-                unregister: vi.fn(),
-                clear: vi.fn(),
+            instance.get_property = () => undefined
+            try {
+                expect(() => featureFlags.getEarlyAccessFeatures(callback, true)).not.toThrow()
+                await vi.runAllTimersAsync()
+                expect(instance._send_request).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
+            } finally {
+                instance.persistence = originalPersistence
+                instance.get_property = originalGetProperty
             }
         })
 
@@ -3141,39 +3150,54 @@ describe('featureflags', () => {
             })
         })
 
-        it('should call onFeatureFlags with existing flags on timeouts', async () => {
-            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
-                callback({
-                    statusCode: 0,
-                    text: '',
+        it.each(['network', 'timeout'])(
+            'calls onFeatureFlags with existing flags after %s failure',
+            async (failure) => {
+                instance.config.feature_flag_request_max_retries = 1
+                instance._send_request = vi.fn().mockImplementation(({ callback }) =>
+                    callback({
+                        statusCode: 0,
+                        text: '',
+                        error:
+                            failure === 'timeout'
+                                ? Object.assign(new Error('timed out'), { name: 'AbortError' })
+                                : undefined,
+                    })
+                )
+
+                let called = false
+                let callbackCount = 0
+                let _flags = []
+                let _variants = {}
+                let _errors = undefined
+
+                featureFlags.onFeatureFlags((flags, variants, errors) => {
+                    called = true
+                    callbackCount++
+                    _flags = flags
+                    _variants = variants
+                    _errors = errors?.errorsLoading
                 })
-            )
+                expect(called).toEqual(false)
 
-            let called = false
-            let _flags = []
-            let _variants = {}
-            let _errors = undefined
+                featureFlags.reloadFeatureFlags()
 
-            featureFlags.onFeatureFlags((flags, variants, errors) => {
-                called = true
-                _flags = flags
-                _variants = variants
-                _errors = errors?.errorsLoading
-            })
-            expect(called).toEqual(false)
-
-            featureFlags.reloadFeatureFlags()
-
-            await vi.runAllTimersAsync()
-            expect(called).toEqual(true)
-            expect(_errors).toEqual(true)
-            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
-            expect(_variants).toEqual({
-                'beta-feature': true,
-                'alpha-feature-2': true,
-                'multivariate-flag': 'variant-1',
-            })
-        })
+                await vi.runAllTimersAsync()
+                expect(called).toEqual(true)
+                expect(callbackCount).toBe(1)
+                expect(instance._send_request).toHaveBeenCalledTimes(failure === 'timeout' ? 2 : 1)
+                expect(instance.persistence.get_property('$feature_flag_errors')).toEqual([
+                    failure === 'timeout' ? FeatureFlagError.TIMEOUT : FeatureFlagError.apiError(0),
+                ])
+                expect(_errors).toEqual(true)
+                expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+                expect(_variants).toEqual({
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                })
+            }
+        )
     })
 
     describe('Feature Flag Request ID and Evaluated At', () => {
@@ -3467,7 +3491,7 @@ describe('parseFlagsResponse', () => {
     let persistence
 
     beforeEach(() => {
-        window.POSTHOG_DEBUG = true
+        assignableWindow.POSTHOG_DEBUG = true
         persistence = { register: vi.fn(), unregister: vi.fn() }
     })
 
@@ -3514,7 +3538,9 @@ describe('parseFlagsResponse', () => {
                     'beta-feature': {
                         key: 'beta-feature',
                         enabled: true,
-                        metadata: { payload: false },
+                        variant: undefined,
+                        reason: undefined,
+                        metadata: { id: 1, version: 1, description: undefined, payload: false },
                     },
                 },
             },
@@ -3971,8 +3997,14 @@ describe('getRemoteConfigPayload', () => {
     let instance: PostHog
     let featureFlags: PostHogFeatureFlags
 
+    const getRequestData = () => {
+        const data = vi.mocked(instance._send_request).mock.calls[0][0].data
+        if (!data || isArray(data)) throw new Error('Expected a single flags request')
+        return data
+    }
+
     beforeEach(() => {
-        window.POSTHOG_DEBUG = true
+        assignableWindow.POSTHOG_DEBUG = true
         instance = createMockPostHog({
             config: {
                 token: 'test-token',
@@ -3980,11 +4012,10 @@ describe('getRemoteConfigPayload', () => {
             } as PostHogConfig,
             get_distinct_id: () => 'test-distinct-id',
             _send_request: vi.fn(),
-            requestRouter: {
-                endpointFor: vi.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
-            },
+            requestRouter: new RequestRouter(createMockPostHog()),
         })
 
+        vi.spyOn(instance.requestRouter, 'endpointFor').mockImplementation((endpoint, path) => `${endpoint}${path}`)
         featureFlags = createFeatureFlags(instance)
     })
 
@@ -3994,7 +4025,7 @@ describe('getRemoteConfigPayload', () => {
         const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
-        const requestData = instance._send_request.mock.calls[0][0].data
+        const requestData = getRequestData()
         expect(requestData.person_properties).toEqual({
             $lib: 'web',
             $lib_version: expect.any(String),
@@ -4039,9 +4070,9 @@ describe('getRemoteConfigPayload', () => {
         )
 
         if (isUndefined(expectedFlagKeys)) {
-            expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('flag_keys')
+            expect(getRequestData()).not.toHaveProperty('flag_keys')
         } else {
-            expect(instance._send_request.mock.calls[0][0].data.flag_keys).toEqual(expectedFlagKeys)
+            expect(getRequestData().flag_keys).toEqual(expectedFlagKeys)
         }
     })
 
@@ -4107,7 +4138,7 @@ describe('getRemoteConfigPayload', () => {
         )
 
         // Verify evaluation_contexts is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+        expect(getRequestData().evaluation_contexts).toBeUndefined()
     })
 
     it('should not include evaluation_contexts when configured as empty array', () => {
@@ -4128,7 +4159,7 @@ describe('getRemoteConfigPayload', () => {
         )
 
         // Verify evaluation_contexts is not in the data
-        expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBeUndefined()
+        expect(getRequestData().evaluation_contexts).toBeUndefined()
     })
 
     it('should support deprecated evaluation_environments field', () => {
@@ -4387,7 +4418,7 @@ describe('updateFlags', () => {
 
         posthog.updateFlags({ 'test-flag': true })
 
-        expect(posthog.featureFlags._hasLoadedFlags).toBe(true)
+        expect(posthog.featureFlags.hasLoadedFlags).toBe(true)
     })
 
     it('should work with advanced_disable_flags enabled', async () => {
@@ -4401,12 +4432,26 @@ describe('updateFlags', () => {
     })
 
     it('should not make any network requests', async () => {
-        const posthog = await createPosthogInstance()
-        const sendRequestSpy = vi.spyOn(posthog, '_send_request')
-
-        posthog.updateFlags({ 'test-flag': true })
-
-        expect(sendRequestSpy).not.toHaveBeenCalled()
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_feature_flags_on_first_load: true,
+            remote_config_refresh_interval_ms: 0,
+        })
+        await vi.advanceTimersByTimeAsync(100)
+        const sendRequestSpy = vi.spyOn(posthog, '_send_request').mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200, json: { featureFlags: {} } })
+        })
+        try {
+            posthog.updateFlags({ 'test-flag': true })
+            await vi.advanceTimersByTimeAsync(100)
+            expect(sendRequestSpy).not.toHaveBeenCalled()
+            expect(posthog.getFeatureFlag('test-flag', { send_event: false })).toBe(true)
+            posthog.reloadFeatureFlags()
+            await vi.advanceTimersByTimeAsync(100)
+            expect(sendRequestSpy).toHaveBeenCalledTimes(1)
+        } finally {
+            sendRequestSpy.mockRestore()
+            posthog.featureFlags.dispose()
+        }
     })
 
     it('should handle empty flags object', async () => {
@@ -4425,7 +4470,7 @@ describe('updateFlags', () => {
     })
 
     it('should persist flags to storage', async () => {
-        const posthog = await createPosthogInstance()
+        const posthog = await createPosthogInstance(undefined, { persistence: 'localStorage' })
 
         posthog.updateFlags(
             { 'persisted-flag': true, 'variant-flag': 'control' },
@@ -4459,13 +4504,31 @@ describe('updateFlags', () => {
             'variant-flag': 'control',
         })
         expect(posthog.persistence?.props.$active_feature_flags).toEqual(['persisted-flag', 'variant-flag'])
+        const reader = new PostHogPersistence(posthog.config)
+        expect(reader.get_property('$enabled_feature_flags')).toEqual({
+            'persisted-flag': true,
+            'variant-flag': 'control',
+        })
+        expect(reader.get_property('$active_feature_flags')).toEqual(['persisted-flag', 'variant-flag'])
+        expect(reader.get_property('$feature_flag_details')).toEqual({
+            'persisted-flag': {
+                key: 'persisted-flag',
+                enabled: true,
+                metadata: { id: 0, payload: { data: 'test' } },
+            },
+            'variant-flag': { key: 'variant-flag', enabled: true, variant: 'control' },
+        })
+        reader.destroy()
+        posthog.persistence?.clear()
+        posthog.persistence?.destroy()
+        posthog.featureFlags.dispose()
     })
 })
 
 describe('$feature_flag_error tracking', () => {
     let instance: any
     let featureFlags: PostHogFeatureFlags
-    let mockWarn: vi.SpyInstance
+    let mockWarn: VitestSpyInstance
 
     const config = {
         token: 'random fake token',
@@ -4501,7 +4564,7 @@ describe('$feature_flag_error tracking', () => {
 
     afterEach(() => {
         mockWarn.mockRestore()
-        delete window.POSTHOG_DEBUG
+        delete assignableWindow.POSTHOG_DEBUG
         vi.clearAllMocks()
     })
 
@@ -4576,7 +4639,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should set $feature_flag_error to quota_limited when quota limited', async () => {
-        window.POSTHOG_DEBUG = true
+        assignableWindow.POSTHOG_DEBUG = true
         instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4824,7 +4887,7 @@ describe('$feature_flag_error tracking', () => {
 
     describe('feature flag cache TTL', () => {
         beforeEach(() => {
-            window.POSTHOG_DEBUG = true
+            assignableWindow.POSTHOG_DEBUG = true
 
             // Set up flags in persistence for TTL tests
             instance.persistence.register({
@@ -4846,7 +4909,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: twoHoursAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             expect(featureFlags.getFeatureFlag('beta-feature')).toBeUndefined()
             expect(mockWarn).toHaveBeenCalledWith(
@@ -4865,7 +4928,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: thirtyMinutesAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
         })
@@ -4880,7 +4943,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: oneYearAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             // Should still return flag value since TTL is not configured
             expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
@@ -4896,7 +4959,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: oneYearAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             // Should still return flag value since TTL is disabled
             expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(true)
@@ -4909,7 +4972,7 @@ describe('$feature_flag_error tracking', () => {
             // No evaluated_at set
             instance.persistence.unregister('$feature_flag_evaluated_at')
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             expect(featureFlags.getFeatureFlag('beta-feature')).toBeUndefined()
             expect(mockWarn).toHaveBeenCalledWith(
@@ -4928,7 +4991,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: twoHoursAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             expect(featureFlags.getFeatureFlagResult('beta-feature')).toBeUndefined()
         })
@@ -4945,7 +5008,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: twoHoursAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             // First call should trigger reload
             featureFlags.getFeatureFlag('beta-feature')
@@ -4970,7 +5033,7 @@ describe('$feature_flag_error tracking', () => {
                 $feature_flag_evaluated_at: twoHoursAgo,
             })
 
-            featureFlags._hasLoadedFlags = true
+            featureFlags['_hasLoadedFlags'] = true
 
             // First stale detection triggers reload
             featureFlags.getFeatureFlag('beta-feature')
@@ -5226,7 +5289,7 @@ describe('minimal $feature_flag_called events', () => {
     it('keeps sending minimal events after a reload backed by the same persistence', async () => {
         const persistenceName = `reload-test-${uuidv7()}`
         const { posthog: firstInstance } = await createInstanceWithCapturedEvents({
-            persistence: 'localstorage',
+            persistence: 'localStorage',
             persistence_name: persistenceName,
         })
         // First page load receives the gated flags but never evaluates them.
@@ -5237,7 +5300,7 @@ describe('minimal $feature_flag_called events', () => {
         // Simulated reload: fresh instance backed by the same persisted state, no flags response.
         const events: any[] = []
         const reloadedInstance = await createPosthogInstance(undefined, {
-            persistence: 'localstorage',
+            persistence: 'localStorage',
             persistence_name: persistenceName,
             advanced_disable_feature_flags: true,
             before_send: (event) => {

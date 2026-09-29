@@ -7,12 +7,15 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { EVENT_IDENTIFY, USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin, setupSegmentIntegration } from '../extensions/segment-integration'
-import { PostHog } from '../posthog-core'
+import { PostHog, init_as_module } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
+
+init_as_module()
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
@@ -27,12 +30,16 @@ const initPostHogInAPromise = (
 ): Promise<PostHog> => {
     return new Promise((resolve) => {
         return new PostHog().init(
-            `test-token`,
+            posthogName,
             {
                 persistence: `localStorage`,
                 api_host: `https://test.com`,
                 segment: segment,
-                loaded: resolve,
+                loaded: (instance) => {
+                    instances.push(instance as PostHog)
+                    resolve(instance as PostHog)
+                },
+                before_send: () => null,
                 disable_surveys: true,
                 // want to avoid flags code logging during tests
                 advanced_disable_feature_flags: true,
@@ -43,8 +50,11 @@ const initPostHogInAPromise = (
     })
 }
 
-// sometimes flakes because of unexpected console.logs
-vi.setConfig({ retry: 6 })
+const instances: PostHog[] = []
+afterEach(async () => {
+    await Promise.all(instances.splice(0).map((instance) => instance.shutdown()))
+    vi.restoreAllMocks()
+})
 
 describe(`Segment integration`, () => {
     let segment: any
@@ -54,11 +64,13 @@ describe(`Segment integration`, () => {
     vi.setConfig({ testTimeout: 500 })
 
     beforeEach(() => {
+        segmentIntegration = undefined as unknown as SegmentPlugin
+        posthogName = uuidv7()
         // Clear localStorage to avoid state leakage between tests
         localStorage.clear()
 
         assignableWindow._POSTHOG_REMOTE_CONFIG = {
-            'test-token': {
+            [posthogName]: {
                 config: {},
                 siteApps: [],
             },
@@ -91,7 +103,7 @@ describe(`Segment integration`, () => {
         }
 
         // logging of network requests during init causes this to flake
-        console.error = vi.fn()
+        vi.spyOn(console, 'error').mockImplementation(() => {})
     })
 
     it('should call loaded after the segment integration has been set up', async () => {
@@ -129,7 +141,7 @@ describe(`Segment integration`, () => {
         expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
         expect(posthog.get_distinct_id()).toBe(initialDistinctId)
 
-        const enrichedContext = runtimeIntegration!.track!({
+        const enrichedContext = await runtimeIntegration!.track!({
             event: {
                 event: 'Runtime Segment Event',
                 userId: 'test-id',
@@ -246,7 +258,7 @@ describe(`Segment integration`, () => {
             },
         } as unknown as SegmentContext
 
-        expect(segmentIntegration.track!(context).event.properties).toEqual({
+        expect((await segmentIntegration.track!(context)).event.properties).toEqual({
             $session_id: 'session-id',
             added_by_first_filter: true,
             customer_metadata: customerMetadata,
@@ -279,7 +291,7 @@ describe(`Segment integration`, () => {
             },
         } as unknown as SegmentContext
 
-        expect(segmentIntegration.track!(context).event.properties).toBe(properties)
+        expect((await segmentIntegration.track!(context)).event.properties).toBe(properties)
         expect(filterProperties.mock.calls[0][0]).not.toHaveProperty('customer_metadata')
     })
 
@@ -308,7 +320,7 @@ describe(`Segment integration`, () => {
             },
         } as unknown as SegmentContext
 
-        expect(segmentIntegration.track!(context).event.properties).toBe(properties)
+        expect((await segmentIntegration.track!(context)).event.properties).toBe(properties)
         expect(customerMetadata).toEqual({ source: 'segment' })
         expect(filterProperties.mock.calls[0][0]).not.toHaveProperty('customer_metadata')
     })
@@ -332,8 +344,9 @@ describe(`Segment integration`, () => {
             },
         } as unknown as SegmentContext
 
-        const enrichedContext = segmentIntegration.track!(context)
+        const enrichedContext = await segmentIntegration.track!(context)
         const event = enrichedContext.event
+        expect(event.properties?.token).toBe(posthogName)
         expect(event.properties).toEqual(
             expect.objectContaining({
                 distinct_id: 'test-id',
@@ -354,6 +367,7 @@ describe(`Segment integration`, () => {
             ...event,
             properties: {
                 ...event.properties,
+                token: '<generated-token>',
                 $session_id: '<generated-session-id>',
                 $window_id: '<generated-window-id>',
                 $lib_version: '<sdk-version>',
@@ -368,8 +382,7 @@ describe(`Segment integration`, () => {
         }).toMatchSnapshot()
     })
 
-    // FIXME: Flaky test - fails on main branch, see issue tracking test isolation
-    it.skip('should handle the segment user being a promise', async () => {
+    it('should handle the segment user being a promise', async () => {
         segment.user = () =>
             Promise.resolve({
                 anonymousId: () => 'test-anonymous-id',
@@ -382,8 +395,7 @@ describe(`Segment integration`, () => {
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
     })
 
-    // FIXME: Flaky test - fails on main branch, see issue tracking test isolation
-    it.skip('should handle segment.identify after bootstrap', async () => {
+    it('should handle segment.identify after bootstrap', async () => {
         segment.user = () => ({
             anonymousId: () => 'test-anonymous-id',
             id: () => '',
@@ -394,17 +406,15 @@ describe(`Segment integration`, () => {
         expect(posthog.get_distinct_id()).not.toEqual('test-id')
         expect(posthog.persistence?.get_property(USER_STATE)).toEqual('anonymous')
 
-        if (segmentIntegration && segmentIntegration.identify) {
-            segmentIntegration.identify({
-                event: {
-                    event: '$identify',
-                    userId: 'distinguished user',
-                    anonymousId: 'anonymous segment user',
-                },
-            } as unknown as SegmentContext)
-
-            expect(posthog.get_distinct_id()).toEqual('distinguished user')
-            expect(posthog.persistence?.get_property(USER_STATE)).toEqual('identified')
-        }
+        expect(segmentIntegration?.identify).toEqual(expect.any(Function))
+        segmentIntegration.identify!({
+            event: {
+                event: '$identify',
+                userId: 'distinguished user',
+                anonymousId: 'anonymous segment user',
+            },
+        } as unknown as SegmentContext)
+        expect(posthog.get_distinct_id()).toEqual('distinguished user')
+        expect(posthog.persistence?.get_property(USER_STATE)).toEqual('identified')
     })
 })

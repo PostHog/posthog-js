@@ -1,4 +1,4 @@
-import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from '../request-queue'
+import { RequestQueue } from '../request-queue'
 import { QueuedRequestWithOptions } from '../types'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
@@ -6,35 +6,46 @@ const EPOCH = 1_600_000_000
 
 describe('RequestQueue', () => {
     describe('setting flush timeout', () => {
-        it('can override the flush timeout', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 1000 })
-            expect(queue['_flushTimeoutMs']).toEqual(1000)
-        })
+        const expectDeliveryAt = (queue: RequestQueue, interval: number) => {
+            const send = vi.spyOn(queue as any, '_sendRequest').mockImplementation(() => {})
+            queue.unload()
+            send.mockClear()
+            vi.useFakeTimers()
+            try {
+                queue.enqueue({ url: '/e', data: { event: 'interval-probe' } })
+                queue.enable()
+                vi.advanceTimersByTime(interval - 1)
+                expect(send).not.toHaveBeenCalled()
+                vi.advanceTimersByTime(1)
+                expect(send).toHaveBeenCalledTimes(1)
+                expect(send).toHaveBeenCalledWith(
+                    expect.objectContaining({ url: '/e', data: [{ event: 'interval-probe' }] }),
+                    undefined
+                )
+            } finally {
+                queue.unload()
+                send.mockRestore()
+                vi.useRealTimers()
+            }
+        }
 
-        it('defaults to 3000 when not configured', () => {
-            const queue = new RequestQueue(vi.fn(), {})
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('defaults to 3000 when no config', () => {
-            const queue = new RequestQueue(vi.fn())
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('cannot set below 250', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 249 })
-            expect(queue['_flushTimeoutMs']).toEqual(250)
-        })
-
-        it('cannot set above 5000', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 5001 })
-            expect(queue['_flushTimeoutMs']).toEqual(5000)
+        it.each([
+            ['explicit override', { flush_interval_ms: 1000 }, 1000],
+            ['empty config', {}, 3000],
+            ['omitted config', undefined, 3000],
+            ['lower clamp', { flush_interval_ms: 249 }, 250],
+            ['upper clamp', { flush_interval_ms: 5001 }, 5000],
+        ] as const)('delivers at the configured interval: %s', (_, config, expected) => {
+            const queue = new RequestQueue(vi.fn(), config)
+            expect(queue['_flushTimeoutMs']).toBe(expected)
+            expectDeliveryAt(queue, expected)
         })
 
         it('can be passed in from posthog config', async () => {
             const posthog = await createPosthogInstance('token', { request_queue_config: { flush_interval_ms: 1000 } })
             expect(posthog.config.request_queue_config.flush_interval_ms).toEqual(1000)
             expect(posthog['_requestQueue']['_flushTimeoutMs']).toEqual(1000)
+            expectDeliveryAt(posthog['_requestQueue'], 1000)
         })
     })
 

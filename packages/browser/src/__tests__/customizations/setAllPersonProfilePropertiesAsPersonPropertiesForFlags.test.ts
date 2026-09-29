@@ -18,7 +18,8 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         },
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             get referrer() {
                 return mockReferrerGetter()
             },
@@ -39,7 +40,12 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('setAllPersonPropertiesForFlags', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
     beforeEach(() => {
+        vi.spyOn(window.navigator, 'vendor', 'get').mockReturnValue('')
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
@@ -55,8 +61,8 @@ describe('setAllPersonPropertiesForFlags', () => {
         // assert
         expect(posthog.persistence?.props[STORED_PERSON_PROPERTIES_KEY]).toMatchInlineSnapshot(`
 {
-  "$browser": "Mobile Safari",
-  "$browser_version": null,
+  "$browser": "Firefox",
+  "$browser_version": 41,
   "$current_url": "https://example.com?utm_source=foo",
   "$device_type": "Mobile",
   "$os": "Android",

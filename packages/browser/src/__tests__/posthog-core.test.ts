@@ -27,11 +27,15 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockHostName,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             // Forwarding the mocked document's listener registration requires calling the DOM API directly.
-            // oxlint-disable-next-line posthog-js/no-add-event-listener
-            addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
-            removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
+            addEventListener: (...args: Parameters<typeof orig.document.addEventListener>) => {
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                return orig.document.addEventListener(...args)
+            },
+            removeEventListener: (...args: Parameters<typeof orig.document.removeEventListener>) =>
+                orig.document.removeEventListener(...args),
             get referrer() {
                 return mockReferrer()
             },
@@ -68,6 +72,11 @@ describe('posthog core', () => {
     })
 
     describe('posthog debug logging', () => {
+        const originalConsole = { error: console.error, log: console.log, warn: console.warn }
+        afterEach(() => {
+            Object.assign(console, originalConsole)
+        })
+
         beforeEach(() => {
             console.error = vi.fn()
             console.log = vi.fn()
@@ -75,7 +84,7 @@ describe('posthog core', () => {
         })
 
         it('log when setting debug to false', () => {
-            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false }, uuidv7())!
             posthog.debug(false)
             expect(console.error).not.toHaveBeenCalled()
             expect(console.warn).not.toHaveBeenCalled()
@@ -83,7 +92,7 @@ describe('posthog core', () => {
         })
 
         it('log when setting debug to undefined', () => {
-            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false }, uuidv7())!
             posthog.debug()
             expect(console.log).toHaveBeenCalledWith(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
@@ -91,7 +100,7 @@ describe('posthog core', () => {
         })
 
         it('log when setting debug to true', () => {
-            const posthog = defaultPostHog().init(uuidv7(), { debug: false })!
+            const posthog = defaultPostHog().init(uuidv7(), { debug: false }, uuidv7())!
             posthog.debug(true)
             expect(console.log).toHaveBeenCalledWith(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
@@ -1188,37 +1197,45 @@ describe('posthog core', () => {
     })
 
     describe('_execute_array and push re-entrancy guard', () => {
-        it('should not infinitely recurse when push is called re-entrantly (e.g., TikTok Proxy)', () => {
-            const posthog = defaultPostHog()
-
-            // Simulate TikTok's in-app browser Proxy behavior:
-            // When _execute_array dispatches a method via this[method](),
-            // a Proxy intercepts it and calls push() instead, which would
-            // re-enter _execute_array and cause infinite recursion.
-            const origCapture = posthog.capture.bind(posthog)
+        it('should not infinitely recurse when push is called re-entrantly (e.g., TikTok Proxy)', async () => {
+            const beforeSend = vi.fn((event) => event)
+            const posthog = await createPosthogInstance(uuidv7(), {
+                capture_pageview: false,
+                before_send: beforeSend,
+            })
+            const originalCapture = posthog.capture
+            const error = vi.spyOn(console, 'error').mockImplementation(() => {})
             let callCount = 0
             posthog.capture = function (...args: any[]) {
                 callCount++
                 if (callCount > 100) {
                     throw new Error('Infinite recursion detected')
                 }
-                // Simulate what TikTok's Proxy does: convert the method call
-                // to a push() call
                 posthog.push(['capture', ...args])
             } as any
-
-            // This should not throw RangeError: Maximum call stack size exceeded
-            expect(() => {
-                posthog.push(['capture', 'test-event', { foo: 'bar' }])
-            }).not.toThrow()
-
-            // Restore original capture to verify it was called via prototype
-            posthog.capture = origCapture
+            beforeSend.mockClear()
+            error.mockClear()
+            try {
+                expect(() => posthog.push(['capture', 'test-event', { foo: 'bar' }])).not.toThrow()
+                expect(callCount).toBe(1)
+                expect(beforeSend).toHaveBeenCalledTimes(1)
+                expect(beforeSend).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: 'test-event',
+                        properties: expect.objectContaining({ foo: 'bar' }),
+                    })
+                )
+                expect(error).not.toHaveBeenCalled()
+            } finally {
+                posthog.capture = originalCapture
+                error.mockRestore()
+                await posthog.shutdown()
+            }
         })
 
         it('should execute methods normally when no Proxy interference', () => {
             const posthog = defaultPostHog()
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+            const captureSpy = vi.spyOn(posthog, 'capture').mockReturnValue(undefined)
 
             posthog.push(['capture', 'test-event', { foo: 'bar' }])
 
@@ -1229,7 +1246,7 @@ describe('posthog core', () => {
         it('should handle _execute_array with array of commands', () => {
             const posthog = defaultPostHog()
             const registerSpy = vi.spyOn(posthog, 'register').mockImplementation(() => {})
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+            const captureSpy = vi.spyOn(posthog, 'capture').mockReturnValue(undefined)
 
             posthog._execute_array([
                 ['register', { key: 'value' }],
@@ -1244,7 +1261,7 @@ describe('posthog core', () => {
 
         it('should not abort queued calls when one call throws', () => {
             const posthog = defaultPostHog()
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+            const captureSpy = vi.spyOn(posthog, 'capture').mockReturnValue(undefined)
             ;(posthog as any).parseInvalidJson = (payload: string) => JSON.parse(payload)
 
             expect(() => {
@@ -1384,6 +1401,8 @@ describe('posthog core', () => {
 
             posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
             posthog.unregister_for_session('flow')
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            posthog.sessionPersistence!.register({ flow: 'system-managed' })
 
             emitSessionChange(posthog, {
                 noSessionId: false,
@@ -1392,7 +1411,7 @@ describe('posthog core', () => {
                 crossTabAdoption: false,
             })
 
-            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['flow']).toBe('system-managed')
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
     })

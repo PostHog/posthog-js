@@ -2,7 +2,7 @@
 
 import { expect } from 'vitest'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
-import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
+import { buildNetworkRequestOptions, defaultNetworkOptions } from '../../../../extensions/replay/external/config'
 import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
 import { defaultConfig } from '../../../../posthog-core'
 import {
@@ -10,7 +10,6 @@ import {
     _readBody,
     _tryReadBodyStreaming,
     getRecordNetworkPlugin,
-    NEVER_RECORD_BODY_CONTENT_TYPES,
     shouldRecordBody,
 } from '../../../../extensions/replay/external/network-plugin'
 
@@ -98,6 +97,7 @@ function createNavigationTimingEntry(name: string, loadEventEnd: number = 400) {
         initiatorType: 'navigation',
         startTime: 0,
         responseEnd: 120,
+        duration: 500,
         loadEventEnd,
         toJSON() {
             return {
@@ -118,6 +118,7 @@ function createResourceTimingEntry(name: string, serverTimingName: string, serve
         initiatorType: 'fetch',
         startTime: 10,
         responseEnd: 20,
+        duration: 10,
         serverTiming: [{ name: serverTimingName, duration: serverTimingDuration }],
         toJSON() {
             return {
@@ -128,6 +129,15 @@ function createResourceTimingEntry(name: string, serverTimingName: string, serve
                 duration: 10,
             }
         },
+    }
+}
+
+function createObserverEntryList(entries: PerformanceEntry[]): PerformanceObserverEntryList {
+    return {
+        getEntries: () => entries,
+        getEntriesByName: (name, type) =>
+            entries.filter((entry) => entry.name === name && (!type || entry.entryType === type)),
+        getEntriesByType: (type) => entries.filter((entry) => entry.entryType === type),
     }
 }
 
@@ -270,10 +280,16 @@ describe('network plugin', () => {
         })
 
         describe('binary content types are never recorded', () => {
-            const neverRecordCases: [string, boolean][] = NEVER_RECORD_BODY_CONTENT_TYPES.map((prefix) => [
-                prefix.endsWith('/') ? `${prefix}example` : prefix,
-                false,
-            ])
+            const neverRecordCases: [string, boolean][] = [
+                ['image/png', false],
+                ['video/mp4', false],
+                ['audio/mpeg', false],
+                ['font/woff2', false],
+                ['application/octet-stream', false],
+                ['application/pdf', false],
+                ['application/zip', false],
+                ['application/wasm', false],
+            ]
             const alwaysRecordCases: [string, boolean][] = [
                 ['application/json', true],
                 ['text/plain', true],
@@ -283,7 +299,7 @@ describe('network plugin', () => {
                 (contentType, expected) => {
                     const result = shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': contentType } as unknown as Headers,
+                        headers: { 'content-type': contentType },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -295,7 +311,7 @@ describe('network plugin', () => {
                 expect(
                     shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': 'Image/WebP' } as unknown as Headers,
+                        headers: { 'content-type': 'Image/WebP' },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -303,7 +319,7 @@ describe('network plugin', () => {
                 expect(
                     shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': 'APPLICATION/PDF' } as unknown as Headers,
+                        headers: { 'content-type': 'APPLICATION/PDF' },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -472,7 +488,7 @@ describe('network plugin', () => {
             const cleanup = plugin.observer(callback, mockWindow, networkOptions)
             const entry = createResourceTimingEntry('https://example.com/ingest/s/?ver=1.406.2', 'proxy', 5)
 
-            observerCallbacks[0]({ getEntries: () => [entry] } as PerformanceObserverEntryList)
+            observerCallbacks[0](createObserverEntryList([entry]))
 
             expect(callback).not.toHaveBeenCalled()
             cleanup()
@@ -492,7 +508,7 @@ describe('network plugin', () => {
             const droppedEntry = createResourceTimingEntry('https://example.com/ingest/s/', 'proxy', 5)
             const allowedEntry = createResourceTimingEntry('https://example.com/api/data', 'allowed-proxy', 3)
 
-            observerCallbacks[0]({ getEntries: () => [droppedEntry, allowedEntry] } as PerformanceObserverEntryList)
+            observerCallbacks[0](createObserverEntryList([droppedEntry, allowedEntry]))
 
             expect(callback).toHaveBeenCalledWith({
                 requests: [
@@ -563,6 +579,7 @@ describe('network plugin', () => {
                 delete broken.mockWindow.PerformanceObserver
                 const healthy = createMockWindow()
                 // the bundle's frame loaded a minute ago and the healthy frame a second ago
+                const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
                 const frameOrigin = Date.now() - 1000
                 healthy.mockWindow.performance.now = () => Date.now() - frameOrigin
                 const globalNow = vi.spyOn(performance, 'now').mockReturnValue(60_000)
@@ -574,15 +591,16 @@ describe('network plugin', () => {
                 const stopHealthy = plugin.observer(callback, healthy.mockWindow, networkOptions)
 
                 const entry = createResourceTimingEntry('https://example.com/api/data', 'proxy', 3)
-                healthy.observerCallbacks[0]({ getEntries: () => [entry] } as PerformanceObserverEntryList)
+                healthy.observerCallbacks[0](createObserverEntryList([entry]))
 
                 const [request] = callback.mock.calls[0][0].requests
-                expect(Math.abs(request.timeOrigin - frameOrigin)).toBeLessThanOrEqual(1)
-                expect(Math.abs(request.timestamp - (frameOrigin + entry.startTime))).toBeLessThanOrEqual(1)
+                expect(request.timeOrigin).toBe(frameOrigin)
+                expect(request.timestamp).toBe(frameOrigin + entry.startTime)
 
                 stopHealthy()
                 stopBroken()
                 globalNow.mockRestore()
+                dateNow.mockRestore()
             })
 
             it('still wraps fetch when the frame has no PerformanceObserver but headers are recorded', () => {
@@ -713,9 +731,7 @@ describe('network plugin', () => {
                 cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
                 expect(callback).not.toHaveBeenCalled()
 
-                observerCallbacks[0]({
-                    getEntries: () => [createNavigationTimingEntry('https://example.com/app')],
-                } as PerformanceObserverEntryList)
+                observerCallbacks[0](createObserverEntryList([createNavigationTimingEntry('https://example.com/app')]))
 
                 expect(callback).toHaveBeenCalledTimes(1)
                 expect(callback.mock.calls[0][0].requests).toEqual([
@@ -814,7 +830,7 @@ describe('network plugin', () => {
 
                 global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                const plugin = getRecordNetworkPlugin({ recordBody: true })
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
                 cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
 
                 xhr = new mockWindow.XMLHttpRequest()
@@ -846,7 +862,9 @@ describe('network plugin', () => {
                 it(`should remove all listeners when XHR ${event}s`, () => {
                     xhr.open('GET', 'https://example.com')
                     xhr.send()
-
+                    for (const type of ['readystatechange', 'error', 'abort', 'timeout']) {
+                        expect(xhr.getListenerCount(type)).toBeGreaterThan(0)
+                    }
                     const listeners = xhr.listeners.get(event) || []
                     listeners.forEach((listener: any) => listener(payload))
 
@@ -862,7 +880,9 @@ describe('network plugin', () => {
                     const testXhr = new mockWindow.XMLHttpRequest()
                     testXhr.open('GET', `https://example.com/${i}`)
                     testXhr.send()
-
+                    for (const type of ['readystatechange', 'error', 'abort', 'timeout']) {
+                        expect(testXhr.getListenerCount(type)).toBeGreaterThan(0)
+                    }
                     const errorListeners = testXhr.listeners.get('error') || []
                     errorListeners.forEach((listener: any) => listener(new Error('Network error')))
 
@@ -1024,7 +1044,7 @@ describe('network plugin', () => {
                     }
                 } as any
 
-                const plugin = getRecordNetworkPlugin({ recordBody: true })
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
                 cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
 
                 const xhr = new mockWindow.XMLHttpRequest()
@@ -1048,7 +1068,7 @@ describe('network plugin', () => {
                 }
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
-                const plugin = getRecordNetworkPlugin({ recordBody: true })
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
                 cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
                 patchedFetch = mockWindow.fetch
 
@@ -1089,7 +1109,10 @@ describe('network plugin', () => {
                 } as any
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
-                const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
+                const plugin = getRecordNetworkPlugin({
+                    ...defaultNetworkOptions,
+                    recordBody: { request: true, response: false },
+                })
                 cleanupObserver = plugin.observer(() => {}, mockWindow, {
                     recordBody: { request: true, response: false },
                 })
@@ -1135,7 +1158,7 @@ describe('network plugin', () => {
                 read: () =>
                     opts.readNeverResolves
                         ? new Promise(() => {})
-                        : opts.readRejects
+                        : opts.readRejects && i >= chunks.length
                           ? Promise.reject(new Error('boom'))
                           : Promise.resolve(
                                 i < chunks.length
@@ -1164,10 +1187,21 @@ describe('network plugin', () => {
         })
 
         it('stops at the limit and returns a placeholder, without buffering past it', async () => {
-            const r = fakeStreamingBody([encode('a'.repeat(8)), encode('b'.repeat(8))])
+            const read = vi
+                .fn()
+                .mockResolvedValueOnce({ done: false, value: encode('a'.repeat(8)) })
+                .mockResolvedValueOnce({ done: false, value: encode('b'.repeat(8)) })
+                .mockResolvedValueOnce({ done: false, value: encode('must not read') })
+                .mockResolvedValue({ done: true })
+            const cancel = vi.fn().mockResolvedValue(undefined)
+            const r = {
+                clone: () => ({ body: { tee: () => [], getReader: () => ({ read, cancel }) } }),
+            } as unknown as Response
             await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe(
                 '[SessionReplay] Body too large to record (> 10 bytes)'
             )
+            expect(read).toHaveBeenCalledTimes(2)
+            expect(cancel).toHaveBeenCalledTimes(1)
         })
 
         it('records a body that exactly fills the limit', async () => {
@@ -1196,8 +1230,11 @@ describe('network plugin', () => {
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('[SessionReplay] Failed to read body')
         })
 
-        it('resolves (never rejects) when the reader errors mid-stream', async () => {
-            const r = fakeStreamingBody([encode('partial')], { readRejects: true })
+        it.each([
+            { name: 'first read', chunks: [] },
+            { name: 'after one chunk', chunks: ['partial'] },
+        ])('resolves (never rejects) when the reader errors: $name', async ({ chunks }) => {
+            const r = fakeStreamingBody(chunks.map(encode), { readRejects: true })
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
                 '[SessionReplay] Failed to read body: Error: boom'
             )
