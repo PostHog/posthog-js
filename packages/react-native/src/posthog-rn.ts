@@ -49,7 +49,15 @@ import {
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
+import {
+  getPlatformOS,
+  getRemoteConfigBool,
+  getRemoteConfigNumber,
+  isHermes,
+  isMacOS,
+  isValidSampleRate,
+  isWeb,
+} from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -81,6 +89,44 @@ const NATIVE_CALL_TIMEOUT_MS = 10_000
 // Native config readiness has no bridge notification, so manual starts need bounded timer
 // retries as well as flags-driven retries. JS flags can finish loading before native config.
 const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
+
+const DEFAULT_THROTTLE_DELAY_MS = 1000
+// Native clears a replay hold on its own clock, so a `buffering` map is re-read from the
+// capture path at most this often.
+const BUFFERING_STATUS_REFRESH_INTERVAL_MS = 5_000
+
+const isDebugPropertyKey = (key: string): boolean => key === '$recording_status' || key.startsWith('$sdk_debug_')
+
+const withoutDebugProperties = (properties: JsonType): JsonType => {
+  if (!isObject(properties)) {
+    return properties
+  }
+  const stripped: PostHogEventProperties = {}
+  for (const [key, value] of Object.entries(properties)) {
+    if (!isDebugPropertyKey(key)) {
+      stripped[key] = value
+    }
+  }
+  return stripped
+}
+
+type SessionReplayTriggerStatus = 'trigger_disabled' | 'trigger_pending' | 'trigger_activated'
+
+// Every key the JS debug block owns; a build failure resets all of them alongside the error key.
+const EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES: { [key: string]: JsonType | undefined } = {
+  $recording_status: undefined,
+  $sdk_debug_session_start: undefined,
+  $sdk_debug_current_session_duration: undefined,
+  $sdk_debug_pending_queue_size: undefined,
+  $sdk_debug_replay_capture_mode: undefined,
+  $sdk_debug_replay_throttle_delay_ms: undefined,
+  $sdk_debug_replay_event_trigger_status: undefined,
+  $sdk_debug_replay_linked_flag_trigger_status: undefined,
+  $sdk_debug_replay_pending_trigger_conditions: undefined,
+  $sdk_debug_replay_flush_hold_reason: undefined,
+  $sdk_debug_replay_internal_buffer_length: undefined,
+  $sdk_debug_error_capturing_properties: undefined,
+}
 
 type ManualRecordingStartRequest = {
   pending: boolean
@@ -313,6 +359,13 @@ export class PostHog extends PostHogCore {
   // call order. See _enqueueNative.
   private _nativeChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
+  // Native's own replay debug map, refreshed fire-and-forget on lifecycle/state-change events.
+  // `undefined` until the first refresh lands; JS-derived values stand until then.
+  private _nativeSessionReplayDebugProperties?: { [key: string]: JsonType }
+  private _nativeSessionReplayDebugRefreshQueued = false
+  private _nativeSessionReplayDebugRefreshedAt = 0
+  // Bumped on invalidation so a refresh already in flight cannot write a pre-invalidation map.
+  private _nativeSessionReplayDebugGeneration = 0
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
@@ -384,6 +437,7 @@ export class PostHog extends PostHogCore {
     super(normalizedApiKey, options)
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
+    this._sessionReplayOptions = options
     this._disableSurveys = options?.disableSurveys ?? false
     this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, {
       captureFatalException: (error, hint, eventUuid, timestamp, prepareNativeCapture) =>
@@ -538,6 +592,7 @@ export class PostHog extends PostHogCore {
 
       if (state === 'active') {
         this.getSessionId()
+        this._refreshNativeSessionReplayDebugProperties()
       }
     })
 
@@ -614,6 +669,7 @@ export class PostHog extends PostHogCore {
         if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
         }
+        this._refreshNativeSessionReplayDebugProperties()
       })
 
       if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
@@ -757,7 +813,182 @@ export class PostHog extends PostHogCore {
       ...this._appProperties,
       $screen_height: Dimensions.get('screen').height,
       $screen_width: Dimensions.get('screen').width,
+      ...(this._sessionReplayDebugProperties() as PostHogEventProperties),
     }
+  }
+
+  // Runs twice per capture and also outside capture (flags, surveys), so it only reads state:
+  // no getSessionId() (rotates the session) and no bridge calls. Every owned key is written on
+  // each call, `undefined` when absent, so nothing leaks from the first call into the second.
+  private _sessionReplayDebugProperties(): { [key: string]: JsonType | undefined } {
+    try {
+      const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
+      const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
+      const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
+      const platformOS = getPlatformOS()
+      const hasNativeReplay = !!OptionalReactNativePlugin && (platformOS === 'ios' || platformOS === 'android')
+      const replayEnabled = this._isEnableSessionReplay()
+      // Native's replay state is authoritative once known; JS only knows whether it asked
+      // native to start. Trigger/mode/throttle keys stay JS-owned even when native has a map.
+      const cached = this._nativeSessionReplayDebugProperties
+      const native = typeof cached?.['$recording_status'] === 'string' ? cached : undefined
+      const nativeHoldReason = native?.['$sdk_debug_replay_flush_hold_reason']
+      const nativeBufferLength = native?.['$sdk_debug_replay_internal_buffer_length']
+
+      let eventTriggerStatus: SessionReplayTriggerStatus | undefined
+      let linkedFlagTriggerStatus: SessionReplayTriggerStatus | undefined
+      let pendingTriggerConditions: string[] | undefined
+      if (replayEnabled) {
+        const sessionId = this.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
+        eventTriggerStatus =
+          this._sessionReplayEventTriggers.length === 0
+            ? 'trigger_disabled'
+            : this._isEventTriggerActivatedForSession(sessionId)
+              ? 'trigger_activated'
+              : 'trigger_pending'
+        const sessionReplay = (this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}) as {
+          [key: string]: JsonType
+        }
+        linkedFlagTriggerStatus = this._linkedFlagTriggerStatus(
+          sessionReplay['linkedFlag'],
+          (this.getKnownFeatureFlags() ?? {}) as { [key: string]: FeatureFlagValue }
+        ).status
+        const pending = [
+          eventTriggerStatus === 'trigger_pending' ? 'event_trigger' : undefined,
+          linkedFlagTriggerStatus === 'trigger_pending' ? 'linked_flag' : undefined,
+        ].filter((condition): condition is string => condition !== undefined)
+        pendingTriggerConditions = pending.length > 0 ? pending : undefined
+      }
+
+      return {
+        ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES,
+        $recording_status: native
+          ? (native['$recording_status'] as string)
+          : this._sessionReplayRecordingActive === true
+            ? 'active'
+            : 'disabled',
+        $sdk_debug_session_start: hasSessionStart ? sessionStart : undefined,
+        $sdk_debug_current_session_duration: hasSessionStart ? Date.now() - sessionStart : undefined,
+        $sdk_debug_pending_queue_size: Array.isArray(queue) ? queue.length : 0,
+        $sdk_debug_replay_capture_mode: hasNativeReplay ? 'screenshot' : undefined,
+        $sdk_debug_replay_throttle_delay_ms: hasNativeReplay
+          ? this._resolveThrottleDelayMs(this._sessionReplayOptions)
+          : undefined,
+        $sdk_debug_replay_event_trigger_status: eventTriggerStatus,
+        $sdk_debug_replay_linked_flag_trigger_status: linkedFlagTriggerStatus,
+        $sdk_debug_replay_pending_trigger_conditions: pendingTriggerConditions,
+        $sdk_debug_replay_flush_hold_reason: typeof nativeHoldReason === 'string' ? nativeHoldReason : undefined,
+        $sdk_debug_replay_internal_buffer_length:
+          typeof nativeBufferLength === 'number' ? nativeBufferLength : undefined,
+      }
+    } catch (e) {
+      return { ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES, $sdk_debug_error_capturing_properties: String(e) }
+    }
+  }
+
+  // Older plugins without this method leave JS-derived values standing (no cache ever set).
+  // A refresh already in flight covers any request made meanwhile.
+  private _refreshNativeSessionReplayDebugProperties(): void {
+    if (!OptionalReactNativePlugin?.getSessionReplayDebugProperties || this._nativeSessionReplayDebugRefreshQueued) {
+      return
+    }
+    this._nativeSessionReplayDebugRefreshQueued = true
+    let started = false
+    void this._enqueueNative(
+      'getSessionReplayDebugProperties',
+      async (plugin) => {
+        started = true
+        this._nativeSessionReplayDebugRefreshQueued = false
+        const generation = this._nativeSessionReplayDebugGeneration
+        const map = await plugin.getSessionReplayDebugProperties?.()
+        if (generation === this._nativeSessionReplayDebugGeneration) {
+          this._nativeSessionReplayDebugProperties = isObject(map) ? (map as { [key: string]: JsonType }) : undefined
+          this._nativeSessionReplayDebugRefreshedAt = Date.now()
+        }
+      },
+      false
+    ).finally(() => {
+      // Only an entry the chain skipped (disabled, web, native not set up) still owns the flag.
+      if (!started) {
+        this._nativeSessionReplayDebugRefreshQueued = false
+      }
+    })
+  }
+
+  private _refreshStaleBufferingStatus(): void {
+    if (
+      this._nativeSessionReplayDebugProperties?.['$recording_status'] === 'buffering' &&
+      Date.now() - this._nativeSessionReplayDebugRefreshedAt >= BUFFERING_STATUS_REFRESH_INTERVAL_MS
+    ) {
+      this._refreshNativeSessionReplayDebugProperties()
+    }
+  }
+
+  // A capture between the state change and the refresh landing must not see the stale map.
+  private _invalidateNativeSessionReplayDebugProperties(): void {
+    this._nativeSessionReplayDebugProperties = undefined
+    this._nativeSessionReplayDebugGeneration++
+    this._refreshNativeSessionReplayDebugProperties()
+  }
+
+  private _resolveThrottleDelayMs(options?: PostHogOptions): number {
+    const {
+      throttleDelayMs: configuredThrottleDelayMs,
+      iOSdebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
+      androidDebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
+    } = options?.sessionReplayConfig ?? {}
+
+    let throttleDelayMs = configuredThrottleDelayMs ?? DEFAULT_THROTTLE_DELAY_MS
+
+    // if deprecated values are set, we use the higher one for back compatibility
+    if (
+      throttleDelayMs === DEFAULT_THROTTLE_DELAY_MS &&
+      (iOSdebouncerDelayMs !== DEFAULT_THROTTLE_DELAY_MS || androidDebouncerDelayMs !== DEFAULT_THROTTLE_DELAY_MS)
+    ) {
+      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
+    }
+    return throttleDelayMs
+  }
+
+  private _linkedFlagTriggerStatus(
+    linkedFlag: JsonType | undefined,
+    featureFlags: { [key: string]: FeatureFlagValue }
+  ): { status: SessionReplayTriggerStatus; message: string } {
+    if (typeof linkedFlag === 'string') {
+      const value = featureFlags[linkedFlag]
+      let matched: boolean
+      if (typeof value === 'boolean') {
+        matched = value
+      } else if (typeof value === 'string') {
+        // if its a multi-variant flag linked to "any"
+        matched = true
+      } else {
+        // disable recording if the flag does not exist/quota limited
+        matched = false
+      }
+      return {
+        status: matched ? 'trigger_activated' : 'trigger_pending',
+        message: `Session replay '${linkedFlag}' linked flag value: '${value}'`,
+      }
+    }
+    if (linkedFlag && typeof linkedFlag === 'object') {
+      const linked = linkedFlag as { [key: string]: JsonType }
+      const flag = linked['flag'] as string | undefined
+      const variant = linked['variant'] as string | undefined
+      if (flag && variant) {
+        const value = featureFlags[flag]
+        return {
+          status: value === variant ? 'trigger_activated' : 'trigger_pending',
+          message: `Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`,
+        }
+      }
+      // disable recording if the flag does not exist/quota limited
+      return {
+        status: 'trigger_pending',
+        message: `Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`,
+      }
+    }
+    return { status: 'trigger_disabled', message: 'Session replay has no cached linkedFlag.' }
   }
 
   getSurveyDisplayLanguageOverride(): string | null {
@@ -1839,6 +2070,8 @@ export class PostHog extends PostHogCore {
         return true
       })
 
+      this._invalidateNativeSessionReplayDebugProperties()
+
       if (!started) {
         this._logger.warn(
           'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
@@ -1904,6 +2137,7 @@ export class PostHog extends PostHogCore {
       }
 
       await OptionalReactNativePlugin.stopRecording()
+      this._invalidateNativeSessionReplayDebugProperties()
       this._logger.info('Session recording stopped.')
       return true
     } catch (e) {
@@ -2737,6 +2971,7 @@ export class PostHog extends PostHogCore {
     if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
       this._sessionReplayNativeInitialized = true
       await OptionalReactNativePlugin.startRecording?.(true)
+      this._refreshNativeSessionReplayDebugProperties()
       return true
     }
 
@@ -2745,8 +2980,6 @@ export class PostHog extends PostHogCore {
       this._logger.warn(`Native PostHog plugin enabled but no sessionId found.`)
       return false
     }
-
-    const defaultThrottleDelayMs = 1000
 
     const {
       maskAllTextInputs = true,
@@ -2761,8 +2994,8 @@ export class PostHog extends PostHogCore {
       screenshotColorMode,
       screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
-      iOSdebouncerDelayMs = defaultThrottleDelayMs,
-      androidDebouncerDelayMs = defaultThrottleDelayMs,
+      iOSdebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
+      androidDebouncerDelayMs = DEFAULT_THROTTLE_DELAY_MS,
     } = options?.sessionReplayConfig ?? {}
 
     if (captureTouches === false && !isMacOS()) {
@@ -2775,15 +3008,7 @@ export class PostHog extends PostHogCore {
       }
     }
 
-    let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
-
-    // if deprecated values are set, we use the higher one for back compatibility
-    if (
-      throttleDelayMs === defaultThrottleDelayMs &&
-      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
-    ) {
-      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
-    }
+    const throttleDelayMs = this._resolveThrottleDelayMs(options)
 
     // Gate captureLog and captureNetworkTelemetry using cached remote config.
     // The effective state is: localEnabled AND remoteEnabled.
@@ -2995,6 +3220,7 @@ export class PostHog extends PostHogCore {
       this._currentSessionId = sessionId
       if (enableSessionReplay) {
         this._sessionReplayNativeInitialized = true
+        this._refreshNativeSessionReplayDebugProperties()
         this._logger.info(`Session replay started with sessionId ${sessionId}.`)
       }
       if (enableNativeErrorTracking) {
@@ -3022,7 +3248,6 @@ export class PostHog extends PostHogCore {
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>
   ): Promise<void> {
     this._enableSessionReplay = options?.enableSessionReplay
-    this._sessionReplayOptions = options
 
     await this._evaluateAndStartSessionReplay(cachedRemoteConfig)
   }
@@ -3085,41 +3310,9 @@ export class PostHog extends PostHogCore {
 
     this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
 
-    let recordingActive = true
-    const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
-      | string
-      | { [key: string]: JsonType }
-      | null
-      | undefined
-
-    if (typeof linkedFlag === 'string') {
-      const value = cachedFeatureFlags[linkedFlag]
-      if (typeof value === 'boolean') {
-        recordingActive = value
-      } else if (typeof value === 'string') {
-        // if its a multi-variant flag linked to "any"
-        recordingActive = true
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        recordingActive = false
-      }
-
-      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
-    } else if (linkedFlag && typeof linkedFlag === 'object') {
-      const flag = linkedFlag['flag'] as string | undefined
-      const variant = linkedFlag['variant'] as string | undefined
-      if (flag && variant) {
-        const value = cachedFeatureFlags[flag]
-        recordingActive = value === variant
-        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
-        recordingActive = false
-      }
-    } else {
-      this._logger.info(`Session replay has no cached linkedFlag.`)
-    }
+    const linkedFlagTrigger = this._linkedFlagTriggerStatus(cachedSessionReplayConfig['linkedFlag'], cachedFeatureFlags)
+    this._logger.info(linkedFlagTrigger.message)
+    let recordingActive = linkedFlagTrigger.status !== 'trigger_pending'
 
     // Event triggers: replay records only once the client captures an event whose name matches a
     // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
@@ -3175,6 +3368,13 @@ export class PostHog extends PostHogCore {
     const isObservedFatal =
       observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
     const processed = super.processBeforeEnqueue(message)
+    if (processed) {
+      try {
+        this._stripDebugPropertiesIfBackdated(processed)
+      } catch (e) {
+        this._logger.error(`Session replay debug property strip failed: ${e}.`)
+      }
+    }
     let suppress = false
     if (isObservedFatal && processed && observation) {
       // The final, before_send-accepted payload. Offer it to the native SDK here rather than
@@ -3183,7 +3383,13 @@ export class PostHog extends PostHogCore {
       // outcomes have to be decided in this one step or the exception can end up in neither
       // queue, or in both.
       try {
-        observation.nativeCapture = observation.prepareNativeCapture(processed)
+        // Native runs its own debug-property builder on the handed-off event, so the JS
+        // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
+        // used when native declines, keeps it.
+        observation.nativeCapture = observation.prepareNativeCapture({
+          ...processed,
+          properties: withoutDebugProperties(processed.properties),
+        })
       } catch (e) {
         this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
         observation.nativeCapture = undefined
@@ -3193,6 +3399,7 @@ export class PostHog extends PostHogCore {
     }
     try {
       this._maybeActivateEventTrigger(processed?.['event'])
+      this._refreshStaleBufferingStatus()
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
     }
@@ -3224,6 +3431,20 @@ export class PostHog extends PostHogCore {
     return { queued: observation.queued, nativeCapture: observation.nativeCapture }
   }
 
+  private _stripDebugPropertiesIfBackdated(message: PostHogEventProperties): void {
+    const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
+    if (typeof sessionStart !== 'number' || sessionStart <= 0) {
+      return
+    }
+    const timestamp = message.timestamp
+    const eventTime =
+      timestamp instanceof Date ? timestamp.getTime() : typeof timestamp === 'string' ? Date.parse(timestamp) : NaN
+    if (Number.isNaN(eventTime) || eventTime >= sessionStart) {
+      return
+    }
+    message.properties = withoutDebugProperties(message.properties)
+  }
+
   private _maybeActivateEventTrigger(eventName: unknown): void {
     if (this._sessionReplayEventTriggers.length === 0 || typeof eventName !== 'string') {
       return
@@ -3251,6 +3472,7 @@ export class PostHog extends PostHogCore {
     // Re-evaluate so the native recorder starts; fire-and-forget keeps the capture path synchronous.
     // Serialized through _sessionReplayEvalChain, so this never races a concurrent evaluation.
     void this._evaluateAndStartSessionReplay()
+    this._refreshNativeSessionReplayDebugProperties()
   }
 
   private _parseEventTriggers(value: JsonType | undefined): string[] {
