@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.78.1
+
+### Patch Changes
+
+- [#5145](https://github.com/PostHog/posthog-js/pull/5145) [`890ba01`](https://github.com/PostHog/posthog-js/commit/890ba016d5ec0acd3464f63ff1c3022e31b6e74f) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Add an accessible name and button role to the survey close control.
+  (2026-09-29)
+
 ## 4.78.0
 
 ### Minor Changes
