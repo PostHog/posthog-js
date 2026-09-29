@@ -752,11 +752,14 @@ export class PostHog extends PostHogCore {
   }
 
   getCommonEventProperties(): PostHogEventProperties {
+    // On iOS, 'screen' is UIScreen.main, which ignores resizable windows and stays the outer display on
+    // foldables. 'window' is the app's window. Android's 'window' can exclude system bars, so keep 'screen' there.
+    const { width, height } = Dimensions.get(Platform.OS === 'ios' ? 'window' : 'screen')
     return {
       ...super.getCommonEventProperties(),
       ...this._appProperties,
-      $screen_height: Dimensions.get('screen').height,
-      $screen_width: Dimensions.get('screen').width,
+      $screen_height: height,
+      $screen_width: width,
     }
   }
 
