@@ -44,6 +44,9 @@ import {
 import {
     isUndefined,
     isArray,
+    isBoolean,
+    isObject,
+    isString,
     getEnabledFromValue,
     getVariantFromValue,
     parsePayload,
@@ -694,6 +697,28 @@ export class PostHogFeatureFlags implements Extension {
         })
     }
 
+    /**
+     * Bootstrapped flag values must be a variant string or a boolean. Apps that pass the
+     * `/flags?v=2` detail shape (`{ key, enabled, variant }`) are flattened to the value the
+     * detail describes, because storing the object mis-buckets the user with no other signal.
+     */
+    private _normalizeBootstrappedFlagValue(key: string, value: unknown): string | boolean | undefined {
+        if (isString(value) || isBoolean(value)) {
+            return value
+        }
+
+        let flattened: string | boolean | undefined
+        if (isObject(value) && (isBoolean(value.enabled) || isString(value.variant))) {
+            flattened = isString(value.variant) ? value.variant : !!value.enabled
+        }
+
+        this._logger.warn(
+            `Invalid bootstrapped value for feature flag "${key}": expected a variant string or a boolean. ` +
+                (isUndefined(flattened) ? 'Ignoring it.' : `Using ${JSON.stringify(flattened)} from the flag detail.`)
+        )
+        return flattened
+    }
+
     initialize(): void {
         const config = this._config
         const bootstrapFlags = config.bootstrap?.featureFlags ?? {}
@@ -703,7 +728,10 @@ export class PostHogFeatureFlags implements Extension {
             const featureFlags = Object.keys(bootstrapFlags)
                 .filter((flag) => !isUndefined(bootstrapFlags[flag]))
                 .reduce((res: Record<string, string | boolean>, key) => {
-                    res[key] = bootstrapFlags[key]
+                    const value = this._normalizeBootstrappedFlagValue(key, bootstrapFlags[key])
+                    if (!isUndefined(value)) {
+                        res[key] = value
+                    }
                     return res
                 }, {})
             const featureFlagPayloads = Object.keys(bootstrapPayloads)

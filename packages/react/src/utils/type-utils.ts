@@ -10,6 +10,20 @@ export const isUndefined = function (x: unknown): x is undefined {
     return x === void 0
 }
 
+export const isString = function (x: unknown): x is string {
+    return typeof x === 'string'
+}
+
+export const isBoolean = function (x: unknown): x is boolean {
+    // oxlint-disable-next-line posthog-js/no-direct-boolean-check
+    return typeof x === 'boolean'
+}
+
 export const isNull = function (x: unknown): x is null {
     return x === null
+}
+
+export const isObject = function (x: unknown): x is Record<string, any> {
+    // oxlint-disable-next-line posthog-js/no-direct-object-check, posthog-js/no-direct-array-check
+    return x === Object(x) && !Array.isArray(x)
 }
