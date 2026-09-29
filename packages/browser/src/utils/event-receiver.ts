@@ -97,7 +97,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * user dismisses or answers them, so an event-triggered survey survives a reload within the
      * triggering session (but not a brand-new session) until it's actually interacted with.
      */
-    protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
+    protected abstract _activationOutcome(
+        event: string,
+        itemId: string,
+        eventPayload?: CaptureResult
+    ): ActivationOutcome
 
     /**
      * Whether an item armed by a trigger should be persisted immediately (session-scoped)
@@ -281,7 +285,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         // An item reacting to one of its own lifecycle events (shown / dismissed / sent).
         const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
         if (itemId && this.getActivatedIds().includes(itemId)) {
-            const outcome = this._activationOutcome(event, itemId)
+            const outcome = this._activationOutcome(event, itemId, eventPayload)
             if (outcome === 'consume') {
                 logger.info('event consumed activated item, removing it', { event, itemId })
                 this._deactivateItems([itemId])

@@ -195,6 +195,53 @@ describe('active matching survey subscriptions', () => {
         }
     )
 
+    it.each([
+        [eventSurvey, 'activate'],
+        [actionSurvey, 'account_upgraded'],
+    ] as const)('retains partial response activation across a same-session reload (%s)', (survey, trigger) => {
+        fixture([survey])
+        start()
+        capture(trigger)
+        capture(SurveyEventName.SHOWN, { $survey_id: survey.id })
+        capture(SurveyEventName.SENT, { $survey_id: survey.id, $survey_completed: false })
+        expect(surveys._surveyEventReceiver?.getSurveys()).toContain(survey.id)
+
+        surveys.dispose()
+        surveys = new BrowserSurveys(posthog)
+        posthog.surveys = surveys
+        posthog.getSurveys = surveys.getSurveys.bind(surveys)
+        surveys.setup(createSurveysClient(posthog))
+        start()
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback).toHaveBeenLastCalledWith([survey], { isLoaded: true })
+        capture(SurveyEventName.SENT, { $survey_id: survey.id, $survey_completed: true })
+        expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
+    })
+
+    it.each([true, undefined])('consumes submissions with completion %s', (completed) => {
+        fixture([actionSurvey])
+        start()
+        capture('account_upgraded')
+        capture(SurveyEventName.SENT, { $survey_id: actionSurvey.id, $survey_completed: completed })
+        expect(surveys._surveyEventReceiver?.getSurveys()).toEqual([])
+    })
+
+    it('still applies configured cancellation rules to partial submissions', () => {
+        const survey = {
+            ...actionSurvey,
+            conditions: {
+                ...actionSurvey.conditions,
+                cancelEvents: { values: [{ name: SurveyEventName.SENT }] },
+            },
+        } as Survey
+        fixture([survey])
+        start()
+        capture('account_upgraded')
+        capture(SurveyEventName.SENT, { $survey_id: survey.id, $survey_completed: false })
+        expect(surveys._surveyEventReceiver?.getSurveys()).toEqual([])
+    })
+
     it('review regression: consumes a repeatable action-only survey when shown', () => {
         const repeatable = { ...actionSurvey, schedule: SurveySchedule.Always }
         fixture([repeatable])
