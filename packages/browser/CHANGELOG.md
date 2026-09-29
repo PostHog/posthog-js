@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.434.18
+
+### Patch Changes
+
+- [#5125](https://github.com/PostHog/posthog-js/pull/5125) [`69a55c0`](https://github.com/PostHog/posthog-js/commit/69a55c06c85f83e7b6008446530a1b728812c427) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent analytics persistence writes during initialization when persistence is disabled or opted out.
+  (2026-09-29)
+
+- [#5133](https://github.com/PostHog/posthog-js/pull/5133) [`fbf3990`](https://github.com/PostHog/posthog-js/commit/fbf3990e2e0b4d072cab83477ec8bcca20cd8135) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate replay network masking callback errors so unrelated network records continue to be captured.
+  (2026-09-29)
+
+- [#5126](https://github.com/PostHog/posthog-js/pull/5126) [`5775575`](https://github.com/PostHog/posthog-js/commit/577557503c53f99ccd15e31ec6463069eaaa1cff) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve equals signs in survey URL prefill values and ignore malformed URL parameters without blocking surveys.
+  (2026-09-29)
+
 ## 1.434.17
 
 ### Patch Changes
