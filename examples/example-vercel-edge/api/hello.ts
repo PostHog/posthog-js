@@ -14,6 +14,7 @@ export default function handler(request: Request): Response {
         event: 'vercel_edge_request',
         properties: { pathname: new URL(request.url).pathname },
     })
+    // Keep delivery alive after the response without making the caller wait for PostHog.
     waitUntil(posthog.flush().catch((error) => console.error('PostHog flush failed', error)))
 
     return new Response('Hello from a Vercel Edge Function!')
