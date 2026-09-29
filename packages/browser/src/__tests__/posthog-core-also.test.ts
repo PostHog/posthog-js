@@ -99,6 +99,92 @@ describe('posthog core', () => {
     })
 
     describe('capture()', () => {
+        it('keeps replay diagnosis on every event while throttling optional debug properties', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            const required = {
+                $recording_status: 'active',
+                $sdk_debug_recording_script_not_loaded: false,
+                $sdk_debug_replay_url_trigger_status: 'trigger_pending',
+                $sdk_debug_replay_event_trigger_status: 'trigger_disabled',
+                $sdk_debug_replay_linked_flag_trigger_status: 'trigger_activated',
+                $sdk_debug_replay_rrweb_error: false,
+                $sdk_debug_replay_internal_buffer_length: 3,
+                $sdk_debug_replay_flushed_size: 100,
+            }
+            const optional = {
+                $sdk_debug_replay_internal_buffer_size: 200,
+                $sdk_debug_session_start: baseUTCDateTime.getTime(),
+                $sdk_debug_rrweb_attached: true,
+                $sdk_debug_rrweb_start_attempted: true,
+                $sdk_debug_replay_trigger_groups_count: 1,
+                $sdk_debug_replay_matched_recording_trigger_groups: [0],
+                $sdk_debug_replay_remote_trigger_matching_config: { url: '/checkout' },
+                $sdk_debug_replay_pending_trigger_conditions: ['url'],
+                $sdk_debug_replay_stale_config: false,
+                $sdk_debug_replay_flush_hold_reason: 'no_interaction_since_recording_started',
+            }
+            const replayProperties = { ...required, ...optional }
+            const persisted = {
+                $sdk_debug_recording_script_not_loaded: required.$sdk_debug_recording_script_not_loaded,
+                $sdk_debug_replay_url_trigger_status: required.$sdk_debug_replay_url_trigger_status,
+                $sdk_debug_replay_event_trigger_status: required.$sdk_debug_replay_event_trigger_status,
+                $sdk_debug_replay_linked_flag_trigger_status: required.$sdk_debug_replay_linked_flag_trigger_status,
+                $sdk_debug_replay_trigger_groups_count: optional.$sdk_debug_replay_trigger_groups_count,
+                $sdk_debug_replay_matched_recording_trigger_groups:
+                    optional.$sdk_debug_replay_matched_recording_trigger_groups,
+                $sdk_debug_replay_remote_trigger_matching_config:
+                    optional.$sdk_debug_replay_remote_trigger_matching_config,
+                $sdk_debug_replay_pending_trigger_conditions: optional.$sdk_debug_replay_pending_trigger_conditions,
+                $sdk_debug_replay_stale_config: optional.$sdk_debug_replay_stale_config,
+            }
+            posthog.register_for_session(persisted)
+            expect(posthog.sessionRecording!.sdkDebugProperties).toMatchObject(persisted)
+            vi.spyOn(posthog.sessionRecording!, 'sdkDebugProperties', 'get').mockReturnValue(replayProperties)
+            const expectRequiredOnly = (event: string): void => {
+                const properties = posthog.capture(event)!.properties
+                expect(properties).toMatchObject({
+                    ...required,
+                    $recording_status: replayProperties.$recording_status,
+                    $sdk_debug_replay_internal_buffer_length: replayProperties.$sdk_debug_replay_internal_buffer_length,
+                })
+                for (const key of Object.keys(optional)) {
+                    expect(properties).not.toHaveProperty(key)
+                }
+            }
+
+            for (const event of ['custom_event', '$feature_flag_called', '$$heatmap']) {
+                expectRequiredOnly(event)
+            }
+            expect(posthog.calculateEventProperties('$pageview', {}, undefined, undefined, true)).toMatchObject(
+                replayProperties
+            )
+            expect(posthog.capture('$pageview')!.properties).toMatchObject(replayProperties)
+
+            replayProperties.$recording_status = 'buffering'
+            replayProperties.$sdk_debug_replay_internal_buffer_length = 0
+            for (const event of [
+                'custom_event',
+                '$exception',
+                '$identify',
+                '$set',
+                '$pageview',
+                '$feature_flag_called',
+                '$$heatmap',
+            ]) {
+                expectRequiredOnly(event)
+            }
+            vi.advanceTimersByTime(29_999)
+            expectRequiredOnly('$autocapture')
+            vi.advanceTimersByTime(1)
+            expect(posthog.capture('$autocapture')!.properties).toMatchObject(replayProperties)
+            expectRequiredOnly('$exception')
+
+            const snapshot = posthog.capture('$snapshot', { $snapshot_data: [] })!.properties
+            for (const key of Object.keys(replayProperties)) {
+                expect(snapshot).not.toHaveProperty(key)
+            }
+        })
+
         it.each([true, false, undefined])('maps send_instantly: %p to preferSyncCompression', (sendInstantly) => {
             const requests: unknown[] = []
             const posthog = posthogWith(defaultConfig, {
@@ -652,7 +738,7 @@ describe('posthog core', () => {
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-                get_property: () => 'anonymous',
+                get_property: () => undefined,
             } as unknown as PostHogPersistence,
             sessionManager: {
                 checkAndGetSessionAndWindowId: vi.fn().mockReturnValue({

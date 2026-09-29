@@ -187,6 +187,20 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+// Recording buttons and capture diagnostics read these from individual events.
+const REQUIRED_REPLAY_PROPERTIES = [
+    '$recording_status',
+    '$sdk_debug_recording_script_not_loaded',
+    '$sdk_debug_replay_url_trigger_status',
+    '$sdk_debug_replay_event_trigger_status',
+    '$sdk_debug_replay_linked_flag_trigger_status',
+    '$sdk_debug_replay_rrweb_error',
+    '$sdk_debug_replay_internal_buffer_length',
+    '$sdk_debug_replay_flushed_size',
+]
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
+const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 // `fb.<subdomainIndex>.<creationTimeMs>.<randomNumber>`, the shape of Meta's _fbp cookie.
@@ -526,6 +540,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
@@ -2143,7 +2158,20 @@ export class PostHog implements PostHogInterface {
 
         try {
             if (this.sessionRecording) {
-                extend(properties, this.sessionRecording.sdkDebugProperties)
+                const replayProperties = this.sessionRecording.sdkDebugProperties
+                const includeDebugProperties =
+                    !this._replayDebugPropertiesPaused &&
+                    eventName.charAt(0) === '$' &&
+                    !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+                for (const key in replayProperties) {
+                    if (includeDebugProperties || includes(REQUIRED_REPLAY_PROPERTIES, key)) {
+                        properties[key] = replayProperties[key]
+                    }
+                }
+                if (includeDebugProperties && !readOnly) {
+                    this._replayDebugPropertiesPaused = true
+                    setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+                }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {

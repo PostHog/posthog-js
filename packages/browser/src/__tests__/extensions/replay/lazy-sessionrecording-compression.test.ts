@@ -391,7 +391,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
-    it('counts an event dropped for being too large to stringify on the replay debug properties', async () => {
+    it('counts an event dropped for being too large to stringify', async () => {
         const gzipCompress = vi.fn(async (input: string) => {
             // hold the async path open so the event is still queued at unload
             await new Promise(() => {})
@@ -421,9 +421,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         // the drop only writes a debug-gated console line, so without this counter the recording
         // loses data with nothing in our own data to show for it
-        expect(lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']).toBe(
-            1
-        )
+        expect(lazyLoadedSessionRecording['_unstringifiableEventsDropped']).toBe(1)
     })
 
     it.each(['_onBeforeUnload', '_onPageHide'] as const)(
@@ -544,9 +542,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                 expect(captureException).not.toHaveBeenCalled()
                 expect(errorSpy).not.toHaveBeenCalled()
                 expect(warnSpy).toHaveBeenCalled()
-                expect(
-                    lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']
-                ).toBe(1)
+                expect(lazyLoadedSessionRecording['_unstringifiableEventsDropped']).toBe(1)
             } finally {
                 Config.DEBUG = false
                 stringifySpy.mockRestore()

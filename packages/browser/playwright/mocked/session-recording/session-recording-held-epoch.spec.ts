@@ -30,16 +30,17 @@ test.describe('Session recording - held epoch', () => {
         await page.resetCapturedEvents()
     })
 
-    test('names the hold on captured events while nothing is uploaded, and stops naming it after interaction', async ({
+    test('reports the hold in debug properties while nothing is uploaded, and clears it after interaction', async ({
         page,
     }) => {
-        await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('before_interaction'))
+        const debugProperties = () =>
+            page.evaluate(() => (window as WindowWithPostHog).posthog?.sessionRecording?.sdkDebugProperties)
 
         const heldEvents = await page.capturedEvents()
         expect(heldEvents.filter((e) => e.event === '$snapshot')).toHaveLength(0)
-        const held = heldEvents.find((e) => e.event === 'before_interaction')
-        expect(held?.properties.$recording_status).toEqual('active')
-        expect(held?.properties.$sdk_debug_replay_flush_hold_reason).toEqual('no_interaction_since_recording_started')
+        const held = await debugProperties()
+        expect(held?.$recording_status).toEqual('active')
+        expect(held?.$sdk_debug_replay_flush_hold_reason).toEqual('no_interaction_since_recording_started')
 
         await page.resetCapturedEvents()
         await page.waitingForNetworkCausedBy({
@@ -48,12 +49,11 @@ test.describe('Session recording - held epoch', () => {
                 await page.locator('[data-cy-input]').type('hello posthog!')
             },
         })
-        await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('after_interaction'))
 
         const shippedEvents = await page.capturedEvents()
         expect(shippedEvents.filter((e) => e.event === '$snapshot').length).toBeGreaterThan(0)
-        const shipped = shippedEvents.find((e) => e.event === 'after_interaction')
-        expect(shipped?.properties.$recording_status).toEqual('active')
-        expect(shipped?.properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+        const shipped = await debugProperties()
+        expect(shipped?.$recording_status).toEqual('active')
+        expect(shipped?.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
     })
 })
