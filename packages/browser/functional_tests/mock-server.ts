@@ -15,10 +15,22 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = 
 }
 
 const capturedFlagsWireRequests: any[] = []
+const deferredFlagsResponses = new Map<string, Promise<void>>()
+
+export function deferNextFlagsResponse(token: string): () => void {
+    let release!: () => void
+    // This response barrier runs in the Node test server, not in legacy browsers.
+    // oxlint-disable-next-line compat/compat
+    deferredFlagsResponses.set(token, new Promise<void>((resolve) => (release = resolve)))
+    return () => {
+        deferredFlagsResponses.delete(token)
+        release()
+    }
+}
 
 const isGzipData = (data: Uint8Array): boolean => data[0] === 0x1f && data[1] === 0x8b
 
-const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
+const handleRequest = (group: string) => async (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
     let bodyWrapper = '<unknown>'
 
@@ -53,6 +65,9 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
             decodedBody: body,
             path: `${req.url.pathname}${req.url.search}`,
         })
+        const deferredResponse = deferredFlagsResponses.get(body.token)
+        deferredFlagsResponses.delete(body.token)
+        await deferredResponse
     }
 
     return res(ctx.json({}))

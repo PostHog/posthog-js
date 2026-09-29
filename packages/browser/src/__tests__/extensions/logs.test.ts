@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import type { Client } from '@posthog/browser-common'
 
 import { assignableWindow } from '../../utils/globals'
@@ -8,7 +9,7 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     // Console capture routes through the core logs API; assert against that seam.
-    let mockEmit: vi.Mock
+    let mockEmit: VitestMock
 
     beforeEach(() => {
         vi.resetModules()

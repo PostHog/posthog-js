@@ -42,8 +42,11 @@ async function readPersistence(page: Page): Promise<{ main?: any; flags?: any; s
     })
 }
 
-const getFlag = (page: Page, flag: string): Promise<any> =>
-    page.evaluate((f) => (window as any).posthog?.getFeatureFlag(f), flag)
+const getFlag = async (page: Page, flag: string): Promise<any> => {
+    // oxlint-disable-next-line posthog-js/no-direct-function-check -- Serialized browser code cannot import isFunction.
+    await page.waitForFunction(() => typeof (window as any).posthog?.getFeatureFlag === 'function')
+    return page.evaluate((f) => (window as any).posthog.getFeatureFlag(f), flag)
+}
 
 test.describe('split storage (split_storage)', () => {
     test('gate off (default): flags stay in the single blob, no group entries', async ({ page, context }) => {
@@ -97,7 +100,17 @@ test.describe('split storage (split_storage)', () => {
         await start({ options, flagsResponseOverrides, url: PAGE }, page, context)
         await expect.poll(() => getFlag(page, MY_FLAG)).toBe(true)
 
-        await start({ options, flagsResponseOverrides, url: PAGE, type: 'reload' }, page, context)
+        await start(
+            {
+                options: { ...options, advanced_disable_feature_flags: true },
+                flagsResponseOverrides,
+                url: PAGE,
+                type: 'reload',
+                waitForFlags: false,
+            },
+            page,
+            context
+        )
 
         await expect.poll(() => getFlag(page, MY_FLAG)).toBe(true)
         const snap = await readPersistence(page)
@@ -111,7 +124,8 @@ test.describe('split storage (split_storage)', () => {
     }) => {
         await start(
             {
-                options: { split_storage: true },
+                options: { split_storage: true, advanced_disable_feature_flags: true },
+                waitForFlags: false,
                 flagsResponseOverrides: { featureFlags: { [MY_FLAG]: true }, flags: flagOn(MY_FLAG) },
                 url: PAGE,
                 // seed an old-layout single blob (flags inline) before PostHog initialises
@@ -130,14 +144,14 @@ test.describe('split storage (split_storage)', () => {
             context
         )
 
-        await expect.poll(() => getFlag(page, MY_FLAG)).toBe(true)
+        await expect.poll(() => getFlag(page, 'cached-flag')).toBe(true)
 
         const snap = await readPersistence(page)
         // the seeded identity survives the migration...
         expect(snap.main?.distinct_id).toBe('migrated-user')
         // ...but the flag cluster has been lifted out of the main blob into __flags
         expect(snap.main?.[ENABLED_FEATURE_FLAGS]).toBeUndefined()
-        expect(snap.flags?.[ENABLED_FEATURE_FLAGS]).toBeTruthy()
+        expect(snap.flags?.[ENABLED_FEATURE_FLAGS]?.['cached-flag']).toBe(true)
     })
 
     test('gate on (surveys): $surveys is split out, the survey shows, and dismissal survives reload', async ({
@@ -174,9 +188,9 @@ test.describe('split storage (split_storage)', () => {
 
         await expect(page.locator(`.PostHogSurvey-${surveyId}`).locator('.survey-form')).toBeVisible()
 
-        // $surveys must not ride in the main blob when the gate is on
         const snap = await readPersistence(page)
         expect(snap.main?.[SURVEYS]).toBeUndefined()
+        expect(snap.surveys?.[SURVEYS]).toEqual(expect.arrayContaining([expect.objectContaining({ id: surveyId })]))
 
         await page.locator(`.PostHogSurvey-${surveyId}`).locator('.form-cancel').click()
         await expect(page.locator(`.PostHogSurvey-${surveyId}`).locator('.survey-form')).not.toBeInViewport()

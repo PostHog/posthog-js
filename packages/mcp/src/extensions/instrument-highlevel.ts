@@ -298,6 +298,7 @@ async function handleToolCallRequest(
     parameterOwnership: registeredTool
       ? getAnalyticsParameterOwnership(registeredTool.inputSchema, registeredTool.outputSchema)
       : undefined,
+    inputSchema: registeredTool?.inputSchema,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {

@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { mockLogger } from './helpers/mock-logger'
 
 import * as globals from '@posthog/browser-common/utils/globals'
@@ -13,13 +14,12 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
     USER_STATE,
 } from '../constants'
-import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import { createPosthogInstance, defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
 // `var` so the hoisted vi.mock factory below can assign to it without TDZ.
@@ -27,7 +27,7 @@ import { SessionPropsManager } from '../session-props'
 // was in package.json#browserslist. `vi.hoisted()` would be the modern
 // fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
 // oxlint-disable-next-line no-var
-var mockGetProperties: vi.Mock
+var mockGetProperties: VitestMock
 
 vi.mock('@posthog/browser-common/utils/event-utils', async (importOriginal) => {
     const originalEventUtils = await importOriginal<typeof import('@posthog/browser-common/utils/event-utils')>()
@@ -58,11 +58,23 @@ describe('posthog core', () => {
             },
         } as any
         const posthog = defaultPostHog().init(token, config, uuidv7())
-        return Object.assign(posthog, overrides || {})
+        return Object.assign(posthog, { _send_retriable_request: vi.fn() }, overrides || {})
     }
 
-    beforeEach(() => {
+    beforeEach(async () => {
+        const actual = await vi.importActual<typeof import('@posthog/browser-common/utils/event-utils')>(
+            '@posthog/browser-common/utils/event-utils'
+        )
+        mockGetProperties.mockImplementation(actual.getEventProperties)
         vi.useFakeTimers().setSystemTime(baseUTCDateTime)
+        localStorage.clear()
+        sessionStorage.clear()
+        document!.cookie.split(';').forEach((cookie) => {
+            document!.cookie = `${cookie.split('=')[0].trim()}=; max-age=0; path=/`
+        })
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            testtoken: { config: {}, siteApps: [] },
+        } as any
     })
 
     afterEach(() => {
@@ -218,8 +230,8 @@ describe('posthog core', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
-            posthog.capture(eventName, {}, {})
-            expect(hook).not.toHaveBeenCalledWith('$event')
+            expect(posthog.capture(eventName, {}, {})).toBeUndefined()
+            expect(hook).not.toHaveBeenCalled()
             navigatorSpy.mockRestore()
         })
 
@@ -656,7 +668,15 @@ describe('posthog core', () => {
         }
 
         beforeEach(() => {
+            overrides.persistence!.props = {}
             mockGetProperties.mockReturnValue({ $lib: 'web' })
+            vi.mocked(overrides.sessionManager!.checkAndGetSessionAndWindowId).mockReturnValue({
+                windowId: 'windowId',
+                sessionId: 'sessionId',
+            } as any)
+            vi.mocked(overrides.sessionPropsManager!.getSessionProps).mockReturnValue({
+                $session_entry_referring_domain: 'https://referrer.example.com',
+            })
 
             posthog = posthogWith(
                 {
@@ -1533,26 +1553,22 @@ describe('posthog core', () => {
             posthogWith(config as Partial<PostHogConfig>)
         })
 
-        it.skip('does not load feature flags, session recording', () => {
-            // TODO this didn't make a tonne of sense in the given form
-            // it makes no sense now
-            // of course mocks added _after_ init will not be called
-            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
-
-            posthog.sessionRecording = {
-                afterFlagsResponse: vi.fn(),
-                startIfEnabledOrStop: vi.fn(),
-            } as unknown as SessionRecording
-            posthog.persistence = {
-                register: vi.fn(),
-                update_config: vi.fn(),
-            } as unknown as PostHogPersistence
-
-            // Feature flags
-            expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
-
-            // Session recording
-            expect(posthog.sessionRecording.onRemoteConfig).not.toHaveBeenCalled()
+        it.each([true, false])('respects startup flags disabled=%s', async (disabled) => {
+            const requests = vi.spyOn(PostHog.prototype, '_send_request').mockImplementation(() => {})
+            let instance: PostHog | undefined
+            try {
+                instance = await createPosthogInstance(uuidv7(), {
+                    advanced_disable_flags: disabled,
+                    capture_pageview: false,
+                })
+                vi.advanceTimersByTime(10)
+                expect(requests.mock.calls.filter(([request]) => request.url.includes('/flags/'))).toHaveLength(
+                    disabled ? 0 : 1
+                )
+            } finally {
+                await instance?.shutdown()
+                requests.mockRestore()
+            }
         })
 
         describe('device id behavior', () => {
@@ -1581,19 +1597,28 @@ describe('posthog core', () => {
                 expect(posthog.persistence!.props.$device_id).toEqual(posthog.persistence!.props.distinct_id)
             })
 
-            it('does not set distinct_id/$device_id if distinct_id is unset', () => {
-                uninitialisedPostHog.persistence = {
-                    props: { distinct_id: 'existing-id' },
-                } as unknown as PostHogPersistence
-                const posthog = uninitialisedPostHog.init(
-                    uuidv7(),
-                    {
-                        get_device_id: (uuid) => uuid,
-                    },
+            it('preserves persisted distinct_id and $device_id when recreating a client', async () => {
+                const token = uuidv7()
+                const original = await createPosthogInstance(token, { persistence: 'localStorage' })
+                original.register({ distinct_id: 'existing-id', $device_id: 'existing-device' })
+                const getDeviceId = vi.fn((uuid) => uuid)
+                const restored = new PostHog().init(
+                    token,
+                    { ...original.config, get_device_id: getDeviceId, loaded: () => {} },
                     uuidv7()
                 )!
-
-                expect(posthog.persistence!.props.distinct_id).not.toEqual('existing-id')
+                try {
+                    expect(restored).not.toBe(original)
+                    expect(restored.persistence!.props).toMatchObject({
+                        distinct_id: 'existing-id',
+                        $device_id: 'existing-device',
+                    })
+                    expect(getDeviceId).not.toHaveBeenCalled()
+                } finally {
+                    restored.persistence!.clear()
+                    await original.shutdown()
+                    await restored.shutdown()
+                }
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
@@ -2036,7 +2061,7 @@ describe('posthog core', () => {
                 const sendRequestMock = vi.fn()
                 await createPosthogInstance(uuidv7(), {
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        requirePostHogInstance(ph)._send_request = sendRequestMock
                     },
                 })
 
@@ -2053,7 +2078,7 @@ describe('posthog core', () => {
                 await createPosthogInstance(uuidv7(), {
                     advanced_disable_flags: true,
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        requirePostHogInstance(ph)._send_request = sendRequestMock
                     },
                 })
 
@@ -2064,42 +2089,46 @@ describe('posthog core', () => {
     })
 
     describe('capturing pageviews', () => {
-        it('captures not capture pageview if disabled', async () => {
+        it('does not capture pageview if disabled', async () => {
             vi.useFakeTimers()
-
+            const beforeSend = vi.fn((event) => event)
             const instance = await createPosthogInstance(uuidv7(), {
                 capture_pageview: false,
+                before_send: beforeSend,
             })
-            instance.capture = vi.fn()
-
-            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-            // but you do :shrug:
-            instance.capture('not a pageview', {})
-
-            vi.runOnlyPendingTimers()
-
-            expect(instance.capture).not.toHaveBeenLastCalledWith(
-                '$pageview',
-                { title: 'test' },
-                { send_instantly: true }
-            )
+            try {
+                instance.capture('not a pageview', {})
+                vi.runOnlyPendingTimers()
+                expect(beforeSend).toHaveBeenCalledWith(expect.objectContaining({ event: 'not a pageview' }))
+                expect(beforeSend.mock.calls.map(([event]) => event.event)).not.toContain('$pageview')
+            } finally {
+                await instance.shutdown()
+            }
         })
 
         it('captures pageview if enabled', async () => {
-            vi.useFakeTimers()
-
-            const instance = await createPosthogInstance(uuidv7(), {
-                capture_pageview: true,
-            })
-            instance.capture = vi.fn()
-
-            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-            // but you do :shrug:
-            instance.capture('not a pageview', {})
-
-            vi.runOnlyPendingTimers()
-
-            expect(instance.capture).toHaveBeenLastCalledWith('$pageview', { title: 'test' }, { send_instantly: true })
+            const originalTitle = document!.title
+            document!.title = 'startup title'
+            const capture = vi.spyOn(PostHog.prototype, 'capture')
+            const beforeSend = vi.fn((event) => event)
+            let instance: PostHog | undefined
+            try {
+                instance = await createPosthogInstance(uuidv7(), {
+                    capture_pageview: true,
+                    before_send: beforeSend,
+                })
+                vi.runOnlyPendingTimers()
+                expect(capture).toHaveBeenCalledWith('$pageview', { title: 'startup title' }, { send_instantly: true })
+                const pageviews = beforeSend.mock.calls
+                    .map(([event]) => event)
+                    .filter((event) => event.event === '$pageview')
+                expect(pageviews).toHaveLength(1)
+                expect(pageviews[0].properties.title).toBe('startup title')
+            } finally {
+                await instance?.shutdown()
+                capture.mockRestore()
+                document!.title = originalTitle
+            }
         })
     })
 

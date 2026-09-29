@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import { within } from '@testing-library/dom'
 import {
@@ -27,16 +28,26 @@ import {
 
 import { beforeEach } from 'vitest'
 import Config from '@posthog/browser-common/config'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { PostHog } from '../../posthog-core'
+import { PostHog, defaultConfig } from '../../posthog-core'
+import { BrowserSurveys } from '../../browser-surveys'
 import { PostHogFeatureFlags } from '../../posthog-featureflags'
 import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
 import { FeatureFlagsExtension } from '../../extension-tokens'
 import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 import { createMockPostHog } from '../helpers/posthog-instance'
+
+const createSurveyFeatureFlags = (values?: Record<string, boolean | string>): PostHogFeatureFlags => {
+    const flags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+    vi.spyOn(flags, 'hasLoadedFlags', 'get').mockReturnValue(true)
+    vi.spyOn(flags, 'getFeatureFlag').mockImplementation((key) => (values ? values[key] : true))
+    vi.spyOn(flags, 'isFeatureEnabled').mockImplementation((key) => (values ? !!values[key] : true))
+    return flags
+}
 
 declare const global: any
 
@@ -100,16 +111,20 @@ describe('survey display logic', () => {
     ]
 
     const mockPostHog = createMockPostHog({
-        surveys: {
-            getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
-        },
         get_session_replay_url: vi.fn(),
         is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
         config: {
+            ...defaultConfig(),
             disable_surveys_automatic_display: false,
         },
     })
+
+    mockPostHog.surveys = new BrowserSurveys(mockPostHog)
+    mockPostHog.surveys.getSurveys = vi.fn<
+        Parameters<BrowserSurveys['getSurveys']>,
+        ReturnType<BrowserSurveys['getSurveys']>
+    >((callback) => callback(mockSurveys))
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         vi.useFakeTimers()
@@ -173,13 +188,15 @@ describe('usePopupVisibility', () => {
     const removeSurvey = vi.fn()
 
     test('should set isPopupVisible to true immediately if delay is 0', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after delay', () => {
         vi.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
+        const { result } = renderHook(() =>
+            usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey, true)
+        )
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
             vi.advanceTimersByTime(1000)
@@ -189,7 +206,7 @@ describe('usePopupVisibility', () => {
     })
 
     test('should hide popup when PHSurveyClosed event is dispatched', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         act(() => {
             window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
         })
@@ -205,7 +222,7 @@ describe('usePopupVisibility', () => {
             thankYouMessageDescription: 'We appreciate your feedback.',
         }
 
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         act(() => {
             window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
         })
@@ -223,24 +240,38 @@ describe('usePopupVisibility', () => {
 
     test('should clean up event listeners and timers on unmount', () => {
         vi.useFakeTimers()
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
+        const { unmount } = renderHook(() =>
+            usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey, true)
+        )
+        const shown = vi.fn()
+        addEventListener(window, 'PHSurveyShown', shown)
+        const capture = vi.spyOn(mockPostHog, 'capture')
+        capture.mockClear()
         const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
 
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveySent', expect.any(Function))
+        act(() => {
+            vi.advanceTimersByTime(1001)
+        })
+        expect(shown).not.toHaveBeenCalled()
+        expect(capture).not.toHaveBeenCalled()
+        window.removeEventListener('PHSurveyShown', shown)
+        capture.mockRestore()
+        removeEventListenerSpy.mockRestore()
         vi.useRealTimers()
     })
 
     test('should set isPopupVisible to true if isPreviewMode is true', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after a delay of 500 milliseconds', () => {
         vi.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
             vi.advanceTimersByTime(500)
@@ -250,12 +281,12 @@ describe('usePopupVisibility', () => {
     })
 
     test('should not throw an error if posthog is undefined', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should clean up event listeners on unmount when delay is 0', () => {
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
@@ -266,7 +297,7 @@ describe('usePopupVisibility', () => {
 
     test('should dispatch PHSurveyShown event when survey is shown', () => {
         const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent')
-        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(new Event('PHSurveyShown'))
     })
@@ -275,10 +306,10 @@ describe('usePopupVisibility', () => {
         vi.useFakeTimers()
         const mockSurvey2 = { ...mockSurvey, id: 'testSurvey2', name: 'Test survey 2' } as Survey
         const { result: result1 } = renderHook(() =>
-            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey)
+            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true)
         )
         const { result: result2 } = renderHook(() =>
-            usePopupVisibility(mockSurvey2, mockPostHog, 500, false, removeSurvey)
+            usePopupVisibility(mockSurvey2, mockPostHog, 500, false, removeSurvey, true)
         )
 
         expect(result1.current.isPopupVisible).toBe(true)
@@ -413,7 +444,6 @@ describe('usePopupVisibility close animation path', () => {
         expect(startViewTransition).not.toHaveBeenCalled()
         expect(result.current.isPopupVisible).toBe(false)
 
-        // @ts-expect-error - clean up the property we added
         delete document.startViewTransition
     })
 
@@ -486,6 +516,7 @@ describe('SurveyManager', () => {
     } as unknown as FlagsResponse
 
     beforeEach(() => {
+        localStorage.clear()
         mockSurveys = [
             {
                 id: 'testSurvey1',
@@ -523,19 +554,14 @@ describe('SurveyManager', () => {
             get_session_replay_url: vi.fn(),
             is_capturing: vi.fn(() => true),
             capture: vi.fn(),
-            featureFlags: {
-                hasLoadedFlags: true,
-                _send_request: vi
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-            },
-            surveys: {
-                getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
-            },
+            featureFlags: createSurveyFeatureFlags(flagsResponse.featureFlags),
         })
 
+        mockPostHog.surveys = new BrowserSurveys(mockPostHog)
+        mockPostHog.surveys.getSurveys = vi.fn<
+            Parameters<BrowserSurveys['getSurveys']>,
+            ReturnType<BrowserSurveys['getSurveys']>
+        >((callback) => callback(mockSurveys))
         surveyManager = createSurveyManager(mockPostHog)
     })
 
@@ -547,7 +573,7 @@ describe('SurveyManager', () => {
         const survey = {
             ...mockSurveys[0],
             linked_flag_key: 'linked-flag-key',
-            conditions: { linkedFlagVariant: 'control' },
+            conditions: { events: null, actions: null, cancelEvents: null, linkedFlagVariant: 'control' },
         }
 
         expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
@@ -702,11 +728,16 @@ describe('SurveyManager', () => {
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
 
-            vi.advanceTimersByTime(30000)
+            act(() => {
+                vi.advanceTimersByTime(30000)
+            })
 
             // shown: focus is retained (released only on dismiss/close), pending timer consumed
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('cancels a pending survey when a later evaluation cycle finds it ineligible', () => {
@@ -731,7 +762,7 @@ describe('SurveyManager', () => {
         const makeDelayedSurvey = (id: string, delaySeconds: number): Survey => ({
             ...mockSurveys[0],
             id,
-            conditions: { events: { values: [{ name: 'trigger_event' }] } },
+            conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'trigger_event' }] } },
             appearance: { surveyPopupDelaySeconds: delaySeconds },
         })
 
@@ -759,11 +790,18 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
 
             // the full 60s has not elapsed, but the remaining 20s has → shown
-            vi.advanceTimersByTime(19_000)
+            act(() => {
+                vi.advanceTimersByTime(19_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            vi.advanceTimersByTime(1_000)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('shows immediately when the delay already elapsed on an earlier page', () => {
@@ -776,6 +814,9 @@ describe('SurveyManager', () => {
             // no pending timer: rendered right away
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('waits the full delay when no activation time is recorded', () => {
@@ -785,11 +826,18 @@ describe('SurveyManager', () => {
             stubEventReceiver(survey.id, undefined)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-            vi.advanceTimersByTime(59_000)
+            act(() => {
+                vi.advanceTimersByTime(59_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            vi.advanceTimersByTime(1_000)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('waits the full delay when an older core bundle has no activation timestamp method', () => {
@@ -799,9 +847,21 @@ describe('SurveyManager', () => {
             ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => [survey.id] }
 
             expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
-            vi.advanceTimersByTime(60_000)
+            act(() => {
+                vi.advanceTimersByTime(59_999)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            expect(
+                document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent
+            ).not.toContain(survey.questions[0].question)
+            act(() => {
+                vi.advanceTimersByTime(1)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
@@ -814,11 +874,18 @@ describe('SurveyManager', () => {
 
             surveyManager.handlePopoverSurvey(survey)
 
-            vi.advanceTimersByTime(59_000)
+            act(() => {
+                vi.advanceTimersByTime(59_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            vi.advanceTimersByTime(1_000)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('never waits longer than the configured delay when the clock moved backwards', () => {
@@ -829,9 +896,14 @@ describe('SurveyManager', () => {
             stubEventReceiver(survey.id, Date.now() + 600_000)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-            vi.advanceTimersByTime(60_000)
+            act(() => {
+                vi.advanceTimersByTime(60_000)
+            })
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
     })
 
@@ -850,20 +922,20 @@ describe('SurveyManager', () => {
         })
 
         it('is not eligible while flags have not loaded, even when the cached flag says eligible', () => {
-            mockPostHog.featureFlags.hasLoadedFlags = false
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(false)
             const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
             expect(result.eligible).toBe(false)
             expect(result.reason).toContain('Feature flags have not loaded yet')
         })
 
         it('is eligible once flags have loaded and the internal flag is enabled', () => {
-            mockPostHog.featureFlags.hasLoadedFlags = true
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
             const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
             expect(result.eligible).toBe(true)
         })
 
         it('still bypasses the internal flag for repeatable surveys before flags load', () => {
-            mockPostHog.featureFlags.hasLoadedFlags = false
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(false)
             const result = surveyManager.checkSurveyEligibility({
                 ...makeGatedSurvey(),
                 schedule: SurveySchedule.Always,
@@ -965,7 +1037,7 @@ describe('SurveyManager', () => {
         // it and assert we read its own consent gate instead of throwing on every display poll.
         describe('on a core without is_capturing (version skew)', () => {
             beforeEach(() => {
-                // @ts-expect-error deliberately removing the method to emulate an older core
+                // Deliberately remove the method to emulate an older core (strictNullChecks is disabled).
                 mockPostHog.is_capturing = undefined
             })
 
@@ -1039,7 +1111,7 @@ describe('SurveyManager', () => {
         const makeEventGatedSurvey = (): Survey => ({
             ...mockSurveys[0],
             id: EVENT_GATED_SURVEY_ID,
-            conditions: { events: { values: [{ name: 'survey_trigger_event' }] } },
+            conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'survey_trigger_event' }] } },
         })
 
         const setActivatedSurveys = (surveyIds: string[]): void => {
@@ -1102,7 +1174,7 @@ describe('SurveyManager', () => {
             linked_flag_key: null,
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
-            questions: [],
+            questions: [{ id: 'widget-question', type: SurveyQuestionType.Open, question: 'Widget question?' }],
             appearance: { widgetType: SurveyWidgetType.Tab }, // Specify widget type
             conditions: null,
             start_date: '2021-01-01T00:00:00.000Z',
@@ -1115,8 +1187,13 @@ describe('SurveyManager', () => {
         const handleWidgetSpy = vi.spyOn(surveyManager as any, '_handleWidget')
         surveyManager.getTestAPI().handleWidget(mockSurvey) // Call the actual method
         expect(handleWidgetSpy).toHaveBeenCalledWith(mockSurvey)
-        // We can add more specific assertions here if needed, e.g., checking if the shadow DOM was created
-        // For now, just ensuring it was called seems sufficient for this test's scope.
+        const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)!.shadowRoot!
+        const tab = shadow.querySelector('.ph-survey-widget-tab') as HTMLButtonElement
+        expect(tab).not.toBeNull()
+        expect(tab).toBeEnabled()
+        expect(shadow.textContent).not.toContain('Widget question?')
+        fireEvent.click(tab)
+        expect(shadow.textContent).toContain('Widget question?')
     })
 
     test('manageWidgetSelectorListener should be called for selector widgets', () => {
@@ -1321,23 +1398,24 @@ describe('SurveyManager', () => {
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
         mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
-
+        const handlePopoverSurveyMock = vi
+            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .mockImplementation(() => {})
         surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
+        expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
         mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
-
-        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
-        surveyManager.callSurveysAndEvaluateDisplayLogic()
-
         const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
@@ -1575,16 +1653,19 @@ describe('SurveyManager', () => {
 
     describe('renderSurvey with URL prefill', () => {
         let surveyManager: SurveyManager
-        let originalLocation: Location
+        let originalLocation: PropertyDescriptor
 
         beforeEach(() => {
-            originalLocation = window.location
-            delete (window as any).location
-            window.location = { ...originalLocation, search: '' } as Location
+            originalLocation = Object.getOwnPropertyDescriptor(window, 'location')
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...window.location, search: '' },
+            })
         })
 
         afterEach(() => {
-            window.location = originalLocation
+            Object.defineProperty(window, 'location', originalLocation)
         })
 
         it.each([
@@ -1601,6 +1682,7 @@ describe('SurveyManager', () => {
         ])('should show confirmation=$shouldShowConfirmation for $scenario', ({ search, shouldShowConfirmation }) => {
             const mockPH = createMockPostHog({
                 config: {
+                    ...defaultConfig(),
                     token: 'test-token',
                     api_host: 'https://test.com',
                     surveys: { prefillFromUrl: true },
@@ -1609,7 +1691,7 @@ describe('SurveyManager', () => {
                 get_session_replay_url: vi.fn(),
                 is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
-                featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
+                featureFlags: createSurveyFeatureFlags(),
             })
 
             surveyManager = createSurveyManager(mockPH)
@@ -1624,6 +1706,8 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'How was the draft?',
                         scale: 2,
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         display: 'emoji',
                         skipSubmitButton: true,
                         branching: {
@@ -1667,6 +1751,7 @@ describe('SurveyManager', () => {
             localStorage.clear()
             const mockPH = createMockPostHog({
                 config: {
+                    ...defaultConfig(),
                     token: 'test-token',
                     api_host: 'https://test.com',
                     surveys: { prefillFromUrl: true },
@@ -1675,7 +1760,7 @@ describe('SurveyManager', () => {
                 get_session_replay_url: vi.fn(),
                 is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
-                featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
+                featureFlags: createSurveyFeatureFlags(),
             })
             surveyManager = createSurveyManager(mockPH)
 
@@ -1690,6 +1775,8 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate the draft',
                         scale: 2,
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         display: 'emoji',
                         skipSubmitButton: true,
                     },
@@ -1746,9 +1833,7 @@ describe('SurveyManager', () => {
                 get_session_replay_url: vi.fn(),
                 is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
-                featureFlags: {
-                    isFeatureEnabled: vi.fn().mockReturnValue(true),
-                },
+                featureFlags: createSurveyFeatureFlags(),
             })
 
             surveyManager = createSurveyManager(mockPostHog)
@@ -1782,21 +1867,6 @@ describe('SurveyManager', () => {
             // Make the internal methods accessible for testing
             vi.spyOn(surveyManager as any, '_addSurveyToFocus')
             vi.spyOn(surveyManager as any, '_removeSurveyFromFocus')
-
-            // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
-            vi.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
-                // Add survey to focus and create a timeout
-                surveyManager.getTestAPI().addSurveyToFocus(survey)
-
-                if (survey.appearance?.surveyPopupDelaySeconds) {
-                    const timeoutId = setTimeout(() => {
-                        // This simulates what would happen when the timeout completes
-                        // In the real implementation, it would render the survey
-                        surveyManager.getTestAPI().surveyTimeouts.delete(survey.id)
-                    }, survey.appearance.surveyPopupDelaySeconds * 1000)
-                    surveyManager.getTestAPI().surveyTimeouts.set(survey.id, timeoutId)
-                }
-            })
         })
 
         afterEach(() => {
@@ -1810,9 +1880,22 @@ describe('SurveyManager', () => {
             vi.restoreAllMocks()
         })
 
-        test('should track timeouts when scheduling delayed surveys', () => {
+        test('should track timeouts until a delayed survey renders', () => {
             surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)!.shadowRoot!
             expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+
+            act(() => {
+                vi.advanceTimersByTime(4999)
+            })
+            expect(shadow.textContent).not.toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+
+            act(() => {
+                vi.advanceTimersByTime(1)
+            })
+            expect(shadow.textContent).toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
         })
 
         test('should clear timeouts when removing survey from focus', () => {
@@ -1851,9 +1934,19 @@ describe('SurveyManager', () => {
             surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey2)
             const secondTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey2.id)
 
-            // Verify both timeouts are tracked separately
+            expect(firstTimeoutId).toBeDefined()
+            expect(secondTimeoutId).toBeDefined()
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+
+            act(() => {
+                vi.advanceTimersByTime(10000)
+            })
+            expect(document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)).toBeNull()
+            const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey2)}`)!.shadowRoot!
+            expect(shadow.textContent).toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey2.id)).toBe(false)
         })
 
         test('cancelSurvey should clear timeout and release focus for pending survey', () => {
@@ -1996,13 +2089,9 @@ describe('SurveyManager', () => {
         })
 
         it('keeps the shuffled question order stable across a language change', () => {
-            // With only 2 questions, getDisplayOrderQuestions's reverseIfUnshuffled makes the
-            // "shuffled" order deterministic (there's only one non-identity permutation), so a
-            // reshuffle-on-every-render bug would be invisible. 4 questions give 24 possible
-            // orders, so recomputing on every render would show up as a different order almost
-            // every time. Repeat with a fresh survey id (and shadow root) per trial so a flaky
-            // pass doesn't mask a regression.
-            for (let trial = 0; trial < 10; trial++) {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+            try {
+                const trial = 0
                 const shuffledSurvey: Survey = {
                     id: `shuffled-lang-survey-${trial}`,
                     name: 'Shuffled Lang Survey',
@@ -2040,6 +2129,8 @@ describe('SurveyManager', () => {
                     Boolean(within(shadowEl).queryByText(`${id.toUpperCase()}-EN`))
                 )
                 expect(firstQuestionId).toBeDefined()
+                expect(firstQuestionId).toBe('q2')
+                random.mockReturnValue(0.999)
 
                 setNavigatorLanguage('fr')
                 act(() => {
@@ -2051,7 +2142,14 @@ describe('SurveyManager', () => {
                     expect(within(shadowEl).queryByText(`${otherId.toUpperCase()}-FR`)).not.toBeInTheDocument()
                 }
 
+                for (const expected of ['q3', 'q4', 'q1']) {
+                    fireEvent.input(within(shadowEl).getByRole('textbox'), { target: { value: 'answer' } })
+                    fireEvent.click(within(shadowEl).getByRole('button', { name: /submit survey/i }))
+                    expect(within(shadowEl).getByText(`${expected.toUpperCase()}-FR`)).toBeInTheDocument()
+                }
                 surveyManager.getTestAPI().removeSurveyFromFocus(shuffledSurvey)
+            } finally {
+                random.mockRestore()
             }
         })
     })
@@ -2108,41 +2206,45 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
+            const enabled = vi
+                .spyOn(mockPostHog.featureFlags, 'isFeatureEnabled')
+                .mockImplementation((flag) => flag === 'flag-3')
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
+            expect(enabled).toHaveBeenCalledTimes(1)
+            expect(enabled).toHaveBeenCalledWith('flag-3', { send_event: true })
         })
     })
 
     describe('URL prefill auto-submit behavior', () => {
         let mockPostHog: PostHog
         let surveyManager: SurveyManager
-        let originalLocation: Location
+        let originalLocation: PropertyDescriptor
 
         beforeEach(() => {
             localStorage.clear()
             vi.clearAllMocks()
 
-            originalLocation = window.location
-            delete (window as any).location
-            window.location = { ...originalLocation, search: '' } as Location
+            originalLocation = Object.getOwnPropertyDescriptor(window, 'location')
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...window.location, search: '' },
+            })
 
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
                 is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
-                featureFlags: {
-                    isFeatureEnabled: vi.fn().mockReturnValue(true),
-                },
+                featureFlags: createSurveyFeatureFlags(),
             })
 
             surveyManager = createSurveyManager(mockPostHog)
         })
 
         afterEach(() => {
-            window.location = originalLocation
+            Object.defineProperty(window, 'location', originalLocation)
         })
 
         it('should auto-submit prefilled responses when skipSubmitButton is true and enable_partial_responses is true', () => {
@@ -2157,6 +2259,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -2202,6 +2307,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -2248,6 +2356,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: false,
                     },
                     {
@@ -2286,6 +2397,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -2324,6 +2438,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                 ],
@@ -2364,6 +2481,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -2371,6 +2491,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate again',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: false,
                     },
                     {
@@ -2414,8 +2537,8 @@ describe('SurveyManager', () => {
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
     let posthog: PostHog
-    let mockRemoveSurveyFromFocus: vi.Mock
-    let originalLocationHref: string
+    let mockRemoveSurveyFromFocus: VitestMock
+    let originalLocationDescriptor: PropertyDescriptor
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
 
@@ -2460,7 +2583,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         originalReplaceState = window.history.replaceState
 
         // Store original location and set initial location
-        originalLocationHref = window.location.href
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         Object.defineProperty(window, 'location', {
             value: new URL('https://example.com'),
             writable: true,
@@ -2473,10 +2596,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         window.history.replaceState = originalReplaceState
 
         // Restore original location
-        Object.defineProperty(window, 'location', {
-            value: new URL(originalLocationHref),
-            writable: true,
-        })
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
     })
 
     it('should not hide survey when URL matches - exact match', () => {
@@ -2485,7 +2605,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             value: new URL('https://example.com/path1'),
             writable: true,
         })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         act(() => {
             window.history.pushState({}, '', '/path1')
@@ -2496,10 +2618,18 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should hide survey when URL changes to non-matching - exact match', () => {
-        const survey = createTestSurvey({ url: '/path1', urlMatchType: 'exact' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        const survey = createTestSurvey({ url: 'https://example.com/path1', urlMatchType: 'exact' })
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
         act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        act(() => {
+            Object.defineProperty(window, 'location', { value: new URL('https://example.com/path2'), writable: true })
             window.history.pushState({}, '', '/path2')
         })
 
@@ -2517,7 +2647,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             writable: true,
         })
 
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         act(() => {
             window.history.pushState({}, '', '/path/subpage')
@@ -2529,9 +2661,20 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle replaceState URL changes', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
         act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/other/page'),
+                writable: true,
+            })
             window.history.replaceState({}, '', '/other/page')
         })
 
@@ -2541,8 +2684,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle browser back/forward navigation', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
+        act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         act(() => {
             Object.defineProperty(window, 'location', {
                 value: new URL('https://example.com/other/page'),
@@ -2558,8 +2708,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle hash-based navigation', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
+        act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         act(() => {
             Object.defineProperty(window, 'location', {
                 value: new URL('https://example.com/other/page#/hash'),
@@ -2576,7 +2733,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should restore original history methods on unmount', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { unmount } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { unmount } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         unmount()
 
@@ -2585,9 +2744,10 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should not show delayed survey if URL no longer matches when delay expires', () => {
+        vi.useFakeTimers()
         // Create a survey with a URL condition and a 2 second delay
         const survey = createTestSurvey({
-            url: '/initial-path',
+            url: 'https://example.com/initial-path',
             urlMatchType: 'exact',
         })
         survey.appearance = { surveyPopupDelaySeconds: 2 }
@@ -2604,11 +2764,14 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         }
 
         // Start the survey visibility hook
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus, true)
+        )
 
         // Initially the survey should not be visible (due to delay)
         expect(result.current.isPopupVisible).toBe(false)
 
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         // Change URL to non-matching path before delay expires
         act(() => {
             Object.defineProperty(window, 'location', {
@@ -2630,11 +2793,11 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 })
 
 describe('useHideSurveyOnURLChange', () => {
-    let originalLocationHref: string
+    let originalLocationDescriptor: PropertyDescriptor
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
-    let mockRemoveSurveyFromFocus: vi.Mock
-    let mockSetSurveyVisible: vi.Mock
+    let mockRemoveSurveyFromFocus: VitestMock
+    let mockSetSurveyVisible: VitestMock
 
     const BASE_SURVEY = {
         id: 'test-survey',
@@ -2650,7 +2813,7 @@ describe('useHideSurveyOnURLChange', () => {
         mockSetSurveyVisible = vi.fn()
 
         // Store original location and set initial location
-        originalLocationHref = window.location.href
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         Object.defineProperty(window, 'location', {
             value: { href: 'https://example.com' },
             writable: true,
@@ -2663,10 +2826,7 @@ describe('useHideSurveyOnURLChange', () => {
         window.history.replaceState = originalReplaceState
 
         // Restore original location
-        Object.defineProperty(window, 'location', {
-            value: { href: originalLocationHref },
-            writable: true,
-        })
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
 
         vi.clearAllMocks()
     })
@@ -2675,6 +2835,7 @@ describe('useHideSurveyOnURLChange', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
                 events: null,
@@ -2703,6 +2864,7 @@ describe('useHideSurveyOnURLChange', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 events: null,
                 actions: null,
             },
@@ -2725,130 +2887,56 @@ describe('useHideSurveyOnURLChange', () => {
         expect(mockSetSurveyVisible).not.toHaveBeenCalled()
     })
 
-    it('should handle pushState navigation', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
+    it.each(['pushState', 'replaceState', 'popstate', 'hashchange'] as const)(
+        'handles %s navigation only when the URL stops matching',
+        (navigation) => {
+            const survey = {
+                ...BASE_SURVEY,
+                conditions: {
+                    cancelEvents: null,
+                    url: 'https://example.com',
+                    urlMatchType: 'exact' as const,
+                    events: null,
+                    actions: null,
+                },
+            }
+            renderHook(() =>
+                useHideSurveyOnURLChange({
+                    survey,
+                    removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                    setSurveyVisible: mockSetSurveyVisible,
+                    isPreviewMode: false,
+                })
+            )
+            act(() => {
+                window.dispatchEvent(new Event('popstate'))
+            })
+            expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+            expect(mockSetSurveyVisible).not.toHaveBeenCalled()
+            act(() => {
+                const href =
+                    navigation === 'hashchange'
+                        ? 'https://different.com/#/some-hash'
+                        : navigation === 'popstate'
+                          ? 'https://different.com'
+                          : 'https://example.com/different-path'
+                Object.defineProperty(window, 'location', { value: { href }, writable: true })
+                if (navigation === 'pushState' || navigation === 'replaceState') {
+                    window.history[navigation]({}, '', '/different-path')
+                } else {
+                    window.dispatchEvent(new Event(navigation))
+                }
+            })
+            expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
+            expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
         }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            window.history.pushState({}, '', '/different-path')
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle replaceState navigation', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            window.history.replaceState({}, '', '/different-path')
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle popstate events', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://different.com' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('popstate'))
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle hashchange events', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://different.com/#/some-hash' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('hashchange'))
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
+    )
 
     it('should clean up event listeners and history methods on unmount', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
                 events: null,
@@ -2884,6 +2972,7 @@ describe('useHideSurveyOnURLChange', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'icontains' as const,
                 events: null,
@@ -2937,7 +3026,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -2975,7 +3064,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -3015,7 +3104,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -3051,7 +3140,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -3087,7 +3176,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -3123,7 +3212,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }

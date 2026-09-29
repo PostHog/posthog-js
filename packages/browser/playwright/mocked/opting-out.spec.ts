@@ -1,12 +1,21 @@
-import { test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
+import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start, gotoPage } from './utils/setup'
 
 test.describe('opting out', () => {
     test.describe('when not initialized', () => {
-        test('does not capture events without init', async ({ page }) => {
-            await gotoPage(page, './playground/cypress/index.html')
+        test('does not capture events without init', async ({ page, context }) => {
+            const requests: string[] = []
+            page.on('request', (request) => {
+                if (/\/e\//.test(request.url())) requests.push(request.url())
+            })
+            await gotoPage(page, '/playground/cypress/index.html')
             await page.type('[data-cy-input]', 'hello posthog!')
-            await page.expectCapturedEventsToBe([])
+            await page.locator('[data-cy-custom-event-button]').click()
+            await page.waitForTimeout(3500)
+            expect(requests).toEqual([])
+            await start({}, page, context)
+            await page.locator('[data-cy-custom-event-button]').click()
+            await expect.poll(() => requests.length).toBeGreaterThan(0)
         })
     })
 
@@ -29,8 +38,14 @@ test.describe('opting out', () => {
             await page.expectCapturedEventsToBe([])
 
             await page.type('[data-cy-input]', 'hello posthog!')
-
+            await page.evaluate(() => (window as WindowWithPostHog).posthog!.capture('consent-control'))
             await page.expectCapturedEventsToBe([])
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog!
+                ph.opt_in_capturing()
+                ph.capture('consent-control')
+            })
+            expect((await page.capturedEvents()).filter((event) => event.event === 'consent-control')).toHaveLength(1)
         })
 
         test('sends a $pageview event when opting in', async ({ page, context }) => {

@@ -302,9 +302,7 @@ export const buildNetworkRequestOptions = (
         logger.warn(
             'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
         )
-    }
-
-    if (hasDeprecatedMaskFunction) {
+    } else if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
             // Preserve the nullish signal for initial entries so the required-metadata fallback below can

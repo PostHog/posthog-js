@@ -11,7 +11,7 @@ import { BrowserContext, Page } from '@playwright/test'
 // The canvas redraws random content each frame, so we assert the byte-size trend
 // (half-res frame is meaningfully smaller), not pixel identity between the two runs.
 
-type CanvasFrame = { dw: number; dh: number; base64Len: number }
+type CanvasFrame = { dw: number; dh: number; base64Len: number; base64: string }
 
 function startOptionsFor(resolutionScale: number | undefined): Parameters<typeof start>[0] {
     return {
@@ -47,7 +47,7 @@ function latestCanvasFrame(events: any[]): CanvasFrame | undefined {
             const dw = drawImage.args[3]
             const dh = drawImage.args[4]
             const base64 = drawImage.args[0]?.args?.[0]?.data?.[0]?.base64 ?? ''
-            frames.push({ dw, dh, base64Len: base64.length })
+            frames.push({ dw, dh, base64Len: base64.length, base64 })
         }
     }
     return frames[frames.length - 1]
@@ -127,6 +127,18 @@ test.describe('canvas capture resolution', () => {
 
         expect(fullRes).toBeDefined()
         expect(halfRes).toBeDefined()
+        const dimensions = async (frame: CanvasFrame) => {
+            expect(frame.base64Len).toBeGreaterThan(0)
+            return page.evaluate(async (base64) => {
+                const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+                const image = await createImageBitmap(new Blob([bytes]))
+                const result = { width: image.width, height: image.height }
+                image.close()
+                return result
+            }, frame.base64)
+        }
+        expect(await dimensions(fullRes!)).toEqual({ width: 1000, height: 750 })
+        expect(await dimensions(halfRes!)).toEqual({ width: 500, height: 375 })
 
         // the recorded display size is the canvas's CSS display size (1000x750) and is IDENTICAL
         // whether or not we downscale the capture - we never relabel a 1000px canvas as anything else.

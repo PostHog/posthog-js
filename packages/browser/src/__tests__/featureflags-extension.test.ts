@@ -15,6 +15,7 @@ import { defaultConfig } from '../posthog-core'
 import { FeatureFlagError, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createPosthogInstance } from './helpers/posthog-instance'
+import { isArray } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('PostHogFeatureFlags extension lifecycle', () => {
@@ -105,7 +106,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             { 'early-access-flag': true },
             { errorsLoading: undefined }
         )
-        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
         posthog.getFeatureFlag('early-access-flag')
         expect(capture).toHaveBeenCalledWith(
             '$feature_flag_called',
@@ -269,7 +270,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     key: 'flag',
                     enabled: false,
                     failed: true,
-                    metadata: { id: 3, version: 3 },
+                    variant: undefined,
+                    reason: undefined,
+                    metadata: { id: 3, version: 3, description: undefined, payload: undefined },
                 },
             },
             errorsWhileComputingFlags: true,
@@ -1067,7 +1070,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 }),
             })
         )
-        const snapshotProperties = enqueue.mock.calls[0][0].data.properties
+        const snapshotData = enqueue.mock.calls[0][0].data
+        if (!snapshotData || isArray(snapshotData)) throw new Error('Expected a single snapshot payload')
+        const snapshotProperties = snapshotData.properties
         for (const property of [
             '$active_feature_flags',
             '$feature_flag_payloads',
@@ -1377,9 +1382,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const client = posthog._getBrowserClientAdapter()
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
-        const callback = vi.fn()
+        const observations: Array<{ phase: string; flags: unknown; enrollment: unknown }> = []
+        const observe = (phase: string) =>
+            observations.push({
+                phase,
+                flags: { ...featureFlags.getFlagVariants() },
+                enrollment: { ...posthog.persistence?.get_property(STORED_PERSON_PROPERTIES_KEY) },
+            })
+        const callback = vi.fn(() => observe('callback'))
         featureFlags.addFeatureFlagsHandler(callback)
-        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {
+            observe('capture')
+            return undefined
+        })
         const setPersistence = vi.spyOn(client.kv, 'set')
 
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
@@ -1393,6 +1408,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
         expect(callback).toHaveBeenCalledTimes(1)
         expect(capture).toHaveBeenCalledWith('$feature_enrollment_update', expect.any(Object))
+        expect(observations).toEqual([
+            { phase: 'callback', flags: { 'test-flag': true }, enrollment: { '$feature_enrollment/test-flag': true } },
+            { phase: 'capture', flags: { 'test-flag': true }, enrollment: { '$feature_enrollment/test-flag': true } },
+        ])
+        expect(setPersistence.mock.invocationCallOrder[0]).toBeLessThan(callback.mock.invocationCallOrder[0])
+        expect(setPersistence.mock.invocationCallOrder[0]).toBeLessThan(capture.mock.invocationCallOrder[0])
         featureFlags.dispose()
     })
 

@@ -182,6 +182,22 @@ to retain transport-based session grouping and unchanged response content. Custo
 dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
 
+### Identifying the deployed server build
+
+MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable
+Git commit SHA, release ID, or container digest once during setup. The SDK adds it to every MCP event
+as `$mcp_server_build`.
+
+```ts
+instrument(server, posthog, { serverBuild: process.env.GIT_SHA })
+
+const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  serverBuild: process.env.GIT_SHA,
+})
+```
+
+Omit `serverBuild` when the deployment does not provide a reliable value.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the

@@ -7,11 +7,12 @@ import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
-import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
+import { BoundedCache, IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
 import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/feedback'
@@ -54,11 +55,10 @@ import type {
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   const logger = createLogger(options?.logger)
 
-  // Fail fast on a `collectFeedback` config error (reserved extra key,
-  // undeclared extraRequired). Above the graceful-degradation try so it throws
-  // out of instrument() like PostHogMCP's constructor does — inside the catch it
-  // would silently disable ALL analytics for the server, not just feedback.
+  // Fail fast on config errors. Keep these checks above the graceful-degradation
+  // try so invalid config does not silently disable all analytics for the server.
   // `options?.` — untyped JavaScript can pass null options (see logger-isolation.test.ts).
+  validateServerBuild(options?.serverBuild)
   const feedbackOptions = resolveCollectFeedbackOptions(options?.collectFeedback)
   if (feedbackOptions) {
     getFeedbackToolDescriptor(feedbackOptions)
@@ -161,6 +161,7 @@ function buildTrackingData(
     toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
+    toolInputSchemas: new BoundedCache(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: {
       ...DEFAULT_OPTIONS,
@@ -230,6 +231,7 @@ export {
 // Host callbacks receive the SDK's `extra`/`ctx` unchanged, and the two SDK
 // majors carry HTTP headers in different places and shapes. This reads either.
 export { getRequestHeaders } from './extensions/request-headers'
+export { getToolInputProperties } from './extensions/tool-input'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
@@ -249,6 +251,7 @@ export type {
   CaptureEventData,
   CollectFeedbackConfig,
   InitializeCaptureData,
+  InputAliasMap,
   McpAnalytics,
   McpCaptureCommon,
   MCPAnalyticsContextOptions,
@@ -262,7 +265,9 @@ export type {
   PrepareToolCallOptions,
   PrepareToolListOptions,
   RequestHeaderBag,
+  ShouldRecordInputKeyFn,
   ToolCallCaptureData,
+  ToolInputOptions,
   ToolsListCaptureData,
   UserIdentity,
 } from './types'

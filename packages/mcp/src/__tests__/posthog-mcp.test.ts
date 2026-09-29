@@ -1,4 +1,4 @@
-import { getMoreToolsResult, PostHogMCP } from '../index'
+import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
@@ -45,6 +45,38 @@ describe('PostHogMCP', () => {
 
   // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
 
+  it('adds the configured server build to captured events', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('does not let custom properties replace the configured server build', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({
+        toolName: 'execute-sql',
+        isError: false,
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('rejects a server build that cannot be recorded exactly', () => {
+    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({
@@ -55,7 +87,14 @@ describe('PostHogMCP', () => {
         distinctId: 'user-123',
         sessionId: 'session-abc',
         groups: { organization: 'org-1', project: 'proj-1' },
-        properties: { $mcp_client_name: 'claude-code', custom_flag: true },
+        properties: {
+          $mcp_client_name: 'claude-code',
+          custom_flag: true,
+          ...getToolInputProperties(
+            { query: 'example-value', private_identifier: true },
+            { properties: { query: {} } }
+          ),
+        },
       })
       await tick()
 
@@ -72,6 +111,9 @@ describe('PostHogMCP', () => {
       expect(p.$groups).toEqual({ organization: 'org-1', project: 'proj-1' })
       expect(p.$mcp_client_name).toBe('claude-code')
       expect(p.custom_flag).toBe(true)
+      expect(p.$mcp_input_keys).toEqual(['query', '[redacted]'])
+      expect(p).not.toHaveProperty('$mcp_parameters')
+      expect(JSON.stringify(p)).not.toContain('example-value')
       // A resolved identity keeps person processing on.
       expect(p.$process_person_profile).toBeUndefined()
     })

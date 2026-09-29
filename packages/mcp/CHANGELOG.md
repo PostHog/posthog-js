@@ -1,5 +1,29 @@
 # @posthog/mcp
 
+## 0.21.0
+
+### Minor Changes
+
+- [#5136](https://github.com/PostHog/posthog-js/pull/5136) [`be66818`](https://github.com/PostHog/posthog-js/commit/be66818539cc1bd16cbd969f3b3e8072026206ed) Thanks [@gesh](https://github.com/gesh)! - Add optional MCP server build metadata
+  (2026-09-28)
+
+## 0.20.0
+
+### Minor Changes
+
+- [#5130](https://github.com/PostHog/posthog-js/pull/5130) [`4d58499`](https://github.com/PostHog/posthog-js/commit/4d584990e5d9e331193e07c4ccda1592d414abb1) Thanks [@gesh](https://github.com/gesh)! - Record declared input aliases in automatic MCP instrumentation.
+  (2026-09-28)
+
+## 0.19.0
+
+### Minor Changes
+
+- [#5117](https://github.com/PostHog/posthog-js/pull/5117) [`51699b4`](https://github.com/PostHog/posthog-js/commit/51699b4b575505a1378fc6766767b9ef636063c2) Thanks [@pauldambra](https://github.com/pauldambra)! - Record which declared parameter aliases a tool call relied on as `$mcp_input_aliases_used`, from a server-owned `inputAliases` map.
+  (2026-09-28)
+
+- [#5048](https://github.com/PostHog/posthog-js/pull/5048) [`466da07`](https://github.com/PostHog/posthog-js/commit/466da07b12730515be7f933d3f7367a29e422898) Thanks [@pauldambra](https://github.com/pauldambra)! - Record safe tool input field names for automatic and custom MCP servers. Unknown names are `[redacted]` by default; `shouldRecordInputKey` replaces that rule.
+  (2026-09-28)
+
 ## 0.18.1
 
 ### Patch Changes

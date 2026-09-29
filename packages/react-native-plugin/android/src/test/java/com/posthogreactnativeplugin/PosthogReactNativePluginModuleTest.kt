@@ -1,6 +1,7 @@
 package com.posthogreactnativeplugin
 
 import com.facebook.react.bridge.JavaOnlyMap
+import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroidConfig
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
@@ -158,6 +159,70 @@ class PosthogReactNativePluginModuleTest {
   fun `malformed or empty timestamps are rejected rather than defaulting to now`() {
     for (value in listOf("", "not-a-date", "2026-09-22", "2026-09-22T10:11:12Z", "2026-13-45T99:99:99.999Z")) {
       assertNull("expected $value to be rejected", parseIso8601(value))
+    }
+  }
+
+  private fun nativeExceptionEvent(name: String = "\$exception") =
+    PostHogEvent(
+      name,
+      "distinct-id",
+      properties =
+        mutableMapOf(
+          "\$process_person_profile" to false,
+          "\$is_identified" to false,
+          "\$recording_status" to "active",
+        ),
+    )
+
+  @Test
+  fun `JS fatal capture keeps the person processing values JS decided`() {
+    val jsProperties =
+      mapOf<String, Any>(
+        "\$process_person_profile" to true,
+        "\$is_identified" to true,
+        "\$recording_status" to "disabled",
+      )
+
+    val event =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent())
+      }
+
+    assertEquals(true, event.properties!!["\$process_person_profile"])
+    assertEquals(true, event.properties!!["\$is_identified"])
+    // Only the person keys are JS's; everything else keeps the native SDK's precedence.
+    assertEquals("active", event.properties!!["\$recording_status"])
+  }
+
+  @Test
+  fun `JS fatal capture drops person processing values JS set to null`() {
+    // Mirrors `ReadableMap.toHashMap()`, whose values can be null despite the cast.
+    @Suppress("UNCHECKED_CAST")
+    val jsProperties = mapOf("\$process_person_profile" to null, "\$is_identified" to true) as Map<String, Any>
+
+    val event =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent())
+      }
+
+    assertFalse(event.properties!!.containsKey("\$process_person_profile"))
+    assertEquals(true, event.properties!!["\$is_identified"])
+  }
+
+  @Test
+  fun `events outside the JS fatal capture keep native person processing values`() {
+    val jsProperties = mapOf<String, Any>("\$process_person_profile" to true, "\$is_identified" to true)
+
+    withJsFatalCaptureProperties(jsProperties) {}
+    val afterCapture = restoreJsFatalCaptureProperties(nativeExceptionEvent())
+    val otherEvent =
+      withJsFatalCaptureProperties(jsProperties) {
+        restoreJsFatalCaptureProperties(nativeExceptionEvent("other event"))
+      }
+
+    for (event in listOf(afterCapture, otherEvent)) {
+      assertEquals(false, event.properties!!["\$process_person_profile"])
+      assertEquals(false, event.properties!!["\$is_identified"])
     }
   }
 }

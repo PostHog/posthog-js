@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
@@ -11,7 +12,7 @@ const LAST_ACTIVITY = new Date('2023-01-01T10:30:00Z').getTime() // 167256900000
 describe('logs entrypoint — golden (console-capture record handed to core)', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    let mockCapture: vi.Mock
+    let mockCapture: VitestMock
 
     const initialize = async (instance: PostHog = mockPostHog): Promise<void> => {
         await import('../../entrypoints/logs')

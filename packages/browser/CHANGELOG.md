@@ -1,5 +1,54 @@
 # posthog-js
 
+## 1.435.0
+
+### Minor Changes
+
+- [#4794](https://github.com/PostHog/posthog-js/pull/4794) [`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Add `onActiveMatchingSurveysChanged` to subscribe to survey eligibility updates with safe unsubscribe and recoverable load-error reporting.
+  (2026-09-29)
+
+### Patch Changes
+
+- Updated dependencies [[`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202)]:
+  - @posthog/types@1.413.0
+
+## 1.434.18
+
+### Patch Changes
+
+- [#5125](https://github.com/PostHog/posthog-js/pull/5125) [`69a55c0`](https://github.com/PostHog/posthog-js/commit/69a55c06c85f83e7b6008446530a1b728812c427) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent analytics persistence writes during initialization when persistence is disabled or opted out.
+  (2026-09-29)
+
+- [#5133](https://github.com/PostHog/posthog-js/pull/5133) [`fbf3990`](https://github.com/PostHog/posthog-js/commit/fbf3990e2e0b4d072cab83477ec8bcca20cd8135) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate replay network masking callback errors so unrelated network records continue to be captured.
+  (2026-09-29)
+
+- [#5126](https://github.com/PostHog/posthog-js/pull/5126) [`5775575`](https://github.com/PostHog/posthog-js/commit/577557503c53f99ccd15e31ec6463069eaaa1cff) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve equals signs in survey URL prefill values and ignore malformed URL parameters without blocking surveys.
+  (2026-09-29)
+
+## 1.434.17
+
+### Patch Changes
+
+- [#5063](https://github.com/PostHog/posthog-js/pull/5063) [`799e84c`](https://github.com/PostHog/posthog-js/commit/799e84ccd9fc830db733033093d0382aec023025) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): keep a held recording epoch's buffered data when it hits the size cap
+  (2026-09-28)
+
+- [#5118](https://github.com/PostHog/posthog-js/pull/5118) [`3212630`](https://github.com/PostHog/posthog-js/commit/3212630d9fea54dad35c31b9eba8c66175f517ad) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): keep CSS-in-JS styles after a large DOM change in the page head
+  (2026-09-28)
+
+## 1.434.16
+
+### Patch Changes
+
+- [#5127](https://github.com/PostHog/posthog-js/pull/5127) [`d48c783`](https://github.com/PostHog/posthog-js/commit/d48c7838fde1fb5fc7d3c1b96b8c02c003c3db76) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor the modern replay network masking callback when both modern and deprecated hooks are configured.
+  (2026-09-28)
+
+## 1.434.15
+
+### Patch Changes
+
+- [#5115](https://github.com/PostHog/posthog-js/pull/5115) [`8531e40`](https://github.com/PostHog/posthog-js/commit/8531e4029d04f4f1ddf2ca02b129534c3ddd9dae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix SPA `$pageview` events from `pushState`/`replaceState` navigations carrying the previous page's `title`
+  (2026-09-26)
+
 ## 1.434.14
 
 ### Patch Changes
