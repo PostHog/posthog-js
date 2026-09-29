@@ -27,7 +27,7 @@ const fakePostHog = createMockPostHog({
 // Shared test helper: Creates a mock TriggerGroupMatching with optional overrides
 const createMockMatcher = (
     id: string,
-    triggerStatus: 'trigger_activated' | 'trigger_pending' | 'trigger_disabled',
+    triggerStatus: ReturnType<TriggerGroupMatching['triggerStatus']>,
     overrides?: Partial<SessionRecordingTriggerGroup>
 ): TriggerGroupMatching => {
     return {
@@ -105,8 +105,31 @@ describe('V2 Trigger Groups', () => {
                 },
             }
 
-            const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
-            expect(matcher.group).toEqual(group)
+            let notifyFlags: any
+            const stop = vi.fn()
+            const instance = createMockPostHog({
+                register_for_session: vi.fn(),
+                get_property: () => undefined,
+                onFeatureFlags: vi.fn((callback) => {
+                    notifyFlags = callback
+                    return stop
+                }),
+            })
+            const onStarted = vi.fn()
+            const matcher = new TriggerGroupMatching(instance, group, onStarted)
+            try {
+                expect(matcher.group).toEqual(group)
+                expect(matcher.triggerStatus('session')).toBe(TRIGGER_PENDING)
+                expect(notifyFlags).toBeTypeOf('function')
+                notifyFlags(['beta-users'], { 'beta-users': false })
+                expect(onStarted).not.toHaveBeenCalled()
+                notifyFlags(['beta-users'], { 'beta-users': true })
+                expect(onStarted).toHaveBeenCalledWith('beta-users', null)
+                expect(matcher.triggerStatus('session')).toBe(TRIGGER_ACTIVATED)
+            } finally {
+                matcher.stop()
+            }
+            expect(stop).toHaveBeenCalledTimes(1)
         })
 
         it('should create matcher with minDurationMs', () => {
@@ -411,8 +434,14 @@ describe('V2 Trigger Groups', () => {
                 expectedStatus: DISABLED,
             },
         ])('should return $expectedStatus when $name', ({ statusOverrides, expectedStatus }) => {
-            const status = triggerGroupsMatchSessionRecordingStatus({
+            const enabledBase = {
                 ...createBaseStatus(),
+                triggerGroupMatchers: [createMockMatcher('group-1', TRIGGER_ACTIVATED)],
+                triggerGroupSamplingResults: new Map([['group-1', true]]),
+            }
+            expect(triggerGroupsMatchSessionRecordingStatus(enabledBase)).toBe(SAMPLED)
+            const status = triggerGroupsMatchSessionRecordingStatus({
+                ...enabledBase,
                 ...statusOverrides,
             })
             expect(status).toBe(expectedStatus)

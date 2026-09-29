@@ -77,10 +77,14 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
-            // oxlint-disable-next-line posthog-js/no-add-event-listener
-            addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
-            removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
+            addEventListener: (...args: Parameters<typeof orig.document.addEventListener>) => {
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                return orig.document.addEventListener(...args)
+            },
+            removeEventListener: (...args: Parameters<typeof orig.document.removeEventListener>) =>
+                orig.document.removeEventListener(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()

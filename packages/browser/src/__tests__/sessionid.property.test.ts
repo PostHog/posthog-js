@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import * as fc from 'fast-check'
 import { DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS, SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
@@ -22,8 +23,15 @@ describe('SessionIdManager property-based tests', () => {
         persistence_name: 'test-persistence',
     }
 
-    const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>
-        new SessionIdManager(
+    let activeManager: SessionIdManager | undefined
+    const disposeManager = () => {
+        activeManager?.destroy()
+        activeManager = undefined
+    }
+    afterEach(disposeManager)
+
+    const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) => {
+        activeManager = new SessionIdManager(
             createMockPostHog({
                 config: config as PostHogConfig,
                 persistence: phPersistence as PostHogPersistence,
@@ -32,12 +40,17 @@ describe('SessionIdManager property-based tests', () => {
             () => `session-${++uuidCounter}`,
             () => `window-${++uuidCounter}`
         )
+        return activeManager
+    }
 
     const resetPersistence = () => {
+        disposeManager()
+        vi.mocked(sessionStore._parse).mockReset().mockReturnValue(null)
+        const props: Properties = { [SESSION_ID]: undefined }
         persistence = {
-            props: { [SESSION_ID]: undefined },
-            register: vi.fn().mockImplementation((props) => {
-                Object.assign(persistence.props, props)
+            props,
+            register: vi.fn().mockImplementation((values) => {
+                Object.assign(props, values)
             }),
             load: vi.fn(),
             flush: vi.fn(),
@@ -49,8 +62,8 @@ describe('SessionIdManager property-based tests', () => {
     beforeEach(() => {
         uuidCounter = 0
         resetPersistence()
-        ;(sessionStore._is_supported as vi.Mock).mockReturnValue(true)
-        ;(sessionStore._parse as vi.Mock).mockReturnValue(null)
+        ;(sessionStore._is_supported as VitestMock).mockReturnValue(true)
+        ;(sessionStore._parse as VitestMock).mockReturnValue(null)
     })
 
     it('generates new session when no session id exists', () => {
@@ -118,7 +131,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = lastActivityTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)
@@ -145,7 +158,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = lastActivityTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(true, currentTimestamp)
@@ -173,7 +186,7 @@ describe('SessionIdManager property-based tests', () => {
                     const lastActivityTimestamp = currentTimestamp - 1000
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -202,7 +215,7 @@ describe('SessionIdManager property-based tests', () => {
                     const startTimestamp = currentTimestamp - timeSinceStart
 
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -235,7 +248,7 @@ describe('SessionIdManager property-based tests', () => {
                             uuidCounter = 0
                             resetPersistence()
                             persistence.props[SESSION_ID] = [activityTimestamp, 'existing-session', startTimestamp]
-                            ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                            ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                             const manager = sessionIdMgr(persistence)
                             const result = manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -270,7 +283,7 @@ describe('SessionIdManager property-based tests', () => {
                         resetPersistence()
                         const lastActivityTimestamp = currentTimestamp - 1000
                         persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                        ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                        ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                         const manager = sessionIdMgr(persistence)
                         const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)
@@ -307,7 +320,7 @@ describe('SessionIdManager property-based tests', () => {
                         const startTimestamp = originalActivityTimestamp - 1000
 
                         persistence.props[SESSION_ID] = [originalActivityTimestamp, 'existing-session', startTimestamp]
-                        ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                        ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                         const manager = sessionIdMgr(persistence)
                         manager.checkAndGetSessionAndWindowId(readOnly, currentTimestamp)
@@ -334,7 +347,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [timestamp - 1000, 'existing-session', timestamp - 2000]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue(hasExistingWindowId ? 'existing-window' : null)
+                    ;(sessionStore._parse as VitestMock).mockReturnValue(hasExistingWindowId ? 'existing-window' : null)
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(readOnly, timestamp)
@@ -365,7 +378,7 @@ describe('SessionIdManager property-based tests', () => {
                     const activityIncrement = Math.floor(SESSION_TIMEOUT_MS / (callCount + 1))
 
                     persistence.props[SESSION_ID] = [startTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
 
@@ -396,7 +409,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session', startTimestamp]
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result1 = manager.checkAndGetSessionAndWindowId(readOnly, timestamp)
@@ -423,7 +436,7 @@ describe('SessionIdManager property-based tests', () => {
                     uuidCounter = 0
                     resetPersistence()
                     persistence.props[SESSION_ID] = [lastActivityTimestamp, 'existing-session']
-                    ;(sessionStore._parse as vi.Mock).mockReturnValue('existing-window')
+                    ;(sessionStore._parse as VitestMock).mockReturnValue('existing-window')
 
                     const manager = sessionIdMgr(persistence)
                     const result = manager.checkAndGetSessionAndWindowId(false, currentTimestamp)

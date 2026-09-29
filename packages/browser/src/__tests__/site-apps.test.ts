@@ -1,14 +1,16 @@
+import type { Mock as VitestMock } from 'vitest'
 import { mockLogger } from './helpers/mock-logger'
 
 import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { PostHog } from '../posthog-core'
+import { PostHog, defaultConfig as makeDefaultConfig } from '../posthog-core'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { PostHogConfig, Properties, CaptureResult, RemoteConfig } from '../types'
 import { assignableWindow } from '../utils/globals'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '@posthog/core'
-import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('SiteApps', () => {
     let posthog: PostHog
@@ -18,7 +20,8 @@ describe('SiteApps', () => {
 
     const token = 'testtoken'
 
-    const defaultConfig: Partial<PostHogConfig> = {
+    const defaultConfig: PostHogConfig = {
+        ...makeDefaultConfig(),
         token: token,
         api_host: 'https://test.com',
         persistence: 'memory',
@@ -48,9 +51,10 @@ describe('SiteApps', () => {
 
         removeCaptureHook = vi.fn()
 
-        posthog = createMockPostHog({
+        posthog = new PostHog()
+        Object.assign(posthog, {
             config: { ...defaultConfig, opt_in_site_apps: true },
-            persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
+            persistence: new PostHogPersistence(defaultConfig),
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
             get_property: (key: string) => posthog.persistence!.props[key],
@@ -59,24 +63,21 @@ describe('SiteApps', () => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
-            _afterFlagsResponse: vi.fn(),
             get_distinct_id: vi.fn().mockImplementation(() => 'distinctid'),
             _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: {
-                receivedFeatureFlags: vi.fn(),
-                setReloadingPaused: vi.fn(),
-                _startReloadTimer: vi.fn(),
-            },
-            requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
-            _hasBootstrappedFeatureFlags: vi.fn(),
+            featureFlags: new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig)),
+            requestRouter: new RequestRouter(posthog),
             getGroups: () => ({ organization: '5' }),
             on: vi.fn(),
-        })
+        } satisfies Partial<PostHog>)
 
+        vi.spyOn(posthog.featureFlags, 'receivedFeatureFlags').mockImplementation(() => {})
+        vi.spyOn(posthog.featureFlags, 'setReloadingPaused').mockImplementation(() => {})
         siteAppsInstance = new SiteApps(posthog)
     })
 
     afterEach(() => {
+        posthog.persistence?.destroy()
         vi.clearAllMocks()
     })
 
@@ -85,7 +86,7 @@ describe('SiteApps', () => {
             posthog.config = {
                 ...defaultConfig,
                 opt_in_site_apps: true,
-            } as PostHogConfig
+            } satisfies PostHogConfig
 
             expect(siteAppsInstance.isEnabled).toBe(true)
         })
@@ -94,7 +95,7 @@ describe('SiteApps', () => {
             posthog.config = {
                 ...defaultConfig,
                 opt_in_site_apps: false,
-            } as PostHogConfig
+            } satisfies PostHogConfig
 
             siteAppsInstance = new SiteApps(posthog)
 
@@ -154,12 +155,16 @@ describe('SiteApps', () => {
         })
 
         it('trims missedInvocations to last 990 when exceeding 1000', () => {
-            siteAppsInstance['_bufferedInvocations'] = new Array(1000).fill({})
+            siteAppsInstance['_bufferedInvocations'] = Array.from({ length: 1000 }, (_, index) => ({
+                marker: index,
+            })) as any
 
             emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(991)
-            expect(siteAppsInstance['_bufferedInvocations'][0]).toEqual({})
+            expect(siteAppsInstance['_bufferedInvocations'].slice(0, 990)).toEqual(
+                Array.from({ length: 990 }, (_, index) => ({ marker: index + 10 }))
+            )
             expect(siteAppsInstance['_bufferedInvocations'][990]).toMatchObject({ event: { event: 'test_event' } })
         })
     })
@@ -312,7 +317,7 @@ describe('SiteApps', () => {
             posthog: PostHog
             callback: (success: boolean) => void
         }
-        let appConfigs: (AppConfig & { processEvent: vi.Mock })[] = []
+        let appConfigs: (AppConfig & { processEvent: VitestMock })[] = []
         const init = (onInit?: (appConfig: AppConfig) => void) => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [token]: {
@@ -538,19 +543,42 @@ describe('SiteApps', () => {
                 script.nonce = 'script-nonce'
                 return script
             })
-            init()
-            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
-            appConfigs[0].processEvent.mockImplementation(() => {
-                const script = document.createElement('script')
-                document.head.append(script)
-            })
+            const targets: Array<[object, string]> = [
+                [Node.prototype, 'appendChild'],
+                [Node.prototype, 'insertBefore'],
+                [Node.prototype, 'replaceChild'],
+                ...['append', 'prepend', 'before', 'after', 'replaceWith', 'insertAdjacentElement'].map(
+                    (key) => [Element.prototype, key] as [object, string]
+                ),
+            ]
+            const descriptors = targets.map(([owner, key]) => Object.getOwnPropertyDescriptor(owner, key))
+            const expectRestored = () =>
+                targets.forEach(([owner, key], index) =>
+                    expect(Object.getOwnPropertyDescriptor(owner, key)).toEqual(descriptors[index])
+                )
+            try {
+                init(({ callback }) => callback(true))
+                siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+                expectRestored()
+                appConfigs[0].processEvent.mockImplementation(() => {
+                    const script = document.createElement('script')
+                    document.head.append(script)
+                })
 
-            const eventCaptured = (posthog.on as vi.Mock).mock.calls[0][1]
-            eventCaptured({ event: 'test_event', properties: {} } as CaptureResult)
+                const eventCaptured = (posthog.on as VitestMock).mock.calls[0][1]
+                eventCaptured({ event: 'test_event', properties: {} } as CaptureResult)
 
-            const scriptElement = document.head.querySelector('script')
-            expect(posthog.config.prepare_external_dependency_script).toHaveBeenCalledWith(scriptElement)
-            expect(scriptElement?.nonce).toBe('script-nonce')
+                const scriptElement = document.head.querySelector('script')
+                expect(posthog.config.prepare_external_dependency_script).toHaveBeenCalledWith(scriptElement)
+                expect(scriptElement?.nonce).toBe('script-nonce')
+                expectRestored()
+            } finally {
+                targets.forEach(([owner, key], index) => {
+                    const descriptor = descriptors[index]
+                    if (descriptor) Object.defineProperty(owner, key, descriptor)
+                    else delete (owner as any)[key]
+                })
+            }
         })
 
         it('marks site app as errored if callback fails', () => {

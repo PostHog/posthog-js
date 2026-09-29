@@ -47,8 +47,7 @@ export const testPage = base.extend<{ page: BasePage; url: string | undefined }>
             const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
                 return this.waitForResponse(urlPattern)
             })
-            await options.action()
-            await Promise.allSettled(responsePromises)
+            await Promise.all([...responsePromises, Promise.resolve().then(options.action)])
         }
         page.reloadIdle = async () => {
             await page.reload({ waitUntil: 'networkidle' })

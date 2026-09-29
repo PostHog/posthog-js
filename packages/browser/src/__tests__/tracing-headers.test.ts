@@ -154,7 +154,9 @@ describe('tracing headers', () => {
 
     describe('fetch', () => {
         it('adds tracing headers without spreading init or mutating caller headers', async () => {
-            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -201,7 +203,9 @@ describe('tracing headers', () => {
         })
 
         it('delegates unchanged when the hostname does not match', async () => {
-            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -213,7 +217,9 @@ describe('tracing headers', () => {
         })
 
         it('uses the latest configured hostnames from a mutated hostname list without re-patching', async () => {
-            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
             setWindowFetch(originalFetch)
             const hostnames = ['example.com']
             restoreFetchPatch = patchFns._patchFetch(hostnames, 'distinct-id', sessionManager as any)
@@ -234,7 +240,9 @@ describe('tracing headers', () => {
         })
 
         it('uses the latest distinct ID from a provider without re-patching', async () => {
-            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
             setWindowFetch(originalFetch)
             let distinctId = 'first-distinct-id'
             restoreFetchPatch = patchFns._patchFetch(['example.com'], () => distinctId, sessionManager as any)
@@ -258,7 +266,7 @@ describe('tracing headers', () => {
             const originalFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
                 downstreamRequest = new Request(input, init)
                 return {} as Response
-            }) as vi.MockedFunction<typeof fetch>
+            })
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -286,7 +294,9 @@ describe('tracing headers', () => {
         })
 
         it('preserves Request input semantics and init overrides', async () => {
-            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() =>
+                Promise.resolve(new Response())
+            )
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -319,9 +329,9 @@ describe('tracing headers', () => {
 
         it('propagates synchronous downstream fetch errors without retrying', () => {
             const error = new Error('sync fetch failure')
-            const originalFetch = vi.fn(() => {
+            const originalFetch = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() => {
                 throw error
-            }) as vi.MockedFunction<typeof fetch>
+            })
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -376,8 +386,10 @@ describe('tracing headers', () => {
             expectedHeaders.forEach(([header, value]) => {
                 expect(setRequestHeaderSpy).toHaveBeenCalledWith(header, value)
             })
-            absentHeaders.forEach(([header, value]) => {
-                expect(setRequestHeaderSpy).not.toHaveBeenCalledWith(header, value)
+            absentHeaders.forEach(([header]) => {
+                expect(
+                    setRequestHeaderSpy.mock.calls.some(([name]) => name.toLowerCase() === header.toLowerCase())
+                ).toBe(false)
             })
         })
     })

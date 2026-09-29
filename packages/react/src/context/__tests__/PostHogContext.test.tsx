@@ -21,6 +21,7 @@ describe('PostHogContext component', () => {
 
     afterEach(() => {
         setDefaultPostHogInstance(undefined)
+        vi.restoreAllMocks()
     })
 
     it('should return a client instance from the context if available', () => {
@@ -36,19 +37,22 @@ describe('PostHogContext component', () => {
         expect(getByTestId('client').textContent).toBe('match')
     })
 
-    it("should not throw error if a client instance can't be found in the context", () => {
-        // oxlint-disable-next-line no-console
-        console.warn = vi.fn()
+    it('uses the default client when no client or API key is supplied', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        let observedClient: unknown
+        function DefaultConsumer() {
+            observedClient = React.useContext(PostHogContext).client
+            return <div>Hello</div>
+        }
 
         expect(() => {
             render(
-                // we have to cast `as any` so that we can test for when
-                // posthog might not exist - in SSR for example
                 <PostHogProvider client={undefined as any}>
-                    <div>Hello</div>
+                    <DefaultConsumer />
                 </PostHogProvider>
             )
         }).not.toThrow()
+        expect(observedClient).toBe(posthogJs)
 
         // oxlint-disable-next-line no-console
         expect(console.warn).toHaveBeenCalledWith(

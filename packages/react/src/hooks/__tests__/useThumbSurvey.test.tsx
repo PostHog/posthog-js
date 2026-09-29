@@ -6,8 +6,6 @@ import { useThumbSurvey } from '../useThumbSurvey'
 import { SurveyEventName, SurveyEventProperties } from 'posthog-js'
 import { isUndefined } from '../../utils/type-utils'
 
-vi.useFakeTimers()
-
 describe('useThumbSurvey hook', () => {
     let posthog: PostHog
     let captureMock: Mock
@@ -40,6 +38,12 @@ describe('useThumbSurvey hook', () => {
                 )
 
                 expect(captureMock).toHaveBeenCalledTimes(shouldAutoTrack ? 1 : 0)
+                if (shouldAutoTrack) {
+                    expect(captureMock).toHaveBeenCalledWith(SurveyEventName.SHOWN, {
+                        [SurveyEventProperties.SURVEY_ID]: 'test-survey',
+                        sessionRecordingUrl: 'https://app.posthog.com/replay/123',
+                    })
+                }
                 expect(!isUndefined(result.current.trackShown)).toBe(shouldExposeTrackShown)
             }
         )

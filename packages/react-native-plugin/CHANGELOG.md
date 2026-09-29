@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.1
+
+### Patch Changes
+
+- [#5135](https://github.com/PostHog/posthog-js/pull/5135) [`7e14f4d`](https://github.com/PostHog/posthog-js/commit/7e14f4de50da7b51c33a22b40357403f6a9236fb) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep the JS layer's `$process_person_profile` and `$is_identified` on fatal JS crashes captured through the Android native SDK, so they stay correct once posthog-android stops letting event properties override them
+  (2026-09-28)
+
 ## 2.12.0
 
 ### Minor Changes
