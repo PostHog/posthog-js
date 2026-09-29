@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.413.0
+
+### Minor Changes
+
+- [#4794](https://github.com/PostHog/posthog-js/pull/4794) [`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Add `onActiveMatchingSurveysChanged` to subscribe to survey eligibility updates with safe unsubscribe and recoverable load-error reporting.
+  (2026-09-29)
+
 ## 1.412.4
 
 ### Patch Changes
