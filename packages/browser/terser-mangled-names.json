@@ -198,6 +198,7 @@
         "_dueRefreshIntervalMs",
         "_dynamicProperties",
         "_elementSelectors",
+        "_elementSelectorsByOwner",
         "_elementsChainAsString",
         "_enabledServerSide",
         "_encodedBody",

@@ -1,6 +1,9 @@
 import type { ApiResponse } from '@posthog/browser-common'
 
 import { BrowserSurveys } from '../browser-surveys'
+import { BrowserAutocapture } from '../browser-autocapture'
+import { ProductTourEventReceiver } from '../utils/product-tour-event-receiver'
+import type { ProductTour } from '../posthog-product-tours-types'
 import { SURVEYS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
 import type { PostHog } from '../posthog-core'
@@ -128,6 +131,47 @@ describe('active matching survey definition refreshes', () => {
         requests.shift()!({ statusCode: 200, json: { surveys: definitions } })
         await flushRequests()
     }
+
+    it.each([false, true])('preserves tour selector activation (refresh surveys: %s)', async (refresh) => {
+        posthog._shouldDisableFlags = () => false
+        posthog.autocapture = new BrowserAutocapture(posthog)
+        const button = document.createElement('button')
+        button.id = 'tour-button'
+        document.body.appendChild(button)
+        const tour = {
+            id: 'selector-tour',
+            name: 'Selector tour',
+            conditions: {
+                actions: {
+                    values: [
+                        {
+                            id: 10,
+                            name: 'tour-click',
+                            steps: [{ event: '$autocapture', selector: '#tour-button' }],
+                        },
+                    ],
+                },
+            },
+        } as ProductTour
+        posthog.productTours = {
+            getProductTours: (callback: (tours: ProductTour[]) => void) => callback([tour]),
+        } as PostHog['productTours']
+        const receiver = new ProductTourEventReceiver(posthog)
+        try {
+            receiver.register([tour])
+            expect(posthog.autocapture.getElementSelectors(button)).toContain('#tour-button')
+            if (refresh) {
+                await refreshDefinitions([])
+            }
+            const selectors = posthog.autocapture.getElementSelectors(button)
+            expect.soft(selectors).toContain('#tour-button')
+            capture('$autocapture', { $element_selectors: selectors })
+            expect(receiver.getTours()).toContain('selector-tour')
+        } finally {
+            receiver.dispose()
+            button.remove()
+        }
+    })
 
     it('replaces stale action triggers when refreshed definitions change or remove them', async () => {
         const callback = vi.fn()
