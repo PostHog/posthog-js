@@ -43,6 +43,7 @@ import {
   GroupIdentifyMessage,
   IdentifyMessage,
   IPostHog,
+  MetricsAutocaptureConfig,
   OverrideFeatureFlagsOptions,
   PostHogOptions,
   SendFeatureFlagsOptions,
@@ -69,6 +70,12 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+
+/** The running metrics autocapture, as `startMetricsAutocapture` returns it. */
+export interface MetricsAutocaptureHandle {
+  forceFlush(): Promise<void>
+  shutdown(): Promise<void>
+}
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -151,6 +158,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _metricsAutocapture?: MetricsAutocaptureHandle
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -278,6 +286,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
+
+    const autocapture = normalizedOptions.metrics?.autocapture
+    if (!this.disabled && autocapture) {
+      const areas = autocapture === true ? {} : autocapture
+      this._metricsAutocapture = this.startMetricsAutocapture({
+        http: areas.http ?? true,
+        db: areas.db ?? true,
+        runtime: areas.runtime ?? true,
+      })
+    }
+  }
+
+  /**
+   * Starts metrics autocapture. Overridden by the Node entrypoint; other
+   * runtimes have no OpenTelemetry instrumentations to start.
+   */
+  protected startMetricsAutocapture(_areas: Required<MetricsAutocaptureConfig>): MetricsAutocaptureHandle | undefined {
+    this._logger.warn('metrics.autocapture needs the Node.js runtime, so it is ignored here.')
+    return undefined
   }
 
   protected override enqueue(
@@ -2882,6 +2909,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.
       this._metrics.reset()
+    }
+    if (this._metricsAutocapture) {
+      // Exports the last window, then removes the instrumentations.
+      await raceWithTimeout(
+        this._metricsAutocapture.shutdown().catch(() => {}),
+        Math.max(0, shutdownDeadlineMs - Date.now())
+      )
+      this._metricsAutocapture = undefined
     }
     if (this._traces) {
       // Same treatment as metrics: send what's queued, raced against the shared

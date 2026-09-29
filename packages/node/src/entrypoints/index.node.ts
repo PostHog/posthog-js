@@ -5,13 +5,15 @@ import { addSourceContext } from '../extensions/error-tracking/modifiers/context
 import { createRelativePathModifier } from '../extensions/error-tracking/modifiers/relative-path.node'
 
 import type { PostHogFetchBodyBytes } from '@posthog/core'
-import { PostHogBackendClient } from '../client'
+import { PostHogBackendClient, type MetricsAutocaptureHandle } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import type { SpanContextManager } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
 import { AsyncLocalStorageSpanContextManager } from '../extensions/context/span-context.node'
 import { gzipCompress } from '../gzip.node'
 import { hostOsResourceAttributes } from '../host-os.node'
+import { startMetricsAutocapture, type MetricsAutocaptureAreas } from '../extensions/metrics-autocapture.node'
+import { version } from '../version'
 
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
@@ -32,6 +34,26 @@ export class PostHog extends PostHogBackendClient {
 
   protected override hostResourceAttributes(): Record<string, string> {
     return hostOsResourceAttributes()
+  }
+
+  protected override startMetricsAutocapture(areas: MetricsAutocaptureAreas): MetricsAutocaptureHandle | undefined {
+    const metrics = this.options.metrics
+    return startMetricsAutocapture({
+      host: this.host,
+      apiKey: this.apiKey,
+      config: areas,
+      serviceName: metrics?.serviceName,
+      resourceAttributes: {
+        ...hostOsResourceAttributes(),
+        ...(metrics?.serviceVersion ? { 'service.version': metrics.serviceVersion } : {}),
+        ...(metrics?.environment ? { 'deployment.environment': metrics.environment } : {}),
+        ...metrics?.resourceAttributes,
+      },
+      distroVersion: version,
+      logger: this._logger,
+      isEnabled: () => !this.isDisabled && !this.optedOut,
+      exportIntervalMs: metrics?.flushIntervalMs,
+    })
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
