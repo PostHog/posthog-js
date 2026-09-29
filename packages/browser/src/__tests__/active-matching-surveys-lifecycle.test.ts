@@ -3,7 +3,12 @@ import { isArray } from '@posthog/core'
 import { BrowserSurveys } from '../browser-surveys'
 import { SURVEYS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
-import { dismissedSurveyEvent, sendSurveyEvent } from '../extensions/surveys/surveys-extension-utils'
+import {
+    dismissedSurveyEvent,
+    sendSurveyEvent,
+    setInProgressSurveyState,
+    getInProgressSurveyState,
+} from '../extensions/surveys/surveys-extension-utils'
 import type { PostHog } from '../posthog-core'
 import { Survey, SurveyEventName, SurveyEventProperties, SurveyType } from '../posthog-surveys-types'
 import type { CaptureResult } from '../types'
@@ -118,6 +123,51 @@ describe('active matching survey subscription lifecycle consumption', () => {
         localStorage.clear()
         vi.restoreAllMocks()
     })
+
+    it.each(['dismiss', 'complete', 'partial'] as const)(
+        'keeps subscription consistent with the getter after %s of an in-progress survey',
+        (operation) => {
+            const startedSurvey = {
+                ...untargetedSurvey,
+                questions: [
+                    { id: 'q1', type: 'open', question: 'First?' },
+                    { id: 'q2', type: 'open', question: 'Second?' },
+                ],
+            } as Survey
+            state[SURVEYS] = [startedSurvey]
+            setInProgressSurveyState(startedSurvey, {
+                surveySubmissionId: 'submission-1',
+                lastQuestionIndex: 1,
+                responses: { $survey_response: 'First answer' },
+            })
+            const callback = vi.fn()
+            surveys.onActiveMatchingSurveysChanged(callback)
+            expect(callback.mock.lastCall?.[0]).toEqual([startedSurvey])
+
+            if (operation === 'dismiss') {
+                dismissedSurveyEvent(startedSurvey, posthog)
+            } else {
+                sendSurveyEvent({
+                    responses: { $survey_response: 'First answer' },
+                    survey: startedSurvey,
+                    surveySubmissionId: 'submission-1',
+                    isSurveyCompleted: operation === 'complete',
+                    posthog,
+                })
+            }
+
+            const expected = operation === 'partial' ? [startedSurvey] : []
+            if (operation === 'partial') {
+                expect(getInProgressSurveyState(startedSurvey)).not.toBeNull()
+            } else {
+                expect(getInProgressSurveyState(startedSurvey)).toBeNull()
+            }
+            const getter = vi.fn()
+            surveys.getActiveMatchingSurveys(getter)
+            expect(getter.mock.lastCall?.[0]).toEqual(expected)
+            expect(callback.mock.lastCall?.[0]).toEqual(expected)
+        }
+    )
 
     const expectConsumed = (callback: ReturnType<typeof vi.fn>): void => {
         expect(callback.mock.lastCall?.[0]).toEqual([])
