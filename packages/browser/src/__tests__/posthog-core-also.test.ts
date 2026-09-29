@@ -185,6 +185,33 @@ describe('posthog core', () => {
             }
         })
 
+        it.each(['property enrichment', 'before_send rejection', 'snapshot capture'])(
+            'does not consume the replay diagnostic interval on %s',
+            (scenario) => {
+                const posthog = posthogWith({
+                    capture_pageview: false,
+                    autocapture: false,
+                    before_send: (event) => (event.event === '$discarded' ? null : event),
+                })
+                const diagnostics = {
+                    $recording_status: 'active',
+                    $sdk_debug_session_start: baseUTCDateTime.getTime(),
+                }
+                vi.spyOn(posthog.sessionRecording!, 'sdkDebugProperties', 'get').mockReturnValue(diagnostics)
+
+                if (scenario === 'property enrichment') {
+                    expect(posthog.calculateEventProperties('$pageview', {})).toMatchObject(diagnostics)
+                } else if (scenario === 'before_send rejection') {
+                    expect(posthog.capture('$discarded')).toBeUndefined()
+                } else {
+                    posthog.capture('$snapshot', { $snapshot_data: [] })
+                }
+
+                expect(posthog.capture('$pageview')!.properties).toMatchObject(diagnostics)
+                expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+            }
+        )
+
         it.each([true, false, undefined])('maps send_instantly: %p to preferSyncCompression', (sendInstantly) => {
             const requests: unknown[] = []
             const posthog = posthogWith(defaultConfig, {

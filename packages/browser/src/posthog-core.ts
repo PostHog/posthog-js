@@ -198,8 +198,10 @@ const REQUIRED_REPLAY_PROPERTIES = [
     '$sdk_debug_replay_internal_buffer_length',
     '$sdk_debug_replay_flushed_size',
 ]
-const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap']
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap', '$snapshot']
 const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+const isReplayDebugEvent = (eventName: string): boolean =>
+    eventName.charAt(0) === '$' && !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
@@ -1954,6 +1956,11 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        if (this.sessionRecording && !this._replayDebugPropertiesPaused && isReplayDebugEvent(event_name)) {
+            this._replayDebugPropertiesPaused = true
+            setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+        }
+
         const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
             const finalValue =
                 data.$set?.[channel.property] ??
@@ -2159,18 +2166,11 @@ export class PostHog implements PostHogInterface {
         try {
             if (this.sessionRecording) {
                 const replayProperties = this.sessionRecording.sdkDebugProperties
-                const includeDebugProperties =
-                    !this._replayDebugPropertiesPaused &&
-                    eventName.charAt(0) === '$' &&
-                    !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+                const includeDebugProperties = !this._replayDebugPropertiesPaused && isReplayDebugEvent(eventName)
                 for (const key in replayProperties) {
                     if (includeDebugProperties || includes(REQUIRED_REPLAY_PROPERTIES, key)) {
                         properties[key] = replayProperties[key]
                     }
-                }
-                if (includeDebugProperties && !readOnly) {
-                    this._replayDebugPropertiesPaused = true
-                    setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
                 }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length

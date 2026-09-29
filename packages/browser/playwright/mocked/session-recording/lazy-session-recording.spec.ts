@@ -2,6 +2,7 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '@posthog/core'
+import { satisfies } from 'semver'
 
 async function ensureRecordingIsStopped(page: Page) {
     await page.resetCapturedEvents()
@@ -391,6 +392,11 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent!['properties']['$sdk_debug_replay_internal_buffer_length']).toBeDefined()
         expect(targetEvent!['properties']['$sdk_debug_replay_rrweb_error']).toEqual(false)
         expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeUndefined()
-        expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeUndefined()
+        // Optional diagnostics are filtered by the core, not the CDN recorder.
+        if (process.env.COMPAT_VERSION && satisfies(process.env.COMPAT_VERSION, '<=1.434.18')) {
+            expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
+        } else {
+            expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeUndefined()
+        }
     })
 })
