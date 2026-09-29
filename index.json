@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/5148": {
+    "key": "PostHog/posthog-js/issue/5148",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5148",
+    "url": "https://github.com/PostHog/posthog-js/issues/5148",
+    "conclusion": "Confirmed session-replay recorder bug: a cross-origin navigation can leave `observeAttachShadow` reading `contentWindow.Element` without the existing `SecurityError` containment.",
+    "labels": [
+      "feature/replay",
+      "javascript",
+      "needs-to-be-contributed-back",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-29T18:05:28.636Z"
+  },
   "PostHog/posthog-js/issue/1583": {
     "key": "PostHog/posthog-js/issue/1583",
     "repo": "PostHog/posthog-js",
@@ -2894,23 +2909,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-24T19:00:08.577Z"
-  },
-  "PostHog/posthog-js/issue/3956": {
-    "key": "PostHog/posthog-js/issue/3956",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3956",
-    "url": "https://github.com/PostHog/posthog-js/issues/3956",
-    "conclusion": "Valid React Native mobile logs feature request; keep open for demand/design.",
-    "labels": [
-      "enhancement",
-      "feature",
-      "feature/mobile",
-      "react-native",
-      "iOS",
-      "Android",
-      "team/logs"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-24T17:34:12.357Z"
   }
 }
