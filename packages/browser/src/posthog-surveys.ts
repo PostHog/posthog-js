@@ -61,6 +61,7 @@ export class PostHogSurveys implements Extension {
     public _surveyEventReceiver: SurveyEventReceiver | null = null
     private _surveyManager: SurveyManager | null = null
     private _isInitializingSurveys = false
+    private _surveyInitializationFailed = false
     private _surveyCallbacks: SurveyCallback[] = []
     private _activeMatchingSurveyCallbacks: ActiveMatchingSurveySubscription[] = []
     private _activeMatchingSurveyConditionsUnsubscribe?: () => void
@@ -143,6 +144,7 @@ export class PostHogSurveys implements Extension {
         }
 
         if (!result.ok) {
+            this._surveyInitializationFailed = true
             this._notifyActiveMatchingSurveyCallbacks({
                 isLoaded: false,
                 error: 'Remote config unavailable. Not loading surveys.',
@@ -221,6 +223,7 @@ export class PostHogSurveys implements Extension {
         const isSurveysEnabled = this._isSurveysEnabled || config.advancedEnableSurveys
 
         this._isInitializingSurveys = true
+        this._surveyInitializationFailed = false
 
         try {
             const generateSurveys = phExtensions.generateSurveys
@@ -288,6 +291,7 @@ export class PostHogSurveys implements Extension {
 
     /** Helper to handle errors during survey loading */
     private _handleSurveyLoadError(message: string, error?: any): void {
+        this._surveyInitializationFailed = true
         logger.error(message, error)
         this._notifyActiveMatchingSurveyCallbacks({ isLoaded: false, error: message })
         this._notifySurveyCallbacks({ isLoaded: false, error: message })
@@ -517,7 +521,15 @@ export class PostHogSurveys implements Extension {
         const subscription: ActiveMatchingSurveySubscription = { callback, active: true, revision: 0 }
         this._activeMatchingSurveyCallbacks.push(subscription)
         this._startActiveMatchingSurveyConditions()
-        if (this._surveyManager) {
+        const cached = (this._client ?? this._initialClientState)?.kv.get<Survey[]>(SURVEYS)
+        const unavailable =
+            this._config.disableSurveys ||
+            (!this._surveyManager && this._surveyInitializationFailed && !this._isInitializingSurveys) ||
+            (!cached && !isNullish(this._lastSurveyRefreshFailedAt) && !this._getSurveysInFlightPromise)
+        if (unavailable) {
+            // Report current availability, not an error that happened before registration.
+            this._notifyActiveMatchingSurveyCallback(subscription, { isLoaded: false })
+        } else if (this._surveyManager) {
             this._notifyActiveMatchingSurveyCallback(subscription)
         }
         return () => {

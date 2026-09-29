@@ -905,6 +905,7 @@
         "_surfacesCheckedAt",
         "_surveyCallbacks",
         "_surveyInFocus",
+        "_surveyInitializationFailed",
         "_surveyIsRendered",
         "_surveyPopupProps",
         "_surveyTimeouts",

@@ -334,6 +334,78 @@ describe('active matching survey subscriptions', () => {
         expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
     })
 
+    it('gives late subscribers unavailable state after script failure without replaying the error', () => {
+        fixture([])
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: (_instance, _kind, callback) => callback(new Error('unavailable')),
+        }
+        start()
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])
+        assignableWindow.__PosthogExtensions__ = { generateSurveys: () => new SurveyManager(posthog) }
+        surveys.loadIfEnabled()
+        expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
+    })
+
+    it('gives late subscribers unavailable state after remote-config failure', () => {
+        fixture([])
+        surveys.onRemoteConfig({ ok: false, error: new Error('unavailable') })
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])
+        start()
+        expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
+    })
+
+    it('reports disabled surveys as unavailable without starting a load', () => {
+        fixture([])
+        posthog.config.disable_surveys = true
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])
+        expect(requests).toHaveLength(0)
+    })
+
+    it('gives late subscribers unavailable state after an initial fetch fails, then recovers', async () => {
+        fixture()
+        delete state[SURVEYS]
+        start()
+        surveys.getSurveys(() => {})
+        await resolveRequest([], 503)
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])
+        expect(requests).toHaveLength(0)
+        surveys.getSurveys(() => {}, true)
+        await resolveRequest([])
+        expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
+    })
+
+    it('gives late subscribers usable cached matches after a failed refresh without replaying the error', async () => {
+        fixture([eventSurvey], true)
+        start()
+        capture('activate')
+        surveys.getSurveys(() => {}, true)
+        await resolveRequest([], 503)
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback.mock.calls).toEqual([[[eventSurvey], { isLoaded: true }]])
+        expect(requests).toHaveLength(0)
+    })
+
+    it('keeps late subscribers pending while a fresh initial fetch is in flight', async () => {
+        fixture()
+        delete state[SURVEYS]
+        start()
+        surveys.getSurveys(() => {})
+        const callback = vi.fn()
+        surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback).not.toHaveBeenCalled()
+        await resolveRequest([])
+        expect(callback.mock.calls).toEqual([[[], { isLoaded: true }]])
+    })
+
     it('isolates throwing callbacks during asynchronous delivery', async () => {
         fixture()
         delete state[SURVEYS]

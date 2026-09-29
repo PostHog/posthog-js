@@ -3000,7 +3000,10 @@ export class PostHog implements PostHogInterface {
      * passing; selector, device and wait-period conditions are checked on the supported updates.
      *
      * The optional callback context distinguishes load errors from a successfully loaded empty
-     * result. Recoverable load failures keep the subscription alive. Unsubscribing prevents any
+     * result. New subscribers receive the current snapshot without replaying earlier errors:
+     * a settled unavailable state is `([], { isLoaded: false })`, while usable cached definitions
+     * are evaluated normally. An initial load already in progress delivers when it resolves.
+     * Recoverable load failures keep the subscription alive. Unsubscribing prevents any
      * further delivery, including callbacks from an outstanding initial request.
      *
      * {@label Surveys}
