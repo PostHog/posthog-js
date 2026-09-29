@@ -1,3 +1,13 @@
+import { logger } from './logger'
+
+const callListener = (event: string, call: () => void): void => {
+    try {
+        call()
+    } catch (error) {
+        logger.critical(`A listener for "${event}" threw an error`, error)
+    }
+}
+
 export class SimpleEventEmitter {
     private _events: { [key: string]: ((...args: any[]) => void)[] } = {}
 
@@ -14,10 +24,10 @@ export class SimpleEventEmitter {
 
     emit(event: string, payload: any): void {
         for (const listener of this._events[event] || []) {
-            listener(payload)
+            callListener(event, () => listener(payload))
         }
         for (const listener of this._events['*'] || []) {
-            listener(event, payload)
+            callListener(event, () => listener(event, payload))
         }
     }
 }
