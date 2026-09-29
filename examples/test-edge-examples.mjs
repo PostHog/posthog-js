@@ -73,6 +73,9 @@ for (const [directory, entry, eventName] of [
                 context
             )
         } else if (directory === 'example-vercel-edge') {
+            const { scripts } = createRequire(`${cwd}/package.json`)('./package.json')
+            assert.equal(scripts.build, undefined, 'Vercel must not auto-detect its own CLI wrapper')
+            assert.equal(scripts.dev, undefined, 'Vercel must not auto-detect its own CLI wrapper')
             response = module.exports.default(request)
         } else if (directory === 'example-nextjs-edge-route') {
             assert.equal(module.exports.runtime, 'edge')

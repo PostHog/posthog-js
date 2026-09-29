@@ -4,8 +4,8 @@
     "type": "module",
     "packageManager": "pnpm@11.7.0",
     "scripts": {
-        "dev": "vercel dev",
-        "build": "vercel build",
+        "vercel:dev": "vercel dev",
+        "vercel:build": "vercel build",
         "deploy": "vercel",
         "check-types": "tsc --noEmit"
     },
