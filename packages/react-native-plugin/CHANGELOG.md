@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.2
+
+### Patch Changes
+
+- [#5142](https://github.com/PostHog/posthog-js/pull/5142) [`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-android 3.71.2, which stops event properties from overriding `$process_person_profile` and `$is_identified` on native events
+  (2026-09-29)
+
 ## 2.12.1
 
 ### Patch Changes

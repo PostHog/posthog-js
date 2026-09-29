@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.1
+
+### Patch Changes
+
+- [#5120](https://github.com/PostHog/posthog-js/pull/5120) [`5929eab`](https://github.com/PostHog/posthog-js/commit/5929eab802d910c15edd1fa322fb7c29614151af) Thanks [@breken-ai](https://github.com/breken-ai)! - PostHogFeature without `match` shows the fallback when the flag evaluates to false.
+  (2026-09-29)
+
 ## 1.435.0
 
 ### Minor Changes

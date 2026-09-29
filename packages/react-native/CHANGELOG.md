@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.78.2
+
+### Patch Changes
+
+- [#5141](https://github.com/PostHog/posthog-js/pull/5141) [`7faa1db`](https://github.com/PostHog/posthog-js/commit/7faa1dbae2cb63fd1b6f3d9032b82cb2a3216aad) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$screen_width` and `$screen_height` on iOS to report the app's window size on foldables, Stage Manager, and split view
+  (2026-09-29)
+- Updated dependencies [[`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197)]:
+  - @posthog/react-native-plugin@2.12.2
+
 ## 4.78.1
 
 ### Patch Changes
