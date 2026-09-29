@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 1583](https://github.com/PostHog/posthog-js/issues/1583) | Confirmed browser SDK feature gap: failed events are retried only in memory and are not durable across a page/app restart. | enhancement, feature, web, javascript, team/client-libraries |  | no | 2026-09-29T08:40:47.818Z |
 | PostHog/posthog-js | [issue 5137](https://github.com/PostHog/posthog-js/issues/5137) | Confirmed React Native accessibility bug; the proposed localization prop is a reasonable public API shape but needs maintainer agreement before an external contribution. | react-native, feature/mobile, feature/surveys, team/client-libraries, iOS, Android, bug |  | no | 2026-09-28T15:47:24.429Z |
 | PostHog/posthog-js | [issue 1657](https://github.com/PostHog/posthog-js/issues/1657) | Valid browser SDK type-gap enhancement: the early-access response is forwarded at runtime, but its public `EarlyAccessFeature` type does not declare a creation timestamp. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-28T08:48:53.884Z |
 | PostHog/posthog-js | [issue 1699](https://github.com/PostHog/posthog-js/issues/1699) | Valid feature-flag API gap: the browser SDK exposes no public awaitable reload operation. | enhancement, feature, feature/flags, team/feature-flags, web |  | no | 2026-09-27T08:36:04.147Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 3968](https://github.com/PostHog/posthog-js/issues/3968) | Valid Nuxt typing bug: posthogConfig is not registered in Nuxt schema types. | nuxt | https://github.com/PostHog/posthog-js/pull/3969 | no | 2026-06-25T09:19:15.035Z |
 | PostHog/posthog-js | [issue 3957](https://github.com/PostHog/posthog-js/issues/3957) | Valid bug: the Convex polling interval env var is read too early to affect the registered cron schedule. | feature/flags, team/feature-flags |  | no | 2026-06-24T19:00:08.577Z |
 | PostHog/posthog-js | [issue 3956](https://github.com/PostHog/posthog-js/issues/3956) | Valid React Native mobile logs feature request; keep open for demand/design. | enhancement, feature, feature/mobile, react-native, iOS, Android, team/logs |  | no | 2026-06-24T17:34:12.357Z |
-| PostHog/posthog-js | [issue 3950](https://github.com/PostHog/posthog-js/issues/3950) | Valid bug: the no-external full module bundle cannot load the toolbar because the toolbar still depends on an external toolbar.js loader. | feature/toolbar, web |  | no | 2026-06-24T15:24:14.075Z |
