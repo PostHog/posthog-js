@@ -350,7 +350,7 @@ describe('active matching survey subscriptions', () => {
 
     it('gives late subscribers unavailable state after remote-config failure', () => {
         fixture([])
-        surveys.onRemoteConfig({ ok: false, error: new Error('unavailable') })
+        surveys.onRemoteConfig({ ok: false })
         const callback = vi.fn()
         surveys.onActiveMatchingSurveysChanged(callback)
         expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])

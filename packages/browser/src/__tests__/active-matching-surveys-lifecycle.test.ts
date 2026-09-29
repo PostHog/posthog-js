@@ -1,8 +1,11 @@
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { isArray } from '@posthog/core'
+import { h } from 'preact'
+import { cleanup, render } from '@testing-library/preact'
 
 import { BrowserSurveys } from '../browser-surveys'
 import { SURVEYS } from '../constants'
-import { SurveyManager } from '../extensions/surveys'
+import { SurveyManager, SurveyPopup } from '../extensions/surveys'
 import {
     dismissedSurveyEvent,
     sendSurveyEvent,
@@ -118,6 +121,7 @@ describe('active matching survey subscription lifecycle consumption', () => {
     })
 
     afterEach(() => {
+        cleanup()
         surveys.dispose()
         assignableWindow.__PosthogExtensions__ = originalExtensions
         localStorage.clear()
@@ -168,6 +172,55 @@ describe('active matching survey subscription lifecycle consumption', () => {
             expect(callback.mock.lastCall?.[0]).toEqual(expected)
         }
     )
+
+    it.each([false, true])('updates cooldown matches when shown (skip telemetry: %s)', (skipShownEvent) => {
+        const shownSurvey = {
+            ...untargetedSurvey,
+            id: 'shown-survey',
+            type: SurveyType.Popover,
+            questions: [{ id: 'q1', type: 'open', question: 'Feedback?' }],
+        } as Survey
+        const cooldownSurvey = {
+            ...untargetedSurvey,
+            id: 'cooldown-survey',
+            conditions: { seenSurveyWaitPeriodInDays: 7 },
+        } as Survey
+        state[SURVEYS] = [shownSurvey, cooldownSurvey]
+        const callback = vi.fn()
+        const stop = surveys.onActiveMatchingSurveysChanged(callback)
+        expect(callback).toHaveBeenLastCalledWith([shownSurvey, cooldownSurvey], { isLoaded: true })
+        const datesAtNotification: Array<string | null> = []
+        const onShown = () => datesAtNotification.push(localStorage.getItem('lastSeenSurveyDate'))
+        addEventListener(window, 'PHSurveyShown', onShown)
+        try {
+            render(
+                h(SurveyPopup, {
+                    survey: shownSurvey,
+                    posthog,
+                    isPopup: true,
+                    removeSurveyFromFocus: vi.fn(),
+                    skipShownEvent,
+                })
+            )
+            expect(datesAtNotification).toHaveLength(1)
+            expect(datesAtNotification[0]).not.toBeNull()
+            expect(callback).toHaveBeenLastCalledWith([shownSurvey], { isLoaded: true })
+            expect(callback).toHaveBeenCalledTimes(2)
+            if (skipShownEvent) {
+                expect(posthog.capture).not.toHaveBeenCalled()
+            } else {
+                expect(posthog.capture).toHaveBeenCalledWith(SurveyEventName.SHOWN, expect.any(Object))
+            }
+            window.dispatchEvent(new Event('PHSurveyShown'))
+            expect(callback).toHaveBeenCalledTimes(2)
+            stop()
+            localStorage.removeItem('lastSeenSurveyDate')
+            window.dispatchEvent(new Event('PHSurveyShown'))
+            expect(callback).toHaveBeenCalledTimes(2)
+        } finally {
+            window.removeEventListener('PHSurveyShown', onShown)
+        }
+    })
 
     const expectConsumed = (callback: ReturnType<typeof vi.fn>): void => {
         expect(callback.mock.lastCall?.[0]).toEqual([])

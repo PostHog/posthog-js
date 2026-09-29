@@ -1,3 +1,4 @@
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import type { ApiResponse, Client, KeyValueStore, SendRequestInit } from '@posthog/browser-common'
 import { isUndefined } from '@posthog/core'
 
@@ -7,7 +8,7 @@ import { SurveyEventName } from './posthog-surveys-types'
 import { extendURLParams } from './request'
 import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
 import type { Properties, QueuedRequestWithOptions } from './types'
-import { assignableWindow } from './utils/globals'
+import { assignableWindow, window } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 
 class InitialSurveysKeyValueStore implements KeyValueStore {
@@ -101,10 +102,18 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
             // Capture hooks run from `eventCaptured`, after `PostHog.capture` has applied
             // survey seen-state for dismissal/submission lifecycle events. Re-evaluate here
             // so untargeted surveys are removed immediately as well as event/action surveys.
-            if (event === '$pageview' || event === SurveyEventName.DISMISSED || event === SurveyEventName.SENT) {
+            if (
+                event === '$pageview' ||
+                event === SurveyEventName.SHOWN ||
+                event === SurveyEventName.DISMISSED ||
+                event === SurveyEventName.SENT
+            ) {
                 callback()
             }
         })
+        // Rendering updates cooldown state even when shown-event telemetry is suppressed.
+        const onShown = () => callback()
+        addEventListener(window, 'PHSurveyShown', onShown)
         // onFeatureFlags may synchronously deliver its cached value while registering.
         // The subscription establishes its own initial value after these hooks are attached.
         let listening = false
@@ -118,6 +127,7 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
             listening = false
             unsubscribeCapture()
             unsubscribeFlags()
+            window?.removeEventListener('PHSurveyShown', onShown)
         }
     }
 }
