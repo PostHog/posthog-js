@@ -42,9 +42,13 @@ describe('PostHog RN session replay follows consent', () => {
   let warnSpy: vi.SpyInstance
   let logSpy: vi.SpyInstance
   let errorSpy: vi.SpyInstance
+  let currentSessionRecording: any
+  let currentFlags: Record<string, any>
 
   beforeEach(() => {
     nativeRecording = false
+    currentSessionRecording = { endpoint: '/s/' }
+    currentFlags = {}
 
     replay.start.mockReset()
     replay.startSession.mockClear()
@@ -68,9 +72,9 @@ describe('PostHog RN session replay follows consent', () => {
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
-      const res: any = { status: 'ok', sessionRecording: { endpoint: '/s/' } }
+      const res: any = { status: 'ok', sessionRecording: currentSessionRecording }
       if (url.includes('flags')) {
-        res.featureFlags = {}
+        res.featureFlags = currentFlags
       }
       return { status: 200, json: () => Promise.resolve(res) }
     })
@@ -154,6 +158,37 @@ describe('PostHog RN session replay follows consent', () => {
     await posthog.optIn()
 
     await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
+  it('stops a manually-started recording on opt-out even when a linked flag would have blocked replay', async () => {
+    // Warm the persisted cache with a linked flag evaluating false first, exactly like the
+    // "warm start" pattern in session-replay-rearm.spec.ts. Without this, the *first* bootstrap
+    // evaluation ever run for a token sees an empty cached config (no linkedFlag yet) and
+    // defaults recordingActive to true before the real config arrives, which races ahead and
+    // sets _sessionReplayRecordingActive itself — masking the bug this test is for.
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    const warmup = newPostHog({ enableSessionReplay: true })
+    await warmup.ready()
+    await warmup.reloadFeatureFlagsAsync()
+    await warmup.shutdown()
+    replay.start.mockClear()
+    replay.startRecording.mockClear()
+    nativeRecording = false
+
+    // Real run: bootstrap now reads the cached linkedFlag=false config directly, so replay
+    // never auto-starts and _sessionReplayRecordingActive is never set by the flags-driven path.
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    expect(nativeRecording).toBe(false)
+
+    await posthog.startSessionRecording()
+    expect(nativeRecording).toBe(true)
+
+    await posthog.optOut()
+
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(false))
+    expect(replay.stopRecording).toHaveBeenCalled()
   })
 
   it('leaves a recording running when the user was never opted out', async () => {

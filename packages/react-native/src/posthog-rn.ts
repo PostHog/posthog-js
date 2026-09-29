@@ -3163,11 +3163,14 @@ export class PostHog extends PostHogCore {
     // setup: native still comes up armed (it carries the push identity provider and its own opt-out
     // flag), so replay can start on optIn() without a restart, but nothing records until then.
     if (this.optedOut) {
-      const nativeWasInitialized = this._sessionReplayNativeInitialized
-      if (!nativeWasInitialized) {
+      if (!this._sessionReplayNativeInitialized) {
         await this.initializeNativePlugin(options, remoteConfig, true)
       }
-      if (this._sessionReplayNativeInitialized && (!nativeWasInitialized || this._sessionReplayRecordingActive === true)) {
+      // Stop whenever native replay is up, regardless of why it's recording: the flags-driven
+      // path (_sessionReplayRecordingActive) and a manual startSessionRecording() call both land
+      // here, and only the former sets that flag. _stopSessionRecording() is a no-op if nothing
+      // is actually running.
+      if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording()
       }
       this._sessionReplayRecordingActive = false
