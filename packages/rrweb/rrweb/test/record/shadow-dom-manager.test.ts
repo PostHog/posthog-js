@@ -59,6 +59,55 @@ describe('ShadowDomManager', () => {
     });
   }
 
+  it('ignores SecurityError when a frame navigates cross-origin', () => {
+    const manager = createManager();
+    const iframe = {
+      contentWindow: {
+        get Element() {
+          throw new DOMException('Cross-origin frame', 'SecurityError');
+        },
+      },
+      contentDocument: document,
+    } as unknown as HTMLIFrameElement;
+
+    expect(() => manager.observeAttachShadow(iframe)).not.toThrow();
+    manager.reset();
+  });
+
+  it('does not swallow unrelated errors while observing a frame', () => {
+    const manager = createManager();
+    const iframe = {
+      contentWindow: {
+        get Element() {
+          throw new TypeError('Broken Element getter');
+        },
+      },
+      contentDocument: document,
+    } as unknown as HTMLIFrameElement;
+
+    expect(() => manager.observeAttachShadow(iframe)).toThrow(
+      'Broken Element getter',
+    );
+    manager.reset();
+  });
+
+  it('still patches same-origin iframe shadow roots', () => {
+    const manager = createManager();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const iframeElement = iframe.contentWindow?.Element;
+
+    expect(iframeElement).toBeDefined();
+    const before = iframeElement?.prototype.attachShadow;
+    manager.observeAttachShadow(iframe);
+    expect(iframeElement?.prototype.attachShadow).not.toBe(before);
+
+    manager.reset();
+    expect(iframeElement?.prototype.attachShadow).toBe(before);
+    iframe.remove();
+  });
+
   it('reset() should not call MutationBuffer.reset() from restoreHandler to avoid infinite recursion', () => {
     const manager = createManager();
 
