@@ -13,7 +13,12 @@ export function Cancel({
   appearance: SurveyAppearanceTheme
 }): JSX.Element {
   return (
-    <TouchableOpacity style={[styles.cancelBtnWrapper, { borderColor: appearance.borderColor }]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.cancelBtnWrapper, { borderColor: appearance.borderColor }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Close survey"
+    >
       <CancelSVG />
     </TouchableOpacity>
   )
