@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.3
+
+### Patch Changes
+
+- [#4976](https://github.com/PostHog/posthog-js/pull/4976) [`47db7ce`](https://github.com/PostHog/posthog-js/commit/47db7ce9005dc4d11647ab3aa217f0e38bb38f74) Thanks [@posthog](https://github.com/apps/posthog)! - Start session recording at `DOMContentLoaded`, so a page whose `load` event is late or never fires still records, and report `$sdk_debug_rrweb_attached` from rrweb's own recording state
+  (2026-09-30)
+
 ## 1.435.2
 
 ### Patch Changes
