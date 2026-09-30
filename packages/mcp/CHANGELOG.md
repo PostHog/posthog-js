@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.21.1
+
+### Patch Changes
+
+- [#5157](https://github.com/PostHog/posthog-js/pull/5157) [`e2a3e3d`](https://github.com/PostHog/posthog-js/commit/e2a3e3d90c4d50e5333c1d0b9ea0f15745e6b247) Thanks [@gesh](https://github.com/gesh)! - Add the configured server build to custom events captured through `PostHogMCP`.
+  (2026-09-30)
+
 ## 0.21.0
 
 ### Minor Changes
