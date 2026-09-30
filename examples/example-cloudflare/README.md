@@ -23,7 +23,11 @@ pnpm build # Bundles for workerd without deploying.
 ```
 
 To deploy, run `pnpm exec wrangler secret put POSTHOG_PROJECT_API_KEY`, set the host in
-`wrangler.toml`, then run `pnpm deploy`.
+`wrangler.toml`, then run `pnpm run deploy`.
+
+For a standalone copy, remove the shared `pnpmfile` setting and install `posthog-node`
+5.39.2 or later instead of local tarballs. Earlier versions can finish `flush()` before
+`capture()` has queued the event.
 
 ## Request lifetime
 

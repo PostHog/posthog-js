@@ -28,9 +28,10 @@ pnpm vercel:build
 ```
 
 To deploy, configure `POSTHOG_PROJECT_API_KEY` and `POSTHOG_HOST` in the Vercel project,
-then run `pnpm deploy`. Local tarballs must also be available in the build environment;
+then run `pnpm run deploy`. Local tarballs must also be available in the build environment;
 for a standalone copy outside this monorepo, remove the shared `pnpmfile` setting and
-install a published `posthog-node` version that exports `/edge` instead.
+install `posthog-node` 5.39.2 or later instead. Earlier versions can finish `flush()`
+before `capture()` has queued the event.
 
 ## Request lifetime
 

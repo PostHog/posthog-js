@@ -34,8 +34,9 @@ pnpm start
 ```
 
 Set the same environment variables on a hosting provider supporting Next.js Edge Route
-Handlers. For a standalone copy, remove the shared `pnpmfile` setting and install a
-published `posthog-node` version that exports `/edge` instead of local tarballs.
+Handlers. For a standalone copy, remove the shared `pnpmfile` setting and install
+`posthog-node` 5.39.2 or later instead of local tarballs. Earlier versions can finish
+`flush()` before `capture()` has queued the event.
 
 ## Request lifetime
 
