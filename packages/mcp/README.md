@@ -197,6 +197,7 @@ const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN,
 ```
 
 Omit `serverBuild` when the deployment does not provide a reliable value.
+`PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
