@@ -2,6 +2,8 @@ name: Library checks
 
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main
@@ -130,7 +132,7 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
     env:
       HOME: /root
-    if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.affected.outputs.is-affected == 'true'
     permissions:
       contents: read
       pull-requests: write
@@ -329,11 +331,12 @@ jobs:
 
       - name: Fetch comparison history
         env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || github.ref_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
+          BASE_BRANCH="${BASE_BRANCH#refs/heads/}"
           REFS=("+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH")
           if [[ -n "$PR_NUMBER" ]]; then
             REFS+=("+refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge")
@@ -344,8 +347,8 @@ jobs:
       - name: Check if rrweb packages changed
         id: changed
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: |
           set -euo pipefail
 
