@@ -381,15 +381,20 @@ function truncateToSize(event: MutableEvent): MutableEvent {
   // Progressive depth reduction, from the first depth that collapses anything.
   // Any deeper depth leaves the event as it is, and it is already too large.
   const nesting = Math.max(...REDUCIBLE_FIELDS.map((field) => nestingDepth(event[field])))
+  let atDepthOne: MutableEvent | undefined
   for (let depth = nesting - 1; depth >= 1; depth--) {
     const reduced = normalizeReducibleFields(event, depth)
     if (jsonByteSize(reduced) <= MAX_EVENT_BYTES) {
       return reduced
     }
+    if (depth === 1) {
+      atDepthOne = reduced
+    }
   }
 
-  // Last resort: truncate largest string fields
-  return truncateLargestFields(normalizeReducibleFields(event, 1), MAX_EVENT_BYTES)
+  // Last resort: truncate largest string fields. Reuse the loop's depth-1
+  // result when it already computed one, instead of normalizing again.
+  return truncateLargestFields(atDepthOne ?? normalizeReducibleFields(event, 1), MAX_EVENT_BYTES)
 }
 
 /**
