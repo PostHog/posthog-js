@@ -119,10 +119,13 @@ describe('sanitizeEvent - response content blocks', () => {
     expect(result.response.content[0]).toEqual(textResource)
   })
 
-  it('should redact unknown content types with type name in message', () => {
+  it.each([
+    ['video', 'video'],
+    ['phc_123456789012345678901234567890', '[redacted]'],
+  ])('should redact unknown content types with type name in message: %s', (type, shownType) => {
     const event = makeEvent({
       response: {
-        content: [{ type: 'video', data: 'somestuff', mimeType: 'video/mp4' }],
+        content: [{ type, data: 'somestuff', mimeType: 'video/mp4' }],
       },
     })
 
@@ -130,7 +133,7 @@ describe('sanitizeEvent - response content blocks', () => {
 
     expect(result.response.content[0]).toEqual({
       type: 'text',
-      text: '[unsupported content type "video" redacted - not supported by PostHog MCP analytics]',
+      text: `[unsupported content type "${shownType}" redacted - not supported by PostHog MCP analytics]`,
     })
   })
 
