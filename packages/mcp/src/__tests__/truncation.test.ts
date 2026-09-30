@@ -408,7 +408,7 @@ describe('truncateEvent - size targeting', () => {
         b: 'y'.repeat(60_000),
         c: 'z'.repeat(60_000),
         d: 'w'.repeat(60_000),
-        nested: { deeper: 'value' },
+        nested: {},
       },
     })
     const result = truncateEvent(event)
