@@ -1,0 +1,69 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:25.056Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data"
+        },
+        "body": {
+          "fields": [
+            ["language", "en"],
+            ["model", "whisper-1"],
+            ["response_format", "verbose_json"]
+          ],
+          "files": [
+            {
+              "name": "file",
+              "filename": "openai-audio.wav",
+              "type": "audio/wav",
+              "size": 60078,
+              "sha256": "4caafa4ec93a87ca344d0cd44082ef99cbf3c24a1ace90111bc3b1a09806b4b1"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_7e324ac3d95b442aa0240dc6f400eece"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "task": "transcribe",
+            "language": "english",
+            "duration": 1.8700000047683716,
+            "text": "The weather in Paris is sunny.",
+            "segments": [
+              {
+                "id": 0,
+                "seek": 0,
+                "start": 0,
+                "end": 2,
+                "text": " The weather in Paris is sunny.",
+                "tokens": [50364, 440, 5503, 294, 8380, 307, 20412, 13, 50464],
+                "temperature": 0,
+                "avg_logprob": -0.3397992253303528,
+                "compression_ratio": 0.8333333134651184,
+                "no_speech_prob": 0.012005293741822243
+              }
+            ],
+            "usage": {
+              "type": "duration",
+              "seconds": 2
+            }
+          }
+        }
+      }
+    }
+  ]
+}

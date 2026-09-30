@@ -123,10 +123,6 @@ const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
 // reported on captured events and logged, or a held recording looks like a shipping one.
 type FlushHoldReason = 'no_interaction_since_recording_started' | 'no_interaction_since_session_rotated'
 
-function roundOrUndefined(value: number | undefined): number | undefined {
-    return isUndefined(value) ? undefined : Math.round(value)
-}
-
 /**
  * Extracts the network_timing value from a capturePerformance config.
  * Returns `true`/`false` if explicitly set, or `undefined` if not specified.
@@ -532,8 +528,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
-    // attribute mutations the throttler dropped across this session, reported on captured
-    // events so the drop path is measurable in our own data
     private _throttledMutationsDropped = 0
     private _oversizedMutationsDropped = 0
     private _oversizedMutationBytesDropped = 0
@@ -551,22 +545,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
-    // set when a held buffer hit the size cap and was dropped to bound memory; a release
-    // then takes a fresh full snapshot so the recording resumes playable
+    // set when a held buffer hit the size cap and stopped collecting to bound memory; a
+    // release ships what was held and takes a fresh full snapshot to resume playable
     private _heldBufferOverflowed = false
     // a release while the recorder is stopped (e.g. an override during startSessionRecording's
     // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
     private _suppressNextFreshStartHold = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
-    private _maxDepthExceeded = false
-    /**
-     * Cost of the most expensive full snapshot this recorder has taken. A full snapshot
-     * is one uninterruptible task, so this doubles as "the longest freeze we caused".
-     * Reported on captured events so slow snapshots are visible in our own data rather
-     * than only via customer-supplied Chrome traces.
-     */
-    private _slowestFullSnapshot: SnapshotCost | undefined
     // the cost object most recently read from rrweb; each snapshot produces a fresh
     // object, so identity comparison dedupes the sync and microtask reads
     private _lastSeenSnapshotCost: SnapshotCost | undefined
@@ -586,10 +572,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Strategy pattern: V1 vs V2 trigger logic
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
-    private _fullSnapshotTimestamps: Array<[string, number]> = []
     // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
-    // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug
-    // telemetry). Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
+    // the marker-only flush guard. Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
     private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
@@ -1425,7 +1409,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Reset first full snapshot timestamp for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
-        this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
@@ -1630,13 +1613,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // cost metrics are per-session; reset them only after the old recorder has
             // stopped (its teardown flush still records deferred stylesheet work, which
             // belongs to the old session) and before the new one takes its first snapshot
-            this._slowestFullSnapshot = undefined
             this._lastSeenSnapshotCost = undefined
             // the drop counts are per-session too, so the new session starts at zero
+            this._unstringifiableEventsDropped = 0
             this._throttledMutationsDropped = 0
             this._oversizedMutationsDropped = 0
             this._oversizedMutationBytesDropped = 0
-            this._unstringifiableEventsDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
@@ -1691,6 +1673,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._heldEpochShipsOnUnload = false
         if (this._heldBufferOverflowed) {
             this._heldBufferOverflowed = false
+            // the overflowed hold retained its data, so the release ships it; a fresh full
+            // snapshot bridges the gap between the cap and this release
             this._tryTakeFullSnapshot()
         }
         this._scheduleFlushBuffer()
@@ -1771,9 +1755,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
         this._lastSeenSnapshotCost = cost
-        if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
-            this._slowestFullSnapshot = cost
-        }
         if (cost.durationMs >= SLOW_FULL_SNAPSHOT_THRESHOLD_MS) {
             logger.warn('full snapshot was slow, the page may have been unresponsive while it ran', {
                 durationMs: Math.round(cost.durationMs),
@@ -1972,9 +1953,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
-            if (getRRWeb()?.wasMaxDepthReached?.()) {
-                this._maxDepthExceeded = true
-            }
             // the FullSnapshot event is emitted partway through rrweb's takeFullSnapshot,
             // whose cost window only closes after the post-snapshot buffer drain and
             // adoptedStyleSheets work; the sync read below picks up any snapshot we have
@@ -2044,13 +2022,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // marker is captured — attributing a marker backdated by the idle gap to the new
             // session, which drags the new recording's start back and makes its prefix unplayable
             this._updateWindowAndSessionIds(event)
-        }
-
-        if (rawEvent.type === EventType.FullSnapshot) {
-            this._fullSnapshotTimestamps.push([this._sessionId, rawEvent.timestamp])
-            if (this._fullSnapshotTimestamps.length > 6) {
-                this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)
-            }
         }
 
         // Route lifecycle events using their payload IDs:
@@ -2414,6 +2385,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         $lib: Config.LIB_NAME,
                         $lib_version: Config.LIB_VERSION,
                         $snapshot_host: snapshotHostname,
+                        ...(this._throttledMutationsDropped > 0
+                            ? { $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationsDropped > 0
+                            ? { $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationBytesDropped > 0
+                            ? {
+                                  $sdk_debug_replay_oversized_mutation_bytes_dropped:
+                                      this._oversizedMutationBytesDropped,
+                              }
+                            : {}),
                         ...(this._unstringifiableEventsDropped > 0
                             ? { $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped }
                             : {}),
@@ -2527,17 +2510,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._buffer.windowId = properties.$window_id as string
         }
 
-        // a held buffer can't ship at the cap, so bound memory instead: drop the epoch's data
-        // and stop collecting; a release takes a fresh full snapshot to resume playable
+        // a held buffer can't ship at the cap, so bound memory instead: stop collecting but
+        // keep what is held, so a release still ships the epoch from its start; the release
+        // takes a fresh full snapshot to bridge the gap between cap and interaction
         if (
             this._holdFlushUntilInteraction &&
             (this._heldBufferOverflowed ||
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
-            if (!this._heldBufferOverflowed) {
-                this._heldBufferOverflowed = true
-                this._buffer = this._clearBuffer()
-            }
+            this._heldBufferOverflowed = true
             return
         }
 
@@ -2612,15 +2593,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // a clean unload releases a fresh-start hold for passive visits (reading, video),
-        // but only if the document was ever visible. Rotation-born holds stay held, and an
-        // overflowed hold has nothing playable left to ship.
-        if (
-            this._holdFlushUntilInteraction &&
-            this._heldEpochShipsOnUnload &&
-            this._documentWasEverVisible &&
-            !this._heldBufferOverflowed
-        ) {
+        // but only if the document was ever visible. Rotation-born holds stay held. An
+        // overflowed hold takes its recovery snapshot here, not in _releaseHoldAndFlush:
+        // that path early-returns once the hold is cleared, so a cancelled navigation
+        // would never heal the gap between cap and the resumed recording.
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {
             this._setFlushHold(undefined)
+            if (this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = false
+                this._tryTakeFullSnapshot()
+            }
         }
 
         // beforeunload cannot wait for async CompressionStream work. Synchronously
@@ -2783,10 +2765,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get sdkDebugProperties(): Properties {
-        // deferred sheets that never made it back into the recording (see rrweb-snapshot),
-        // undefined on recorder chunks that predate the counters
-        const deferredStylesheetStats = getRRWeb()?.getDeferredStylesheetStats?.()
-
         return {
             $recording_status: this.status,
             // "active" does not mean "uploading": a held epoch keeps its buffer until the user
@@ -2794,52 +2772,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_flush_hold_reason: this._flushHoldReason,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
-            $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: this._sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
-            $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
-            $snapshot_max_depth_exceeded: this._maxDepthExceeded,
-            // slowest, not most recent: a full snapshot is one uninterruptible task, so
-            // the worst one is the freeze a user would actually have noticed
-            $sdk_debug_replay_slowest_full_snapshot_ms: roundOrUndefined(this._slowestFullSnapshot?.durationMs),
-            $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: roundOrUndefined(
-                this._slowestFullSnapshot?.stylesheetMs
-            ),
-            $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
-            $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
-            // never-deferrable sources (CSSOM-only <style>, adoptedStyleSheets) split out,
-            // so a customer can tell which bucket dominates their page
-            $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable:
-                this._slowestFullSnapshot?.nonDeferrableCssRuleCount,
-            // cumulative across the session, unlike the slowest-snapshot properties: a fast
-            // first snapshot's deferrals must not vanish because a slower one deferred none
-            $sdk_debug_replay_deferred_stylesheets: deferredStylesheetStats?.deferredCount,
-            $sdk_debug_replay_deferred_stylesheets_failed: deferredStylesheetStats?.failedCount,
-            $sdk_debug_replay_deferred_stylesheets_abandoned: deferredStylesheetStats?.abandonedCount,
-            $sdk_debug_replay_deferred_stylesheet_ms: roundOrUndefined(deferredStylesheetStats?.totalMs),
-            $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: roundOrUndefined(
-                deferredStylesheetStats?.slowestSliceMs
-            ),
-            $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
-                getRRWeb()?.getMutationCost?.()?.slowestBatchMs
-            ),
-            // duration samples dropped because they straddled a tab suspension or blew
-            // the plausibility cap (see rrweb-snapshot snapshot-cost.ts): the duration
-            // gauges above stay alert-safe, and the discard itself stays observable
-            $sdk_debug_replay_discarded_duration_samples: getRRWeb()?.getDiscardedDurationSamples?.(),
-            // cumulative across the session: attribute mutations the throttler dropped, each
-            // of which risks the player showing DOM that already left the live page
-            $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
-            $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
-            $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
-            // cumulative across the session: events too large to stringify, each one a gap in
-            // the recording that nothing else reports
-            $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
-            // observers that failed to start: the recorder's error handler swallows those
-            // errors, so without this a frame that records almost nothing still reports
-            // every other health signal as good
-            $sdk_debug_replay_observer_init_failures: getRRWeb()?.getObserverInitFailures?.(),
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: this._rrwebAttached,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }

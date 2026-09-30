@@ -2,8 +2,10 @@ import { PostHogPersistedProperty } from '@posthog/core'
 import { getSurveyIterationKey, isSurveyKeyForSurvey, SurveyWithIteration } from '@posthog/core/surveys'
 import { useCallback, useEffect, useState } from 'react'
 import { usePostHog } from '../hooks/usePostHog'
+import type { PostHog } from '../posthog-rn'
 
 type SurveyStorage = {
+  isReady: boolean
   // Iteration-qualified keys (getSurveyIterationKey) so repeating surveys re-show when a new iteration starts
   seenSurveys: string[]
   setSeenSurvey: (survey: SurveyWithIteration) => void
@@ -21,13 +23,18 @@ export function updateSeenSurveys(current: string[], survey: SurveyWithIteration
   return [surveyKey, ...current.filter((key) => !isSurveyKeyForSurvey(key, survey.id))].slice(0, MAX_SEEN_SURVEYS)
 }
 
-export function useSurveyStorage(): SurveyStorage {
-  const posthogStorage = usePostHog()
+export function useSurveyStorage(client?: PostHog): SurveyStorage {
+  const fromHook = usePostHog()
+  const posthogStorage = client ?? fromHook
+  const [isReady, setIsReady] = useState(false)
   const [lastSeenSurveyDate, setLastSeenSurveyDate] = useState<Date | undefined>(undefined)
   const [seenSurveys, setSeenSurveys] = useState<string[]>([])
 
   useEffect(() => {
-    posthogStorage.ready().then(() => {
+    let mounted = true
+    setIsReady(false)
+    const load = () => {
+      if (!mounted) return
       const lastSeenSurveyDate = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveyLastSeenDate)
       if (typeof lastSeenSurveyDate === 'string') {
         setLastSeenSurveyDate(new Date(lastSeenSurveyDate))
@@ -35,15 +42,32 @@ export function useSurveyStorage(): SurveyStorage {
 
       const serialisedSeenSurveys = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)
       if (typeof serialisedSeenSurveys === 'string') {
-        const parsedSeenSurveys: unknown = JSON.parse(serialisedSeenSurveys)
+        let parsedSeenSurveys: unknown
+        try {
+          parsedSeenSurveys = JSON.parse(serialisedSeenSurveys)
+        } catch {
+          parsedSeenSurveys = []
+        }
         if (Array.isArray(parsedSeenSurveys)) {
           setSeenSurveys(parsedSeenSurveys.filter((key): key is string => typeof key === 'string'))
         }
+      } else {
+        setSeenSurveys([])
       }
+      setIsReady(true)
+    }
+    void posthogStorage.ready().then(load)
+    const unsubscribe = posthogStorage.on('surveysReset', () => {
+      void posthogStorage.ready().then(load)
     })
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
   }, [posthogStorage])
 
   return {
+    isReady,
     seenSurveys,
     setSeenSurvey: useCallback(
       (survey: SurveyWithIteration) => {

@@ -460,6 +460,20 @@ describe('RichContent', () => {
 
             // Content beyond depth should not be rendered
             expect(container.textContent).not.toContain('Should not appear')
+            for (const [paragraphs, visible] of [
+                [19, true],
+                [20, false],
+            ] as const) {
+                let boundaryContent: TipTapDoc['content'] = [{ type: 'text', text: 'Boundary text' }]
+                for (let i = 0; i < paragraphs; i++) {
+                    boundaryContent = [{ type: 'paragraph', content: boundaryContent }]
+                }
+                const boundary = render(
+                    <RichContent {...defaultProps} richContent={{ type: 'doc', content: boundaryContent }} />
+                )
+                expect(boundary.container.textContent?.includes('Boundary text')).toBe(visible)
+                boundary.unmount()
+            }
         })
     })
 
@@ -591,6 +605,7 @@ describe('RichContent', () => {
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
             expect(container.querySelector('strong')).not.toBeNull()
+            expect(container.querySelector('strong')?.textContent).toBe('Bold text')
         })
 
         it('should render italic text', () => {
@@ -613,6 +628,7 @@ describe('RichContent', () => {
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
             expect(container.querySelector('em')).not.toBeNull()
+            expect(container.querySelector('em')?.textContent).toBe('Italic text')
         })
 
         it('should render underline text', () => {
@@ -635,6 +651,7 @@ describe('RichContent', () => {
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
             expect(container.querySelector('u')).not.toBeNull()
+            expect(container.querySelector('u')?.textContent).toBe('Underlined text')
         })
 
         it('should render strikethrough text', () => {
@@ -657,6 +674,7 @@ describe('RichContent', () => {
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
             expect(container.querySelector('s')).not.toBeNull()
+            expect(container.querySelector('s')?.textContent).toBe('Strikethrough text')
         })
 
         it('should render inline code', () => {
@@ -698,6 +716,7 @@ describe('RichContent', () => {
 
             expect(container.querySelector('pre')).not.toBeNull()
             expect(container.querySelector('pre code')).not.toBeNull()
+            expect(container.querySelector('pre code')?.textContent).toBe('function hello() {\n  return "world"\n}')
         })
 
         it('should render bullet list', () => {
@@ -726,6 +745,10 @@ describe('RichContent', () => {
             expect(ul).not.toBeNull()
             expect(ul?.style.listStyleType).toBe('disc')
             expect(container.querySelectorAll('li')).toHaveLength(2)
+            expect(Array.from(container.querySelectorAll('ul li'), (item) => item.textContent)).toEqual([
+                'Item 1',
+                'Item 2',
+            ])
         })
 
         it('should render ordered list', () => {
@@ -754,6 +777,10 @@ describe('RichContent', () => {
             expect(ol).not.toBeNull()
             expect(ol?.style.listStyleType).toBe('decimal')
             expect(container.querySelectorAll('li')).toHaveLength(2)
+            expect(Array.from(container.querySelectorAll('ol li'), (item) => item.textContent)).toEqual([
+                'First',
+                'Second',
+            ])
         })
 
         it('should render blockquote', () => {
@@ -770,6 +797,7 @@ describe('RichContent', () => {
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
             expect(container.querySelector('blockquote')).not.toBeNull()
+            expect(container.querySelector('blockquote')?.textContent).toBe('Quoted text')
         })
 
         it('should render headings with correct level', () => {
@@ -793,6 +821,8 @@ describe('RichContent', () => {
 
             expect(container.querySelector('h1')).not.toBeNull()
             expect(container.querySelector('h3')).not.toBeNull()
+            expect(container.querySelector('h1')?.textContent).toBe('Heading 1')
+            expect(container.querySelector('h3')?.textContent).toBe('Heading 3')
         })
 
         it('should clamp heading level to valid range (1-6)', () => {
@@ -816,6 +846,8 @@ describe('RichContent', () => {
 
             expect(container.querySelector('h1')).not.toBeNull()
             expect(container.querySelector('h6')).not.toBeNull()
+            expect(container.querySelector('h1')?.textContent).toBe('Clamped heading')
+            expect(container.querySelector('h6')?.textContent).toBe('Clamped heading 2')
         })
 
         it('should render horizontal rule', () => {
@@ -911,6 +943,7 @@ describe('RichContent', () => {
 
             expect(container.querySelector('strong')).not.toBeNull()
             expect(container.querySelector('em')).not.toBeNull()
+            expect(container.querySelector('em strong')?.textContent).toBe('Bold and italic')
         })
 
         it('should ignore unknown mark types', () => {
@@ -930,9 +963,9 @@ describe('RichContent', () => {
                 ],
             }
 
-            // Should not throw
             expect(() => {
-                render(<RichContent {...defaultProps} richContent={doc} />)
+                const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
+                expect(container.textContent).toBe('Unknown mark')
             }).not.toThrow()
         })
 
@@ -1055,21 +1088,29 @@ describe('RichContent', () => {
 
     describe('Error Handling', () => {
         it('should gracefully handle errors during rendering and fall back to plain text', () => {
-            // Create a doc that might cause issues during rendering
             const problematicDoc = {
                 type: 'doc',
                 content: [
                     {
                         type: 'paragraph',
-                        content: null, // Invalid - content should be array
+                        content: 42, // Invalid nested content bypasses root validation
                     },
                 ],
             } as unknown as TipTapDoc
 
             // Should not throw and should fall back to plain text
             expect(() => {
-                render(<RichContent {...defaultProps} content="Fallback" richContent={problematicDoc} />)
+                const { container } = render(
+                    <RichContent {...defaultProps} content="Fallback" richContent={problematicDoc} />
+                )
+                expect(container.textContent).toBe('Fallback')
+                expect(container.querySelector('p')).toBeNull()
             }).not.toThrow()
+        })
+
+        it('tolerates null child content without throwing', () => {
+            const doc = { type: 'doc', content: [{ type: 'paragraph', content: null }] } as unknown as TipTapDoc
+            expect(() => render(<RichContent {...defaultProps} content="Fallback" richContent={doc} />)).not.toThrow()
         })
     })
 })

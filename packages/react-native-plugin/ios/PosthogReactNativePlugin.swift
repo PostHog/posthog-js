@@ -1,4 +1,4 @@
-import PostHog
+@_spi(PostHogInternal) import PostHog
 import React
 
 /// Meant for internally logging PostHog related things
@@ -26,6 +26,26 @@ private func containsFatalJsErrorMarker(_ text: String?) -> Bool {
     guard let text else { return false }
     return fatalJsErrorMarkers.contains { text.contains($0) }
 }
+
+private let fatalCaptureErrorCode = "PosthogReactNativePluginFatalCaptureError"
+
+/// Holds the JS-approved properties for the thread on which the JS layer's own fatal capture
+/// is running, so `beforeSend` can tell that capture apart from a native re-report of the same
+/// crash — and can put back the values native's own enrichment would otherwise win.
+private let jsFatalCaptureKey = "com.posthog.reactnative.jsFatalCapture"
+
+private var jsFatalCaptureProperties: [String: Any]? {
+    Thread.current.threadDictionary[jsFatalCaptureKey] as? [String: Any]
+}
+
+/// The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly so
+/// an unparseable value is a caller error rather than a silent substitution of "now", which
+/// would attribute the crash to the wrong instant.
+private let iso8601Formatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
 
 private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     guard event.event == "$exception",
@@ -64,11 +84,9 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
 private final class SetupWindow {
     private let lock = NSLock()
     private var distinctId: String?
-    private var jsOptedOut: Bool
 
-    init(distinctId: String, jsOptedOut: Bool) {
+    init(distinctId: String) {
         self.distinctId = distinctId.isEmpty ? nil : distinctId
-        self.jsOptedOut = jsOptedOut
     }
 
     var pendingDistinctId: String? {
@@ -77,17 +95,10 @@ private final class SetupWindow {
         return distinctId
     }
 
-    var dropsPushOpens: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return jsOptedOut
-    }
-
     func settled() {
         lock.lock()
         defer { lock.unlock() }
         distinctId = nil
-        jsOptedOut = false
     }
 }
 
@@ -247,7 +258,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         let distinctId = sdkOptions["distinctId"] as? String ?? ""
         let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
         let jsOptedOut = sdkOptions["optOut"] as? Bool ?? false
-        let setupWindow = SetupWindow(distinctId: distinctId, jsOptedOut: jsOptedOut)
+        let setupWindow = SetupWindow(distinctId: distinctId)
         // Every exit below is past the point where native storage carries the ids, or past a
         // failure that left the SDK disabled, so no path can leave the window armed.
         defer { setupWindow.settled() }
@@ -255,18 +266,29 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
         config.setBeforeSend { event in
+            // The JS layer's own fatal capture is the event we want; only native re-reports
+            // of a crash JS already captured are duplicates. Matching the event name as well
+            // as the thread-local keeps anything else posthog-ios emits on this thread during
+            // the call from having this event's properties written over it.
+            if event.event == "$exception", let jsProperties = jsFatalCaptureProperties {
+                // `buildProperties` keeps its own value on a key clash (`{ current, _ in
+                // current }`), so native's enrichment silently wins over what JS decided —
+                // `$process_person_profile` from `personProfiles: 'never'`, or any value the
+                // app's `before_send` rewrote. Put the JS-approved values back. On Android,
+                // caller properties already win apart from SDK debug properties, so the
+                // module there only restores `$process_person_profile` and `$is_identified`.
+                for (key, value) in jsProperties {
+                    event.properties[key] = value
+                }
+                return event
+            }
             if isReactNativeFatalJsError(event) {
                 return nil
             }
             // Only the replayed tap. `setup()` also replays the previous launch's crash report,
             // and that `$exception` carries the distinct id recorded at crash time, which stands.
-            if event.event == "$push_notification_opened" {
-                if setupWindow.dropsPushOpens {
-                    return nil
-                }
-                if let distinctId = setupWindow.pendingDistinctId {
-                    event.distinctId = distinctId
-                }
+            if event.event == "$push_notification_opened", let distinctId = setupWindow.pendingDistinctId {
+                event.distinctId = distinctId
             }
             return event
         }
@@ -326,6 +348,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         config.flushAt = flushAt
 
         config.optOut = jsOptedOut
+        // JS owns consent: posthog-js core keeps its own store, so the value above is the answer,
+        // not a default the SDK may override from its own disk copy.
+        config.persistOptOut = false
         // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
         // has no remoteConfig switch to mirror — it deprecated the option and always loads.
         config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
@@ -422,6 +447,16 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         #endif
     }
 
+    @objc(getSessionReplayDebugProperties:withRejecter:)
+    func getSessionReplayDebugProperties(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
+        #if os(iOS)
+            resolve(PostHogSDK.shared.sessionReplayDebugProperties())
+        #else
+            // Session replay is unsupported on macOS.
+            resolve([:])
+        #endif
+    }
+
     @objc(endSession:withRejecter:)
     func endSession(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
         PostHogSDK.shared.endSession()
@@ -514,6 +549,55 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         reject _: RCTPromiseRejectBlock
     ) {
         PostHogSDK.shared.addExceptionStep(message, properties: properties)
+        resolve(nil)
+    }
+
+    /// Capture a fatal JavaScript exception through the native SDK.
+    ///
+    /// The JS layer has already run `before_send` and built the final payload; this only
+    /// hands it to posthog-ios, whose `capture` writes the record to its own disk queue
+    /// synchronously on the calling thread — the durability the JS event queue cannot
+    /// promise while AsyncStorage is still draining. Delivery, retry and the relaunch flush
+    /// are then the native SDK's job.
+    ///
+    /// The JS side drops its own copy of the event when this path is taken, so this must not
+    /// silently no-op: a rejection tells JS the capture did not happen.
+    @objc(captureFatalException:withTimestamp:withProperties:withResolver:withRejecter:)
+    func captureFatalException(
+        distinctId: String, timestamp: String, properties: [String: Any],
+        resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
+    ) {
+        guard let date = iso8601Formatter.date(from: timestamp) else {
+            reject(
+                fatalCaptureErrorCode,
+                "captureFatalException: invalid timestamp '\(timestamp)'", nil
+            )
+            return
+        }
+        // capture() returns silently when the SDK is not capturing. `isOptOut()` is true both
+        // when it was never set up and when the user opted out; JS gates on both before
+        // calling, so either answer here means the event was dropped. It has already given up
+        // its own copy, so report the loss rather than resolving successfully.
+        guard !PostHogSDK.shared.isOptOut() else {
+            reject(
+                fatalCaptureErrorCode,
+                "captureFatalException: the native SDK is not capturing (not set up, or opted out)", nil
+            )
+            return
+        }
+        // `beforeSend` below drops native re-reports of fatal JS errors to avoid duplicating
+        // what JS already captured. This event *is* the JS capture, so hand the filter the
+        // JS-approved properties for the duration of the call: it passes the event through
+        // and restores those values over native's enrichment. A thread-local keeps a
+        // concurrent native crash report on another thread subject to the filter as usual.
+        Thread.current.threadDictionary[jsFatalCaptureKey] = properties
+        defer { Thread.current.threadDictionary.removeObject(forKey: jsFatalCaptureKey) }
+        PostHogSDK.shared.capture(
+            "$exception",
+            distinctId: distinctId.isEmpty ? nil : distinctId,
+            properties: properties,
+            timestamp: date
+        )
         resolve(nil)
     }
 

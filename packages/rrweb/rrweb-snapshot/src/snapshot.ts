@@ -75,6 +75,26 @@ function getValidTagName(element: Element): Lowercase<string> {
 let canvasService: HTMLCanvasElement | null;
 let canvasCtx: CanvasRenderingContext2D | null;
 
+// a tainted canvas fails on every snapshot, so warn once rather than on each one
+let taintedCanvasWarned = false;
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time like the img inline path does, rather than blaming taint
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      'Cannot read canvas pixels, so this canvas is left out of the recording.',
+      error,
+    );
+    return;
+  }
+  if (taintedCanvasWarned) return;
+  taintedCanvasWarned = true;
+  console.warn(
+    'Cannot read canvas pixels, so this canvas is left out of the recording. A cross-origin image or video drawn into it taints it.',
+    error,
+  );
+}
+
 // oxlint-disable-next-line no-control-regex
 const SRCSET_NOT_SPACES = /^[^ \t\n\r\u000c]+/; // Don't use \s, to avoid matching non-breaking space
 // oxlint-disable-next-line no-control-regex
@@ -274,6 +294,19 @@ export function ignoreAttribute(
     (tagName === 'video' || tagName === 'audio') &&
     toLowerCase(name) === 'autoplay'
   );
+}
+
+/**
+ * Whether a `<link>`'s `rel` marks it as a stylesheet, matching `rel` as the
+ * space-separated, ASCII-case-insensitive token list it is. The distinction
+ * matters because `<link rel=preload as=style>` carries the same URL as the
+ * stylesheet it preloads while applying no CSS of its own.
+ */
+function isStylesheetLink(rel: unknown): boolean {
+  if (typeof rel !== 'string') {
+    return false;
+  }
+  return toLowerCase(rel).split(/\s+/).includes('stylesheet');
 }
 
 export function _isBlockedElement(
@@ -772,7 +805,16 @@ function serializeElementNode(
   // remote css
   // a blocked link is serialized as a dimensions-only placeholder, so reading its
   // sheet would be wasted work - and deferring it would leak CSS the block excluded
-  if (tagName === 'link' && inlineStylesheet && !needBlock) {
+  if (
+    tagName === 'link' &&
+    inlineStylesheet &&
+    !needBlock &&
+    // Only a real stylesheet link. `preload`/`prefetch` links carry the URL of
+    // a sheet without applying it, so the href lookup below happily resolves
+    // them to the loaded sheet - and then the whole stylesheet is inlined twice
+    // into the snapshot, once on an element the replayer must leave alone.
+    isStylesheetLink(attributes.rel)
+  ) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -877,34 +919,42 @@ function serializeElementNode(
   // the payload through the masked frame stream — serializing them here would
   // bypass the masking
   if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured?.()) {
-    if ((n as ICanvas).__context === '2d') {
-      // only record this on 2d canvas
-      if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
-        attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+    // `toDataURL` throws a SecurityError on a canvas the page tainted with a
+    // cross-origin draw. This runs inside the full-snapshot serialize pass, so
+    // an escaping throw costs the whole recording: no FullSnapshot event is
+    // emitted and no observer is ever attached. Drop the canvas instead.
+    try {
+      if ((n as ICanvas).__context === '2d') {
+        // only record this on 2d canvas
+        if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
+          attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+            dataURLOptions.type,
+            dataURLOptions.quality,
+          );
+        }
+      } else if (!('__context' in n)) {
+        // context is unknown, better not call getContext to trigger it
+        const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
-      }
-    } else if (!('__context' in n)) {
-      // context is unknown, better not call getContext to trigger it
-      const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
 
-      // create blank canvas of same dimensions
-      const blankCanvas = doc.createElement('canvas');
-      blankCanvas.width = (n as HTMLCanvasElement).width;
-      blankCanvas.height = (n as HTMLCanvasElement).height;
-      const blankCanvasDataURL = blankCanvas.toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
+        // create blank canvas of same dimensions
+        const blankCanvas = doc.createElement('canvas');
+        blankCanvas.width = (n as HTMLCanvasElement).width;
+        blankCanvas.height = (n as HTMLCanvasElement).height;
+        const blankCanvasDataURL = blankCanvas.toDataURL(
+          dataURLOptions.type,
+          dataURLOptions.quality,
+        );
 
-      // no need to save dataURL if it's the same as blank canvas
-      if (canvasDataURL !== blankCanvasDataURL) {
-        attributes.rr_dataURL = canvasDataURL;
+        // no need to save dataURL if it's the same as blank canvas
+        if (canvasDataURL !== blankCanvasDataURL) {
+          attributes.rr_dataURL = canvasDataURL;
+        }
       }
+    } catch (err) {
+      warnCanvasUnreadable(err);
     }
   }
   // save image offline
@@ -1493,7 +1543,7 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    serializedNode.attributes.rel === 'stylesheet'
+    isStylesheetLink(serializedNode.attributes.rel)
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,

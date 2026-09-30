@@ -187,6 +187,22 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+// Recording buttons and capture diagnostics read these from individual events.
+const REQUIRED_REPLAY_PROPERTIES = [
+    '$recording_status',
+    '$sdk_debug_recording_script_not_loaded',
+    '$sdk_debug_replay_url_trigger_status',
+    '$sdk_debug_replay_event_trigger_status',
+    '$sdk_debug_replay_linked_flag_trigger_status',
+    '$sdk_debug_replay_rrweb_error',
+    '$sdk_debug_replay_internal_buffer_length',
+    '$sdk_debug_replay_flushed_size',
+]
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap', '$snapshot']
+const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+const isReplayDebugEvent = (eventName: string): boolean =>
+    eventName.charAt(0) === '$' && !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 // `fb.<subdomainIndex>.<creationTimeMs>.<randomNumber>`, the shape of Meta's _fbp cookie.
@@ -355,6 +371,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     advanced_enable_surveys: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
+    feature_flag_request_max_retries: 1,
     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
@@ -525,6 +542,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
@@ -1938,6 +1956,11 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        if (this.sessionRecording && !this._replayDebugPropertiesPaused && isReplayDebugEvent(event_name)) {
+            this._replayDebugPropertiesPaused = true
+            setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+        }
+
         const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
             const finalValue =
                 data.$set?.[channel.property] ??
@@ -1954,6 +1977,7 @@ export class PostHog implements PostHogInterface {
             url,
             data,
             compression: 'best-available',
+            preferSyncCompression: options?.send_instantly,
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
             ...(isSessionRecording && data.properties?.$session_id
@@ -2141,7 +2165,13 @@ export class PostHog implements PostHogInterface {
 
         try {
             if (this.sessionRecording) {
-                extend(properties, this.sessionRecording.sdkDebugProperties)
+                const replayProperties = this.sessionRecording.sdkDebugProperties
+                const includeDebugProperties = !this._replayDebugPropertiesPaused && isReplayDebugEvent(eventName)
+                for (const key in replayProperties) {
+                    if (includeDebugProperties || includes(REQUIRED_REPLAY_PROPERTIES, key)) {
+                        properties[key] = replayProperties[key]
+                    }
+                }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {
@@ -2984,6 +3014,46 @@ export class PostHog implements PostHogInterface {
         this.surveys
             ? this.surveys.getActiveMatchingSurveys(callback, forceReload)
             : callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
+    }
+
+    /**
+     * Register an event listener that runs when the set of active matching surveys changes.
+     * The listener receives the initial matching set and updates after event/action triggers,
+     * cancellation, consumption, session expiry, definitions refresh, captured pageviews,
+     * feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.
+     *
+     * URL conditions are re-evaluated on captured `$pageview` events, including automatic SPA
+     * pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled,
+     * capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time
+     * passing; selector, device and wait-period conditions are checked on the supported updates.
+     *
+     * The optional callback context distinguishes load errors from a successfully loaded empty
+     * result. New subscribers receive the current snapshot without replaying earlier errors:
+     * a settled unavailable state is `([], { isLoaded: false })`, while usable cached definitions
+     * are evaluated normally. An initial load already in progress delivers when it resolves.
+     * Recoverable load failures keep the subscription alive. Unsubscribing prevents any
+     * further delivery, including callbacks from an outstanding initial request.
+     *
+     * {@label Surveys}
+     *
+     * @example
+     * ```js
+     * const unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {
+     *     // respond to changes in currently matching surveys
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @param {SurveyCallback} callback The callback to call with active matching surveys.
+     * @returns A function that can be called to unsubscribe the listener.
+     */
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
+            return () => {}
+        }
+        return this.surveys.onActiveMatchingSurveysChanged(callback)
     }
 
     /**
@@ -5203,7 +5273,7 @@ export function init_from_snippet(): void {
     // The snippet stub always has an _i initialization queue, while a materialized SDK instance does not.
     // Multiple snippet init() calls can insert array.js more than once, so do not let a later execution replace
     // the live global instance (including an unloaded primary with loaded named instances).
-    if (snippetPostHog && !isArray(snippetPostHog['_i'])) {
+    if (snippetPostHog && !isArray(snippetPostHog['_i']) && isFunction(snippetPostHog['init'])) {
         return
     }
 

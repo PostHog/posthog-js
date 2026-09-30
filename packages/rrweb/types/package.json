@@ -2,7 +2,7 @@
     "name": "@posthog/rrweb-types",
     "version": "0.0.62",
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-types^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc --noEmit",
@@ -36,7 +36,7 @@
     ],
     "devDependencies": {
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "typescript": "catalog:native"
     },
     "browserslist": [
         "supports es6-class"

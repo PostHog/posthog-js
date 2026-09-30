@@ -1,4 +1,4 @@
-import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '@/error-tracking/types'
+import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '../types'
 import { isBuiltin, isString } from '@/utils'
 
 export class DOMExceptionCoercer implements ErrorTrackingCoercer<DOMException> {

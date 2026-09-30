@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument, PostHog, PostHogMCP } from '../index'
 import { version } from '../version'
+import { setupTestServerAndClient } from './test-utils/client-server-factory'
 
 /**
  * Every event @posthog/mcp sends should self-identify with the standard PostHog
@@ -40,6 +42,71 @@ describe('lib identity', () => {
       instrument(server, posthog)
       expect(posthog.getLibraryId()).toBe('posthog-node-mcp')
     } finally {
+      await posthog.shutdown()
+    }
+  })
+
+  it.each(['PostHogMCP', 'instrument()'])('%s keeps shared properties on tool calls and exceptions', async (path) => {
+    const beforeSend = vi.fn(() => null)
+    const posthog = new PostHogMCP('phc_test', { ...options, before_send: beforeSend })
+    const { server, client, cleanup } = await setupTestServerAndClient()
+    try {
+      await posthog.register({ $mcp_server_build: 'example-build', environment: 'test' })
+      if (path === 'PostHogMCP') {
+        posthog.captureToolCall({ toolName: 'example-tool', isError: true, error: new Error('example failure') })
+      } else {
+        instrument(server, posthog, { enableConversationId: false })
+        await client
+          .request(
+            { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'missing' } } },
+            CallToolResultSchema
+          )
+          .catch(() => undefined)
+      }
+
+      await vi.waitFor(() => {
+        for (const name of ['$mcp_tool_call', '$exception']) {
+          expect(beforeSend).toHaveBeenCalledWith(
+            expect.objectContaining({
+              event: name,
+              properties: expect.objectContaining({ $mcp_server_build: 'example-build', environment: 'test' }),
+            })
+          )
+        }
+      })
+    } finally {
+      await cleanup()
+      await posthog.shutdown()
+    }
+  })
+
+  it('keeps the instrumented server build when the client has a different default', async () => {
+    const beforeSend = vi.fn(() => null)
+    const posthog = new PostHogMCP('phc_test', {
+      ...options,
+      before_send: beforeSend,
+      serverBuild: 'client-build',
+    })
+    const { server, client, cleanup } = await setupTestServerAndClient()
+    try {
+      instrument(server, posthog, { enableConversationId: false, serverBuild: 'instrumented-build' })
+      await client
+        .request(
+          { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'missing' } } },
+          CallToolResultSchema
+        )
+        .catch(() => undefined)
+
+      await vi.waitFor(() => {
+        expect(beforeSend).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: '$mcp_tool_call',
+            properties: expect.objectContaining({ $mcp_server_build: 'instrumented-build' }),
+          })
+        )
+      })
+    } finally {
+      await cleanup()
       await posthog.shutdown()
     }
   })

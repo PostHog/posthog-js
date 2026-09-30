@@ -5,7 +5,35 @@
  * currently not supported in the browser lib).
  */
 
+import { execFileSync } from 'child_process'
+import path from 'path'
 import { init_from_snippet, PostHog } from '../posthog-core'
+
+const runWithoutBrowser = (method: 'identify' | 'capture') => {
+    execFileSync(
+        process.execPath,
+        [
+            '-e',
+            `
+        const assert = require('node:assert/strict')
+        assert.equal(typeof window, 'undefined')
+        assert.equal(typeof document, 'undefined')
+        global.fetch = () => { throw new Error('Unexpected network request in SSR fixture') }
+        const sdk = require(${JSON.stringify(path.resolve(__dirname, '../../dist/module.js'))})
+        const ph = sdk.default || sdk
+        ph.init('node-fixture', {
+            persistence: 'memory', bootstrap: { distinctID: 'node-fixture-user' },
+            capture_pageview: false, advanced_disable_flags: true,
+            before_send: () => null, disable_session_recording: true, disable_surveys: true,
+        })
+        ph[${JSON.stringify(method)}]('Pat')
+        // This smoke test checks synchronous SSR API safety, not browser timer lifecycle in Node.
+        process.exit(0)
+    `,
+        ],
+        { timeout: 10000 }
+    )
+}
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
@@ -26,8 +54,14 @@ describe(`Module-based loader in Node env`, () => {
         // assignableWindow.__PosthogExtensions__ = {}
 
         vi.useFakeTimers()
-        vi.spyOn(posthog, '_send_request').mockReturnValue()
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
         vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        vi.clearAllTimers()
+        vi.restoreAllMocks()
+        assignableWindow.POSTHOG_DEBUG = false
     })
 
     it('should load and capture the pageview event', () => {
@@ -59,10 +93,12 @@ describe(`Module-based loader in Node env`, () => {
 
     it(`supports identify()`, () => {
         expect(() => posthog.identify(`Pat`)).not.toThrow()
+        runWithoutBrowser('identify')
     })
 
     it(`supports capture()`, () => {
         expect(() => posthog.capture(`Pat`)).not.toThrow()
+        runWithoutBrowser('capture')
     })
 
     it(`always returns posthog from init`, () => {
@@ -133,6 +169,24 @@ describe('Snippet loader', () => {
     afterEach(() => {
         assignableWindow.posthog = undefined as any
         vi.restoreAllMocks()
+    })
+
+    it.each([undefined, {}, { init: 'placeholder' }])('loads over an uninitialized global %j', (placeholder) => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        assignableWindow.posthog = placeholder as any
+
+        init_from_snippet()
+
+        const posthog = assignableWindow.posthog
+        expect(posthog).toBeInstanceOf(PostHog)
+        expect(typeof posthog.init).toBe('function')
+        posthog.init('phc_placeholder', snippetConfig())
+        expect(posthog.__loaded).toBe(true)
+        expect(posthog.config.token).toBe('phc_placeholder')
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(posthog)
     })
 
     it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {

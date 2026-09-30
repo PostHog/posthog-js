@@ -1,3 +1,4 @@
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 import '@testing-library/jest-dom'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
@@ -21,9 +22,9 @@ vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOrig
 
 vi.mock('@posthog/browser-common/utils/uuidv7')
 
-const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
-const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
-const mockedUuidv7 = uuid.uuidv7 as vi.Mock
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as VitestMock
+const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as VitestMock
+const mockedUuidv7 = uuid.uuidv7 as VitestMock
 
 const mockPosthog = {
     capture: vi.fn(),
@@ -56,7 +57,7 @@ const openQuestion = (id: string, question: string): SurveyQuestion =>
     ({ type: SurveyQuestionType.Open, question, id }) as SurveyQuestion
 
 describe('Surveys: shuffled questions', () => {
-    let randomSpy: vi.SpyInstance
+    let randomSpy: VitestSpyInstance
 
     beforeEach(() => {
         cleanup()
@@ -65,13 +66,8 @@ describe('Surveys: shuffled questions', () => {
         mockedGetInProgressSurveyState.mockReturnValue(null)
         HTMLFormElement.prototype.submit = vi.fn()
 
-        // Sort keys 5, 1, 9 shuffle [q1, q2, q3] into [q2, q1, q3].
-        randomSpy = vi
-            .spyOn(Math, 'random')
-            .mockReturnValueOnce(0.5)
-            .mockReturnValueOnce(0.1)
-            .mockReturnValueOnce(0.9)
-            .mockReturnValue(0)
+        // Keep q3 in place, then swap q1 and q2 with Fisher-Yates.
+        randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.999999).mockReturnValueOnce(0).mockReturnValue(0)
     })
 
     afterEach(() => {

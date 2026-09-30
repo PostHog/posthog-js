@@ -101,6 +101,7 @@ describe('inlineDeferredStylesheets()', () => {
     styleEl.textContent = rules.join('\n');
     document.head.appendChild(styleEl);
     const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
     document.head.appendChild(linkEl);
     Object.defineProperty(linkEl, 'sheet', { value: styleEl.sheet });
     record.mirror.add(linkEl, {
@@ -566,6 +567,7 @@ describe('record() teardown of deferred stylesheets', () => {
     styleEl.textContent = rules.join('\n');
     document.head.appendChild(styleEl);
     const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
     document.head.appendChild(linkEl);
     Object.defineProperty(linkEl, 'sheet', { value: styleEl.sheet });
     cleanupNodes.push(styleEl, linkEl);

@@ -132,9 +132,8 @@ test('every rrweb production build retains semantic checking before declaration 
         assert.equal(scripts.build, 'pnpm check-types && vite build && pnpm build:declarations', manifest)
         assert.equal(scripts['check-types'], 'tsc --noEmit', manifest)
         assert.equal(scripts['build:declarations'], 'rolldown -c rolldown.dts.config.mts', manifest)
-        assert.equal(scripts['dev:runtime'] ?? scripts.dev, 'vite build --watch', manifest)
-        if (scripts['dev:runtime']) {
-            assert.equal(scripts['dev:declarations'], 'pnpm build:declarations --watch', manifest)
-        }
+        assert.match(scripts.dev, /^pnpm turbo run build --filter='[^']+\^\.\.\.' && vite build --watch$/, manifest)
+        assert.equal(scripts['dev:runtime'], undefined, manifest)
+        assert.equal(scripts['dev:declarations'], undefined, manifest)
     }
 })

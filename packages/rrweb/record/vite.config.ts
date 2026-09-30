@@ -8,7 +8,6 @@ const workspacePackages: Record<string, string> = {
 }
 
 export default config(path.resolve(__dirname, 'src/index.ts'), 'rrweb', {
-    generateDeclarations: false,
     plugins: [
         {
             name: 'resolve-workspace-sources',

@@ -321,6 +321,9 @@ function collectStringPaths(
   currentPath: string[],
   results: Array<{ path: string[]; length: number }>
 ): void {
+  if (currentPath.length === 1 && currentPath[0] === 'serverBuild') {
+    return
+  }
   if (typeof obj === 'string' && obj.length > 100) {
     results.push({ path: [...currentPath], length: obj.length })
     return

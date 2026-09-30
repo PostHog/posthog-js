@@ -6,6 +6,8 @@ import {
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
+    setInProgressSurveyState,
+    getInProgressSurveyState,
 } from '../../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
@@ -162,6 +164,7 @@ describe('getSurveySeen', () => {
             const eventRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         repeatedActivation: true,
                         values: [{ name: 'test-event' }],
@@ -177,6 +180,7 @@ describe('getSurveySeen', () => {
             const nonRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         repeatedActivation: false,
                         values: [{ name: 'test-event' }],
@@ -192,6 +196,7 @@ describe('getSurveySeen', () => {
             const nonRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         values: [{ name: 'test-event' }],
                     },
@@ -346,6 +351,11 @@ describe('getFontFamily', () => {
 })
 
 describe('doesSurveyUrlMatch', () => {
+    let originalLocationDescriptor: PropertyDescriptor
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
+    })
     const mockWindowLocation = (href: string | undefined) => {
         Object.defineProperty(window, 'location', {
             value: { href },
@@ -353,20 +363,21 @@ describe('doesSurveyUrlMatch', () => {
         })
     }
     beforeEach(() => {
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         // Reset window.location before each test
         mockWindowLocation(undefined)
     })
 
     it('should return true when no URL conditions are set', () => {
-        const survey = { conditions: { events: null, actions: null } }
+        const survey = { conditions: { cancelEvents: null, events: null, actions: null } }
         expect(doesSurveyUrlMatch(survey)).toBe(true)
 
-        const surveyWithNullConditions = { conditions: { url: null, events: null, actions: null } }
+        const surveyWithNullConditions = { conditions: { cancelEvents: null, url: null, events: null, actions: null } }
         expect(doesSurveyUrlMatch(surveyWithNullConditions)).toBe(true)
     })
 
     it('should return false when window.location.href is not available', () => {
-        const survey = { conditions: { url: 'example.com', events: null, actions: null } }
+        const survey = { conditions: { cancelEvents: null, url: 'example.com', events: null, actions: null } }
         expect(doesSurveyUrlMatch(survey)).toBe(false)
     })
 
@@ -376,16 +387,19 @@ describe('doesSurveyUrlMatch', () => {
         })
 
         it('should match using icontains (default) match type', () => {
-            const survey = { conditions: { url: 'example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'example.com', events: null, actions: null } }
             expect(doesSurveyUrlMatch(survey)).toBe(true)
 
-            const nonMatchingSurvey = { conditions: { url: 'nonexistent.com', events: null, actions: null } }
+            const nonMatchingSurvey = {
+                conditions: { cancelEvents: null, url: 'nonexistent.com', events: null, actions: null },
+            }
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
         })
 
         it('should match using explicit icontains match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'example.com',
                     urlMatchType: 'icontains' as const,
                     events: null,
@@ -396,6 +410,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const caseInsensitiveSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'EXAMPLE.COM',
                     urlMatchType: 'icontains' as const,
                     events: null,
@@ -408,6 +423,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using not_icontains match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'nonexistent.com',
                     urlMatchType: 'not_icontains' as const,
                     events: null,
@@ -418,6 +434,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'example.com',
                     urlMatchType: 'not_icontains' as const,
                     events: null,
@@ -430,6 +447,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using regex match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.com/.*$',
                     urlMatchType: 'regex' as const,
                     events: null,
@@ -440,6 +458,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.org/.*$',
                     urlMatchType: 'regex' as const,
                     events: null,
@@ -452,6 +471,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using not_regex match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.org/.*$',
                     urlMatchType: 'not_regex' as const,
                     events: null,
@@ -462,6 +482,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.com/.*$',
                     urlMatchType: 'not_regex' as const,
                     events: null,
@@ -476,6 +497,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com',
                     urlMatchType: 'exact' as const,
                     events: null,
@@ -486,6 +508,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com/path',
                     urlMatchType: 'exact' as const,
                     events: null,
@@ -500,6 +523,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://other.com',
                     urlMatchType: 'is_not' as const,
                     events: null,
@@ -510,6 +534,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com',
                     urlMatchType: 'is_not' as const,
                     events: null,
@@ -527,7 +552,7 @@ describe('doesSurveyUrlMatch', () => {
         it('matches against the overridden URL instead of window.location.href', () => {
             // raw browser URL would not match the survey condition
             mockWindowLocation('https://generated-host.skin/game')
-            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'app.example.com', events: null, actions: null } }
 
             expect(
                 doesSurveyUrlMatch(
@@ -539,7 +564,7 @@ describe('doesSurveyUrlMatch', () => {
 
         it('falls back to window.location.href when no override is configured', () => {
             mockWindowLocation('https://app.example.com/settings')
-            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'app.example.com', events: null, actions: null } }
 
             expect(doesSurveyUrlMatch(survey, posthogWith())).toBe(true)
         })
@@ -739,6 +764,13 @@ describe('sendSurveyEvent', () => {
             has_opted_out_capturing: () => false,
         } as unknown as PostHog
 
+        setInProgressSurveyState(baseSurvey, {
+            surveySubmissionId: 'submission-123',
+            responses: { $survey_response_q1: 'Great!' },
+            lastQuestionIndex: 0,
+        })
+        expect(getInProgressSurveyState(baseSurvey)).not.toBeNull()
+
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
             survey: baseSurvey,
@@ -748,6 +780,12 @@ describe('sendSurveyEvent', () => {
         })
 
         expect(critical).not.toHaveBeenCalled()
+        expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+        expect(mockPostHog.capture).toHaveBeenCalledWith(
+            'survey sent',
+            expect.objectContaining({ $survey_response_q1: 'Great!', $survey_completed: true })
+        )
+        expect(getInProgressSurveyState(baseSurvey)).toBeNull()
         critical.mockRestore()
     })
 
@@ -769,6 +807,8 @@ describe('sendSurveyEvent', () => {
                 $ai_generation_id: 'gen-456',
                 $ai_trace_id: 'trace-789',
                 custom_field: 'custom_value',
+                $survey_name: 'Custom survey name',
+                $set: { custom_person_property: true },
             },
         })
 
@@ -780,6 +820,8 @@ describe('sendSurveyEvent', () => {
         expect(eventProperties.$ai_generation_id).toBe('gen-456')
         expect(eventProperties.$ai_trace_id).toBe('trace-789')
         expect(eventProperties.custom_field).toBe('custom_value')
+        expect(eventProperties.$survey_name).toBe('Custom survey name')
+        expect(eventProperties.$set).toEqual({ '$survey_responded/test-survey-id': true })
     })
 
     it('works without custom properties', () => {
@@ -804,41 +846,46 @@ describe('sendSurveyEvent', () => {
         expect(eventProperties.$ai_generation_id).toBeUndefined()
     })
 
-    it('reloads feature flags when the survey is completed so the internal targeting flag recomputes', () => {
-        const mockReload = vi.fn()
-        const mockPostHog = {
-            capture: vi.fn(),
-            reloadFeatureFlags: mockReload,
-            is_capturing: () => true,
-        } as unknown as PostHog
+    it.each([false, true])(
+        'emits completion=%s and only clears progress and reloads flags on completion',
+        (completed) => {
+            const mockPostHog = {
+                capture: vi.fn(),
+                reloadFeatureFlags: vi.fn(),
+                is_capturing: () => true,
+                get_session_replay_url: () => 'https://us.posthog.com/replay/session-1',
+            } as unknown as PostHog
+            const progress = {
+                surveySubmissionId: 'submission-123',
+                lastQuestionIndex: 0,
+                responses: { $survey_response_q1: 'Great!' },
+                surveyLanguage: 'fr',
+                questionSnapshots: { q1: 'Votre avis ?' },
+            }
+            setInProgressSurveyState(baseSurvey, progress)
 
-        sendSurveyEvent({
-            responses: { $survey_response_q1: 'Great!' },
-            survey: baseSurvey,
-            surveySubmissionId: 'submission-123',
-            isSurveyCompleted: true,
-            posthog: mockPostHog,
-        })
+            sendSurveyEvent({
+                ...progress,
+                survey: baseSurvey,
+                isSurveyCompleted: completed,
+                posthog: mockPostHog,
+            })
 
-        expect(mockReload).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not reload feature flags for a partial (not completed) response', () => {
-        const mockReload = vi.fn()
-        const mockPostHog = {
-            capture: vi.fn(),
-            reloadFeatureFlags: mockReload,
-            is_capturing: () => true,
-        } as unknown as PostHog
-
-        sendSurveyEvent({
-            responses: { $survey_response_q1: 'Great!' },
-            survey: baseSurvey,
-            surveySubmissionId: 'submission-123',
-            isSurveyCompleted: false,
-            posthog: mockPostHog,
-        })
-
-        expect(mockReload).not.toHaveBeenCalled()
-    })
+            expect(mockPostHog.capture).toHaveBeenCalledWith('survey sent', {
+                $survey_id: baseSurvey.id,
+                $survey_name: baseSurvey.name,
+                $survey_iteration: null,
+                $survey_iteration_start_date: null,
+                $survey_submission_id: 'submission-123',
+                $survey_completed: completed,
+                $survey_language: 'fr',
+                $survey_response_q1: 'Great!',
+                $survey_questions: [{ id: 'q1', question: 'Votre avis ?', response: 'Great!' }],
+                sessionRecordingUrl: 'https://us.posthog.com/replay/session-1',
+                $set: { '$survey_responded/test-survey-id': true },
+            })
+            expect(getInProgressSurveyState(baseSurvey)).toEqual(completed ? null : progress)
+            expect(mockPostHog.reloadFeatureFlags).toHaveBeenCalledTimes(completed ? 1 : 0)
+        }
+    )
 })

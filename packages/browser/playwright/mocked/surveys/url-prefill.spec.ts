@@ -1,3 +1,4 @@
+import { Page } from '@playwright/test'
 import { getSurveyResponseKey } from '@/extensions/surveys/surveys-extension-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
@@ -28,6 +29,36 @@ const prefillSurvey = {
     questions: [thumbsQuestion, followUpQuestion],
 }
 
+const waitForSurveysLoaded = async (page: Page) => {
+    await page.evaluate(
+        () =>
+            new Promise<void>((resolve, reject) => {
+                const ph = (window as any).posthog
+                ph.onSurveysLoaded((_surveys: unknown[], context?: { isLoaded: boolean; error?: string }) => {
+                    if (context?.isLoaded) {
+                        resolve()
+                    } else {
+                        reject(new Error(context?.error ?? 'Surveys failed to load'))
+                    }
+                })
+            })
+    )
+}
+
+// The hosted survey page renders on demand and passes the custom URL params as properties.
+const renderHostedSurvey = async (page: Page, properties?: Record<string, string>) => {
+    await page.evaluate(
+        ({ survey, properties: surveyProperties }) => {
+            const ph = (window as any).posthog
+            const container = document.createElement('div')
+            container.id = 'hosted-survey-container'
+            document.body.appendChild(container)
+            ph.surveys['_surveyManager'].renderSurvey(survey, container, surveyProperties)
+        },
+        { survey: prefillSurvey as any, properties }
+    )
+}
+
 test.describe('surveys - URL prefill with auto-submit', () => {
     test('keeps the auto-submitted answer and caller properties on the follow-up submission', async ({
         page,
@@ -50,28 +81,8 @@ test.describe('surveys - URL prefill with auto-submit', () => {
             context
         )
 
-        await page.evaluate(
-            () =>
-                new Promise<void>((resolve, reject) => {
-                    const ph = (window as any).posthog
-                    ph.onSurveysLoaded((_surveys: unknown[], context?: { isLoaded: boolean; error?: string }) => {
-                        if (context?.isLoaded) {
-                            resolve()
-                        } else {
-                            reject(new Error(context?.error ?? 'Surveys failed to load'))
-                        }
-                    })
-                })
-        )
-
-        // The hosted survey page renders on demand and passes the custom URL params as properties.
-        await page.evaluate((survey) => {
-            const ph = (window as any).posthog
-            const container = document.createElement('div')
-            container.id = 'hosted-survey-container'
-            document.body.appendChild(container)
-            ph.surveys['_surveyManager'].renderSurvey(survey, container, { account_number: '12345' })
-        }, prefillSurvey as any)
+        await waitForSurveysLoaded(page)
+        await renderHostedSurvey(page, { account_number: '12345' })
 
         await pollUntilEventCaptured(page, 'survey sent')
         const autoSubmitted = await page
@@ -100,6 +111,69 @@ test.describe('surveys - URL prefill with auto-submit', () => {
                 [getSurveyResponseKey('follow_up_1')]: 'it was great',
                 $survey_completed: true,
                 account_number: '12345',
+            })
+        )
+    })
+
+    test('advances past the prefilled question when localStorage throws', async ({ page, context }) => {
+        await page.route('**/surveys/**', async (route) => {
+            await route.fulfill({ json: { surveys: [prefillSurvey] } })
+        })
+
+        // A document with an opaque origin (a `sandbox` CSP without `allow-same-origin`) throws on
+        // every localStorage access, so nothing the prefill writes can reach storage.
+        await context.addInitScript(() => {
+            Object.defineProperty(window, 'localStorage', {
+                configurable: true,
+                get() {
+                    throw new DOMException(
+                        "Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag.",
+                        'SecurityError'
+                    )
+                },
+            })
+        })
+
+        await start(
+            {
+                options: {
+                    disable_surveys_automatic_display: true,
+                    persistence: 'memory',
+                    surveys: { prefillFromUrl: true },
+                },
+                flagsResponseOverrides: { surveys: true },
+                url: './playground/cypress/index.html?q0=3',
+            },
+            page,
+            context
+        )
+
+        await waitForSurveysLoaded(page)
+        await renderHostedSurvey(page)
+
+        await pollUntilEventCaptured(page, 'survey sent')
+        const autoSubmitted = await page
+            .capturedEvents()
+            .then((events) => events.filter((e) => e.event === 'survey sent'))
+        expect(autoSubmitted).toHaveLength(1)
+
+        // The prefilled answer and the index it advances to reach the renderer only through the
+        // in-progress state, so a dropped write re-shows the question the URL already answered.
+        await expect(page.locator('#hosted-survey-container .survey-box')).toHaveAttribute('data-question-index', '1')
+
+        await page.locator('#hosted-survey-container textarea').fill('storage was unavailable')
+        await page.locator('#hosted-survey-container .form-submit').click()
+
+        await expect
+            .poll(async () => (await page.capturedEvents()).filter((e) => e.event === 'survey sent').length)
+            .toBe(2)
+        const sentEvents = await page.capturedEvents().then((events) => events.filter((e) => e.event === 'survey sent'))
+        expect(sentEvents[1]!.properties).toEqual(
+            expect.objectContaining({
+                $survey_submission_id: autoSubmitted[0]!.properties['$survey_submission_id'],
+                [getSurveyResponseKey('thumbs_1')]: 3,
+                [getSurveyResponseKey('follow_up_1')]: 'storage was unavailable',
+                $survey_completed: true,
             })
         )
     })

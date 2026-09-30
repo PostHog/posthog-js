@@ -410,18 +410,31 @@ describe('@posthog/browser extensions', () => {
     })
 
     it('flushes analytics before waiting for unrelated extension disposal', async () => {
-        let releaseFetch: ((response: Response) => void) | undefined
-        let releaseExtension: (() => void) | undefined
+        let releaseFetch!: (response: Response) => void
+        let releaseExtension!: () => void
+        let extensionStarted!: () => void
+        const events: string[] = []
         const response = new Promise<Response>((resolve) => {
             releaseFetch = resolve
         })
         const extensionDisposal = new Promise<void>((resolve) => {
             releaseExtension = resolve
         })
+        const started = new Promise<void>((resolve) => {
+            extensionStarted = resolve
+        })
+        const fetch = vi.fn(async () => {
+            events.push('fetch:start')
+            const result = await response
+            events.push('fetch:complete')
+            return result
+        })
         const blocker: Extension = {
             name: 'blocking-disposal',
             setup() {},
             async dispose() {
+                events.push('extension:dispose')
+                extensionStarted()
                 await extensionDisposal
             },
         }
@@ -430,25 +443,27 @@ describe('@posthog/browser extensions', () => {
             capturePageview: false,
             storage: false,
             navigator: false,
-            fetch: () => response,
+            fetch,
             extensions: [analytics(), blocker],
         })
-        await posthog.capture('active', { value: 'a'.repeat(1_000) })
+        posthog.capture('active', { value: 'a'.repeat(1_000) })
         await Promise.resolve()
-        const lane = posthog as unknown as {
-            _analyticsLane: { _activeBytes: number; _queuedBytes: number }
-        }
-        expect(lane._analyticsLane._activeBytes).toBeGreaterThan(0)
-
-        const disposal = posthog.dispose()
-
-        expect(lane._analyticsLane._activeBytes).toBeGreaterThan(0)
-        releaseFetch?.(new Response('{}', { status: 200 }))
-        await Promise.resolve()
-        releaseExtension?.()
+        expect(fetch).toHaveBeenCalledTimes(1)
+        let disposed = false
+        const disposal = posthog.dispose().then(() => {
+            disposed = true
+        })
+        expect(events).toEqual(['fetch:start'])
+        releaseFetch(new Response('{}', { status: 200 }))
+        await started
+        expect(events).toEqual(['fetch:start', 'fetch:complete', 'extension:dispose'])
+        expect(disposed).toBe(false)
+        posthog.capture('after-shutdown')
+        expect(fetch).toHaveBeenCalledTimes(1)
+        releaseExtension()
         await disposal
-        expect(lane._analyticsLane._activeBytes).toBe(0)
-        expect(lane._analyticsLane._queuedBytes).toBe(0)
+        expect(disposed).toBe(true)
+        expect(posthog.getExtension('analytics')).toBeUndefined()
     })
 
     it('disposes extensions in reverse installation order', async () => {

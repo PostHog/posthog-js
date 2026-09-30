@@ -81,7 +81,7 @@ const walkFiles = (dir: string): string[] => {
 }
 
 const isPropertyAccessLike = (
-    expression: ts.LeftHandSideExpression
+    expression: ts.Expression
 ): expression is ts.PropertyAccessExpression | ts.PropertyAccessChain => {
     return ts.isPropertyAccessExpression(expression) || ts.isPropertyAccessChain(expression)
 }
@@ -118,11 +118,7 @@ const isIdentifierNamed = (expression: ts.Expression | undefined, name: string):
 }
 
 const hasPropertyName = (expression: ts.Expression | undefined, names: string[]): boolean => {
-    return (
-        !!expression &&
-        isPropertyAccessLike(expression as ts.LeftHandSideExpression) &&
-        names.includes(expression.name.text)
-    )
+    return !!expression && isPropertyAccessLike(expression) && names.includes(expression.name.text)
 }
 
 const isPersistenceReceiver = (expression: ts.Expression | undefined): boolean => {
@@ -145,7 +141,7 @@ const isKeyValueStoreReceiver = (
         return true
     }
 
-    const symbolNode = isPropertyAccessLike(expression as ts.LeftHandSideExpression)
+    const symbolNode = isPropertyAccessLike(expression)
         ? expression.name
         : ts.isIdentifier(expression)
           ? expression
@@ -172,7 +168,7 @@ const isKeyValueStoreReceiver = (
 const isRegisterForSessionReceiver = (expression: ts.Expression | undefined): boolean => {
     return (
         !!expression &&
-        (ts.isThis(expression) ||
+        (expression.kind === ts.SyntaxKind.ThisKeyword ||
             isIdentifierNamed(expression, 'posthog') ||
             hasPropertyName(expression, ['_instance', 'instance']))
     )
@@ -223,7 +219,7 @@ const resolvePolicyIdentifiers = (
             return
         }
 
-        if (isPropertyAccessLike(node as ts.LeftHandSideExpression) && isUpperSnakeCase(node.name.text)) {
+        if (isPropertyAccessLike(node) && ts.isIdentifier(node.name) && isUpperSnakeCase(node.name.text)) {
             if (!visitSymbol(node.name, true)) {
                 result.hasUnresolved = true
             }
@@ -311,7 +307,7 @@ const analyzeKeyComposition = (
         return analyzeKeyComposition(expression.expression, checker, resolvesNamedConstant, visitedSymbols)
     }
 
-    if (ts.isIdentifier(expression) || isPropertyAccessLike(expression as ts.LeftHandSideExpression)) {
+    if (ts.isIdentifier(expression) || isPropertyAccessLike(expression)) {
         const symbolNode = ts.isIdentifier(expression) ? expression : expression.name
         const symbol = getResolvedSymbol(symbolNode, checker)
         const initializer = getSymbolInitializer(symbol)
@@ -612,7 +608,7 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
 
                 if (
                     methodName === '_remove' &&
-                    ts.isThis(receiver) &&
+                    receiver?.kind === ts.SyntaxKind.ThisKeyword &&
                     getEnclosingClassName(node) === 'PostHogFeatureFlags'
                 ) {
                     recordResolution(node.arguments[0], node, '_remove() in PostHogFeatureFlags', true)
@@ -678,7 +674,10 @@ const getEnclosingClassName = (node: ts.Node): string | undefined => {
 
 const isBrowserCommonKeyValueStoreSymbol = (symbol: ts.Symbol | undefined): boolean =>
     !!symbol?.declarations?.some((declaration) => {
-        const declarationName = 'name' in declaration ? declaration.name : undefined
+        const declarationName =
+            ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration)
+                ? declaration.name
+                : undefined
         const filePath = declaration.getSourceFile().fileName.replace(/\\/g, '/')
         return (
             !!declarationName &&
@@ -747,7 +746,7 @@ const isForwardedFeatureFlagsStateKey = (
     while (current && !ts.isMethodDeclaration(current)) {
         current = current.parent
     }
-    if (!current) {
+    if (!current || !ts.isMethodDeclaration(current)) {
         return false
     }
 
@@ -763,7 +762,7 @@ const isThisPropsElementAccess = (expression: ts.Expression): boolean => {
     return (
         ts.isElementAccessExpression(expression) &&
         ts.isPropertyAccessExpression(expression.expression) &&
-        ts.isThis(expression.expression.expression) &&
+        expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
         expression.expression.name.text === 'props'
     )
 }
@@ -815,7 +814,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
         if (
             ts.isCallExpression(node) &&
             isPropertyAccessLike(node.expression) &&
-            ts.isThis(node.expression.expression)
+            node.expression.expression.kind === ts.SyntaxKind.ThisKeyword
         ) {
             const methodName = node.expression.name.text
             if (methodName === '_setProp' || methodName === '_deleteProp') {
@@ -835,6 +834,19 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
     return issues
 }
 
+// were event-visible before; now hidden and added by SessionRecording.sdkDebugProperties instead
+const REPLAY_DEBUG_SESSION_KEYS = new Set<string>([
+    constants.SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    constants.SDK_DEBUG_REPLAY_STALE_CONFIG,
+    constants.SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
+    constants.SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
+    constants.SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    constants.SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
+    constants.SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
+    constants.SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
+    constants.SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
+])
+
 describe('persistence key policy', () => {
     it('matches legacy exact-key event visibility from before the policy migration', () => {
         const extensionOwnedFeatureFlagKeys = new Set([
@@ -849,7 +861,7 @@ describe('persistence key policy', () => {
                 key,
                 extensionOwnedFeatureFlagKeys.has(key)
                     ? 'hidden'
-                    : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+                    : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key) || REPLAY_DEBUG_SESSION_KEYS.has(key)
                       ? 'hidden'
                       : 'event',
                 policy.exposure,
@@ -857,6 +869,9 @@ describe('persistence key policy', () => {
             .filter(([, expectedExposure, actualExposure]) => expectedExposure !== actualExposure)
 
         expect(compatibilitySnapshot).toEqual([])
+        for (const key of new Set([...LEGACY_RESERVED_PERSISTENCE_KEYS, ...extensionOwnedFeatureFlagKeys])) {
+            expect(getPersistenceKeyPolicy(key)).toMatchObject({ exposure: 'hidden' })
+        }
     })
 
     it('classifies replay trigger-group prefix keys as hidden', () => {

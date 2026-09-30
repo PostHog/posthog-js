@@ -1,4 +1,5 @@
 import { defineNuxtModule, addPlugin, createResolver, addServerPlugin, addImportsDir, getNuxtVersion } from '@nuxt/kit'
+import type { Nitro, NitroConfig } from 'nitropack/types'
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import type {} from 'nuxt/app'
@@ -117,12 +118,12 @@ export default defineNuxtModule<ModuleOptions>({
     let publicDir: string | undefined
     let serverDir: string | undefined
 
-    nuxt.hook('nitro:init', (nitro) => {
+    nuxt.hook('nitro:init', (nitro: Nitro) => {
       publicDir = nitro.options.output?.publicDir
       serverDir = nitro.options.output?.serverDir
     })
 
-    nuxt.hook('nitro:config', (nitroConfig) => {
+    nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
       nitroConfig.rollupConfig = {
         ...(nitroConfig.rollupConfig || {}),
         output: {

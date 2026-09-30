@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.9.0
+
+### Minor Changes
+
+- [#4675](https://github.com/PostHog/posthog-js/pull/4675) [`2828b6b`](https://github.com/PostHog/posthog-js/commit/2828b6bdbd33faddf77226c3e04c296823833315) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Make browser extension capture synchronous so its return semantics match immediate event admission rather than implying delivery completion.
+  (2026-09-16)
+
 ## 0.8.3
 
 ### Patch Changes

@@ -2,7 +2,7 @@
     "name": "@posthog/rrweb-packer",
     "version": "0.0.1",
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-packer^...' && vite build --watch",
         "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "test": "pnpm test:rrweb",
@@ -62,9 +62,8 @@
     ],
     "devDependencies": {
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "catalog:"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "fflate": "^0.4.4",

@@ -11,7 +11,10 @@ import {
   addPostHogWithBundledScriptsToBundleShellScript,
   applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
+  setPostHogAndroidNativeSymbolsExtension,
+  removePostHogAndroidNativeSymbolsExtension,
   buildAndroidDotenvFileGradleValue,
+  buildAndroidForceGradleLine,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
   buildIosDotenvFileBuildSetting,
@@ -23,6 +26,7 @@ import {
   resolveReleaseModeProp,
   updateHermesReleaseModeGradleProperties,
   updateDotenvFileGradleProperties,
+  updateMainActivityNewIntentOverride,
 } from '../src/tooling/expoconfig'
 
 const postHogExpoPlugin = (postHogExpoPluginModule as any).default
@@ -151,14 +155,21 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expectValidShellSyntax(wrapped)
   })
 
-  it('exports skipOnConflict before the wrapped command so outer wrappers inherit it', () => {
-    const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
-    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, true)
+  it.each([
+    ['skipOnConflict', true, false, 'export POSTHOG_SKIP_ON_CONFLICT=1\n'],
+    ['force', false, true, 'export POSTHOG_FORCE=1\n'],
+  ])(
+    'exports %s before the wrapped command so outer wrappers inherit it',
+    (_option, skipOnConflict, force, exported) => {
+      const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
+      const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, skipOnConflict, undefined, force)
 
-    expect(wrapped).toContain('export POSTHOG_SKIP_ON_CONFLICT=1\n')
-    expect(wrapped).not.toContain('--posthog-skip-on-conflict')
-    expectValidShellSyntax(wrapped)
-  })
+      expect(wrapped).toContain(exported)
+      expect(wrapped.match(/^export POSTHOG_/gm)).toHaveLength(1)
+      expect(wrapped).not.toContain('--posthog-skip-on-conflict')
+      expectValidShellSyntax(wrapped)
+    }
+  )
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -176,16 +187,17 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
 
-  it('updates skipOnConflict on an already wrapped bundle phase', () => {
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('updates %s on an already wrapped bundle phase', (_option, skipOnConflict, force, variable) => {
     const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
     modifyExistingXcodeBuildScript(script)
-    modifyExistingXcodeBuildScript(script, true)
-    let parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    modifyExistingXcodeBuildScript(script, skipOnConflict, undefined, force)
+    expect(JSON.parse(script.shellScript)).toContain(`export ${variable}=1`)
 
-    modifyExistingXcodeBuildScript(script, false)
-    parsed = JSON.parse(script.shellScript)
-    expect(parsed).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain(variable)
   })
 
   it('adds and removes the release mode export as the prop changes', () => {
@@ -314,14 +326,14 @@ describe('buildDsymUploadShellScript', () => {
     expect(buildDsymUploadShellScript(true)).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
-  it('does not set POSTHOG_SKIP_ON_CONFLICT by default', () => {
-    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
-    expect(buildDsymUploadShellScript(true, false)).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
-  })
-
-  it('exports POSTHOG_SKIP_ON_CONFLICT=1 when skipOnConflict is requested', () => {
-    expect(buildDsymUploadShellScript(false, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
-    expect(buildDsymUploadShellScript(true, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+  it.each([
+    ['POSTHOG_SKIP_ON_CONFLICT', true, false],
+    ['POSTHOG_FORCE', false, true],
+  ])('exports %s=1 only when its option is requested', (variable, skipOnConflict, force) => {
+    expect(buildDsymUploadShellScript()).not.toContain(variable)
+    expect(buildDsymUploadShellScript(true)).not.toContain(variable)
+    expect(buildDsymUploadShellScript(false, skipOnConflict, force)).toContain(`export ${variable}=1`)
+    expect(buildDsymUploadShellScript(true, skipOnConflict, force)).toContain(`export ${variable}=1`)
   })
 })
 
@@ -350,12 +362,28 @@ describe('addDsymUploadBuildPhase', () => {
     expect(opts.shellScript).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
-  it('forwards skipOnConflict into the phase script', () => {
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('forwards %s into the phase script', (_option, skipOnConflict, force, variable) => {
     const xp = mockXcodeProjectForBuildPhase(undefined)
-    addDsymUploadBuildPhase(xp, false, true)
+    addDsymUploadBuildPhase(xp, false, skipOnConflict, force)
     const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
-    expect(opts.shellScript).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
-    expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
+    expect(opts.shellScript).toContain(`export ${variable}=1`)
+    expect(opts.shellScript.match(/^export POSTHOG_/gm)).toHaveLength(1)
+  })
+
+  it('refreshes a phase written by an SDK without the force option', () => {
+    const existing = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript(true, false)),
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true, false, true)
+
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(true, false, true)))
   })
 
   it('is idempotent — does not add a second phase when one already exists', () => {
@@ -694,6 +722,23 @@ describe('buildAndroidSkipOnConflictGradleLine', () => {
   })
 })
 
+describe('buildAndroidForceGradleLine', () => {
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeForce = true'],
+  ])('serializes force=%s', (force, expected) => {
+    expect(buildAndroidForceGradleLine(force)).toBe(expected)
+  })
+})
+
+describe('postHogExpoPlugin conflict options', () => {
+  it('stops the prebuild when skipOnConflict and force are both enabled', () => {
+    expect(() => postHogExpoPlugin({ name: 'app', slug: 'app' }, { skipOnConflict: true, force: true })).toThrow(
+      /only one of --skip-on-conflict and --force/
+    )
+  })
+})
+
 describe('addPostHogAndroidGradlePluginClasspath', () => {
   const projectBuildGradle = [
     'buildscript {',
@@ -720,6 +765,29 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     const twice = addPostHogAndroidGradlePluginClasspath(once.contents)
     expect(twice.contents).toBe(once.contents)
     expect(twice.classpathPresent).toBe(true)
+  })
+
+  it.each(['1.0.0', '1.4.0', '0.9.9'])('bumps an existing %s classpath that predates native symbols', (version) => {
+    const contents = projectBuildGradle.replace(
+      'classpath("com.android.tools.build:gradle")',
+      `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
+    )
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
+    expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
+  })
+
+  it.each(['1.5.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
+    const contents = `buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")\n    }\n}`
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+  })
+
+  it('keeps a variable-driven classpath and warns that it needs 1.5.0', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const contents =
+      'buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")\n    }\n}'
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.5.0 or later'))
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
@@ -914,6 +982,306 @@ describe('resolveReleaseModeProp', () => {
   })
 })
 
+const kotlinMainActivity = `package com.example
+
+import com.facebook.react.ReactActivity
+
+class MainActivity : ReactActivity() {
+  override fun getMainComponentName(): String = "main"
+}
+`
+
+const javaMainActivity = `package com.example;
+
+import com.facebook.react.ReactActivity;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  protected String getMainComponentName() {
+    return "main";
+  }
+}
+`
+
+describe('updateMainActivityNewIntentOverride', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('injects a Kotlin override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+
+    expect(result).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(result).toContain('    setIntent(intent)\n    super.onNewIntent(intent)')
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('super.onNewIntent(intent)'))
+    expect(result.indexOf('class MainActivity')).toBeLessThan(result.indexOf('onNewIntent'))
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('injects a Java override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(javaMainActivity, 'java', true)
+
+    expect(result).toContain('  @Override\n  public void onNewIntent(android.content.Intent intent) {')
+    expect(result).toContain('    setIntent(intent);\n    super.onNewIntent(intent);')
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('is idempotent for %s', (language, source) => {
+    const once = updateMainActivityNewIntentOverride(source, language, true)
+    const twice = updateMainActivityNewIntentOverride(once, language, true)
+
+    expect(twice).toBe(once)
+    expect(once.split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('restores the original %s file when disabled', (language, source) => {
+    const patched = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(updateMainActivityNewIntentOverride(patched, language, false)).toBe(source)
+  })
+
+  it('leaves an existing override alone and explains what to add', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('replaces a stale managed block rather than stacking a second one', () => {
+    const patched = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+    const stale = patched.replace('setIntent(intent)', 'setIntent(intent) // hand-edited')
+
+    expect(updateMainActivityNewIntentOverride(stale, 'kt', true)).toBe(patched)
+  })
+
+  it('skips a file with no recognizable MainActivity class body', () => {
+    const source = 'package com.example\n\nobject NotAnActivity\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('skips a file whose braces do not balance', () => {
+    const source = 'class MainActivity : ReactActivity() {\n  fun broken() {\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('patches a file that only mentions onNewIntent in a comment', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  // TODO: forward onNewIntent to the router\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain(
+      'override fun onNewIntent(intent: android.content.Intent) {'
+    )
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('still manages the block after the file is normalized to CRLF', () => {
+    const source = kotlinMainActivity.replace(/\n/g, '\r\n')
+    const patched = updateMainActivityNewIntentOverride(source, 'kt', true).replace(/\r?\n/g, '\r\n')
+
+    expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', false)).toBe(source)
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', true).split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('inserts into MainActivity and not a later class in the same file', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun noop() {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('ignores a commented-out class MainActivity above the real one', () => {
+    const source = [
+      '// class MainActivity : ReactActivity() { }',
+      'class MainActivity : ReactActivity() {',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('patches when onNewIntent appears only inside a comment', () => {
+    const source = [
+      'class MainActivity : ReactActivity() {',
+      '  // override fun onNewIntent(intent: Intent) {}',
+      '  override fun getMainComponentName(): String = "main"',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain('setIntent(intent)')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('refuses a file whose block comment never closes', () => {
+    const source = ['class MainActivity : ReactActivity() {', '  /* never closed', '  fun x() {}', ''].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('leaves a Java file whose text block contains a brace', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  String s = """',
+      '    }',
+      '    """;',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('leaves a Kotlin file whose existing override sits below a nested block comment', () => {
+    const source = [
+      'import com.facebook.react.ReactActivity',
+      'class MainActivity : ReactActivity() {',
+      '  /*',
+      '  fun retiredHandler() {',
+      '    /* retired implementation */',
+      '  }',
+      '  */',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('treats a Java block comment as ending at the first close', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  /* outer /* inner */',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('patches MainActivity when a later class in the same file overrides onNewIntent', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun onNewIntent(intent: Intent) {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  // A `"}"` field would end the class early for a scanner that counts every brace, hiding the real
+  // override from the scoped check, so the second override we then insert breaks the build.
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        '  private val closing = "}"\n\n  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        '  private final String closing = "}";\n\n  @Override\n  public void onNewIntent(Intent intent) {\n    super.onNewIntent(intent);\n  }\n\n  @Override\n  protected String getMainComponentName'
+      ),
+    ],
+  ])('keeps an existing %s override that follows a "}" string literal', (language, source) => {
+    expect(updateMainActivityNewIntentOverride(source, language, true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        [
+          '  private val open = "{"',
+          "  private val char = '{'",
+          '  private val raw = """}"""',
+          '  private val template = "${ "}" }" // }',
+          '  /* { */',
+          '  override fun getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        [
+          '  private final String open = "{";',
+          "  private final char c = '{';",
+          '  private final String escaped = "\\\\{\\"}";',
+          '  // }',
+          '  /* { */',
+          '  @Override\n  protected String getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+  ])('patches a %s file whose literals and comments contain lone braces', (language, source) => {
+    const result = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(result).toContain('setIntent(intent)')
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('getMainComponentName'))
+    expect(updateMainActivityNewIntentOverride(result, language, false)).toBe(source)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('skips a file with an unterminated string rather than guessing where the class ends', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  private val broken = "}\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+})
+
 describe('postHogExpoPlugin Android native symbols', () => {
   const projectRoots: string[] = []
   const projectBuildGradle = [
@@ -936,15 +1304,17 @@ describe('postHogExpoPlugin Android native symbols', () => {
     '}',
   ].join('\n')
 
-  const compilePlugin = async (projectContents = projectBuildGradle) => {
+  const compilePlugin = async (projectContents = projectBuildGradle, extraProps: Record<string, unknown> = {}) => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
     const androidRoot = path.join(projectRoot, 'android')
     const appRoot = path.join(androidRoot, 'app')
     projectRoots.push(projectRoot)
-    fs.mkdirSync(appRoot, { recursive: true })
+    const sourceRoot = path.join(appRoot, 'src/main/java/com/example')
+    fs.mkdirSync(sourceRoot, { recursive: true })
     fs.writeFileSync(path.join(androidRoot, 'build.gradle'), projectContents)
     fs.writeFileSync(path.join(appRoot, 'build.gradle'), appBuildGradle)
     fs.writeFileSync(path.join(androidRoot, 'gradle.properties'), '')
+    fs.writeFileSync(path.join(sourceRoot, 'MainActivity.kt'), kotlinMainActivity)
 
     const withEarlierAppGradlePlugin = withAppBuildGradle(
       { name: 'PostHog config plugin test', slug: 'posthog-config-plugin-test' } as any,
@@ -956,6 +1326,7 @@ describe('postHogExpoPlugin Android native symbols', () => {
     const config = postHogExpoPlugin(withEarlierAppGradlePlugin, {
       uploadNativeSymbols: true,
       disableSandboxing: false,
+      ...extraProps,
     })
     await compileModsAsync(config, { projectRoot, platforms: ['android'] })
 
@@ -965,10 +1336,23 @@ describe('postHogExpoPlugin Android native symbols', () => {
     }
   }
 
+  beforeEach(() => {
+    // The MainActivity patch announces itself on every first prebuild.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
   afterEach(() => {
+    vi.restoreAllMocks()
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  it('writes the conflict-behavior ext property the gradle upload reads', async () => {
+    const result = await compilePlugin(projectBuildGradle, { force: true })
+
+    expect(result.app).toContain('project.ext.posthogReactNativeForce = true')
+    expect(result.app).not.toContain('posthogReactNativeSkipOnConflict')
   })
 
   it('applies the Android plugin when an earlier config plugin registers appBuildGradle first', async () => {
@@ -991,6 +1375,63 @@ describe('postHogExpoPlugin Android native symbols', () => {
     } finally {
       warnSpy.mockRestore()
     }
+  })
+})
+
+describe('setPostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.posthog.android"',
+    '',
+    'android {',
+    '}',
+  ].join('\n')
+
+  it('enables native symbol upload right after the plugin apply line', () => {
+    const result = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    const lines = result.split('\n')
+    const applyIdx = lines.indexOf('apply plugin: "com.posthog.android"')
+    expect(lines.slice(applyIdx + 2, applyIdx + 6)).toEqual([
+      'posthog {',
+      '    uploadNativeSymbols = true',
+      '    includeNativeSymbolSources = false',
+      '}',
+    ])
+  })
+
+  it('is idempotent and follows a changed includeSource', () => {
+    const once = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, false)).toBe(once)
+    const withSource = setPostHogAndroidNativeSymbolsExtension(once, true)
+    expect(withSource).toBe(setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true))
+    expect(withSource).toContain('includeNativeSymbolSources = true')
+    expect(withSource.split('posthog {')).toHaveLength(2)
+  })
+
+  it('leaves the file unchanged when the plugin is not applied', () => {
+    const contents = 'apply plugin: "com.android.application"\n'
+    expect(setPostHogAndroidNativeSymbolsExtension(contents, false)).toBe(contents)
+  })
+
+  it('is idempotent on a CRLF file', () => {
+    const crlf = appBuildGradle.replace(/\n/g, '\r\n')
+    const once = setPostHogAndroidNativeSymbolsExtension(crlf, true)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, true)).toBe(once)
+    expect(removePostHogAndroidNativeSymbolsExtension(once)).toBe(crlf)
+    expect(removePostHogAndroidNativeSymbolsExtension(once.replace(/\r?\n/g, '\r\n'))).toBe(crlf)
+  })
+})
+
+describe('removePostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = 'apply plugin: "com.posthog.android"\n\nandroid {\n}\n'
+
+  it('removes the managed block', () => {
+    const withBlock = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true)
+    expect(removePostHogAndroidNativeSymbolsExtension(withBlock)).toBe(appBuildGradle)
+  })
+
+  it('leaves a file without the block unchanged', () => {
+    expect(removePostHogAndroidNativeSymbolsExtension(appBuildGradle)).toBe(appBuildGradle)
   })
 })
 

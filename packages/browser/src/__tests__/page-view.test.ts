@@ -225,6 +225,7 @@ describe('PageView ID manager', () => {
             expect(pageViewManager._currentPageview?.pathname).toBe('/page-a')
 
             // Act: Simulate session rotation due to activity timeout (30 min idle)
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('new-session-id', 'new-window-id', {
                 noSessionId: false,
                 activityTimeout: true,
@@ -233,7 +234,7 @@ describe('PageView ID manager', () => {
 
             // Assert: State should be cleared
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should clear state on session past maximum length', () => {
@@ -256,6 +257,7 @@ describe('PageView ID manager', () => {
             pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
 
             // Act: Simulate session change after posthog.reset()
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('new-session-id', 'new-window-id', {
                 noSessionId: true,
                 activityTimeout: false,
@@ -264,7 +266,7 @@ describe('PageView ID manager', () => {
 
             // Assert: State should be cleared
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should NOT clear state when changeReason is undefined (initial session)', () => {
@@ -306,6 +308,7 @@ describe('PageView ID manager', () => {
         it('should clear state when this tab adopts a sibling tab session rotation', () => {
             pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
 
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('adopted-session-id', 'window-id', {
                 noSessionId: false,
                 activityTimeout: false,
@@ -314,7 +317,7 @@ describe('PageView ID manager', () => {
             })
 
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should cleanup subscription on destroy', () => {

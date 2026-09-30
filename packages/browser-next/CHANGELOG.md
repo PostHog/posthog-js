@@ -1,5 +1,12 @@
 # @posthog/browser
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [[`2828b6b`](https://github.com/PostHog/posthog-js/commit/2828b6bdbd33faddf77226c3e04c296823833315)]:
+  - @posthog/browser-common@0.9.0
+
 ## 0.0.2
 
 ### Patch Changes

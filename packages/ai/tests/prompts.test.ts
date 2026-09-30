@@ -1330,6 +1330,35 @@ describe('Prompts', () => {
       expect(cached.version).toBe(3)
     })
 
+    it('omits the label param on an unlabeled fetch and seeds the cache', async () => {
+      // Without a label the param must be left off the URL entirely, since
+      // the server treats any value as a label name to filter by. Rows
+      // without any labels must be accepted, since no label was requested.
+      const unlabeled = { ...labeledRow('prompt-a', 2), all_labels: [] }
+      mockFetch.mockResolvedValueOnce(listResponse([unlabeled]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll()
+
+      expect(mockFetch.mock.calls[0][0]).not.toContain('label')
+      expect(results).toEqual({
+        'prompt-a': {
+          source: 'api',
+          prompt: 'Prompt for prompt-a',
+          name: 'prompt-a',
+          version: 2,
+          label: undefined,
+          config: null,
+        },
+      })
+
+      // Later unlabeled get() calls are cache hits, not new requests.
+      const cached = await prompts.get('prompt-a')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(cached.source).toBe('cache')
+      expect(cached.version).toBe(2)
+    })
+
     it('throws when the server ignores the label', async () => {
       // An old server ignores ?label= and returns latest versions of every
       // prompt, including prompts without the label. Even when some labels

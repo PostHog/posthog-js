@@ -1,7 +1,6 @@
 import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
-    MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
     SurveyEventName,
@@ -24,10 +23,10 @@ import {
 } from '../../utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import {
-    buildSurveyResponseProperties,
+    buildSurveyResponseEventProperties,
     canSurveyActivateRepeatedly,
     getSurveyResponseKey,
-    surveyHasResponses,
+    shuffle,
 } from '@posthog/core/surveys'
 
 import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
@@ -440,16 +439,25 @@ export const sendSurveyEvent = ({
         return
     }
     setSurveySeenOnLocalStorage(survey)
+    if (isSurveyCompleted) {
+        // Capture hooks must observe the completed survey's final eligibility state.
+        clearInProgressSurveyState(survey)
+    }
     posthog.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
         [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
         [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-        [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
-        [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
-        ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...buildSurveyResponseProperties(responses, survey, questionSnapshots),
+        ...buildSurveyResponseEventProperties({
+            event: 'sent',
+            survey,
+            responses,
+            submissionId: surveySubmissionId,
+            completed: isSurveyCompleted,
+            surveyLanguage,
+            questionSnapshots,
+        }),
         ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -458,7 +466,6 @@ export const sendSurveyEvent = ({
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey)
         // Recompute the internal targeting flag promptly. The response we just recorded makes this
         // person ineligible server-side, but the cached flag still says "eligible", so reloading now
         // stops a quick revisit from re-showing the survey and recording a duplicate response.
@@ -467,6 +474,7 @@ export const sendSurveyEvent = ({
 }
 
 const _buildSurveyEventProperties = (
+    event: 'dismissed' | 'abandoned',
     survey: Survey,
     inProgressSurvey: InProgressSurveyState | null,
     posthog: PostHog
@@ -475,13 +483,15 @@ const _buildSurveyEventProperties = (
     [SurveyEventProperties.SURVEY_ID]: survey.id,
     [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
     [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
-    [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]: surveyHasResponses(inProgressSurvey?.responses),
-    ...(inProgressSurvey?.surveyLanguage && {
-        [SurveyEventProperties.SURVEY_LANGUAGE]: inProgressSurvey.surveyLanguage,
-    }),
     sessionRecordingUrl: posthog.get_session_replay_url?.(),
-    [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey, inProgressSurvey?.questionSnapshots),
+    ...buildSurveyResponseEventProperties({
+        event,
+        survey,
+        responses: inProgressSurvey?.responses,
+        submissionId: inProgressSurvey?.surveySubmissionId,
+        surveyLanguage: inProgressSurvey?.surveyLanguage,
+        questionSnapshots: inProgressSurvey?.questionSnapshots,
+    }),
 })
 
 export const dismissedSurveyEvent = (
@@ -505,15 +515,16 @@ export const dismissedSurveyEvent = (
     // language when no in-progress state exists at all (i.e. the survey was dismissed without
     // answering any question), so check for the record's presence, not its value.
     const effectiveLanguage = inProgressSurvey ? inProgressSurvey.surveyLanguage : surveyLanguage
-    posthog.capture(SurveyEventName.DISMISSED, {
-        ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
+    const properties = {
+        ..._buildSurveyEventProperties('dismissed', survey, inProgressSurvey, posthog),
         ...(effectiveLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: effectiveLanguage }),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
-    })
+    }
     clearInProgressSurveyState(survey)
     setSurveySeenOnLocalStorage(survey)
+    posthog.capture(SurveyEventName.DISMISSED, properties)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
@@ -544,18 +555,13 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: PostHog) => {
         // localStorage not available
     }
 
-    posthog.capture(SurveyEventName.ABANDONED, _buildSurveyEventProperties(survey, inProgressSurvey, posthog), {
-        transport: 'sendBeacon',
-    })
-}
-
-// Use the Fisher-yates algorithm to shuffle this array
-// https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-export const shuffle = (array: any[]) => {
-    return array
-        .map((a) => ({ sort: Math.floor(Math.random() * 10), value: a }))
-        .sort((a, b) => a.sort - b.sort)
-        .map((a) => a.value)
+    posthog.capture(
+        SurveyEventName.ABANDONED,
+        _buildSurveyEventProperties('abandoned', survey, inProgressSurvey, posthog),
+        {
+            transport: 'sendBeacon',
+        }
+    )
 }
 
 const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
@@ -566,27 +572,7 @@ const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     return shuffled
 }
 
-export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
-    if (!question.shuffleOptions) {
-        return question.choices
-    }
-
-    const displayOrderChoices = question.choices
-    let openEndedChoice = ''
-    if (question.hasOpenChoice) {
-        // if the question has an open-ended choice, its always the last element in the choices array.
-        openEndedChoice = displayOrderChoices.pop()!
-    }
-
-    const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
-
-    if (question.hasOpenChoice) {
-        question.choices.push(openEndedChoice)
-        shuffledOptions.push(openEndedChoice)
-    }
-
-    return shuffledOptions
-}
+export { getDisplayOrderChoices, shuffle } from '@posthog/core/surveys'
 
 const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
 
@@ -777,22 +763,45 @@ const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iterat
     return getSurveyStorageKey(SURVEY_IN_PROGRESS_PREFIX, survey)
 }
 
+// Holds the state localStorage refused to take. A document with an opaque origin (the hosted
+// survey page is served with a `sandbox` CSP that omits `allow-same-origin`) throws on every
+// access, and this state is the only channel carrying a URL-prefilled answer and its start index
+// to the question renderer. Only populated when a write fails, so storage stays authoritative.
+const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
+
+export const clearAllInMemoryInProgressSurveyState = (): void => {
+    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
+        delete inMemoryInProgressSurveyState[key]
+    }
+}
+
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
     state: InProgressSurveyState
 ): void => {
+    const key = getInProgressSurveyStateKey(survey)
     try {
-        localStorage.setItem(getInProgressSurveyStateKey(survey), JSON.stringify(state))
+        localStorage.setItem(key, JSON.stringify(state))
+        // The write landed, so drop any copy left by an earlier failed one.
+        delete inMemoryInProgressSurveyState[key]
     } catch (e) {
         logger.error('Error setting in-progress survey state in localStorage', e)
+        inMemoryInProgressSurveyState[key] = state
     }
 }
 
 export const getInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>
 ): InProgressSurveyState | null => {
+    const key = getInProgressSurveyStateKey(survey)
+    // Preferred when set, because storage refused that write and so holds nothing newer. Covers
+    // modes where writes throw but reads succeed (quota reached, older Safari private browsing).
+    const inMemoryState = inMemoryInProgressSurveyState[key]
+    if (inMemoryState) {
+        return inMemoryState
+    }
     try {
-        const stateString = localStorage.getItem(getInProgressSurveyStateKey(survey))
+        const stateString = localStorage.getItem(key)
         if (stateString) {
             return JSON.parse(stateString) as InProgressSurveyState
         }
@@ -808,8 +817,10 @@ export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteratio
 }
 
 export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_iteration'>): void => {
+    const key = getInProgressSurveyStateKey(survey)
+    delete inMemoryInProgressSurveyState[key]
     try {
-        localStorage.removeItem(getInProgressSurveyStateKey(survey))
+        localStorage.removeItem(key)
     } catch (e) {
         logger.error('Error clearing in-progress survey state from localStorage', e)
     }

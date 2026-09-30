@@ -1,5 +1,8 @@
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
+// @vitest-environment-options {"url": "https://app.example.com/"}
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
+import { isNumber } from '@posthog/core'
 import {
     DEVICE_ID,
     ENABLED_FEATURE_FLAGS,
@@ -39,10 +42,11 @@ import {
     memoryStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
+    resetSubDomainCache,
     sessionStore,
 } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
-import Mock = vi.Mock
+import type { Mock } from 'vitest'
 
 const { window } = globals
 let referrer = '' // No referrer by default
@@ -98,12 +102,28 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$sess_rec_flush_size',
 ])
 
-const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS].filter(
+// were event-visible before; now hidden and added by SessionRecording.sdkDebugProperties instead
+const REPLAY_DEBUG_SESSION_KEYS = new Set([
+    '$sdk_debug_recording_script_not_loaded',
+    '$sdk_debug_replay_stale_config',
+    '$sdk_debug_replay_event_trigger_status',
+    '$sdk_debug_replay_linked_flag_trigger_status',
+    '$sdk_debug_replay_matched_recording_trigger_groups',
+    '$sdk_debug_replay_pending_trigger_conditions',
+    '$sdk_debug_replay_remote_trigger_matching_config',
+    '$sdk_debug_replay_trigger_groups_count',
+    '$sdk_debug_replay_url_trigger_status',
+])
+
+const LEGACY_HIDDEN_SDK_PERSISTENCE_KEYS = [...LEGACY_RESERVED_PERSISTENCE_KEYS, ...REPLAY_DEBUG_SESSION_KEYS].filter(
     (key) => key !== ENABLED_FEATURE_FLAGS
 )
 
 const LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS = Object.keys(PERSISTENCE_KEY_POLICY).filter(
-    (key) => key !== ENABLED_FEATURE_FLAGS && !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
+    (key) =>
+        key !== ENABLED_FEATURE_FLAGS &&
+        !LEGACY_RESERVED_PERSISTENCE_KEYS.has(key) &&
+        !REPLAY_DEBUG_SESSION_KEYS.has(key)
 )
 
 function makePostHogConfig(name: string, persistenceMode: string): PostHogConfig {
@@ -113,6 +133,31 @@ function makePostHogConfig(name: string, persistenceMode: string): PostHogConfig
     }
 }
 
+const testWindowListeners: Array<Parameters<Window['addEventListener']>> = []
+const addWindowListener = window!.addEventListener
+
+beforeEach(() => {
+    window!.localStorage.clear()
+    window!.sessionStorage.clear()
+    for (const cookie of document.cookie.split(';')) {
+        const name = cookie.split('=')[0].trim()
+        for (const domain of ['', '; domain=app.example.com', '; domain=example.com']) {
+            document.cookie = `${name}=; max-age=0; path=/${domain}`
+        }
+    }
+    vi.spyOn(window!, 'addEventListener').mockImplementation((...args) => {
+        testWindowListeners.push(args)
+        addWindowListener.apply(window!, args)
+    })
+})
+
+afterEach(() => {
+    for (const args of testWindowListeners.splice(0)) {
+        window!.removeEventListener(...args)
+    }
+    vi.restoreAllMocks()
+})
+
 describe('persistence', () => {
     let library: PostHogPersistence
 
@@ -121,6 +166,59 @@ describe('persistence', () => {
         document.cookie = ''
         referrer = ''
         vi.restoreAllMocks()
+    })
+
+    describe.each(['cookie', 'localStorage+cookie'])('cookie scope cleanup: %s', (persistenceMode) => {
+        const config = (crossSubdomain: boolean): PostHogConfig =>
+            ({
+                ...makePostHogConfig('scope-cleanup', persistenceMode),
+                token: 'scope-cleanup',
+                cross_subdomain_cookie: crossSubdomain,
+                secure_cookie: false,
+            }) as PostHogConfig
+
+        beforeEach(() => {
+            resetSubDomainCache()
+            window?.localStorage.clear()
+            document.cookie = 'origin_cookie=1; path=/'
+        })
+
+        afterEach(() => {
+            cookieStore._remove('ph_scope-cleanup_posthog', false)
+            cookieStore._remove('ph_scope-cleanup_posthog', true)
+            document.cookie = 'origin_cookie=; max-age=0; path=/'
+            window?.localStorage.clear()
+            resetSubDomainCache()
+        })
+
+        it('cleans up a previous cross-subdomain cookie without probing on later host-only loads', () => {
+            const crossSubdomainPage = new PostHogPersistence(config(true))
+            crossSubdomainPage.register({ distinct_id: 'old-user' })
+
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'old-user' })
+
+            const cookieWrites: string[] = []
+            const cookieSetter = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')?.set
+            const setCookieSpy = vi.spyOn(document, 'cookie', 'set').mockImplementation((value) => {
+                cookieWrites.push(value)
+                cookieSetter?.call(document, value)
+            })
+
+            resetSubDomainCache()
+            const firstHostOnlyPage = new PostHogPersistence(config(false))
+            firstHostOnlyPage.register({ distinct_id: 'new-user' })
+
+            resetSubDomainCache()
+            const writesBeforeSecondLoad = cookieWrites.length
+            const secondHostOnlyPage = new PostHogPersistence(config(false))
+
+            expect(secondHostOnlyPage.get_property('distinct_id')).toBe('new-user')
+            expect(cookieStore._parse('ph_scope-cleanup_posthog')).toMatchObject({ distinct_id: 'new-user' })
+            expect(document.cookie.match(/ph_scope-cleanup_posthog=/g)).toHaveLength(1)
+            expect(cookieWrites.slice(writesBeforeSecondLoad).some((value) => value.startsWith('dmn_chk_'))).toBe(false)
+
+            setCookieSpy.mockRestore()
+        })
     })
 
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']
@@ -140,14 +238,26 @@ describe('persistence', () => {
 
         it('should save user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
+            lib.clear()
             lib.set_property(USER_STATE, 'identified')
             expect(lib.props[USER_STATE]).toEqual('identified')
+            const reader = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
+            expect(reader.get_property(USER_STATE)).toBe('identified')
+            reader.destroy()
+            lib.clear()
+            lib.destroy()
         })
 
         it('can load user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
+            lib.clear()
             lib.set_property(USER_STATE, 'identified')
             expect(lib.get_property(USER_STATE)).toEqual('identified')
+            const reader = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
+            expect(reader.get_property(USER_STATE)).toBe('identified')
+            reader.destroy()
+            lib.clear()
+            lib.destroy()
         })
 
         it('has user state as a reserved property key', () => {
@@ -158,7 +268,7 @@ describe('persistence', () => {
         })
 
         it(`should only call save if props changes`, () => {
-            const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            const lib = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
             lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
             const saveMock: Mock = vi.fn()
             lib.save = saveMock
@@ -398,8 +508,11 @@ describe('persistence', () => {
                 const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
-                // Force a save() with no real change. register() guards
-                // against this via `!==`, so call save() directly.
+                const previousProps = library.props
+                const previousTags = library.props.tags
+                library.props = { ...library.props, tags: ['a', 'b'] }
+                expect(library.props).not.toBe(previousProps)
+                expect(library.props.tags).not.toBe(previousTags)
                 library.save()
 
                 expect(storageSetSpy).not.toHaveBeenCalled()
@@ -462,7 +575,7 @@ describe('persistence', () => {
             // Pulls a single key from on-disk storage into in-memory props
             // without a whole-blob flush() (which would clobber a sibling's
             // write) or load() (which would discard pending in-memory writes).
-            let parseSpy: vi.SpyInstance
+            let parseSpy: VitestSpyInstance
 
             afterEach(() => {
                 parseSpy?.mockRestore()
@@ -649,33 +762,36 @@ describe('persistence', () => {
                 expect(setSpy).not.toHaveBeenCalled()
             })
 
-            it('writes through on flush() when debounce is enabled at runtime via set_config (late-enable)', () => {
-                // Customer constructs PostHog with debounce=0 (no listener
-                // would be installed under the old logic), then later does
-                // `posthog.set_config({ persistence_save_debounce_ms: 250 })`.
-                // The mutable config is read every save() via _saveDebounceMs(),
-                // so save() correctly starts debouncing. But we must ALSO
-                // have installed unload listeners at construction so the
-                // pending write isn't lost on page close.
-                const config: any = makePostHogConfig('test-late-debounce', persistenceMode)
-                const debounced = new PostHogPersistence(config)
-                const spy = vi.spyOn(debounced['_storage'], '_set')
+            it.each(['pagehide', 'beforeunload'])(
+                'flushes on %s when debounce is enabled at runtime (late-enable)',
+                (eventName) => {
+                    // Customer constructs PostHog with debounce=0 (no listener
+                    // would be installed under the old logic), then later does
+                    // `posthog.set_config({ persistence_save_debounce_ms: 250 })`.
+                    // The mutable config is read every save() via _saveDebounceMs(),
+                    // so save() correctly starts debouncing. But we must ALSO
+                    // have installed unload listeners at construction so the
+                    // pending write isn't lost on page close.
+                    const config: any = makePostHogConfig('test-late-debounce', persistenceMode)
+                    const debounced = new PostHogPersistence(config)
+                    const spy = vi.spyOn(debounced['_storage'], '_set')
 
-                // Enable debounce after construction.
-                config.persistence_save_debounce_ms = 250
-                spy.mockClear()
+                    // Enable debounce after construction.
+                    config.persistence_save_debounce_ms = 250
+                    spy.mockClear()
 
-                debounced.register({ distinct_id: 'late' })
+                    debounced.register({ distinct_id: 'late' })
 
-                // The debounced write is pending — not in storage yet.
-                expect(spy).not.toHaveBeenCalled()
+                    // The debounced write is pending — not in storage yet.
+                    expect(spy).not.toHaveBeenCalled()
 
-                // Simulate the unload listener firing.
-                debounced.flush()
+                    window?.dispatchEvent(new Event(eventName))
 
-                expect(spy).toHaveBeenCalledTimes(1)
-                debounced.clear()
-            })
+                    expect(spy).toHaveBeenCalledTimes(1)
+                    debounced.clear()
+                    debounced.destroy()
+                }
+            )
         })
     })
 
@@ -2684,13 +2800,81 @@ describe('flag and survey storage split', () => {
     })
 })
 
+describe('initial persistence disabled state', () => {
+    const key = 'ph_initial-consent_posthog'
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        localStore._remove(key)
+        cookieStore._remove(key)
+        sessionStore._remove(`${key}_cookie_identity_change_pending`)
+    })
+
+    it.each([
+        { disablePersistence: false, consentDisabled: true },
+        { disablePersistence: true, consentDisabled: false },
+        { disablePersistence: false, consentDisabled: false },
+    ])(
+        'gates cookie migration and registration with $disablePersistence / $consentDisabled',
+        ({ disablePersistence, consentDisabled }) => {
+            cookieStore._set(key, { distinct_id: 'cookie-user' })
+            localStore._remove(key)
+            const localSpy = vi.spyOn(localStore, '_set')
+            const cookieSpy = vi.spyOn(cookieStore, '_set')
+            const sessionSpy = vi.spyOn(sessionStore, '_set')
+            const disabled = disablePersistence || consentDisabled
+            const persistence = new PostHogPersistence(
+                {
+                    ...makePostHogConfig('initial-consent', 'localStorage+cookie'),
+                    token: 'initial-consent',
+                    disable_persistence: disablePersistence,
+                    cookieWinsOnConflict: true,
+                },
+                consentDisabled
+            )
+
+            try {
+                expect(persistence.props.distinct_id).toBe(disabled ? undefined : 'cookie-user')
+                persistence.register({ distinct_id: 'registered-user', verify_write: 'yes' })
+                expect(persistence.props.verify_write).toBe('yes')
+                const localWrites = localSpy.mock.calls.filter(([name]) => name === key)
+                const cookieWrites = cookieSpy.mock.calls.filter(
+                    ([name, , days]) => name === key && !(isNumber(days) && days < 0)
+                )
+                const sessionWrites = sessionSpy.mock.calls.filter(([name]) => name.startsWith(key))
+                if (disabled) {
+                    expect(localWrites).toEqual([])
+                    expect(cookieWrites).toEqual([])
+                    expect(sessionWrites).toEqual([])
+                    expect(localStore._get(key)).toBeNull()
+                    expect(cookieStore._get(key)).toBeNull()
+                } else {
+                    expect(localWrites.some(([, value]) => value.verify_write === 'yes')).toBe(true)
+                    expect(cookieWrites.some(([, value]) => value.distinct_id === 'registered-user')).toBe(true)
+                    expect(localStore._parse(key).verify_write).toBe('yes')
+                    expect(cookieStore._parse(key).distinct_id).toBe('registered-user')
+                }
+            } finally {
+                persistence.clear()
+                persistence.destroy()
+            }
+        }
+    )
+})
+
 describe('posthog instance persistence', () => {
     beforeEach(() => {
         resetSessionStorageSupported()
         resetLocalStorageSupported()
     })
-    it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('does not write analytics state during initialization or registration when opted out', () => {
         const sessionSpy = vi.spyOn(sessionStore, '_set')
+        const localSpy = vi.spyOn(localStore, '_set')
+        const cookieSpy = vi.spyOn(cookieStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -2703,21 +2887,23 @@ describe('posthog instance persistence', () => {
             uuidv7()
         )
 
-        // Spy on the created store instance's _set method
-        // Note: We spy after initialization, so we're checking that no further calls are made
-        const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
+        posthog.register({ verify_no_write: 'yes' })
+        expect(posthog.persistence?.props.verify_no_write).toBe('yes')
 
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
         // a fix which prevented this
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
 
-        // Check that no calls were made to the created store (spy captures future calls)
-        const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
+        const localCalls = localSpy.mock.calls.filter(([key]) => key !== '__mplssupport__')
+        // Capability probes and expiry writes do not persist analytics data.
+        const cookieCalls = cookieSpy.mock.calls.filter(
+            ([key, , days]) => !key.startsWith('__ph_cookie_support_') && !(isNumber(days) && days < 0)
+        )
 
         expect(sessionCalls).toEqual([])
-        expect(localPlusCookieCalls).toEqual([])
+        expect(localCalls).toEqual([])
+        expect(cookieCalls).toEqual([])
     })
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
@@ -2735,7 +2921,7 @@ describe('posthog instance persistence', () => {
         )
 
         // Spy on the created store instance's _set method
-        const createdStore = (posthog.persistence as any)._storage
+        const createdStore = posthog.persistence!['_storage']
         const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // Trigger a save to verify storage is called. We force a real
@@ -2749,6 +2935,7 @@ describe('posthog instance persistence', () => {
 
         expect(sessionCalls.length).toBeGreaterThan(0)
         expect(localPlusCookieCalls.length).toBeGreaterThan(0)
+        expect(localStore._parse(`ph_${posthog.config.token}_posthog`).verify_write).toBe('yes')
     })
 })
 
@@ -2778,9 +2965,15 @@ describe('persistence fallback when no browser storage is available', () => {
         const memorySet = vi.spyOn(memoryStore, '_set')
 
         const lib = new PostHogPersistence(makePostHogConfig('cookies-only', 'localStorage+cookie'))
+        lib.clear()
         lib.register({ distinct_id: 'cookie-id' })
 
         expect(memorySet).not.toHaveBeenCalled()
+        const reader = new PostHogPersistence(makePostHogConfig('cookies-only', 'localStorage+cookie'))
+        expect(reader.get_property('distinct_id')).toBe('cookie-id')
+        reader.destroy()
+        lib.clear()
+        lib.destroy()
     })
 
     it('does not pick a cookie store for an explicit cookie config when cookies are unusable', () => {

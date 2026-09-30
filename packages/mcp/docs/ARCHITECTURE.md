@@ -74,7 +74,141 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
 5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
+### Tool input field names
+
+Automatic tool-call events include `$mcp_input_keys` on success and failure.
+The SDK reads the original arguments before validation can remove unknown fields.
+It records up to 20 top-level field names, sorted, without their values.
+By default, only names declared by the server's input schema remain visible.
+Unknown names and names longer than 64 characters are replaced by one `[redacted]` entry, the same marker the SDK uses for other hidden data.
+Declared names come first, so `[redacted]` appears only when the 20-name limit leaves space.
+
+The `shouldRecordInputKey(key, { declared })` option replaces the default rule, for automatic capture and as the helper's third argument.
+Return `true` to record a name; any other result, or a throw, records `[redacted]`.
+The 64-character limit, the 20-name limit, and declared-names-first ordering still apply.
+Use it when your server can accept that a caller-chosen name reaches analytics, for example to see misspelled parameter names:
+
+```ts
+instrument(server, posthog, {
+  shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
+})
+```
+
+SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
+Non-object arguments do not produce this property.
+
+High-level servers use the registered tool's schema.
+Low-level servers use schemas from prior `tools/list` responses on the same server instance.
+Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]` by default.
+Alias names from `resolveInputAliases` remain visible because the server owns and declares them.
+The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod object schemas, including objects wrapped by refinements, transforms, preprocessors, pipes, and optional, nullable, default, catch, or readonly wrappers.
+A pipe reports the names of its input schema.
+It does not resolve JSON Schema references or inspect fields inside unions.
+
+Servers with declared input aliases can provide them to automatic instrumentation.
+For example, this server accepts `city` or `place` instead of `location` for one tool.
+It also accepts `orderId` or `id` instead of `order_id` for another tool:
+
+```ts
+import { instrument, type InputAliasMap } from '@posthog/mcp'
+
+const inputAliasesByTool: Record<string, InputAliasMap> = {
+  'weather-current': {
+    location: ['city', 'place'],
+  },
+  'order-get': {
+    order_id: ['orderId', 'id'],
+  },
+}
+
+instrument(server, posthog, {
+  resolveInputAliases: (toolName) => inputAliasesByTool[toolName],
+})
+```
+
+The resolver returns canonical name to aliases in the order the server tries them.
+The server must already accept and normalize these aliases.
+The SDK uses the map only for telemetry and does not change the tool arguments.
+
+For this tool call:
+
+```json
+{
+  "name": "weather-current",
+  "arguments": {
+    "city": "Berlin"
+  }
+}
+```
+
+The SDK adds these properties to the `$mcp_tool_call` event:
+
+```json
+{
+  "$mcp_input_keys": ["city"],
+  "$mcp_input_aliases_used": ["city:location"]
+}
+```
+
+Custom dispatchers use the same helper through the existing `properties` argument:
+
+```ts
+import { getToolInputProperties, PostHogMCP } from '@posthog/mcp'
+
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
+await posthog.register({ $mcp_server_build: 'example-build' })
+
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema)
+posthog.captureToolCall({ toolName, isError: false, properties })
+```
+
+Compute these properties before argument normalization, and include them in both success and error events.
+Pass a schema owned by the server, never one supplied by the caller.
+Custom command formats must extract the actual tool arguments and schema before calling the helper.
+A server that accepts alternative field names passes its own alias map as `inputAliases`, canonical name to aliases in the order the server tries them:
+
+```ts
+const properties = getToolInputProperties(rawArguments, originalTool.inputSchema, {
+  inputAliases: { id: ['experimentId', 'experiment_id'] },
+})
+// { experimentId: 30 } → $mcp_input_keys: ['experimentId'], $mcp_input_aliases_used: ['experimentId:id']
+```
+
+Alias names count as declared, so they stay visible in `$mcp_input_keys`.
+`$mcp_input_aliases_used` records `alias:canonical` for each canonical name the call did not send, using the first of its aliases that the call did send.
+It is omitted when no alias was needed, and it holds at most 20 entries.
+Do not report alias use through server-specific `$mcp_*` properties.
+The SDK does not normalize arguments; the map only describes what the server's own normalizer does.
+
+The helper adds no request values to the event.
+Existing parameter and response capture remains unchanged.
+Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+No session store or additional network request is required.
+
 ## 4. Session & identity
+
+### Shared event properties
+
+Use the underlying PostHog client's `register()` method for values that apply to every event from that client.
+`PostHogMCP` inherits this method from `posthog-node`, and `instrument()` sends events through the supplied client.
+
+```ts
+await posthog.register({ $mcp_server_build: 'example-build', environment: 'production' })
+```
+
+Register these values during startup, before the server accepts requests.
+The build identifier describes the host server release, independently of the analytics SDK version.
+The server supplies it from its deployment configuration; the SDK does not read Git or environment variables for it.
+
+Registered properties apply to MCP events sent through `posthog.capture()`, including tool calls and their exception events, and to ordinary `capture()` events from the client.
+Do not depend on them for inherited `identify()`, `groupIdentify()`, or `alias()` events, or for minimized `$feature_flag_called` events.
+An event's own properties take precedence over registered properties.
+The underlying client's `before_send` hook receives the merged properties.
+The MCP-specific `beforeSend` hook runs earlier and does not receive registered properties.
+Use a separate client when servers need different shared properties.
+Keep user and request data on individual events, because a shared client can serve concurrent requests.
+
+### Session resolution
 
 - **Session ID format**: `ses_<uuidv7>` (`src/extensions/ids.ts`). Uses `uuidv7` from `@posthog/core`.
 - **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — four sources, first match wins:
@@ -87,6 +221,7 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
   - **JSON-mode constraint**: the auto-mint reaches the wire only with `enableJsonResponse: true` (headers are built after handlers run). SSE flushes headers first, so SSE servers set the header themselves with the exported `encodeSessionId`; the SDK still decodes it. Stateless mode also needs the SDK's usual fresh-transport-per-request pattern.
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
 - **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
+- **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
 - **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:
@@ -169,19 +304,19 @@ The `eventProperties` callback returns key/value pairs that are **spread flat at
 
 The `posthog-node` client is **not** an option — it is the required positional 2nd argument to `instrument(server, posthog, options?)`. You construct and own it (host, project token, batching, lifecycle all configured there). The options below are the optional 3rd argument.
 
-| Option                       | Default                                                                                        | Use case                                                                                                                                                                                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `logger`                     | no-op                                                                                          | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                                                                                                                                               |
-| `enableExceptionAutocapture` | `true`                                                                                         | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                                                                                                                                                |
-| `enableConversationId`       | `false`                                                                                        | Inject `conversation_id` into eligible tools that don't already declare it and stamp `$mcp_conversation_id` on their events.                                                                                                                                  |
-| `reportMissing`              | `false`                                                                                        | Register the `get_more_tools` virtual tool.                                                                                                                                                                                                                   |
-| `collectFeedback`            | `false` (object form: `{ toolName, description, extraProperties, extraRequired, onFeedback }`) | Register the `send_feedback` virtual tool — an honest general feedback channel with missing capabilities as the priority category. Covers what `reportMissing` covers, so new integrations should enable only one of the two.                                 |
-| `context`                    | `true` (object form: `{ description }`)                                                        | Inject required `context` arg into every tool schema.                                                                                                                                                                                                         |
-| `captureModel`               | `false` (object form: `{ description }`)                                                       | Capture a model id from recognized client metadata, with an injected `llm_model` argument as fallback. Self-report capture and stripping require confirmed SDK ownership; client metadata does not depend on tool ownership.                                  |
-| `intentFallback`             | —                                                                                              | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.                                                                                                                          |
-| `identify`                   | —                                                                                              | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`.                                                                                                 |
-| `beforeSend`                 | —                                                                                              | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event. |
-| `eventProperties`            | —                                                                                              | Freeform JSON, spread flat.                                                                                                                                                                                                                                   |
+| Option                       | Default                                                                                        | Use case                                                                                                                                                                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `logger`                     | no-op                                                                                          | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                                                                                                                                                              |
+| `enableExceptionAutocapture` | `true`                                                                                         | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                                                                                                                                                               |
+| `enableConversationId`       | `true` (ADR-0013)                                                                              | Inject `conversation_id` into eligible tools that don't already declare it and stamp `$mcp_conversation_id` on their events.                                                                                                                                                 |
+| `reportMissing`              | `false`                                                                                        | Register the `get_more_tools` virtual tool.                                                                                                                                                                                                                                  |
+| `collectFeedback`            | `false` (object form: `{ toolName, description, extraProperties, extraRequired, onFeedback }`) | Register the `send_feedback` virtual tool — an honest general feedback channel with missing capabilities as the priority category. Covers what `reportMissing` covers, so new integrations should enable only one of the two.                                                |
+| `context`                    | `true` (object form: `{ description }`)                                                        | Inject required `context` arg into every tool schema.                                                                                                                                                                                                                        |
+| `captureModel`               | `true` (object form: `{ description }`)                                                        | Capture a model id from recognized client metadata, with an injected `llm_model` argument as fallback. Self-report reads fail open where ownership is unresolved and strips fail closed (ADR-0011); client metadata does not depend on tool ownership. Default per ADR-0013. |
+| `intentFallback`             | —                                                                                              | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.                                                                                                                                         |
+| `identify`                   | —                                                                                              | Per-request callback returning `{ distinctId, properties?, groups? } \| null` — posthog-node's `identify` shape. `properties` → `$set`, `groups` → `$groups`.                                                                                                                |
+| `beforeSend`                 | —                                                                                              | `(event) => event \| null \| undefined` (sync or async), matching posthog-node. Runs on each fully-built payload right before `posthog.capture()` — once per emitted event, including the `$exception` sibling. Return nullish (or throw) to drop that event.                |
+| `eventProperties`            | —                                                                                              | Freeform JSON, spread flat.                                                                                                                                                                                                                                                  |
 
 ## 8. Useful queries
 

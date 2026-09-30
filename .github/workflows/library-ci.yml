@@ -44,6 +44,9 @@ jobs:
       - name: Check task graph
         run: pnpm test:build-graph
 
+      - name: Check SDK types
+        run: pnpm check-types --concurrency=50%
+
       - name: Run unit tests
         run: |
           set -o pipefail

@@ -1,5 +1,33 @@
 # posthog-ai
 
+## 8.13.3
+
+### Patch Changes
+
+- [#5088](https://github.com/PostHog/posthog-js/pull/5088) [`882606d`](https://github.com/PostHog/posthog-js/commit/882606dc43831c9683e528f28feb699532d3f7d7) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool calls and results in captured generation input
+  (2026-09-30)
+
+## 8.13.2
+
+### Patch Changes
+
+- [#5087](https://github.com/PostHog/posthog-js/pull/5087) [`2bce7b2`](https://github.com/PostHog/posthog-js/commit/2bce7b2f448868080d6a3b987df812ca7b20a22f) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool call IDs in captured generations.
+  (2026-09-24)
+
+## 8.13.1
+
+### Patch Changes
+
+- [#5039](https://github.com/PostHog/posthog-js/pull/5039) [`15914bd`](https://github.com/PostHog/posthog-js/commit/15914bdc04f1b57fb0b992fd1f853dc6c35c3982) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.126.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.125.0`, in `peerDependencies`) (2026-09-21)
+
+## 8.13.0
+
+### Minor Changes
+
+- [#5000](https://github.com/PostHog/posthog-js/pull/5000) [`1dfde0e`](https://github.com/PostHog/posthog-js/commit/1dfde0ee8c6edf3380f7326990ffb8010f5d5fae) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll()` now works without a label. It fetches the latest version of every prompt in one request and warms the cache for plain `prompts.get(name)` calls. Previously the label was required by the method's type, and the server treats any label value as a filter, so there was no way to batch-fetch unlabeled prompts.
+  (2026-09-17)
+
 ## 8.12.1
 
 ### Patch Changes

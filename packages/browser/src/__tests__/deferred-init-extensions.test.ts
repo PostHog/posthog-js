@@ -1,6 +1,6 @@
-import { createPosthogInstance } from './helpers/posthog-instance'
+import { createPosthogInstance, createRemoteConfig } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { RemoteConfig, RemoteConfigResult } from '../types'
+import { Compression, RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { PostHog } from '../posthog-core'
 import * as mockedGlobals from '@posthog/browser-common/utils/globals'
@@ -15,7 +15,8 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: orig.document.body,
             get referrer() {
                 return mockReferrerGetter()
@@ -43,12 +44,14 @@ describe('deferred extension initialization', () => {
         mockURLGetter.mockReturnValue('https://example.com')
     })
 
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     describe('race condition handling', () => {
         it('should store pending remote config when it arrives before extensions initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -105,9 +108,7 @@ describe('deferred extension initialization', () => {
 
         it('should handle remote config arriving after extensions initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -119,18 +120,21 @@ describe('deferred extension initialization', () => {
             // Wait for extensions to initialize first
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // Now send remote config after extensions are ready
+            const delivered: RemoteConfigResult[] = []
+            const subscription = posthog
+                ._getBrowserClientAdapter()
+                .onRemoteConfig((result) => delivered.push(result as RemoteConfigResult))
+            delivered.length = 0
             posthog._onRemoteConfig({ ok: true, config: remoteConfig })
-
-            // Config should be stored
+            expect(delivered).toEqual([{ ok: true, config: remoteConfig }])
+            subscription.dispose()
             expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
+            await posthog.shutdown()
         })
 
         it('should not store pending config when deferred init is disabled', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: false, // sync init
@@ -181,9 +185,7 @@ describe('deferred extension initialization', () => {
 
         it('should replay pending remote config to extensions when they initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
             const legacyRemoteConfigs: RemoteConfigResult[] = []
             class TestAutocapture {
                 initialize(): void {}
@@ -241,6 +243,7 @@ describe('deferred extension initialization', () => {
         })
 
         it('should defer extension initialization when flag is enabled', async () => {
+            vi.useFakeTimers()
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
@@ -248,15 +251,12 @@ describe('deferred extension initialization', () => {
                 capture_pageview: false,
             })
 
-            // Extensions should not be initialized yet
-            // (They might be undefined or null depending on when test runs)
-
-            // Wait for deferred init to complete
-            await new Promise((resolve) => setTimeout(resolve, 200))
-
-            // Now extensions should be initialized
+            expect(posthog.sessionRecording).toBeUndefined()
+            expect(posthog.autocapture).toBeUndefined()
+            await vi.advanceTimersByTimeAsync(200)
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
+            await posthog.shutdown()
         })
 
         it('does not set up autocapture after shutdown', async () => {

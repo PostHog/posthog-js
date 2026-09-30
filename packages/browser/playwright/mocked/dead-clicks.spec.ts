@@ -1,5 +1,6 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
+import { Page } from '@playwright/test'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 const startOptions = {
@@ -7,6 +8,14 @@ const startOptions = {
         capture_dead_clicks: true,
     },
     url: '/playground/cypress/index.html',
+}
+
+async function proveTargetCanProduceDeadClick(page: Page) {
+    await page.waitForFunction(() => !!(window as any).posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture)
+    // Startup focus temporarily makes clicks live rather than dead.
+    await page.waitForTimeout(1100)
+    await page.locator('[data-cy-not-an-order-button]').click()
+    await pollUntilEventCaptured(page, '$dead_click')
 }
 
 test.describe('Dead clicks', () => {
@@ -134,6 +143,54 @@ test.describe('Dead clicks', () => {
         })
     }
 
+    for (const attachShadowLater of [false, true]) {
+        test(`observes DOM updates inside an open shadow root${attachShadowLater ? ' attached after its host was inserted' : ''}`, async ({
+            page,
+            context,
+        }) => {
+            await start(startOptions, page, context)
+            await page.waitForFunction(() => {
+                const win = window as any
+                return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+            })
+            await page.evaluate(async (attachShadowLater) => {
+                const host = document.createElement('div')
+                host.id = 'shadow-host'
+                document.body.append(host)
+                if (attachShadowLater) {
+                    // let the detector see the host before it has a shadow root
+                    await new Promise((resolve) => setTimeout(resolve, 200))
+                }
+                // an observed subtree stops at this boundary, so this root needs its own observer
+                const shadowRoot = host.attachShadow({ mode: 'open' })
+                const working = document.createElement('button')
+                working.id = 'shadow-working-control'
+                working.textContent = 'Working control'
+                const broken = document.createElement('button')
+                broken.id = 'shadow-broken-control'
+                broken.textContent = 'Broken control'
+                const result = document.createElement('article')
+                result.id = 'shadow-result'
+                result.textContent = 'Initial content'
+                working.onclick = () => {
+                    result.textContent = 'Updated content'
+                }
+                shadowRoot.append(working, broken, result)
+            }, attachShadowLater)
+            await page.waitForTimeout(1100)
+            await page.resetCapturedEvents()
+
+            await page.locator('#shadow-working-control').click()
+            await expect(page.locator('#shadow-result')).toHaveText('Updated content')
+            await page.waitForTimeout(3500)
+            expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+
+            await page.locator('#shadow-broken-control').click()
+            await pollUntilEventCaptured(page, '$dead_click')
+            expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(1)
+        })
+    }
+
     test('captures dead swipes when configured to', async ({ page, context }) => {
         await start(startOptions, page, context)
 
@@ -166,10 +223,12 @@ test.describe('Dead clicks', () => {
 
     test('does not capture dead click when ctrl key is held', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await proveTargetCanProduceDeadClick(page)
 
         await page.resetCapturedEvents()
 
         await page.locator('[data-cy-not-an-order-button]').click({ modifiers: ['Control'] })
+        await page.locator('[data-cy-not-an-order-button]').dispatchEvent('click', { ctrlKey: true, bubbles: true })
 
         // wait long enough for a dead click to be detected if it was going to be
         await page.waitForTimeout(3500)
@@ -180,10 +239,12 @@ test.describe('Dead clicks', () => {
 
     test('does not capture dead click when meta/cmd key is held', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await proveTargetCanProduceDeadClick(page)
 
         await page.resetCapturedEvents()
 
         await page.locator('[data-cy-not-an-order-button]').click({ modifiers: ['Meta'] })
+        await page.locator('[data-cy-not-an-order-button]').dispatchEvent('click', { metaKey: true, bubbles: true })
 
         await page.waitForTimeout(3500)
 
@@ -193,10 +254,11 @@ test.describe('Dead clicks', () => {
 
     test('does not capture dead click when shift key is held', async ({ page, context }) => {
         await start(startOptions, page, context)
-
+        await proveTargetCanProduceDeadClick(page)
         await page.resetCapturedEvents()
 
         await page.locator('[data-cy-not-an-order-button]').click({ modifiers: ['Shift'] })
+        await page.locator('[data-cy-not-an-order-button]').dispatchEvent('click', { shiftKey: true, bubbles: true })
 
         await page.waitForTimeout(3500)
 
@@ -206,10 +268,12 @@ test.describe('Dead clicks', () => {
 
     test('does not capture dead click when alt key is held', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await proveTargetCanProduceDeadClick(page)
 
         await page.resetCapturedEvents()
 
         await page.locator('[data-cy-not-an-order-button]').click({ modifiers: ['Alt'] })
+        await page.locator('[data-cy-not-an-order-button]').dispatchEvent('click', { altKey: true, bubbles: true })
 
         await page.waitForTimeout(3500)
 
@@ -240,6 +304,7 @@ test.describe('Dead clicks', () => {
                 const win = window as any
                 return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
             },
+            undefined,
             { timeout: 10000 }
         )
 
@@ -256,6 +321,7 @@ test.describe('Dead clicks', () => {
 
     test('does not capture dead click when visibility changes to visible after click', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await proveTargetCanProduceDeadClick(page)
 
         await page.resetCapturedEvents()
 
@@ -277,6 +343,7 @@ test.describe('Dead clicks', () => {
         context,
     }) => {
         await start(startOptions, page, context)
+        await proveTargetCanProduceDeadClick(page)
 
         await page.resetCapturedEvents()
 

@@ -76,6 +76,38 @@ function findByTag(node: serializedNodeWithId, tagName: string): elementNode[] {
 const takeSnapshot = (inlineStylesheetBudgetRules?: number) =>
   snapshot(document, { mirror: new Mirror(), inlineStylesheetBudgetRules });
 
+// absolute, so `findStylesheet`'s href comparison against a link's resolved
+// `href` matches whatever base url the test environment uses
+const appUrl = new URL('/app.css', document.baseURI).href;
+
+/**
+ * `<link rel=preload as=style href=X>`: the resource hint a page emits so the
+ * stylesheet at X starts downloading early. It never applies CSS, so its
+ * `sheet` stays null for the element's whole life.
+ */
+function appendStylePreloadLink(href: string): HTMLLinkElement {
+  const link = document.createElement('link');
+  link.setAttribute('rel', 'preload');
+  link.setAttribute('as', 'style');
+  link.setAttribute('href', href);
+  document.head.appendChild(link);
+  return link;
+}
+
+// `document.styleSheets` is where the serializer looks a link's sheet up by
+// href; jsdom cannot load the fake sheets, so stand the collection in.
+function withDocumentStyleSheets<T>(sheets: CSSStyleSheet[], fn: () => T): T {
+  Object.defineProperty(document, 'styleSheets', {
+    configurable: true,
+    get: () => sheets,
+  });
+  try {
+    return fn();
+  } finally {
+    delete (document as unknown as { styleSheets?: unknown }).styleSheets;
+  }
+}
+
 describe('snapshot cost accounting', () => {
   beforeEach(() => {
     document.head.innerHTML = '';
@@ -394,6 +426,51 @@ describe('snapshot cost accounting', () => {
     expect(cost.cssRuleCount).toBe(508);
     expect(cost.nonDeferrableCssRuleCount).toBe(500);
     expect(cost.deferredStylesheetCount).toBe(0);
+  });
+
+  it('inlines a stylesheet once when a preload link points at the same url', () => {
+    const sheet = makeSheet(appUrl, 8);
+    appendLink(appUrl, sheet);
+    appendStylePreloadLink(appUrl);
+
+    const sn = withDocumentStyleSheets([sheet], () => takeSnapshot());
+
+    const links = findByTag(sn!, 'link');
+    expect(links).toHaveLength(2);
+    // the preload element applies no CSS, so inlining the sheet onto it would
+    // put the whole stylesheet in the payload twice and give the replayer a
+    // second copy to build
+    const inlined = links.filter((link) => '_cssText' in link.attributes);
+    expect(inlined).toHaveLength(1);
+    const preload = links.find((link) => link.attributes.rel === 'preload');
+    expect(preload!.attributes._cssText).toBeUndefined();
+    expect(preload!.attributes.href).toBeDefined();
+    // and it must not charge the budget for rules it never contributes
+    expect(getLastSnapshotCost()!.cssRuleCount).toBe(8);
+  });
+
+  it('never defers a preload link, whose sheet would always be unreadable', () => {
+    const sheet = makeSheet(appUrl, 8);
+    const real = appendLink(appUrl, sheet);
+    appendStylePreloadLink(appUrl);
+
+    // budget spent by the real sheet
+    withDocumentStyleSheets([sheet], () => takeSnapshot(1));
+
+    expect(getLastSnapshotCost()!.deferredStylesheetCount).toBe(1);
+    expect(takeDeferredStylesheetLinks()).toEqual([real]);
+  });
+
+  it('still inlines a stylesheet link whose sheet is only reachable by href', () => {
+    const sheet = makeSheet(appUrl, 8);
+    // `link.sheet` null, e.g. after an SPA changed the baseURI
+    appendLink(appUrl, null);
+
+    const sn = withDocumentStyleSheets([sheet], () => takeSnapshot());
+
+    const links = findByTag(sn!, 'link');
+    expect(links).toHaveLength(1);
+    expect(links[0].attributes._cssText).toBeDefined();
   });
 
   it('accumulates deferred sheet counts across snapshots for the session', () => {

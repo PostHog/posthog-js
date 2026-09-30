@@ -20,6 +20,7 @@ export class LocalFeatureFlagEvaluator {
   readonly flagsByKey: Record<string, PostHogFeatureFlag>
   readonly groupTypeMapping: Record<string, string>
   readonly cohorts: FlagDefinitions['cohorts']
+  readonly propertyMatchingVersion?: number
   debugMode: boolean = false
 
   constructor(definitions: FlagDefinitions) {
@@ -30,6 +31,7 @@ export class LocalFeatureFlagEvaluator {
     }, {})
     this.groupTypeMapping = definitions.groupTypeMapping ?? {}
     this.cohorts = definitions.cohorts ?? {}
+    this.propertyMatchingVersion = definitions.propertyMatchingVersion
   }
 
   debug(enabled: boolean = true): void {
@@ -389,11 +391,11 @@ export class LocalFeatureFlagEvaluator {
       for (const prop of condition.properties) {
         let matches: boolean
         if (prop.type === 'cohort') {
-          matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
+          matches = matchCohort(prop, properties, this.cohorts, this.debugMode, this.propertyMatchingVersion)
         } else if (prop.type === 'flag') {
           matches = await this.evaluateFlagDependency(prop, ctx)
         } else {
-          matches = matchProperty(prop, properties, warn)
+          matches = matchProperty(prop, properties, warn, this.propertyMatchingVersion)
         }
         // `matchPropertyGroup` (cohort path) inverts on `negation`; the top-level flag condition
         // path needs to do the same or any negated property on a flag-level filter quietly passes.

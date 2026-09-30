@@ -50,10 +50,12 @@ describe('per-server logger isolation', () => {
 
     try {
       instrument(setupA.server, failingPostHog('sink-a'), {
+        enableConversationId: false,
         logger: (message) => logsA.push(message),
         identify: async () => ({ distinctId: 'distinct-a-secret', properties: { email: 'a-secret@example.com' } }),
       })
       instrument(setupB.server, failingPostHog('sink-b'), {
+        enableConversationId: false,
         logger: (message) => logsB.push(message),
         identify: async () => ({ distinctId: 'distinct-b-secret', properties: { email: 'b-secret@example.com' } }),
       })
@@ -114,10 +116,12 @@ describe('per-server logger isolation', () => {
 
     try {
       instrument(setupA.server, failingPostHog('sink-a'), {
+        enableConversationId: false,
         logger: (message) => logsA.push(message),
         identify: async () => ({ distinctId: 'user-a' }),
       })
       instrument(setupWithoutLogger.server, failingPostHog('sink-without-logger'), {
+        enableConversationId: false,
         identify: async () => ({ distinctId: 'user-without-logger' }),
       })
 

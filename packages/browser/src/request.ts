@@ -662,12 +662,8 @@ export const request = (_options: RequestWithOptions, onResponse?: TransportCall
         throw new Error('No available transport method')
     }
 
-    // A `transportMethod` (e.g. `_fetch`) can itself throw synchronously - e.g. a third-party
-    // script (a Shopify storefront listener, an ad blocker) monkey-patches `fetch`/`Headers` in
-    // a way `_fetch`'s own internal try/catch doesn't cover. Inside this promise chain such a
-    // throw would otherwise reject with no further `.catch`, escaping as an unhandled rejection
-    // and landing in error tracking. Route it through the same `{ statusCode: 0, error }`
-    // callback path as every other transport failure instead.
+    // A patched global can throw outside a transport's own guards. Route these errors
+    // through the normal failure callback for both synchronous and async compression.
     const safeTransportMethod = (opts: RequestWithEncodedBody) => {
         try {
             transportMethod(opts)
@@ -686,6 +682,7 @@ export const request = (_options: RequestWithOptions, onResponse?: TransportCall
     // sendBeacon must remain synchronous as it's used during page unload.
     if (
         transport !== 'sendBeacon' &&
+        !options.preferSyncCompression &&
         options.data &&
         options.compression === Compression.GZipJS &&
         !!CompressionStream &&
@@ -715,6 +712,6 @@ export const request = (_options: RequestWithOptions, onResponse?: TransportCall
                 safeTransportMethod(options)
             })
     } else {
-        transportMethod(options)
+        safeTransportMethod(options)
     }
 }

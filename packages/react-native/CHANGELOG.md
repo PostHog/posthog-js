@@ -1,5 +1,103 @@
 # posthog-react-native
 
+## 4.78.2
+
+### Patch Changes
+
+- [#5141](https://github.com/PostHog/posthog-js/pull/5141) [`7faa1db`](https://github.com/PostHog/posthog-js/commit/7faa1dbae2cb63fd1b6f3d9032b82cb2a3216aad) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$screen_width` and `$screen_height` on iOS to report the app's window size on foldables, Stage Manager, and split view
+  (2026-09-29)
+- Updated dependencies [[`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197)]:
+  - @posthog/react-native-plugin@2.12.2
+
+## 4.78.1
+
+### Patch Changes
+
+- [#5145](https://github.com/PostHog/posthog-js/pull/5145) [`890ba01`](https://github.com/PostHog/posthog-js/commit/890ba016d5ec0acd3464f63ff1c3022e31b6e74f) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Add an accessible name and button role to the survey close control.
+  (2026-09-29)
+
+## 4.78.0
+
+### Minor Changes
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android 12+ (requires `@posthog/react-native-plugin` 2.12.0). Update `posthog-android` to 3.71.1 so these crashes are stamped at the right time when the device clock disagrees with network time.
+  (2026-09-25)
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Upload Android native (`.so`) debug symbols, and their C/C++ sources with `includeSource`, when the Expo plugin's `uploadNativeSymbols` is enabled
+  (2026-09-25)
+
+### Patch Changes
+
+- Updated dependencies [[`f8d7db4`](https://github.com/PostHog/posthog-js/commit/f8d7db4f4bf990e24ef46aeb33fcd0871c9aabab), [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0)]:
+  - @posthog/react-native-plugin@2.12.0
+
+## 4.77.1
+
+### Patch Changes
+
+- [#5108](https://github.com/PostHog/posthog-js/pull/5108) [`de59de0`](https://github.com/PostHog/posthog-js/commit/de59de08edcf9695d00666362411d247c27a78bc) Thanks [@kristian240](https://github.com/kristian240)! - fix(react-native): record the tapped option for shuffled choice questions
+  (2026-09-25)
+
+## 4.77.0
+
+### Minor Changes
+
+- [#5040](https://github.com/PostHog/posthog-js/pull/5040) [`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce) Thanks [@hpouillot](https://github.com/hpouillot)! - Capture fatal React Native JavaScript exceptions through the embedded native SDK, which persists them to its own disk queue synchronously, so a crash is not lost when the process terminates before AsyncStorage finishes writing. The JS queue copy is dropped when native takes the event, so each crash is still sent once.
+
+  Enabling `errorTracking.autocapture.uncaughtExceptions` now initializes the native PostHog SDK on its own, since that queue is what makes the fatal path durable. Apps that previously enabled neither session replay, native crash autocapture nor push will see one additional `/config` request per launch as a result: the native SDKs fetch remote config at setup regardless of `preloadFeatureFlags`. (2026-09-23)
+
+### Patch Changes
+
+- Updated dependencies [[`ecdce70`](https://github.com/PostHog/posthog-js/commit/ecdce7043ffde8d3f7fbac50a5a86dd833798cce)]:
+  - @posthog/react-native-plugin@2.10.0
+
+## 4.76.0
+
+### Minor Changes
+
+- [#5064](https://github.com/PostHog/posthog-js/pull/5064) [`5b655be`](https://github.com/PostHog/posthog-js/commit/5b655befcb73bb8e1bd4b27725968d7388f8347a) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat: add a `force` option for symbol uploads
+  (2026-09-22)
+
+## 4.75.0
+
+### Minor Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support partial survey responses and persistent resume in React Native, moving surveys toward feature parity across SDKs.
+  (2026-09-18)
+
+### Patch Changes
+
+- Updated dependencies [[`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9)]:
+  - @posthog/core@1.55.0
+
+## 4.74.2
+
+### Patch Changes
+
+- [#5006](https://github.com/PostHog/posthog-js/pull/5006) [`614e508`](https://github.com/PostHog/posthog-js/commit/614e5080753db6229e886f9f3d47f064b02d7cf8) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix source maps to point from the published JavaScript to the original TypeScript source.
+  (2026-09-17)
+
+## 4.74.1
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+- Updated dependencies [[`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0)]:
+  - @posthog/core@1.54.4
+
+## 4.74.0
+
+### Minor Changes
+
+- [#4929](https://github.com/PostHog/posthog-js/pull/4929) [`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$push_notification_opened` not being captured on Android when the app's process was killed but its task stayed in recents (opt out with `{ patchMainActivityNewIntent: false }`).
+  (2026-09-15)
+
+### Patch Changes
+
+- Updated dependencies [[`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c)]:
+  - @posthog/react-native-plugin@2.9.3
+
 ## 4.73.3
 
 ### Patch Changes

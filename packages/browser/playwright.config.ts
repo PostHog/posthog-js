@@ -1,4 +1,5 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices, webkit } from '@playwright/test'
+import path from 'node:path'
 
 /**
  * Read environment variables from file.
@@ -48,7 +49,18 @@ export default defineConfig({
 
         {
             name: 'webkit',
-            use: { ...devices['Desktop Safari'] },
+            use: {
+                ...devices['Desktop Safari'],
+                // Older WebKit builds leak AppKit animation threads while the display sleeps:
+                // https://github.com/microsoft/playwright/issues/42385
+                launchOptions:
+                    process.platform === 'darwin'
+                        ? {
+                              executablePath: path.join(__dirname, 'playwright/webkit-no-animation.sh'),
+                              env: { ...process.env, PW_NATIVE_WEBKIT_EXECUTABLE: webkit.executablePath() },
+                          }
+                        : undefined,
+            },
         },
 
         /* Test against mobile viewports. */

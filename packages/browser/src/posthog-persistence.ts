@@ -268,6 +268,8 @@ export class PostHogPersistence {
         this.props = {}
         this._campaign_params_url = undefined
         this._name = parseName(config)
+        // Reading the combined cookie/localStorage backend can write a migrated entry.
+        this._disabled = config.disable_persistence || !!isDisabled
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
         this.load()

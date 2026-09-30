@@ -7,6 +7,7 @@ import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   CompatibleToolsListLike,
+  InputAliasMap,
   JsonRecord,
   MCPAnalyticsData,
   MCPRequestLike,
@@ -43,11 +44,18 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
-import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
-import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import {
+  deriveSessionIdFromMCPSession,
+  getSessionId,
+  getSessionInfo,
+  isModernEraRequest,
+  newSessionId,
+} from './session'
+import { decodeSessionId, encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
+import { getToolInputProperties } from './tool-input'
 
 /**
  * Single instrumentation core shared by the low-level (`Server`) and high-level
@@ -62,6 +70,23 @@ type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHand
 /** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 
+function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string {
+  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  if (token) return token.sessionId
+  if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
+  return data.sessionId
+}
+
+function resolveInputAliases(data: MCPAnalyticsData, toolName: string | undefined): InputAliasMap | undefined {
+  if (!toolName || !data.options.resolveInputAliases) return undefined
+  try {
+    return data.options.resolveInputAliases(toolName)
+  } catch (error) {
+    data.logger(`Warning: resolveInputAliases failed for tool ${toolName} - ${error}`)
+    return undefined
+  }
+}
+
 interface TraceToolCallParams {
   server: MCPServerLike
   data: MCPAnalyticsData
@@ -70,6 +95,7 @@ interface TraceToolCallParams {
   execute: ToolExecutor
   /** Optional schema-derived ownership override for adapters with direct registry access. */
   parameterOwnership?: AnalyticsParameterOwnership
+  inputSchema?: unknown
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
    * tool passes `mcpMissingCapability` and `send_feedback` passes
@@ -120,6 +146,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     execute,
     parameterOwnership,
+    inputSchema,
     eventType,
     explicitContextIntent,
     extraEventProperties,
@@ -141,13 +168,12 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // Reading the argument and removing it are separate questions: deleting one the
   // application declared costs the customer their call, so the strip below still
   // requires positive ownership, while reading it when ownership is unresolved
-  // costs at worst a mislabelled property. ADR-0011.
-  const canCaptureContextIntent =
-    !isVirtualAnalyticsTool &&
-    isContextEnabled(data.options.context) &&
-    (ownership.context || !ownership.contextOwnershipKnown)
-  const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
-  const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
+  // can mislabel a property. Conversation minting also writes a prompt-back;
+  // that separate tradeoff and its carried-session guard are recorded in ADR-0013.
+  const canCaptureContextIntent = ownership.read.context
+  const conversation = resolveToolConversation(ownership.read.conversationId, request.params?.arguments, extra)
+  const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership.strip)
+  const schemaSessionId = resolveToolSchemaSessionId(data, extra)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
@@ -164,6 +190,19 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     resolvedEventType,
     canCaptureContextIntent
   )
+  if (preparedEvent && resolvedEventType === MCPAnalyticsEventType.mcpToolsCall) {
+    const sessionSchemas =
+      (preparedEvent.event.sessionId ? data.toolInputSchemas.get(preparedEvent.event.sessionId) : undefined) ??
+      data.toolInputSchemas.get(schemaSessionId)
+    const schema = inputSchema ?? sessionSchemas?.get(request.params?.name ?? '')
+    preparedEvent.event.properties = {
+      ...preparedEvent.event.properties,
+      ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
+        shouldRecordInputKey: data.options.shouldRecordInputKey,
+        inputAliases: resolveInputAliases(data, request.params?.name),
+      }),
+    }
+  }
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
   }
@@ -189,17 +228,36 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   return finalResult
 }
 
+function resolveToolConversation(
+  enabled: boolean,
+  args: unknown,
+  extra?: CompatibleRequestHandlerExtra
+): ConversationIdResolution {
+  const conversation = resolveConversationId(enabled, args)
+  // Echoed handles span reconnects; a new handle must not replace a session
+  // already carried by this request or add a needless prompt-back to its result.
+  if (!conversation.minted) return conversation
+  const carriedSession = extra?.sessionId || decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
+  return carriedSession ? { minted: false, conversationId: undefined } : conversation
+}
+
 interface PreparedToolEvent {
   event: McpEvent
   requestAttribution: SessionInfo
 }
 
 /**
- * Ownership for one request, plus whether it could be resolved at all — "no
- * answer" must not read the same as "the application owns it".
+ * Ownership for one request. The `strip` flags gate stripping and require
+ * positive ownership; `read` gates capture and additionally fails open where
+ * ownership could not be resolved — "no answer" must not read the same as "the
+ * application owns it". ADR-0011.
  */
-interface ActiveAnalyticsParameterOwnership extends AnalyticsParameterOwnership {
-  contextOwnershipKnown: boolean
+type ArgumentOwnership = Pick<AnalyticsParameterOwnership, 'context' | 'conversationId' | 'llmModel'>
+
+interface ActiveAnalyticsParameterOwnership {
+  strip: ArgumentOwnership
+  read: ArgumentOwnership
+  outputInstructions: boolean
 }
 
 function getActiveAnalyticsParameterOwnership(
@@ -210,11 +268,14 @@ function getActiveAnalyticsParameterOwnership(
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
+  const enabled = {
+    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context),
+    conversationId: data.options.enableConversationId === true,
+    llmModel: isCaptureModelEnabled(data.options.captureModel),
+  }
   return {
-    contextOwnershipKnown: ownership !== undefined,
-    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context) && ownership?.context === true,
-    conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
-    llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
+    strip: enabledArgumentOwnership(enabled, ownership, false),
+    read: enabledArgumentOwnership(enabled, ownership, true),
     // Deliberately read off `listed`, never the override: only the advertised
     // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
     // override is built from the live registry, which holds Zod on the
@@ -222,13 +283,26 @@ function getActiveAnalyticsParameterOwnership(
     // and fails closed — writing an undeclared key fails the customer's entire
     // tool result under `additionalProperties: false`. See ADR-0004 for the
     // per-request-instance gap this leaves and the planned fix.
-    outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
+    outputInstructions: enabled.conversationId && listed?.outputInstructions === true,
+  }
+}
+
+function enabledArgumentOwnership(
+  enabled: ArgumentOwnership,
+  ownership: ArgumentOwnership | undefined,
+  whenUnknown: boolean
+): ArgumentOwnership {
+  const resolved = ownership ?? { context: whenUnknown, conversationId: whenUnknown, llmModel: whenUnknown }
+  return {
+    context: enabled.context && resolved.context,
+    conversationId: enabled.conversationId && resolved.conversationId,
+    llmModel: enabled.llmModel && resolved.llmModel,
   }
 }
 
 function cloneRequestWithoutOwnedAnalyticsArguments(
   request: MCPRequestLike,
-  ownership: AnalyticsParameterOwnership
+  ownership: ArgumentOwnership
 ): MCPRequestLike {
   const args = request.params?.arguments
   const cleanedArgs = stripOwnedAnalyticsArguments(args, ownership)
@@ -252,7 +326,7 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
-  ownership: AnalyticsParameterOwnership,
+  ownership: ActiveAnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType,
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
@@ -300,9 +374,9 @@ async function prepareToolCallEvent(
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
     // Client metadata does not collide with an application's tool arguments.
-    // Self-report still requires positive ownership before we read `llm_model`.
+    // Self-report reads `llm_model` under the same fail-open rule as `context`.
     if (isCaptureModelEnabled(data.options.captureModel)) {
-      const resolvedModel = resolveModel(request, ownership.llmModel)
+      const resolvedModel = resolveModel(request, ownership.read.llmModel)
       setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
     return { event, requestAttribution }
@@ -328,7 +402,7 @@ function applyConversationInstructions(
   event: McpEvent | null,
   result: unknown,
   conversation: ConversationIdResolution,
-  ownership: AnalyticsParameterOwnership
+  ownership: Pick<AnalyticsParameterOwnership, 'outputInstructions'>
 ): unknown {
   const conversationId = conversation.conversationId
   if (!conversationId) {
@@ -641,36 +715,6 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 }
 
 /**
- * Ownership for an SDK-owned virtual tool (`get_more_tools`, `send_feedback`),
- * resolved from its own descriptor rather than the `tools/list` cache.
- *
- * A virtual-tool branch is only entered when the application does not advertise
- * a tool by this name, so the descriptor is the SDK's own and what it declares
- * is known statically. An instance that never served a listing — a per-request
- * `McpServer`/`Server`, the topology in ADR-0011 — would otherwise read every
- * injected parameter as not-ours and neither capture nor strip it.
- *
- * `conversation_id` still comes from the cache on purpose: resolving it here too
- * would start minting a handle, and appending its prompt-back block, on
- * instances that today mint none. That changes session anchoring (ADR-0004)
- * rather than closing this gap.
- *
- * `virtualToolInputSchema` is required (not defaulted to one specific virtual
- * tool's descriptor) so every call site names the tool it means; each caller
- * passes its own descriptor's `inputSchema`.
- */
-export function getVirtualToolParameterOwnership(
-  data: MCPAnalyticsData,
-  toolName: string,
-  virtualToolInputSchema: unknown
-): AnalyticsParameterOwnership {
-  return {
-    ...getAnalyticsParameterOwnership(virtualToolInputSchema),
-    conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
-  }
-}
-
-/**
  * Checks the server's raw listing for a real owner of a candidate virtual tool.
  * This does not depend on a previous client request and does not call the
  * instrumented list wrapper, so it neither injects PostHog tools nor captures a
@@ -819,25 +863,45 @@ async function getTracedToolsList(
 
     if (data) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+      if (event.sessionId) {
+        const sessionSchemas = data.toolInputSchemas.get(event.sessionId) ?? new Map<string, unknown>()
+        for (const tool of tools) {
+          if (tool?.name) sessionSchemas.set(tool.name, tool.inputSchema)
+        }
+        data.toolInputSchemas.set(event.sessionId, sessionSchemas)
+      }
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
     }
 
     if (data) {
+      // A compliant client concatenates every page into one list, so only the
+      // first page — the one every client reads, including clients that never
+      // follow `nextCursor` — may carry a virtual tool. Presence, not
+      // truthiness: `cursor: ""` is a continuation page.
+      const isFirstPage = request.params?.cursor == null
+
       const missingToolName = resolveMissingCapabilityToolName(data.options)
       if (data.options.reportMissing) {
         const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
-        if (alreadyPresent) {
+        if (isFirstPage && alreadyPresent) {
           data.logger(
-            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted. To keep missing-capability reports, rename the SDK's tool with the missingCapabilityToolName option.`
           )
-        } else {
+        } else if (isFirstPage) {
           const virtualTool = getReportMissingToolDescriptor(missingToolName)
           tools.push(virtualTool)
           // Cached separately because the virtual tool is added after the listing
           // was cached, and its calls need ownership like any other tool's.
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
+        } else if (alreadyPresent) {
+          // Conflicts are only detected on the pages a client actually
+          // fetches; a real owner here is already shadowed by the first-page
+          // injection, so the host must rename the SDK's tool.
+          data.logger(
+            `Warning: A real tool "${missingToolName}" on a later tools/list page is shadowed by the SDK's missing-capability tool. Its calls will be intercepted. Rename the SDK's tool with the missingCapabilityToolName option to keep both.`
+          )
         }
       }
 
@@ -845,11 +909,6 @@ async function getTracedToolsList(
       if (feedbackOptions) {
         const feedbackToolName = feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
         const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
-        // A compliant client concatenates every page into one list, so only the
-        // first page — the one every client reads, including clients that never
-        // follow `nextCursor` — may carry the virtual tool. Presence, not
-        // truthiness: `cursor: ""` is a continuation page.
-        const isFirstPage = request.params?.cursor == null
         if (isFirstPage && alreadyPresent) {
           data.logger(
             `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted. To collect feedback alongside it, rename the SDK's tool with collectFeedback: { toolName: "..." }.`

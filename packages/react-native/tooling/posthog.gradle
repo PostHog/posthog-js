@@ -92,9 +92,21 @@ plugins.withId('com.android.application') {
                             extraArgs.addAll(["--build", versionCode.toString()])
                         }
 
+                        // How an upload treats a symbol set that already exists with different
+                        // content: skip-on-conflict keeps the stored one, force overwrites it, and
+                        // the default fails the build. posthog-cli declares the two flags mutually
+                        // exclusive, so reject the pair rather than failing on a parser error.
                         def posthogUploadArgs = []
-                        if (project.ext.has("posthogReactNativeSkipOnConflict") && project.ext.get("posthogReactNativeSkipOnConflict") == true) {
+                        def posthogSkipOnConflict = project.ext.has("posthogReactNativeSkipOnConflict") && project.ext.get("posthogReactNativeSkipOnConflict") == true
+                        def posthogForce = project.ext.has("posthogReactNativeForce") && project.ext.get("posthogReactNativeForce") == true
+                        if (posthogSkipOnConflict && posthogForce) {
+                            throw new GradleException("posthogReactNativeSkipOnConflict and posthogReactNativeForce cannot both be true. posthog-cli accepts only one of --skip-on-conflict and --force.")
+                        }
+                        if (posthogSkipOnConflict) {
                             posthogUploadArgs.add("--skip-on-conflict")
+                        }
+                        if (posthogForce) {
+                            posthogUploadArgs.add("--force")
                         }
 
                         // How the release a build belongs to gets associated with the exceptions
