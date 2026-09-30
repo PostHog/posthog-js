@@ -7,6 +7,7 @@ import {
   extractAvailableToolCalls,
   extractPosthogParams,
   getModelParams,
+  withPrivacyMode,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
@@ -22,6 +23,18 @@ import { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
 import { preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
+import { formatToolResult } from '../toolResult'
+import { isObject } from '../typeGuards'
+
+const TOOL_RESULT_TYPES = new Set([
+  'tool_result',
+  'bash_code_execution_tool_result',
+  'code_execution_tool_result',
+  'text_editor_code_execution_tool_result',
+  'tool_search_tool_result',
+  'web_fetch_tool_result',
+  'web_search_tool_result',
+])
 
 interface ToolInProgress {
   block: FormattedFunctionCall
@@ -53,6 +66,34 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     super(parentClient)
     this.phClient = phClient
     this.baseURL = parentClient.baseURL
+  }
+
+  private formatInputForPostHog(params: MessageCreateParams, privacyMode: boolean): unknown {
+    try {
+      if (withPrivacyMode(this.phClient, privacyMode, false) === null) return null
+      const input = mergeSystemPrompt(params, 'anthropic')
+      const messages = Array.isArray(input)
+        ? input.map((message) => {
+            if (!isObject(message) || !Array.isArray(message.content)) return message
+            const originalContent = message.content
+            const content = originalContent.map((block) => {
+              if (
+                isObject(block) &&
+                typeof block.type === 'string' &&
+                TOOL_RESULT_TYPES.has(block.type) &&
+                Object.hasOwn(block, 'content')
+              ) {
+                return { ...block, content: formatToolResult(block.content, this.phClient) }
+              }
+              return block
+            })
+            return content.some((block, index) => block !== originalContent[index]) ? { ...message, content } : message
+          })
+        : input
+      return sanitizeAnthropic(messages, this.phClient)
+    } catch {
+      return '[Unserializable]'
+    }
   }
 
   public create(body: MessageCreateParamsNonStreaming, options?: RequestOptions): APIPromise<Message>
@@ -240,7 +281,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+                input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
                 output: formattedOutput,
                 latency,
                 timeToFirstToken,
@@ -261,7 +302,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+                input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
                 output: [],
                 latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
@@ -299,7 +340,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               ...posthogParams,
               model: anthropicParams.model,
               provider: 'anthropic',
-              input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+              input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
               output: formatResponseAnthropic(result),
               latency,
               baseURL: this.baseURL,
@@ -324,7 +365,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             ...posthogParams,
             model: anthropicParams.model,
             provider: 'anthropic',
-            input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
+            input: this.formatInputForPostHog(anthropicParams, posthogParams.privacyMode),
             output: [],
             latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,

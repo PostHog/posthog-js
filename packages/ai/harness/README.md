@@ -333,3 +333,44 @@ cache creation APIs, automatic function execution, or SDK chat helpers. Syntheti
 cache/reasoning metadata checks field mapping, not a real cache hit. Developer API
 embeddings without token statistics remain zero-token events in the current wrapper;
 these tests do not estimate usage or verify backend pricing.
+
+## Tool-result history policy
+
+`tool-result-policy.test.ts` exercises built Gemini, OpenAI Chat, OpenAI Responses,
+and direct Anthropic adapters through their real provider SDKs against a local
+HTTP server. It covers unary and streaming calls with privacy enabled and
+disabled, unchanged provider requests and caller output, linking IDs/error flags,
+and exact input/output token counts. Gemini, OpenAI, and streaming Anthropic
+cases record and replay the synthetic response after shutting down the upstream.
+The existing Anthropic recorder supports streaming only, so its unary cases
+compare native and wrapped calls directly against the local server. No provider
+credentials or live-provider calls are required.
+
+The fixtures verify a 5,000 UTF-8-byte cap on each tool-result string value plus
+the existing 15-byte truncation marker. Objects, arrays, and later fields remain;
+many small fields can exceed 5,015 bytes in aggregate. This is not a whole-event
+size guarantee. Responses retains its existing serialized analytics content;
+values are capped before JSON encoding without parsing arbitrary tool-result
+text or applying another cap to the serialized envelope.
+
+The unit suites `tool-result-policy.test.ts` and
+`tool-result-normalization.test.ts` additionally cover binary redaction before
+type-erasing normalization, MIME metadata, UTF-8 boundaries, JSON-looking text,
+provider failure identity, full capture/privacy, nonmutation, and the existing
+depth/item/node traversal budgets. Claude Agent tests retain its separate
+200,000-byte original tool-span/assistant-output default while generation
+history uses the shared 5,000-byte policy. Full capture bypasses string caps and
+binary redaction while keeping traversal bounds; privacy wins over full capture.
+
+Use the repository-pinned pnpm version to build prerequisites and run the checks:
+
+```sh
+pnpm turbo run build --filter=@posthog/ai
+pnpm --filter @posthog/ai exec vitest run --poolOptions.threads.maxThreads=2 --poolOptions.threads.minThreads=1
+pnpm --filter @posthog/ai test:module-load
+pnpm --filter @posthog/ai test:cassettes --poolOptions.threads.maxThreads=2 --poolOptions.threads.minThreads=1
+```
+
+The worker cap keeps these suites from oversubscribing small development
+environments. `test:cassettes:offline` separately requires Docker and verifies
+network isolation; a normal local replay pass alone does not establish isolation.

@@ -636,56 +636,53 @@ describe('PostHogGemini - Jest test suite', () => {
       ['generateContentStream', false],
       ['generateContent', true],
       ['generateContentStream', true],
-    ] as const)('%s bounds each tool result unless full capture is enabled (full=%s)', async (method, full) => {
-      const large = { text: '!'.repeat(4990) + '😀' + 'x'.repeat(100) }
-      const manyFields = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`field_${i}`, 'value']))
-      const small = { answer: 42 }
-      const contents = [
-        {
-          role: 'user',
-          parts: [
-            {
-              functionResponse: {
-                id: 'call_3',
-                name: 'read_document',
-                response: large,
+    ] as const)(
+      '%s caps tool-result strings without discarding fields unless full capture is enabled (full=%s)',
+      async (method, full) => {
+        const large = { text: '!'.repeat(4990) + '😀' + 'x'.repeat(100) }
+        const manyFields = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`field_${i}`, 'value']))
+        const small = { answer: 42 }
+        const contents = [
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_3',
+                  name: 'read_document',
+                  response: large,
+                },
               },
-            },
-            { functionResponse: { id: 'call_4', name: 'read_fields', response: manyFields } },
-            { functionResponse: { id: 'call_5', name: 'read_answer', response: small } },
-          ],
-        },
-      ]
-      const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
-      Object.assign(mockPostHogClient, { enableFullAiCapture: full })
+              { functionResponse: { id: 'call_4', name: 'read_fields', response: manyFields } },
+              { functionResponse: { id: 'call_5', name: 'read_answer', response: small } },
+            ],
+          },
+        ]
+        const params = { model: 'gemini-3.1-flash-lite-preview', contents, posthogDistinctId: 'test-id' }
+        Object.assign(mockPostHogClient, { enableFullAiCapture: full })
 
-      if (method === 'generateContent') {
-        await client.models.generateContent(params)
-      } else {
-        for await (const _chunk of client.models.generateContentStream(params)) {
-          // Consume the stream so its generation event is captured.
+        if (method === 'generateContent') {
+          await client.models.generateContent(params)
+        } else {
+          for await (const _chunk of client.models.generateContentStream(params)) {
+            // Consume the stream so its generation event is captured.
+          }
         }
-      }
 
-      expect((client as any).client.models[method]).toHaveBeenCalledWith({ model: params.model, contents })
-      expect(contents[0].parts[0].functionResponse.response).toEqual(large)
-      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
-      const captured = properties['$ai_input'][0].content
-      expect(captured[0]).toEqual({
-        type: 'tool_result',
-        tool_use_id: 'call_3',
-        content: full ? large : `${'{"text":"'}${'!'.repeat(4990)}... [truncated]`,
-      })
-      expect(captured[1]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_4' })
-      if (full) {
+        expect((client as any).client.models[method]).toHaveBeenCalledWith({ model: params.model, contents })
+        expect(contents[0].parts[0].functionResponse.response).toEqual(large)
+        const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
+        const captured = properties['$ai_input'][0].content
+        expect(captured[0]).toEqual({
+          type: 'tool_result',
+          tool_use_id: 'call_3',
+          content: full ? large : { text: `${'!'.repeat(4990)}😀${'x'.repeat(6)}... [truncated]` },
+        })
+        expect(captured[1]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_4' })
         expect(captured[1].content).toEqual(manyFields)
-      } else {
-        expect(typeof captured[1].content).toBe('string')
-        expect(captured[1].content).toMatch(/\.\.\. \[truncated\]$/)
-        expect(new TextEncoder().encode(captured[1].content).byteLength).toBeLessThanOrEqual(5015)
+        expect(captured[2]).toEqual({ type: 'tool_result', tool_use_id: 'call_5', content: small })
       }
-      expect(captured[2]).toEqual({ type: 'tool_result', tool_use_id: 'call_5', content: small })
-    })
+    )
 
     test.each([
       ['generateContent', false],
@@ -1571,4 +1568,41 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(captureArgs[0].distinctId).toBe(captureArgs[0].properties['$ai_trace_id'])
     })
   })
+
+  test.each(['single content', 'single part', 'part array'])(
+    'preserves binary redaction and tool-result policy for %s input',
+    async (shape) => {
+      const response = { body: '!'.repeat(6000), summary: 'later field' }
+      const part = { functionResponse: { id: 'fallback_call', name: 'lookup', response } }
+      const contents =
+        shape === 'single content' ? { role: 'user', parts: [part] } : shape === 'single part' ? part : [part]
+      await client.models.generateContent({ model: 'gemini-synthetic', contents: contents as any })
+      const input = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties.$ai_input
+      expect(input[0].role).toBe('user')
+      expect(typeof input[0].content).toBe('string')
+      const parsed = JSON.parse(input[0].content)
+      const result = shape === 'single content' ? parsed.parts[0].functionResponse : parsed.functionResponse
+      expect(result).toEqual({
+        id: 'fallback_call',
+        name: 'lookup',
+        response: { body: '!'.repeat(5000) + '... [truncated]', summary: 'later field' },
+      })
+      expect(response.body.length).toBe(6000)
+    }
+  )
+
+  test.each(['single content', 'single part', 'part array'])(
+    'redacts short MIME-qualified binary in serialized %s input',
+    async (shape) => {
+      const part = { inlineData: { mimeType: 'image/png', data: 'U0hPUlQ=' } }
+      const contents =
+        shape === 'single content' ? { role: 'user', parts: [part] } : shape === 'single part' ? part : [part]
+      await client.models.generateContent({ model: 'gemini-synthetic', contents: contents as any })
+      const input = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties.$ai_input
+      const parsed = JSON.parse(input[0].content)
+      const capturedPart = shape === 'single content' ? parsed.parts[0] : parsed
+      expect(capturedPart.inlineData).toEqual({ mimeType: 'image/png', data: '[base64 image/png redacted]' })
+      expect(part.inlineData.data).toBe('U0hPUlQ=')
+    }
+  )
 })

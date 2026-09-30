@@ -9,6 +9,28 @@ SDK usage examples and code snippets live in the official documentation so they 
 - [AI observability installation docs](https://posthog.com/docs/ai-observability/installation)
 - [AI observability docs](https://posthog.com/docs/ai-observability)
 
+## Tool-result capture
+
+Gemini, OpenAI Chat Completions and Responses, direct Anthropic, and Claude Agent SDK
+use the same string limits for tool results captured in generation input.
+The Azure integrations that share the OpenAI capture paths use the same policy.
+Each string value retains up to 5,000 UTF-8 bytes, followed by the existing
+truncation marker when shortened (up to 5,015 bytes before JSON encoding).
+Objects and arrays retain their structure and later fields; arbitrary text is not
+parsed into JSON. Provider-specific roles, linking IDs, error flags, and media
+metadata are preserved. These limits affect analytics capture, not the requests
+sent to providers or the results returned to the application.
+OpenAI Responses keeps its existing serialized analytics input representation;
+tool-output string values are capped before that formatting.
+
+Traversal safeguards and binary redaction still apply. Full AI capture bypasses
+binary redaction and string caps, while privacy mode takes precedence and omits
+input and output content. Full capture does not disable traversal safeguards.
+
+This is a per-string limit, not a whole-result or whole-event size guarantee.
+Many small fields or repeated results can still produce large events, and events
+that exceed transport limits may be dropped.
+
 ## Claude Agent SDK
 
 The `@posthog/ai/claude-agent-sdk` integration accepts string and streamed prompts.
@@ -22,7 +44,9 @@ If the query stops without a result or the resolver throws, those events are cap
 
 Tool spans include elapsed time and the returned output when available.
 Tools without a result are finalized with their observed elapsed time when the turn or iteration ends.
-Strings in assistant output and tool inputs/outputs are limited to 200,000 UTF-8 bytes, with a 5,000-byte limit for tool results in generation input.
+Strings in assistant output and original tool-span inputs/outputs retain their
+separate 200,000 UTF-8-byte limit. Tool results repeated in generation input use
+the shared 5,000-byte per-string policy above.
 Full AI capture removes these string limits.
 
 Generation metrics cover the main agent.
