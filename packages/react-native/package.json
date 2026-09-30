@@ -42,7 +42,7 @@
     "test:built": "node --test scripts/check-sourcemaps.mjs",
     "test": "pnpm test:unit",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
-    "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
+    "prebuild": "node ../../tooling/write-version.mjs",
     "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js' --source-maps",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.cjs"

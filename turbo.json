@@ -1,4 +1,5 @@
 {
+    "globalDependencies": ["tooling/write-version.mjs"],
     "tasks": {
         "clean": {
             "cache": false

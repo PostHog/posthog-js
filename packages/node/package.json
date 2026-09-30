@@ -17,7 +17,7 @@
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
-    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
