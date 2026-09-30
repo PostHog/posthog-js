@@ -2,7 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
-| PostHog/posthog-js | [issue 5154](https://github.com/PostHog/posthog-js/issues/5154) | Valid @posthog/ai capture-policy enhancement, complementary to—not a duplicate of—the Gemini-focused PR #5088. | feature, enhancement, node, team/ai-observability |  | no | 2026-09-30T05:53:47.480Z |
+| PostHog/posthog-js | [issue 5154](https://github.com/PostHog/posthog-js/issues/5154) | Valid cross-adapter @posthog/ai capture-policy enhancement; it is complementary to the open Gemini-specific work in #5088. | feature, enhancement, node, team/ai-observability |  | no | 2026-09-30T06:24:13.453Z |
 | PostHog/posthog-js | [issue 5148](https://github.com/PostHog/posthog-js/issues/5148) | Confirmed session-replay recorder bug: a cross-origin navigation can leave `observeAttachShadow` reading `contentWindow.Element` without the existing `SecurityError` containment. | feature/replay, javascript, needs-to-be-contributed-back, bug |  | no | 2026-09-29T18:05:28.636Z |
 | PostHog/posthog-js | [issue 1583](https://github.com/PostHog/posthog-js/issues/1583) | Confirmed browser SDK feature gap: failed events are retried only in memory and are not durable across a page/app restart. | enhancement, feature, web, javascript, team/client-libraries |  | no | 2026-09-29T08:40:47.818Z |
 | PostHog/posthog-js | [issue 5137](https://github.com/PostHog/posthog-js/issues/5137) | Confirmed React Native accessibility bug; the proposed localization prop is a reasonable public API shape but needs maintainer agreement before an external contribution. | react-native, feature/mobile, feature/surveys, team/client-libraries, iOS, Android, bug |  | no | 2026-09-28T15:47:24.429Z |
