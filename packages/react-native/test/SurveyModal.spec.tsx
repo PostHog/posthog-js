@@ -206,6 +206,48 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('questions-stub')).toBeNull()
   })
 
+  it('shows the confirmation after submit when displayThankYouMessage is on', () => {
+    const { queryByTestId, getByTestId, onClose } = renderSurveyModal()
+
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+    act(() => {
+      vi.runAllTimers()
+    })
+
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes after submit without a confirmation when displayThankYouMessage is off', () => {
+    const onClose = vi.fn()
+    const { queryByTestId, getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        // The header keeps its default value, so only the flag can hide the confirmation.
+        appearance={{ ...defaultSurveyAppearance, displayThankYouMessage: false }}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(queryByTestId('confirmation-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
+
+    act(() => {
+      vi.runAllTimers()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledWith(true, {})
+  })
+
   it('hides content immediately when the cancel button is pressed', () => {
     const { queryByTestId, getByTestId, onClose } = renderSurveyModal()
     expect(queryByTestId('questions-stub')).not.toBeNull()
