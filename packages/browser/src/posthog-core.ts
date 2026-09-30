@@ -4192,8 +4192,8 @@ export class PostHog implements PostHogInterface {
                 const sharesPersistence =
                     this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 if (sharesPersistence && this.sessionPersistence !== this.persistence) {
-                    // Finish the outgoing store's writes before migrating the primary into its backend.
-                    this.sessionPersistence?.flush()
+                    // Drop the outgoing entry and pending write before the primary takes over.
+                    this.sessionPersistence?.remove()
                     this.sessionPersistence?.destroy()
                 }
                 this.persistence.update_config(this.config, oldConfig, isPersistenceDisabled)

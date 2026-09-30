@@ -241,6 +241,38 @@ describe('posthog.set_config', () => {
                 })
             })
 
+            it.each([0, 250])(
+                'does not restore unregistered properties after leaving memory (debounce: %s)',
+                (debounce) => {
+                    const token = uuidv7()
+                    const beforeSend = vi.fn(() => null)
+                    const posthog = defaultPostHog().init(
+                        token,
+                        {
+                            persistence: 'localStorage',
+                            persistence_save_debounce_ms: debounce,
+                            capture_pageview: false,
+                            bootstrap: { distinctID: token },
+                            before_send: beforeSend,
+                        },
+                        token
+                    )!
+                    posthog.register_for_session({ flow: 'signup' })
+                    posthog.set_config({ persistence: 'memory' })
+                    posthog.unregister_for_session('flow')
+                    vi.advanceTimersByTime(250)
+                    expect.soft(sessionStorage.getItem(`ph_${token}_posthog`)).toBeNull()
+
+                    posthog.set_config({ persistence: 'localStorage' })
+                    posthog.capture('returned from memory')
+                    expect(beforeSend).toHaveBeenLastCalledWith(
+                        expect.objectContaining({ properties: expect.not.objectContaining({ flow: 'signup' }) })
+                    )
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).not.toHaveProperty('flow')
+                }
+            )
+
             it.each(['sessionStorage', 'memory'] as const)(
                 'switches to and from the shared %s backend without stale pending writes',
                 (persistence) => {
