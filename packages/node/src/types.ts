@@ -232,7 +232,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
   enableExceptionAutocapture?: boolean
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
   featureFlagsPollingInterval?: number
-  // Maximum size of cache that deduplicates $feature_flag_called calls per user.
+  // Maximum number of distinct ids held in the cache that deduplicates $feature_flag_called calls
+  // per user. When the cache is full the least recently used distinct ids are evicted.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
