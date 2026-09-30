@@ -122,6 +122,7 @@ describe('sanitizeEvent - response content blocks', () => {
   it.each([
     ['video', 'video'],
     ['phc_123456789012345678901234567890', '[redacted]'],
+    [makeLargeBase64(), '[binary data redacted - not supported by PostHog MCP analytics]'],
   ])('should redact unknown content types with type name in message: %s', (type, shownType) => {
     const event = makeEvent({
       response: {

@@ -84,9 +84,11 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
  * with informative redaction messages.
  */
 function sanitizeResponse(response: unknown): unknown {
-  // Replace the unsupported blocks before the one sanitize pass, so it never scans their data.
+  // Sanitize each kept block on its own, so the pass never scans the data of replaced blocks.
   if (isRecord(response) && Array.isArray(response.content)) {
-    return sanitizeCapturedValue({ ...response, content: response.content.map(sanitizeContentBlock) })
+    const result = sanitizeCapturedValue({ ...response, content: [] }) as SanitizedRecord
+    result.content = response.content.map(sanitizeContentBlock)
+    return result
   }
   return sanitizeCapturedValue(response)
 }
@@ -96,13 +98,13 @@ function sanitizeResponse(response: unknown): unknown {
  */
 function sanitizeContentBlock(block: unknown): unknown {
   if (!isRecord(block)) {
-    return block
+    return sanitizeCapturedValue(block)
   }
 
   switch (block.type) {
     case 'text':
     case 'resource_link':
-      return block
+      return sanitizeCapturedValue(block)
 
     case 'image':
       return {
@@ -122,7 +124,7 @@ function sanitizeContentBlock(block: unknown): unknown {
     default:
       return {
         type: 'text',
-        text: `[unsupported content type "${block.type}" redacted - not supported by PostHog MCP analytics]`,
+        text: `[unsupported content type "${sanitizeCapturedValue(block.type)}" redacted - not supported by PostHog MCP analytics]`,
       }
   }
 }
@@ -139,7 +141,7 @@ function sanitizeResourceBlock(block: SanitizedRecord): unknown {
       text: '[binary resource content redacted - not supported by PostHog MCP analytics]',
     }
   }
-  return block
+  return sanitizeCapturedValue(block)
 }
 
 /**
