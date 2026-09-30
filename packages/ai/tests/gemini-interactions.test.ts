@@ -720,4 +720,422 @@ describe('Gemini Interactions API', () => {
       { role: 'assistant', content: [{ type: 'text', text: 'Legacy works' }] },
     ])
   })
+
+  test('preserves assistant history and matching function-call IDs in telemetry without changing the request', async () => {
+    const { posthog, gemini } = setup()
+    const input = [
+      { type: 'user_input', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      { type: 'model_output', content: [{ type: 'text', text: 'I will check.' }] },
+      { type: 'function_call', id: 'call_history', name: 'weather', arguments: { city: 'Paris' } },
+      { type: 'function_result', name: 'weather', call_id: 'call_history', result: 'Sunny' },
+    ]
+    provider.create.mockResolvedValue(textInteraction)
+
+    expect(await gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)).toBe(textInteraction)
+
+    expect(provider.create).toHaveBeenCalledTimes(1)
+    expect(provider.create).toHaveBeenCalledWith({ model: 'gemini-3.8-flash', input })
+    expect(provider.create.mock.calls[0][0].input).toBe(input)
+    expect(captured(posthog).properties.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'I will check.' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'function', id: 'call_history', function: { name: 'weather', arguments: { city: 'Paris' } } },
+        ],
+      },
+      { role: 'tool', content: [input[3]] },
+    ])
+  })
+
+  test.each(['early return', 'provider error', 'end of stream'])(
+    'retains the latest cumulative step-stop usage after %s without counting per-step usage twice',
+    async (ending) => {
+      const { posthog, gemini } = setup()
+      const error = new Error('connection interrupted')
+      const usage = { total_input_tokens: 12, total_output_tokens: 5, total_cached_tokens: 3, total_thought_tokens: 2 }
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield { event_type: 'interaction.created', interaction: { id: 'v1_partial_usage', status: 'in_progress' } }
+          yield { event_type: 'step.start', index: 0, step: { type: 'model_output' } }
+          yield { event_type: 'step.delta', index: 0, delta: { type: 'text', text: 'Partial' } }
+          yield { event_type: 'step.stop', index: 0, usage: { ...usage, total_output_tokens: 2 } }
+          yield { event_type: 'step.start', index: 1, step: { type: 'model_output' } }
+          yield {
+            event_type: 'step.stop',
+            index: 1,
+            usage,
+            step_usage: { total_input_tokens: 99, total_output_tokens: 99 },
+          }
+          if (ending === 'provider error') throw error
+        })()
+      )
+      const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+      const consume = async () => {
+        for await (const event of stream) {
+          if (ending === 'early return' && (event as any).index === 1 && event.event_type === 'step.stop') break
+        }
+      }
+      if (ending === 'provider error') await expect(consume()).rejects.toBe(error)
+      else await consume()
+
+      const properties = captured(posthog).properties
+      expect(properties).toMatchObject({
+        $ai_completion_id: 'v1_partial_usage',
+        $ai_input_tokens: 12,
+        $ai_output_tokens: 5,
+        $ai_cache_read_input_tokens: 3,
+        $ai_reasoning_tokens: 2,
+        $ai_usage: usage,
+      })
+      expect(properties.$ai_stop_reason).not.toBe('completed')
+      if (ending !== 'early return') expect(properties.$ai_is_error).toBe(true)
+    }
+  )
+
+  test('does not invent cumulative usage from step_usage on an interrupted stream', async () => {
+    const { posthog, gemini } = setup()
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield { event_type: 'interaction.created', interaction: { id: 'v1_step_usage' } }
+        yield { event_type: 'step.stop', index: 0, step_usage: { total_input_tokens: 12, total_output_tokens: 5 } }
+      })()
+    )
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    for await (const _event of stream) {
+      /* consume the interrupted stream */
+    }
+    const properties = captured(posthog).properties
+    expect(properties.$ai_input_tokens).toBeUndefined()
+    expect(properties.$ai_output_tokens).toBeUndefined()
+    expect(properties.$ai_stop_reason).toBe('incomplete')
+  })
+
+  test.each(['success', 'error'])('preserves the exact provider %s when input sanitization throws', async (outcome) => {
+    const { posthog, gemini } = setup()
+    const telemetryError = new Error('sanitizer cannot read content')
+    const input = {
+      get content() {
+        throw telemetryError
+      },
+    }
+    const error = new Error('original provider failure')
+    if (outcome === 'success') provider.create.mockResolvedValue(textInteraction)
+    else provider.create.mockRejectedValue(error)
+
+    const result = gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)
+    if (outcome === 'success') await expect(result).resolves.toBe(textInteraction)
+    else await expect(result).rejects.toBe(error)
+    expect(provider.create).toHaveBeenCalledTimes(1)
+    expect(provider.create.mock.calls[0][0].input).toBe(input)
+    expect(posthog.capture).not.toHaveBeenCalled()
+  })
+
+  test.each(['success', 'error'])(
+    'preserves streamed events and the original %s when final telemetry preparation throws',
+    async (outcome) => {
+      const { gemini } = setup()
+      const input = {
+        get content() {
+          throw new Error('sanitizer cannot read content')
+        },
+      }
+      const originalError = new Error('original stream error')
+      const events = [
+        { event_type: 'interaction.created', interaction: { id: 'v1_telemetry_error' } },
+        { event_type: 'interaction.completed', interaction: textInteraction },
+      ]
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield* events
+          if (outcome === 'error') throw originalError
+        })()
+      )
+      const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input, stream: true } as any)
+      const received = []
+      const consume = async () => {
+        for await (const event of stream) received.push(event)
+      }
+      if (outcome === 'success') await expect(consume()).resolves.toBeUndefined()
+      else await expect(consume()).rejects.toBe(originalError)
+      expect(received).toEqual(events)
+      expect(received[0]).toBe(events[0])
+      expect(received[1]).toBe(events[1])
+    }
+  )
+
+  test('keeps stream telemetry accumulation failures from replacing caller events', async () => {
+    const { gemini } = setup()
+    const malformed = {
+      event_type: 'step.start',
+      index: 0,
+      step: {
+        type: 'model_output',
+        get content() {
+          throw new Error('telemetry-only getter')
+        },
+      },
+    }
+    const terminal = { event_type: 'interaction.completed', interaction: textInteraction }
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield malformed
+        yield terminal
+      })()
+    )
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    const received = []
+    for await (const event of stream) received.push(event)
+    expect(received[0]).toBe(malformed)
+    expect(received[1]).toBe(terminal)
+  })
+
+  test.each([false, true])(
+    'retains newer delta cumulative usage when terminal usage is missing (completed=%s)',
+    async (completed) => {
+      const { posthog, gemini } = setup()
+      const latestUsage = { total_input_tokens: 12, total_output_tokens: 6, total_cached_tokens: 3 }
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield { event_type: 'interaction.created', interaction: { id: 'v1_delta_usage' } }
+          yield { event_type: 'step.stop', index: 0, usage: { total_input_tokens: 12, total_output_tokens: 2 } }
+          yield { event_type: 'step.start', index: 1, step: { type: 'model_output' } }
+          yield {
+            event_type: 'step.delta',
+            index: 1,
+            delta: { type: 'text', text: 'Later' },
+            metadata: { total_usage: latestUsage },
+          }
+          if (completed)
+            yield { event_type: 'interaction.completed', interaction: { id: 'v1_delta_usage', status: 'completed' } }
+        })()
+      )
+      const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+      for await (const _event of stream) {
+        /* consume all available usage snapshots */
+      }
+      const properties = captured(posthog).properties
+      expect(properties).toMatchObject({
+        $ai_input_tokens: 12,
+        $ai_output_tokens: 6,
+        $ai_cache_read_input_tokens: 3,
+        $ai_usage: latestUsage,
+      })
+      expect(properties.$ai_stop_reason).toBe(completed ? 'completed' : 'incomplete')
+    }
+  )
+
+  test('prefers terminal usage over earlier cumulative snapshots instead of summing them', async () => {
+    const { posthog, gemini } = setup()
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield { event_type: 'interaction.created', interaction: { id: 'v1_final_usage' } }
+        yield { event_type: 'step.stop', index: 0, usage: { total_input_tokens: 12, total_output_tokens: 2 } }
+        yield {
+          event_type: 'step.delta',
+          index: 1,
+          delta: { type: 'text', text: 'Later' },
+          metadata: { total_usage: { total_input_tokens: 12, total_output_tokens: 6 } },
+        }
+        yield { event_type: 'interaction.completed', interaction: textInteraction }
+      })()
+    )
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    for await (const _event of stream) {
+      /* terminal response is authoritative */
+    }
+    const properties = captured(posthog).properties
+    expect(properties).toMatchObject({ $ai_input_tokens: 12, $ai_output_tokens: 5, $ai_usage: textInteraction.usage })
+  })
+
+  test('forwards the cancellation reason during a pending provider reader read and releases its lock', async () => {
+    const { posthog, gemini } = setup()
+    let finishPull!: () => void
+    const cancel = vi.fn(() => finishPull())
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ event_type: 'interaction.created', interaction: { id: 'v1_pending_read' } })
+      },
+      pull() {
+        return new Promise<void>((resolve) => {
+          finishPull = resolve
+        })
+      },
+      cancel,
+    })
+    provider.create.mockResolvedValue(source)
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    const reader = stream.getReader()
+    await reader.read()
+    const pending = reader.read()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const reason = new Error('caller cancelled')
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        reader.cancel(reason).then(() => 'cancelled'),
+        new Promise<string>((resolve) => {
+          timer = setTimeout(() => resolve('timed out'), 300)
+        }),
+      ])
+      expect(result).toBe('cancelled')
+      expect(await pending).toEqual({ done: true, value: undefined })
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(cancel).toHaveBeenCalledWith(reason)
+      expect(source.locked).toBe(false)
+      expect(captured(posthog).properties.$ai_stop_reason).toBe('cancelled')
+    } finally {
+      clearTimeout(timer)
+      finishPull()
+    }
+  })
+
+  test('does not close or enqueue after cancellation while immediate telemetry is still pending', async () => {
+    const { posthog, gemini } = setup()
+    let finishCapture!: () => void
+    ;(posthog.captureImmediate as vi.Mock).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCapture = resolve
+        })
+    )
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield { event_type: 'interaction.completed', interaction: textInteraction }
+      })()
+    )
+    const stream = await gemini.interactions.create({
+      model: 'gemini-3.8-flash',
+      input: 'Hello',
+      stream: true,
+      posthogCaptureImmediate: true,
+    })
+    const reader = stream.getReader()
+    await reader.read()
+    const pending = reader.read()
+    await vi.waitFor(() => expect(posthog.captureImmediate).toHaveBeenCalledTimes(1))
+    const cancelled = reader.cancel('stop while telemetry awaits')
+    finishCapture()
+    await cancelled
+    expect(await pending).toEqual({ done: true, value: undefined })
+    expect(posthog.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(posthog.capture).not.toHaveBeenCalled()
+  })
+
+  test('preserves an SDK async iterator error mapping after its direct reader rejects', async () => {
+    const { posthog, gemini } = setup()
+    const rawError = new Error('raw transport error')
+    const sdkError = new Error('SDK normalized error')
+    const source = new ReadableStream({
+      start(controller) {
+        controller.error(rawError)
+      },
+    })
+    const mappedIterator = vi.fn(() => ({
+      next: async () => {
+        throw sdkError
+      },
+      return: async () => ({ done: true, value: undefined }),
+    }))
+    const sdkStream = new Proxy(source, {
+      get(target, key) {
+        if (key === Symbol.asyncIterator) return mappedIterator
+        const value = Reflect.get(target, key, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    provider.create.mockResolvedValue(sdkStream)
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    await expect(stream.getReader().read()).rejects.toBe(sdkError)
+    expect(mappedIterator).toHaveBeenCalledTimes(1)
+    expect(source.locked).toBe(false)
+    expect(captured(posthog).properties.$ai_is_error).toBe(true)
+  })
+
+  test('preserves a provider cancellation failure and still releases its lock and captures once', async () => {
+    const { posthog, gemini } = setup()
+    const cancelError = new Error('provider cancellation failed')
+    const cancel = vi.fn(() => {
+      throw cancelError
+    })
+    const source = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ event_type: 'interaction.created', interaction: { id: 'cancel_failure' } })
+      },
+      cancel,
+    })
+    provider.create.mockResolvedValue(source)
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    const reader = stream.getReader()
+    await reader.read()
+    await expect(reader.cancel('stop')).rejects.toBe(cancelError)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(source.locked).toBe(false)
+    expect(captured(posthog).properties.$ai_stop_reason).toBe('cancelled')
+  })
+
+  test.each(['status', 'steps'])(
+    'preserves unary result identity when telemetry reads a throwing %s getter',
+    async (key) => {
+      const { gemini } = setup()
+      const result = { ...textInteraction }
+      Object.defineProperty(result, key, {
+        get() {
+          throw new Error('telemetry-only getter')
+        },
+      })
+      provider.create.mockResolvedValue(result)
+      await expect(gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello' })).resolves.toBe(result)
+      expect(provider.create).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  test.each([2, 3, 4, 5, 6, 7])(
+    'never cancels a detached reader during SDK error normalization after %s microtasks',
+    async (ticks) => {
+      const { posthog, gemini } = setup()
+      const rawError = new Error('original transport error')
+      const mappedError = new Error('SDK error')
+      let controller!: ReadableStreamDefaultController<any>
+      const source = new ReadableStream({
+        start(value) {
+          controller = value
+        },
+      })
+      const sdkStream = new Proxy(source, {
+        get(target, key) {
+          if (key === Symbol.asyncIterator)
+            return () => {
+              const iterator = target[Symbol.asyncIterator]()
+              return {
+                async next() {
+                  try {
+                    return await iterator.next()
+                  } catch {
+                    throw mappedError
+                  }
+                },
+                async return() {
+                  return await iterator.return?.()
+                },
+              }
+            }
+          const value = Reflect.get(target, key, target)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+      provider.create.mockResolvedValue(sdkStream)
+      const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+      const reader = stream.getReader()
+      const pending = reader.read().catch((error) => error)
+      controller.error(rawError)
+      for (let tick = 0; tick < ticks; tick++) await Promise.resolve()
+      const cancelError = await reader.cancel('stop').catch((error) => error)
+      expect([rawError, mappedError]).toContain(cancelError)
+      await pending
+      await vi.waitFor(() => expect(posthog.capture).toHaveBeenCalledTimes(1))
+      expect(source.locked).toBe(false)
+    }
+  )
 })

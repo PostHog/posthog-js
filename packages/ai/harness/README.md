@@ -318,6 +318,44 @@ redirects, query API keys, and unsupported routes without replacing an existing 
 The same size and interaction limits apply as for Anthropic; Gemini Interactions
 have a 60-second deadline.
 
+### Gemini installed-consumer and lifecycle checks
+
+Build the shipped entrypoints and their workspace dependencies, then run the
+isolated installed-consumer checks with the repository-pinned pnpm version:
+
+```sh
+pnpm turbo run build --filter=@posthog/ai
+pnpm --filter @posthog/ai test:gemini-consumers
+pnpm --filter @posthog/ai test:cassettes
+```
+
+The consumer check packs the current AI, Node, Core, and Types packages and installs
+the tarballs into independent temporary workspaces with `@google/genai` 1.52.0
+and 2.18.0. Both retain the 10,080-minute dependency cooldown and the repository's
+package-manager pin. It checks the named public Gemini export with TypeScript
+5.8.2, strict checking, `skipLibCheck: false`, and NodeNext ESM/CommonJS consumers.
+It installs the Google SDK's optional MCP peer and Express typings needed to check
+all dependency declarations. The strict type fixture uses the named
+`PostHogGoogleGenAI` export: NodeNext ESM default-import typing also fails against
+the pre-change package and is outside this Interactions change. Runtime checks
+exercise the default export in both JavaScript module formats. Models generation,
+streaming, and embeddings run
+against a local HTTP server on both SDK versions and both JavaScript module
+formats; 2.18.0 additionally checks unary/streaming Interactions, while 1.52.0
+checks the deliberate rejection of its experimental Interactions schema.
+Temporary installs, packed tarballs, and compiler/runtime logs remain at the
+printed artifact path for diagnosis. Registry access is normally required for
+installation; set `GEMINI_CONSUMER_OFFLINE=1` only when the package store already
+contains the complete dependency set.
+
+`gemini-interactions-lifecycle.test.ts` uses the real installed SDK and built
+wrapper against a stalled local SSE server. It verifies pending-read cancellation,
+async-iterator early exit, tee cancellation, transport closure, once-only capture,
+and error parity with the provider's native async iterator. These local checks
+make no live-provider requests and require no credentials. The separate
+`test:cassettes:offline` command additionally runs the harness inside Docker with
+network access disabled; a local harness pass alone does not prove that isolation.
+
 ### Record and review Gemini responses
 
 Live recording is a manual, billable operation, never part of CI. Set

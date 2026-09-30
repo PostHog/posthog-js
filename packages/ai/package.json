@@ -16,6 +16,7 @@
     "clean": "rimraf dist",
     "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
+    "test:gemini-consumers": "node tests/gemini-consumer-types.mjs",
     "test:cassettes": "vitest run --config harness/vitest.config.ts",
     "test:cassettes:offline": "node harness/run-offline.mjs",
     "cassette:record": "node harness/record.mjs",
