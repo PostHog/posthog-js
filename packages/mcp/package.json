@@ -57,7 +57,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
-    "@nestjs/microservices": "^11.1.27",
+    "@nestjs/microservices": "^11.2.5",
     "@nestjs/platform-express": "^11.1.27",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
