@@ -528,7 +528,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
-    private _hasLoggedOversizedMutationDrop = false
+    private _throttledMutationsDropped = 0
+    private _oversizedMutationsDropped = 0
+    private _oversizedMutationBytesDropped = 0
     // events dropped because their JSON is longer than the engine's maximum string length. The
     // page keeps running and the recording loses them silently, so the count has to ship
     private _unstringifiableEventsDropped = 0
@@ -1612,9 +1614,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // stopped (its teardown flush still records deferred stylesheet work, which
             // belongs to the old session) and before the new one takes its first snapshot
             this._lastSeenSnapshotCost = undefined
-            // the drop count is per-session too, so the new session starts at zero
+            // the drop counts are per-session too, so the new session starts at zero
             this._unstringifiableEventsDropped = 0
-            this._hasLoggedOversizedMutationDrop = false
+            this._throttledMutationsDropped = 0
+            this._oversizedMutationsDropped = 0
+            this._oversizedMutationBytesDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
@@ -2381,6 +2385,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         $lib: Config.LIB_NAME,
                         $lib_version: Config.LIB_VERSION,
                         $snapshot_host: snapshotHostname,
+                        ...(this._throttledMutationsDropped > 0
+                            ? { $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationsDropped > 0
+                            ? { $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationBytesDropped > 0
+                            ? {
+                                  $sdk_debug_replay_oversized_mutation_bytes_dropped:
+                                      this._oversizedMutationBytesDropped,
+                              }
+                            : {}),
                         ...(this._unstringifiableEventsDropped > 0
                             ? { $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped }
                             : {}),
@@ -2922,18 +2938,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
+                onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
                 bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
                 bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
                 resyncIntervalMs: this._fullSnapshotIntervalMillis,
-                onDroppedOversizedMutation: () => {
-                    if (!this._hasLoggedOversizedMutationDrop) {
-                        this._hasLoggedOversizedMutationDrop = true
+                onDroppedOversizedMutation: (bytes) => {
+                    if (this._oversizedMutationsDropped === 0) {
                         this.log(
                             LOGGER_PREFIX +
                                 ' Dropped an oversized DOM mutation to keep the recording playable. The recording will resync with a full snapshot.',
                             'warn'
                         )
                     }
+                    this._oversizedMutationsDropped += 1
+                    this._oversizedMutationBytesDropped += bytes
                 },
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })

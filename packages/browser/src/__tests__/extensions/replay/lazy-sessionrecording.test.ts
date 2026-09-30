@@ -4451,6 +4451,60 @@ describe('Lazy SessionRecording', () => {
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
         })
 
+        it.each(['attribute', 'oversized'] as const)(
+            'reports cumulative %s mutation drops only on snapshots and resets on rotation',
+            (kind) => {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                releaseInteractionHold()
+                const recorder = sessionRecording['_lazyLoadedSessionRecording']
+                const keys = [
+                    '$sdk_debug_replay_throttled_mutations_dropped',
+                    '$sdk_debug_replay_oversized_mutations_dropped',
+                    '$sdk_debug_replay_oversized_mutation_bytes_dropped',
+                ]
+                const flushSnapshot = () => {
+                    vi.mocked(posthog.capture).mockClear()
+                    _emit(createFullSnapshot())
+                    recorder['_flushBuffer']()
+                    expect(posthog.capture).toHaveBeenCalledWith('$snapshot', expect.any(Object), expect.any(Object))
+                    return vi.mocked(posthog.capture).mock.calls[0][1]!
+                }
+                const initial = flushSnapshot()
+                for (const key of keys) {
+                    expect(initial).not.toHaveProperty(key)
+                }
+                const options = recorder['_mutationThrottler']!['_options']
+                for (let count = 1; count <= 2; count++) {
+                    if (kind === 'attribute') {
+                        options.onDroppedAttributeMutations?.(3)
+                    } else {
+                        options.onDroppedOversizedMutation?.(2048)
+                    }
+                    const snapshot = flushSnapshot()
+                    const expected =
+                        kind === 'attribute'
+                            ? { $sdk_debug_replay_throttled_mutations_dropped: count * 3 }
+                            : {
+                                  $sdk_debug_replay_oversized_mutations_dropped: count,
+                                  $sdk_debug_replay_oversized_mutation_bytes_dropped: count * 2048,
+                              }
+                    expect(snapshot).toMatchObject(expected)
+                    for (const key of keys) {
+                        if (!(key in expected)) {
+                            expect(snapshot).not.toHaveProperty(key)
+                        }
+                        expect(recorder.sdkDebugProperties).not.toHaveProperty(key)
+                    }
+                }
+                recorder['_onSessionIdCallback']('new-session-id', 'new-window-id', { activityTimeout: true })
+                releaseInteractionHold()
+                const rotated = flushSnapshot()
+                for (const key of keys) {
+                    expect(rotated).not.toHaveProperty(key)
+                }
+            }
+        )
+
         it('resets rrweb max depth state on session change', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
