@@ -95,6 +95,10 @@ mis-owning every tool beyond it.
   `additionalProperties: false`, so the advertised schema cannot tell them apart; detection would have
   to read `_def.unknownKeys` off the registered schema, which is reachable only on the high-level path.
   Left as a separate follow-up.
+  **Update:** a low-level server can now supply the registered schema through `resolveOriginalTool`,
+  which resolves ownership per request without a listing, as the high-level path does. The strip
+  still requires positive ownership. The host's answer supplies that ownership, and the SDK never
+  replays a listing to get it.
 
 ## References
 

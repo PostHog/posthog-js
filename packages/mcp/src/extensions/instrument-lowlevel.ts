@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
+import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike } from '../types'
 import {
   buildFeedbackEventProperties,
   buildFeedbackIntent,
@@ -132,6 +132,7 @@ async function handleToolCallRequest(
     })
   }
 
+  const originalTool = resolveOriginalTool(data, toolName)
   return await captureToolCall({
     server,
     data,
@@ -139,7 +140,22 @@ async function handleToolCallRequest(
     extra,
     execute: (downstreamRequest: MCPRequestLike) =>
       runOriginalToolHandler(originalCallToolHandler, downstreamRequest, extra),
+    parameterOwnership: originalTool ? getAnalyticsParameterOwnership(originalTool.inputSchema) : undefined,
+    inputSchema: originalTool?.inputSchema,
   })
+}
+
+function resolveOriginalTool(
+  data: MCPAnalyticsData,
+  toolName: string | undefined
+): { inputSchema?: unknown } | undefined {
+  if (!toolName || !data.options.resolveOriginalTool) return undefined
+  try {
+    return data.options.resolveOriginalTool(toolName) ?? undefined
+  } catch (error) {
+    data.logger(`Warning: resolveOriginalTool failed for tool ${toolName} - ${error}`)
+    return undefined
+  }
 }
 
 function runOriginalToolHandler(
