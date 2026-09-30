@@ -523,7 +523,9 @@ function prepareRequest(
     // use timeOrigin if we really can't gather a start time
     const timestamp = Math.floor(timeOrigin + (start || 0))
 
-    const entryJSON = entry ? entry.toJSON() : { name: url }
+    // toJSON() keeps browser objects such as PerformanceServerTiming,
+    // and postMessage from a cross-origin iframe cannot clone them
+    const entryJSON = entry ? JSON.parse(JSON.stringify(entry.toJSON())) : { name: url }
 
     const requests: CapturedNetworkRequest[] = [
         {
