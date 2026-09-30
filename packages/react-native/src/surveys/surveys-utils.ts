@@ -175,6 +175,12 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backButtonText: 'Back',
 }
 
+// The confirmation message needs both the switch in PostHog and some header text. A survey with
+// the confirmation message turned off keeps its header text, so the text alone does not show it.
+export function shouldShowConfirmationMessage(appearance: SurveyAppearanceTheme): boolean {
+  return Boolean(appearance.displayThankYouMessage) && Boolean(appearance.thankYouMessageHeader)
+}
+
 export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'
 
 const KNOWN_SURVEY_POSITIONS: ReadonlySet<string> = new Set(Object.values(SurveyPosition))

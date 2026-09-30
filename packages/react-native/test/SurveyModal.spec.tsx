@@ -117,6 +117,13 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
   thankYouMessageHeader: '',
 }
 
+// The header text stays behind when the confirmation message is turned off in PostHog.
+const appearanceWithConfirmationOff: SurveyAppearanceTheme = {
+  ...defaultSurveyAppearance,
+  displayThankYouMessage: false,
+  thankYouMessageHeader: 'Thanks!',
+}
+
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
 const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
@@ -204,6 +211,30 @@ describe('SurveyModal close behavior', () => {
     // BUG: shouldShowConfirmation flips false, so Questions remounts with Q1.
     // After the fix the conditional branches on isSurveySent first → null.
     expect(queryByTestId('questions-stub')).toBeNull()
+  })
+
+  it('closes without a confirmation message when the survey turns it off', () => {
+    const onClose = vi.fn()
+    const { queryByTestId, getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithConfirmationOff}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(queryByTestId('confirmation-stub')).toBeNull()
+
+    act(() => {
+      vi.runAllTimers()
+    })
+    expect(onClose).toHaveBeenCalledWith(true, {})
   })
 
   it('hides content immediately when the cancel button is pressed', () => {
