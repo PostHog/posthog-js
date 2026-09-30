@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.2
+
+### Patch Changes
+
+- [#5144](https://github.com/PostHog/posthog-js/pull/5144) [`bd66cee`](https://github.com/PostHog/posthog-js/commit/bd66ceef9ed5308f63e64a3f3058ae6e2298dbdf) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce replay debug properties on captured events while preserving recording status and capture diagnostics. Report cumulative mutation-drop counts and dropped bytes on `$snapshot` events only when greater than zero.
+  (2026-09-30)
+
 ## 1.435.1
 
 ### Patch Changes
