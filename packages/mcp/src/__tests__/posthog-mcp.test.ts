@@ -86,6 +86,11 @@ describe('PostHogMCP', () => {
     const client = newClient({ serverBuild: 'abc123' })
     try {
       client.capture({ distinctId: 'user-123', event: 'custom event', properties: { existing: true } })
+      client.capture({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: undefined },
+      })
       await client.captureImmediate({
         distinctId: 'user-123',
         event: 'immediate event',
@@ -96,6 +101,11 @@ describe('PostHogMCP', () => {
         distinctId: 'user-123',
         event: 'custom event',
         properties: { existing: true, $mcp_server_build: 'abc123' },
+      })
+      expect(captureEvent).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: 'abc123' },
       })
       expect(captureImmediate).toHaveBeenCalledWith({
         distinctId: 'user-123',

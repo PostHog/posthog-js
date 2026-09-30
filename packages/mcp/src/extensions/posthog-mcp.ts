@@ -518,8 +518,9 @@ export class PostHogMCP extends PostHog {
     return {
       ...event,
       properties: {
-        [PostHogMCPAnalyticsProperty.ServerBuild]: this.#serverBuild,
         ...event.properties,
+        [PostHogMCPAnalyticsProperty.ServerBuild]:
+          event.properties?.[PostHogMCPAnalyticsProperty.ServerBuild] ?? this.#serverBuild,
       },
     }
   }
