@@ -1,5 +1,17 @@
 # posthog-ai
 
+## 8.13.4
+
+### Patch Changes
+
+- [#5113](https://github.com/PostHog/posthog-js/pull/5113) [`41f1243`](https://github.com/PostHog/posthog-js/commit/41f1243882210095a5841460a73b76c70708f96d) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Anthropic streaming tool call arguments when a thinking or server tool block precedes the tool call.
+  (2026-09-30)
+
+- [#5056](https://github.com/PostHog/posthog-js/pull/5056) [`9ddb74c`](https://github.com/PostHog/posthog-js/commit/9ddb74c7804e7f850d46c2087ce97e2244c21da9) Thanks [@brandon-julio-t](https://github.com/brandon-julio-t)! - Fix missing cache-read and cache-write token reporting in OpenAI Agents traces.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
 ## 8.13.3
 
 ### Patch Changes
