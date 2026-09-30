@@ -135,7 +135,9 @@ jobs:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.affected.outputs.is-affected == 'true'
     permissions:
       contents: read
-      pull-requests: write
+    outputs:
+      has_failures: ${{ steps.process-results.outputs.has_failures }}
+      failed_tests: ${{ steps.process-results.outputs.failed_tests }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -225,8 +227,28 @@ jobs:
           fi
           report_failures "$FAILED_TESTS"
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-compat-report
+          path: packages/browser/playwright-report/
+          retention-days: 30
+
+  compat-comment:
+    name: Comment on backward compatibility results
+    needs: compat
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-22.04
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Find existing compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        if: ${{ needs.compat.outputs.has_failures == 'true' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-comment
         with:
@@ -235,7 +257,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Create or update compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        if: ${{ needs.compat.outputs.has_failures == 'true' }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
@@ -252,7 +274,7 @@ jobs:
             - ⚠️ A breaking change that affects users with cached old versions (needs investigation)
 
             ### Failed Tests
-            ${{ steps.process-results.outputs.failed_tests }}
+            ${{ needs.compat.outputs.failed_tests }}
 
             <details>
             <summary>What does this mean?</summary>
@@ -282,7 +304,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        if: ${{ needs.compat.outputs.has_failures == 'false' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -291,7 +313,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Remove outdated comment
-        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        if: ${{ steps.find-passing-comment.outputs.comment-id != '' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
@@ -302,13 +324,6 @@ jobs:
               repo: context.repo.repo,
               comment_id: process.env.COMMENT_ID
             })
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-compat-report
-          path: packages/browser/playwright-report/
-          retention-days: 30
 
   functional:
     permissions:
