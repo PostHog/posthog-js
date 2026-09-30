@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.3
+
+### Patch Changes
+
+- [#5151](https://github.com/PostHog/posthog-js/pull/5151) [`512d4c7`](https://github.com/PostHog/posthog-js/commit/512d4c77747b4b436104d746e8ed160680cda176) Thanks [@arnohillen](https://github.com/arnohillen)! - Require posthog-ios 3.86.1 and posthog-android 3.71.4, which stop session replay when the project is over its mobile session replay quota
+  (2026-09-30)
+
 ## 2.12.2
 
 ### Patch Changes
