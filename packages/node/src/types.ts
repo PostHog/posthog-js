@@ -230,8 +230,12 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
-  // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
-  featureFlagsPollingInterval?: number
+  /**
+   * The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
+   * Set to null to disable automatic polling. Definitions are still loaded on initialization;
+   * call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.
+   */
+  featureFlagsPollingInterval?: number | null
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
