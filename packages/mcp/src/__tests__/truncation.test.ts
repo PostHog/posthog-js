@@ -399,6 +399,26 @@ describe('truncateEvent - size targeting', () => {
     expect(size).toBeLessThanOrEqual(102_400)
   })
 
+  it('falls through to last-resort truncation when the depth-1 reduction is still oversized', () => {
+    // A sibling object gives the field nesting above 1, so the loop reaches depth 1
+    // before giving up; four oversized strings keep it over budget even there.
+    const event = makeEvent({
+      parameters: {
+        a: 'x'.repeat(60_000),
+        b: 'y'.repeat(60_000),
+        c: 'z'.repeat(60_000),
+        d: 'w'.repeat(60_000),
+        nested: { deeper: 'value' },
+      },
+    })
+    const result = truncateEvent(event)
+
+    expect(jsonBytes(result)).toBeLessThanOrEqual(MAX_EVENT_BYTES)
+    // Confirms the depth-1 reduction ran (and its result carried through to the
+    // last-resort step) rather than the last resort truncating the raw event.
+    expect((result.parameters as any).nested).toBe('[Object]')
+  })
+
   it('should guarantee 100KB max for pathological payloads', () => {
     // Wide + deep + large strings
     const wide: Record<string, string> = {}
