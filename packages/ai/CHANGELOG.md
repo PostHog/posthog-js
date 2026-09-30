@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.13.3
+
+### Patch Changes
+
+- [#5088](https://github.com/PostHog/posthog-js/pull/5088) [`882606d`](https://github.com/PostHog/posthog-js/commit/882606dc43831c9683e528f28feb699532d3f7d7) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool calls and results in captured generation input
+  (2026-09-30)
+
 ## 8.13.2
 
 ### Patch Changes
