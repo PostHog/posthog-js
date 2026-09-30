@@ -1996,6 +1996,56 @@ describe('Lazy SessionRecording', () => {
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
 
+                it('ships a held epoch born from reset() on a clean unload', () => {
+                    // same order as posthog.reset() in posthog-core
+                    sessionIdGeneratorMock.mockImplementation(() => 'reset-born-session-id')
+                    const resetTimestamp = startingTimestamp + 1000
+                    vi.useFakeTimers().setSystemTime(new Date(resetTimestamp))
+                    sessionRecording.flushBeforeIdentityReset()
+                    sessionManager.resetSessionId()
+                    sessionManager.checkAndGetSessionAndWindowId(false, resetTimestamp)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'reset-born-session-id'
+                    )
+                    ;(posthog.capture as Mock).mockClear()
+
+                    const snapshot = emitInactiveEvent(resetTimestamp + 100, 'unknown')
+                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: 'reset-born-session-id',
+                            $snapshot_data: expect.arrayContaining([snapshot]),
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('discards a held epoch born from a forced idle reset on unload', () => {
+                    // the idle timer also clears the session id and reports noSessionId, but it
+                    // repeats on an untouched tab
+                    const idleSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                    sessionIdGeneratorMock.mockImplementation(() => 'forced-idle-born-session-id')
+                    const resetTimestamp = startingTimestamp + 1000
+                    vi.useFakeTimers().setSystemTime(new Date(resetTimestamp))
+                    sessionManager.resetSessionId()
+                    sessionManager['_eventEmitter'].emit('forcedIdleReset', { idleSessionId })
+                    sessionManager.checkAndGetSessionAndWindowId(false, resetTimestamp)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'forced-idle-born-session-id'
+                    )
+                    ;(posthog.capture as Mock).mockClear()
+
+                    emitInactiveEvent(resetTimestamp + 100, 'unknown')
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                })
+
                 it('holds a fresh start after stop until interaction, then ships', () => {
                     const rotationTimestamp = rotateExternallyWhileUnknown()
                     emitInactiveEvent(rotationTimestamp + 100, 'unknown')
