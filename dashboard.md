@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5154](https://github.com/PostHog/posthog-js/issues/5154) | Valid @posthog/ai capture-policy enhancement, complementary to—not a duplicate of—the Gemini-focused PR #5088. | feature, enhancement, node, team/ai-observability |  | no | 2026-09-30T05:53:47.480Z |
 | PostHog/posthog-js | [issue 5148](https://github.com/PostHog/posthog-js/issues/5148) | Confirmed session-replay recorder bug: a cross-origin navigation can leave `observeAttachShadow` reading `contentWindow.Element` without the existing `SecurityError` containment. | feature/replay, javascript, needs-to-be-contributed-back, bug |  | no | 2026-09-29T18:05:28.636Z |
 | PostHog/posthog-js | [issue 1583](https://github.com/PostHog/posthog-js/issues/1583) | Confirmed browser SDK feature gap: failed events are retried only in memory and are not durable across a page/app restart. | enhancement, feature, web, javascript, team/client-libraries |  | no | 2026-09-29T08:40:47.818Z |
 | PostHog/posthog-js | [issue 5137](https://github.com/PostHog/posthog-js/issues/5137) | Confirmed React Native accessibility bug; the proposed localization prop is a reasonable public API shape but needs maintainer agreement before an external contribution. | react-native, feature/mobile, feature/surveys, team/client-libraries, iOS, Android, bug |  | no | 2026-09-28T15:47:24.429Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2673](https://github.com/PostHog/posthog-js/issues/2673) | Keep open as a broad browser SDK v2 planning feature, not a small fix. | enhancement, feature, web, feature/replay, feature/product-analytics |  | no | 2026-06-25T09:34:21.201Z |
 | PostHog/posthog-js | [issue 2501](https://github.com/PostHog/posthog-js/issues/2501) | Confirmed bug: canRenderSurveyAsync bypasses event/action display-condition checks for surveys. | feature/surveys, web |  | no | 2026-06-25T09:32:02.221Z |
 | PostHog/posthog-js | [issue 3968](https://github.com/PostHog/posthog-js/issues/3968) | Valid Nuxt typing bug: posthogConfig is not registered in Nuxt schema types. | nuxt | https://github.com/PostHog/posthog-js/pull/3969 | no | 2026-06-25T09:19:15.035Z |
-| PostHog/posthog-js | [issue 3957](https://github.com/PostHog/posthog-js/issues/3957) | Valid bug: the Convex polling interval env var is read too early to affect the registered cron schedule. | feature/flags, team/feature-flags |  | no | 2026-06-24T19:00:08.577Z |
