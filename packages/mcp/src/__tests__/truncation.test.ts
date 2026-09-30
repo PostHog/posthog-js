@@ -1,5 +1,5 @@
 import { sanitizeEvent } from '../extensions/sanitization'
-import { normalize, truncateEvent } from '../extensions/truncation'
+import { MAX_EVENT_BYTES, normalize, truncateEvent } from '../extensions/truncation'
 import type { Event, StackFrame } from '../types'
 
 describe('normalize - string truncation', () => {
@@ -181,6 +181,19 @@ describe('normalize - undefined property handling', () => {
   })
 })
 
+function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length
+}
+
+/** Each level holds `text` under `data`, so keeping `depth` levels keeps `depth` copies of it. */
+function chainOf(levels: number, text: string): Record<string, unknown> {
+  let chain: Record<string, unknown> = { data: text }
+  for (let level = 1; level < levels; level++) {
+    chain = { data: text, next: chain }
+  }
+  return chain
+}
+
 // --- truncateEvent tests ---
 
 function makeEvent(overrides: Partial<Event> = {}): Event {
@@ -352,6 +365,27 @@ describe('truncateEvent - size targeting', () => {
 
     const size = new TextEncoder().encode(JSON.stringify(result)).length
     expect(size).toBeLessThanOrEqual(102_400)
+  })
+
+  it.each([
+    ['a deep chain', { parameters: chainOf(6, 'x'.repeat(30_000)) }, 3],
+    ['wide rows', { parameters: { rows: Array.from({ length: 100 }, () => ({ text: 'y'.repeat(1_500) })) } }, 2],
+    [
+      'a shallow field next to a deep one',
+      {
+        parameters: { rows: Array.from({ length: 100 }, () => ({ text: 'p'.repeat(300) })) },
+        response: chainOf(6, 'r'.repeat(20_000)),
+      },
+      3,
+    ],
+  ])('keeps the deepest depth that fits for %s', (_, fields: Partial<Event>, depth) => {
+    const result = truncateEvent(makeEvent(fields))
+
+    expect(jsonBytes(result)).toBeLessThanOrEqual(MAX_EVENT_BYTES)
+    expect(result.parameters).toEqual(normalize(fields.parameters, depth))
+    if (fields.response) {
+      expect(result.response).toEqual(normalize(fields.response, depth))
+    }
   })
 
   it('should truncate largest string fields as last resort', () => {
