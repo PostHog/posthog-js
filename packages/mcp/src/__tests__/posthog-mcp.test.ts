@@ -80,7 +80,7 @@ describe('PostHogMCP', () => {
     expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
   })
 
-  it('adds the authoritative server build to inherited capture methods', async () => {
+  it('adds the configured server build when inherited capture events do not provide one', async () => {
     const captureEvent = vi.spyOn(PostHog.prototype, 'capture').mockImplementation(() => undefined)
     const captureImmediate = vi.spyOn(PostHog.prototype, 'captureImmediate').mockResolvedValue(undefined)
     const client = newClient({ serverBuild: 'abc123' })
@@ -100,7 +100,7 @@ describe('PostHogMCP', () => {
       expect(captureImmediate).toHaveBeenCalledWith({
         distinctId: 'user-123',
         event: 'immediate event',
-        properties: { $mcp_server_build: 'abc123' },
+        properties: { $mcp_server_build: 'custom-build' },
       })
     } finally {
       await client.shutdown()
