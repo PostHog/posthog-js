@@ -4187,16 +4187,33 @@ export class PostHog implements PostHogInterface {
             extend(this.config, configRenames(config))
 
             const isPersistenceDisabled = this._is_persistence_disabled()
-            this.persistence?.update_config(this.config, oldConfig, isPersistenceDisabled)
-            this.sessionPersistence =
-                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
-                    ? this.persistence
-                    : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
-                      new PostHogPersistence(
-                          { ...this.config, persistence: 'sessionStorage' },
-                          isPersistenceDisabled,
-                          false
-                      )
+            // _init creates persistence after applying the initial configuration.
+            if (this.persistence) {
+                const sharesPersistence =
+                    this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
+                if (sharesPersistence && this.sessionPersistence !== this.persistence) {
+                    // Finish the outgoing store's writes before migrating the primary into its backend.
+                    this.sessionPersistence?.flush()
+                    this.sessionPersistence?.destroy()
+                }
+                this.persistence.update_config(this.config, oldConfig, isPersistenceDisabled)
+                if (sharesPersistence) {
+                    this.sessionPersistence = this.persistence
+                } else if (this.sessionPersistence === this.persistence) {
+                    // Leaving a shared backend requires a separate sessionStorage store.
+                    this.sessionPersistence = new PostHogPersistence(
+                        { ...this.config, persistence: 'sessionStorage' },
+                        isPersistenceDisabled,
+                        false
+                    )
+                } else {
+                    this.sessionPersistence?.update_config(
+                        { ...this.config, persistence: 'sessionStorage' },
+                        { ...oldConfig, persistence: 'sessionStorage' },
+                        isPersistenceDisabled
+                    )
+                }
+            }
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
@@ -4730,10 +4747,7 @@ export class PostHog implements PostHogInterface {
         if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
-        if (persistenceDisabled) {
-            this._sessionRegisteredPropKeys.clear()
-            this._persistSessionRegisteredPropKeys()
-        }
+        this._persistSessionRegisteredPropKeys()
         return persistenceDisabled
     }
 

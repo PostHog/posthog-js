@@ -358,6 +358,68 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('referrer1.example.com')
             })
 
+            describe('attribution across page reloads', () => {
+                beforeEach(() => {
+                    vi.useFakeTimers()
+                })
+
+                afterEach(() => {
+                    vi.clearAllTimers()
+                    vi.useRealTimers()
+                })
+
+                it.each<Partial<PostHogConfig>>([
+                    { persistence_save_debounce_ms: 0, split_storage: false },
+                    { persistence_save_debounce_ms: 0, split_storage: true },
+                    { persistence_save_debounce_ms: 250, split_storage: false },
+                    { persistence_save_debounce_ms: 250, split_storage: true },
+                    { defaults: '2026-05-30' },
+                ])('preserves session attribution after reinitialization with %j', (persistenceConfig) => {
+                    const persistenceName = uuidv7()
+                    const config: Partial<PostHogConfig> = {
+                        persistence: 'localStorage+cookie',
+                        persistence_name: persistenceName,
+                        capture_pageview: false,
+                        autocapture: false,
+                        disable_session_recording: true,
+                        advanced_disable_flags: true,
+                        ...persistenceConfig,
+                    }
+                    const expectedProperties = {
+                        $referrer: 'https://www.google.com/search?q=analytics',
+                        $referring_domain: 'www.google.com',
+                        $search_engine: 'google',
+                        utm_source: 'newsletter',
+                        gclid: 'test-click-id',
+                        signup_flow: 'campaign',
+                    }
+                    mockReferrer.mockReturnValue(expectedProperties.$referrer)
+                    mockURL.mockReturnValue('https://example.com/?utm_source=newsletter&gclid=test-click-id')
+                    const firstPage = setup(config)
+                    firstPage.beforeSendMock.mockReturnValue(null)
+                    firstPage.posthog.register_for_session({ signup_flow: 'campaign' })
+                    firstPage.posthog.capture('landing')
+                    expect(firstPage.beforeSendMock.mock.calls[0][0].properties).toMatchObject(expectedProperties)
+
+                    // Finish the first page's writes before simulating a reload with the same storage.
+                    vi.advanceTimersByTime(250)
+                    const storageKey = `ph_${persistenceName}`
+                    expect(JSON.parse(sessionStorage.getItem(storageKey)!)).toMatchObject(expectedProperties)
+
+                    mockURL.mockReturnValue('https://example.com/checkout/return')
+                    mockReferrer.mockReturnValue('https://checkout.stripe.com/')
+                    const returningPage = setup(config)
+                    returningPage.beforeSendMock.mockReturnValue(null)
+                    returningPage.posthog.capture('subscription_created')
+
+                    expect
+                        .soft(returningPage.beforeSendMock.mock.calls[0][0].properties)
+                        .toMatchObject(expectedProperties)
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(storageKey)!)).toMatchObject(expectedProperties)
+                })
+            })
+
             it('should use the new referrer in a new session', () => {
                 // arrange
                 const token = uuidv7()
@@ -1320,6 +1382,35 @@ describe('posthog core', () => {
 
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
             expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+        })
+
+        it('clears debounced session properties on activity timeout without replacing the store', async () => {
+            vi.useFakeTimers()
+            try {
+                const token = uuidv7()
+                const posthog = await createPosthogInstance(token, {
+                    persistence: 'localStorage',
+                    persistence_save_debounce_ms: 250,
+                    capture_pageview: false,
+                })
+                posthog.capture('landing')
+                const sessionId = posthog.get_session_id()
+                const sessionPersistence = posthog.sessionPersistence
+                posthog.register_for_session({ signup_flow: 'campaign' })
+                vi.advanceTimersByTime(250)
+
+                vi.setSystemTime(Date.now() + 31 * 60 * 1000)
+                posthog.capture('returned after timeout')
+
+                expect(posthog.get_session_id()).not.toBe(sessionId)
+                expect(posthog.sessionPersistence).toBe(sessionPersistence)
+                expect(posthog.sessionPersistence?.props.signup_flow).toBeUndefined()
+                vi.advanceTimersByTime(250)
+                expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).not.toHaveProperty('signup_flow')
+            } finally {
+                vi.clearAllTimers()
+                vi.useRealTimers()
+            }
         })
 
         it('does not collide with user-provided session property names', async () => {
