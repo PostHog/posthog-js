@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/5187": {
+    "key": "PostHog/posthog-js/issue/5187",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5187",
+    "url": "https://github.com/PostHog/posthog-js/issues/5187",
+    "conclusion": "Valid AI-observability integration request, but the TypeSafe AI client contract and Jev response metadata must be confirmed before designing a public wrapper.",
+    "labels": [
+      "feature",
+      "team/ai-observability",
+      "enhancement"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-01T20:37:02.849Z"
+  },
   "PostHog/posthog-js/issue/5184": {
     "key": "PostHog/posthog-js/issue/5184",
     "repo": "PostHog/posthog-js",
@@ -2905,21 +2919,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-26T09:35:48.612Z"
-  },
-  "PostHog/posthog-js/issue/2151": {
-    "key": "PostHog/posthog-js/issue/2151",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2151",
-    "url": "https://github.com/PostHog/posthog-js/issues/2151",
-    "conclusion": "Valid React Native Android session replay feature gap; not a small/surgical fix.",
-    "labels": [
-      "enhancement",
-      "feature/replay",
-      "feature/mobile",
-      "react-native",
-      "Android"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-26T09:32:59.138Z"
   }
 }
