@@ -124,6 +124,11 @@ const appearanceWithConfirmationOff: SurveyAppearanceTheme = {
   thankYouMessageHeader: 'Thanks!',
 }
 
+// A survey saved without the setting leaves no value, or a null, in its place. The theme type
+// says boolean, so these cases need a cast to build.
+const withConfirmationSetting = (value: boolean | null | undefined): SurveyAppearanceTheme =>
+  ({ ...appearanceWithThankYou, displayThankYouMessage: value }) as unknown as SurveyAppearanceTheme
+
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
 const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
@@ -213,13 +218,16 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('questions-stub')).toBeNull()
   })
 
-  it('closes without a confirmation message when the survey turns it off', () => {
+  it.each([
+    ['the survey turns it off', appearanceWithConfirmationOff],
+    ['the survey has no header text', appearanceWithoutThankYou],
+  ])('closes without a confirmation message when %s', (_case, appearance) => {
     const onClose = vi.fn()
     const { queryByTestId, getByTestId } = render(
       <SurveyModal
         survey={baseSurvey}
         surveyLanguage={null}
-        appearance={appearanceWithConfirmationOff}
+        appearance={appearance}
         onShow={() => {}}
         onClose={onClose}
       />
@@ -234,7 +242,36 @@ describe('SurveyModal close behavior', () => {
     act(() => {
       vi.runAllTimers()
     })
+    // Submitted, so the parent records a completed survey rather than a dismissal.
+    expect(onClose).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledWith(true, {})
+  })
+
+  it.each([
+    ['unset', undefined],
+    ['null', null],
+  ])('keeps the confirmation message when the setting is %s', (_case, setting) => {
+    const onClose = vi.fn()
+    const { queryByTestId, getByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={withConfirmationSetting(setting)}
+        onShow={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+
+    act(() => {
+      vi.runAllTimers()
+    })
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('hides content immediately when the cancel button is pressed', () => {
