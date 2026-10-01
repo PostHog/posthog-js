@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/5177": {
+    "key": "PostHog/posthog-js/issue/5177",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5177",
+    "url": "https://github.com/PostHog/posthog-js/issues/5177",
+    "conclusion": "Confirmed React Native survey accessibility bug; a small localized fix is appropriate.",
+    "labels": [
+      "feature/surveys",
+      "react-native",
+      "iOS",
+      "Android",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-01T10:40:21.497Z"
+  },
   "PostHog/posthog-js/issue/5178": {
     "key": "PostHog/posthog-js/issue/5178",
     "repo": "PostHog/posthog-js",
@@ -28,24 +45,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-10-01T10:38:18.020Z"
-  },
-  "PostHog/posthog-js/issue/5177": {
-    "key": "PostHog/posthog-js/issue/5177",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 5177",
-    "url": "https://github.com/PostHog/posthog-js/issues/5177",
-    "conclusion": "Confirmed React Native survey accessibility bug; a small, localized fix is appropriate.",
-    "labels": [
-      "feature/surveys",
-      "react-native",
-      "iOS",
-      "Android",
-      "team/client-libraries",
-      "bug"
-    ],
-    "prUrl": "https://github.com/PostHog/posthog-js/pull/5180",
-    "closed": false,
-    "updatedAt": "2026-10-01T10:06:40.236Z"
   },
   "PostHog/posthog-js/issue/5166": {
     "key": "PostHog/posthog-js/issue/5166",
