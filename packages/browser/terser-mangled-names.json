@@ -584,6 +584,7 @@
         "_onOnline",
         "_onOptOut",
         "_onPageHide",
+        "_onPageShow",
         "_onReady",
         "_onReconnect",
         "_onRemoteConfig",
