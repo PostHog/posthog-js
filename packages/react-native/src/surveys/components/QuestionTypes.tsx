@@ -415,6 +415,8 @@ export function MultipleChoiceQuestion({
                   }
                   if (isOpenChoice && (!allowMultiple || !isSelected)) {
                     openEndedInputRef.current?.focus()
+                  } else {
+                    openEndedInputRef.current?.blur()
                   }
                 }}
               >
@@ -434,7 +436,6 @@ export function MultipleChoiceQuestion({
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
                   style={styles.openEndedInput}
                   onFocus={selectOpenChoice}
-                  onPressIn={selectOpenChoice}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
                     if (!isSelected) {

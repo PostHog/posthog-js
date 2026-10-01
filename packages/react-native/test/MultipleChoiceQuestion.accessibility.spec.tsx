@@ -26,12 +26,11 @@ vi.mock('react-native', async (importOriginal) => ({
   TouchableOpacity: ({ children, onPress, disabled }: TouchableOpacityProps) =>
     React.createElement('button', { onClick: onPress, disabled }, children),
   TextInput: (await import('react')).forwardRef<HTMLInputElement, TextInputProps>(
-    ({ accessibilityLabel, onChangeText, onFocus, onPressIn }, ref) =>
+    ({ accessibilityLabel, onChangeText, onFocus }, ref) =>
       React.createElement('input', {
         ref,
         'aria-label': accessibilityLabel,
         onFocus,
-        onMouseDown: onPressIn,
         onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText?.(event.target.value),
       })
   ),
@@ -49,7 +48,7 @@ afterEach(cleanup)
 
 describe('open choice accessibility', () => {
   it.each([SurveyQuestionType.SingleChoice, SurveyQuestionType.MultipleChoice] as const)(
-    'reselects a draft by pressing the input while it is still focused for %s',
+    'blurs the input when another choice is pressed so focusing it reselects the draft for %s',
     (type) => {
       const onSubmit = vi.fn()
       const { getByRole } = render(
@@ -65,11 +64,10 @@ describe('open choice accessibility', () => {
       act(() => input.focus())
       fireEvent.change(input, { target: { value: 'Search' } })
       fireEvent.click(getByRole(role, { name: type === SurveyQuestionType.SingleChoice ? 'Speed' : 'Other' }))
-      expect(document.activeElement).toBe(input)
+      expect(document.activeElement).not.toBe(input)
       expect(getByRole(role, { name: 'Other', checked: false })).toBeTruthy()
-      fireEvent.mouseDown(input)
+      act(() => input.focus())
       expect(getByRole(role, { name: 'Other', checked: true })).toBeTruthy()
-      fireEvent.mouseDown(input)
       fireEvent.click(getByRole('button', { name: 'Submit' }))
       expect(onSubmit).toHaveBeenCalledWith(type === SurveyQuestionType.SingleChoice ? 'Search' : ['Speed', 'Search'])
     }
