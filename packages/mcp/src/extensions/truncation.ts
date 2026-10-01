@@ -20,7 +20,7 @@ const MAX_STACK_FRAMES = 50
 const MAX_CONTENT_TEXT_LENGTH = 32_768
 
 // --- Truncation markers ---
-const TRUNCATION_SUFFIX = '...'
+export const TRUNCATION_SUFFIX = '...'
 
 type MutableEvent = Partial<Event | McpEvent> & Record<string, unknown>
 type MutableRecord = Record<string, unknown>

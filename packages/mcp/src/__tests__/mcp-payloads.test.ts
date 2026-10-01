@@ -1,4 +1,9 @@
-import { buildCapturedMcpParameters, redactPii, sanitizeCapturedValue } from '../extensions/mcp-payloads'
+import {
+  buildCapturedMcpParameters,
+  redactPii,
+  sanitizeCapturedValue,
+  sanitizeFreeTextValue,
+} from '../extensions/mcp-payloads'
 
 describe('buildCapturedMcpParameters', () => {
   it('captures useful tool-call inputs without transport internals or duplicated intent', () => {
@@ -370,19 +375,19 @@ describe('URL credential redaction', () => {
     // A fragment is itself a URL whose fragment is itself a URL: descending
     // would recurse once per `#`. Depth is capped at two, so the third level is
     // dropped whole.
-    ['a fragment nested once per `#`', `${'resource:x#'.repeat(10_000)}intro`, 'resource:x#resource:x#[redacted]'],
+    ['a fragment nested once per `#`', `${'resource:x#'.repeat(5_900)}intro`, 'resource:x#resource:x#[redacted]'],
     // Fields opened once, then thousands of addresses: deciding value position by
     // scanning backwards made every one of them walk to the same `?`.
     [
       'addresses run together after a query opens',
-      `https://a.test/?${'https://b.test/x,'.repeat(4_000)}`,
-      `https://a.test/?${'https://b.test/x,'.repeat(4_000)}`,
+      `https://a.test/?${'https://b.test/x,'.repeat(3_800)}`,
+      `https://a.test/?${'https://b.test/x,'.repeat(3_800)}`,
     ],
     // Addresses run together: one pass over every piece, not one frame each.
     [
       'addresses run together without whitespace',
-      `${'https://a.test/x,'.repeat(10_000)}https://fakeuser:fakepass@b.test/doc`,
-      `${'https://a.test/x,'.repeat(10_000)}https://%5Bredacted%5D@b.test/doc`,
+      `${'https://a.test/x,'.repeat(3_800)}https://fakeuser:fakepass@b.test/doc`,
+      `${'https://a.test/x,'.repeat(3_800)}https://%5Bredacted%5D@b.test/doc`,
     ],
   ])('sanitizes %s in one pass over the value', (_label, value, expected) => {
     const start = Date.now()
@@ -396,11 +401,9 @@ describe('URL credential redaction', () => {
     // that does *not* end the match, so every start position backtracks through
     // it — ~40ms per URL, and a captured string can hold many. Each URL here
     // stays under `MAX_URL_LENGTH` so the length bound does not short-circuit it.
-    const pathological = Array(50)
-      .fill(`https://example.com/${'.'.repeat(8_000)}a`)
-      .join(' ')
+    const pathological = Array(50).fill(`https://example.com/${'.'.repeat(8_000)}a`)
     const start = Date.now()
-    expect(sanitizeCapturedValue(pathological)).toBe(pathological)
+    expect(sanitizeCapturedValue(pathological)).toEqual(pathological)
     expect(Date.now() - start).toBeLessThan(1000)
   })
 })
@@ -509,5 +512,29 @@ describe('redactPii', () => {
     const start = Date.now()
     expect(redactPii(pathological)).toBe(pathological)
     expect(Date.now() - start).toBeLessThan(1000)
+  })
+})
+
+describe('sanitizing strings longer than truncation keeps', () => {
+  const WINDOW = 65_536
+  const token = 'phc_123456789012345678901234567890'
+  const filler = (length: number): string => 'lorem ipsum '.repeat(Math.ceil(length / 12)).slice(0, length)
+
+  it.each([
+    ['plain text', filler(5_000_000), `${filler(WINDOW)}...`],
+    ['a token cut at the window edge', filler(WINDOW - 28) + token, `${filler(WINDOW - 28)}[redacted]...`],
+    [
+      'a credential URL cut at the window edge',
+      `${filler(WINDOW - 40)}https://example.com/?api_key=secretsecretsecretsecret more`,
+      `${filler(WINDOW - 40)}https://example.com/?api_key=%5Bredacted%5D...`,
+    ],
+    [
+      'an attachment',
+      Buffer.alloc(3_000_000, 7).toString('base64'),
+      '[binary data redacted - not supported by PostHog MCP analytics]',
+    ],
+  ])('scans only the window truncation can keep: %s', (_case, value, expected) => {
+    expect(sanitizeCapturedValue(value)).toBe(expected)
+    expect(sanitizeFreeTextValue(value)).toBe(expected)
   })
 })

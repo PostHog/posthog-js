@@ -3,6 +3,8 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
+import { MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
+
 const CONTEXT_ARGUMENT_NAME = 'context'
 const REDACTED_VALUE = '[redacted]'
 const BINARY_REDACTED_VALUE = '[binary data redacted - not supported by PostHog MCP analytics]'
@@ -12,6 +14,10 @@ const BASE64URL_SPECIFIC_CHAR_PATTERN = /[-_]/
 const BASE64_DATA_URL_PREFIX_PATTERN = /^data:[^,\s]*;base64,/i
 const BASE64_DATA_URL_PAYLOAD_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/
 const SIZE_GATE = 10_240
+// Twice what truncation keeps, so a token or URL straddling truncation's cut is
+// still whole when the patterns run, and redactions shrinking the head cannot
+// pull unscanned text back under the cut.
+const MAX_SCANNED_LENGTH = 2 * MAX_STRING_LENGTH
 const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
@@ -503,8 +509,21 @@ function redactUrls(value: string): string {
   return sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
 }
 
+/**
+ * Runs `redact` over only the head of `value` that truncation can keep, so a
+ * multi-megabyte tool result costs the same to sanitize as the part captured.
+ */
+function redactCapturedHead(value: string, redact: (value: string) => string): string {
+  if (value.length <= MAX_SCANNED_LENGTH) {
+    return redact(value)
+  }
+  return redact(value.slice(0, MAX_SCANNED_LENGTH)) + TRUNCATION_SUFFIX
+}
+
 function sanitizeString(value: string): string {
-  return isBinaryBlob(value) ? BINARY_REDACTED_VALUE : redactUrls(redactCredentials(value))
+  return isBinaryBlob(value)
+    ? BINARY_REDACTED_VALUE
+    : redactCapturedHead(value, (head) => redactUrls(redactCredentials(head)))
 }
 
 /**
@@ -523,7 +542,7 @@ export function sanitizeFreeText(value: string): string {
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  return redactUrls(redactPii(redactCredentials(value)))
+  return redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))))
 }
 
 function passesLuhn(digits: string): boolean {
