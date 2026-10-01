@@ -323,6 +323,11 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
  * addresses together, because every one of them scanned back to the same `?`.
  */
 function findEmbeddedAuthorityIndexes(value: string): number[] {
+  // The search tries up to 64 scheme characters at every position, which a long
+  // base64 `data:` URI turns into seconds; without `://` it cannot match at all.
+  if (!value.includes('://')) {
+    return []
+  }
   const starts = [...value.matchAll(URL_AUTHORITY_SEARCH_ALL)].map((match) => match.index)
   const indexes: number[] = []
   const delimiters = { query: false, fragment: false, fragmentQuery: false }
