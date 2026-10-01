@@ -521,12 +521,12 @@ describe('sanitizing strings longer than truncation keeps', () => {
   const filler = (length: number): string => 'lorem ipsum '.repeat(Math.ceil(length / 12)).slice(0, length)
 
   it.each([
-    ['plain text', filler(5_000_000), `${filler(WINDOW)}...`],
-    ['a token cut at the window edge', filler(WINDOW - 32) + token, `${filler(WINDOW - 32)}[redacted]...`],
+    ['plain text', filler(5_000_000), `${filler(WINDOW - 2)}...`],
+    ['a token cut at the window edge', filler(WINDOW - 32) + token, `${filler(WINDOW - 32)}...`],
     [
       'a credential URL cut at the window edge',
       `${filler(WINDOW - 44)}https://example.com/?api_key=secretsecretsecretsecret more`,
-      `${filler(WINDOW - 44)}https://example.com/?api_key=%5Bredacted%5D...`,
+      `${filler(WINDOW - 44)}...`,
     ],
     [
       'an attachment',
@@ -538,6 +538,17 @@ describe('sanitizing strings longer than truncation keeps', () => {
       'tokens with one cut at the window edge',
       `${filler(12)}a. ${`${token} `.repeat(4_000)}and more`,
       `${filler(12)}a. ${'[redacted] '.repeat(4_000)}and more`,
+    ],
+    // A URL running past the head is judged whole: its credentials and field count can sit beyond the cut.
+    [
+      'a URL whose credentials sit past the head',
+      `${filler(996)}https:secretuser${'a'.repeat(WINDOW)}@localhost/path`,
+      `${filler(996)}https://%5Bredacted%5D@localhost/path`,
+    ],
+    [
+      'a URI whose field count passes the limit past the head',
+      `${filler(996)}resource:private/${'p'.repeat(WINDOW)}?${'a=1&'.repeat(200)}`,
+      `${filler(996)}[redacted]`,
     ],
     [
       'pre-signed URLs',

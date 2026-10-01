@@ -39,6 +39,8 @@ const SENSITIVE_KEY_PATTERN =
 // harmless: a match with nothing to redact is returned byte-for-byte, so the
 // text around it is never rewritten.
 const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:[^\s<>"]+/gi
+// A character no URL match can contain, so a cut just after one splits no URL.
+const URL_END_PATTERN = /[\s<>"]/
 /** The same pattern without `g`, for asking whether a value holds a URL at all. */
 const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
 /** Finds the first scheme that brings a real authority, i.e. what the pattern required before it went authority-less. */
@@ -511,19 +513,29 @@ function redactUrls(value: string): string {
 
 /**
  * Runs `redact` over only the head of `value` that truncation can keep, so a
- * multi-megabyte tool result costs about the same as the part captured.
- * Redaction shrinks text, so a head that ends up too short to cover truncation's
- * cut falls back to the whole string: the kept part always reads exactly as if
- * the whole string were redacted.
+ * multi-megabyte tool result costs about the same as the part captured. The head
+ * ends where no URL crosses it, because a URL is redacted or kept on the whole
+ * address. Redaction shrinks text, so a head that ends up too short to cover
+ * truncation's cut falls back to the whole string. Either way the kept part
+ * reads exactly as if the whole string were redacted.
  */
 function redactCapturedHead(value: string, redact: (value: string) => string): string {
   if (value.length > SCANNED_HEAD_LENGTH) {
-    const head = redact(value.slice(0, SCANNED_HEAD_LENGTH))
+    const head = redact(value.slice(0, headLength(value)))
     if (head.length >= MIN_REDACTED_HEAD_LENGTH) {
       return head + TRUNCATION_SUFFIX
     }
   }
   return redact(value)
+}
+
+/** The scanned head, shortened to end just after the last character that ends a URL. */
+function headLength(value: string): number {
+  let end = SCANNED_HEAD_LENGTH
+  while (end > 0 && !URL_END_PATTERN.test(value[end - 1])) {
+    end--
+  }
+  return end
 }
 
 function sanitizeString(value: string): string {
