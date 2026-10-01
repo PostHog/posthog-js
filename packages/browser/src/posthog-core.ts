@@ -892,13 +892,19 @@ export class PostHog implements PostHogInterface {
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
         const persistenceDisabled = this._is_persistence_disabled()
+        const allowDisabledRead = !this._inCookielessMode()
 
-        this.persistence = new PostHogPersistence(this.config, persistenceDisabled)
+        this.persistence = new PostHogPersistence(this.config, persistenceDisabled, true, allowDisabledRead)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
-                  new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
+                  new PostHogPersistence(
+                      { ...this.config, persistence: 'sessionStorage' },
+                      persistenceDisabled,
+                      false,
+                      allowDisabledRead
+                  )
 
         const persistenceName = this.config.persistence_name || this.config.token
         this._sessionRegisteredPropertiesStorageKey = 'ph_' + persistenceName + '_session_registered_properties'
@@ -4879,8 +4885,9 @@ export class PostHog implements PostHogInterface {
         // Identity changes must not let queued recorder work flush under the cookieless identity.
         sessionRecording?.dispose({ discardBufferedEvents: true })
 
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
-            // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
+        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && !this._inCookielessMode()) {
+            // Discard regular user state, including state restored while consent was pending,
+            // before switching to cookieless tracking.
             this._reset(true, true)
         }
 
