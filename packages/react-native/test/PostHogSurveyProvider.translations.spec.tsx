@@ -24,8 +24,9 @@ vi.mock('react-native', async () => {
     KeyboardAvoidingView: Box,
     TouchableOpacity: Button,
     Pressable: Button,
-    TextInput: ({ value, onChangeText }: any) =>
-      R.createElement('input', { value, onChange: (e: any) => onChangeText(e.target.value) }),
+    TextInput: R.forwardRef<HTMLInputElement, any>(({ value, onChangeText }, ref) =>
+      R.createElement('input', { ref, value, onChange: (e: any) => onChangeText(e.target.value) })
+    ),
   }
 })
 vi.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
