@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.78.3
+
+### Patch Changes
+
+- [#5182](https://github.com/PostHog/posthog-js/pull/5182) [`e13bd2c`](https://github.com/PostHog/posthog-js/commit/e13bd2c876390d782fcf05efb7a5e8a267ac1611) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Give numeric survey ratings accessible question labels and selection state.
+  (2026-10-01)
+
 ## 4.78.2
 
 ### Patch Changes

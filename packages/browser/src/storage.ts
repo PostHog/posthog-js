@@ -408,7 +408,8 @@ export const getCookiePropertiesFingerprint = (name: string, cookieValue: string
  */
 export const createLocalPlusCookieStore = (
     customCookieProperties: readonly string[] = [],
-    preferCookieOnConflict: boolean = false
+    preferCookieOnConflict: boolean = false,
+    isReadOnly: () => boolean = () => false
 ): PersistentStore => {
     const cookiePropertiesToPersist = [...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties]
 
@@ -513,7 +514,9 @@ export const createLocalPlusCookieStore = (
                 } else {
                     value = extend(cookieProperties, localStorageData)
                 }
-                localStore._set(name, value)
+                if (!isReadOnly()) {
+                    localStore._set(name, value)
+                }
                 return value
             } catch {
                 // noop
