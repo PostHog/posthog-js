@@ -106,6 +106,34 @@ describe('Gemini Interactions API', () => {
     expect(provider.create).toHaveBeenCalledWith({ model: 'gemini-3.8-flash', input: 'Hello' }, options)
   })
 
+  test('passes Interactions modality usage and aggregate token totals to the captured event', async () => {
+    const { posthog, gemini } = setup()
+    const usage = {
+      total_input_tokens: 15,
+      total_output_tokens: 11,
+      total_cached_tokens: 2,
+      input_tokens_by_modality: [
+        { modality: 'text', tokens: 10 },
+        { modality: 'image', tokens: 5 },
+      ],
+      output_tokens_by_modality: [
+        { modality: 'text', tokens: 3 },
+        { modality: 'image', tokens: 8 },
+      ],
+      cached_tokens_by_modality: [{ modality: 'text', tokens: 2 }],
+    }
+    provider.create.mockResolvedValue({ ...textInteraction, usage })
+
+    await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Describe an image' })
+
+    expect(captured(posthog).properties).toMatchObject({
+      $ai_input_tokens: 15,
+      $ai_output_tokens: 11,
+      $ai_cache_read_input_tokens: 2,
+      $ai_usage: usage,
+    })
+  })
+
   test('does not invent a completion id for a stateless provider response', async () => {
     const { posthog, gemini } = setup()
     provider.create.mockResolvedValue({
@@ -244,10 +272,9 @@ describe('Gemini Interactions API', () => {
         role: 'tool',
         content: [
           {
-            type: 'function_result',
-            name: 'previous_tool',
-            call_id: 'call_previous',
-            result: [{ type: 'text', text: 'done' }],
+            type: 'tool_result',
+            tool_use_id: 'call_previous',
+            content: [{ type: 'text', text: 'done' }],
           },
         ],
       },
@@ -261,6 +288,216 @@ describe('Gemini Interactions API', () => {
       },
     ])
     expect(properties.$ai_tools).toEqual([{ type: 'function', name: 'get_weather' }])
+  })
+
+  test('keeps object tool results structured and linked to their call', async () => {
+    const { posthog, gemini } = setup()
+    const input = [{ type: 'function_result', name: 'get_weather', call_id: 'call_weather', result: { degrees_c: 18 } }]
+    provider.create.mockResolvedValue(textInteraction)
+
+    await gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)
+
+    expect(provider.create.mock.calls[0][0].input).toBe(input)
+    expect(captured(posthog).properties.$ai_input).toEqual([
+      {
+        role: 'tool',
+        content: [{ type: 'tool_result', tool_use_id: 'call_weather', content: { degrees_c: 18 } }],
+      },
+    ])
+  })
+
+  test.each([false, true])(
+    'keeps media tool results linked and applies full capture (enabled=%s)',
+    async (fullCapture) => {
+      const { posthog, gemini } = setup()
+      ;(posthog as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = fullCapture
+      const imageData = 'A'.repeat(80)
+      const input = [
+        {
+          type: 'function_result',
+          name: 'take_screenshot',
+          call_id: 'call_screenshot',
+          result: [{ type: 'image', data: imageData, mime_type: 'image/png' }],
+        },
+      ]
+      provider.create.mockResolvedValue(textInteraction)
+
+      await gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)
+
+      expect(provider.create.mock.calls[0][0].input).toBe(input)
+      expect(captured(posthog).properties.$ai_input).toEqual([
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'call_screenshot',
+              content: [
+                {
+                  type: 'image',
+                  data: fullCapture ? imageData : '[base64 image/png redacted]',
+                  mime_type: 'image/png',
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      if (!fullCapture) expect(JSON.stringify(captured(posthog).properties.$ai_input)).not.toContain(imageData)
+    }
+  )
+
+  test.each([false, true])(
+    'keeps direct text and image input blocks together without changing the provider request (full capture=%s)',
+    async (fullCapture) => {
+      const { posthog, gemini } = setup()
+      ;(posthog as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = fullCapture
+      const imageData = 'A'.repeat(80)
+      const input = [
+        { type: 'text', text: 'What is in this picture?' },
+        { type: 'image', data: imageData, mime_type: 'image/png' },
+      ]
+      provider.create.mockResolvedValue(textInteraction)
+
+      await gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)
+
+      expect(provider.create.mock.calls[0][0].input).toBe(input)
+      expect(captured(posthog).properties.$ai_input).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this picture?' },
+            { type: 'image', data: fullCapture ? imageData : '[base64 image/png redacted]', mime_type: 'image/png' },
+          ],
+        },
+      ])
+      if (!fullCapture) expect(JSON.stringify(captured(posthog).properties.$ai_input)).not.toContain(imageData)
+    }
+  )
+
+  test.each([
+    { type: 'audio', mime_type: 'audio/wav' },
+    { type: 'video', mime_type: 'video/mp4' },
+    { type: 'document', mime_type: 'application/pdf' },
+  ])('keeps direct text and $type input in one user message', async ({ type, mime_type }) => {
+    const { posthog, gemini } = setup()
+    const mediaData = 'A'.repeat(80)
+    const input = [
+      { type: 'text', text: 'Describe this file' },
+      { type, data: mediaData, mime_type },
+    ]
+    provider.create.mockResolvedValue(textInteraction)
+
+    await gemini.interactions.create({ model: 'gemini-3.8-flash', input } as any)
+
+    expect(provider.create.mock.calls[0][0].input).toBe(input)
+    expect(captured(posthog).properties.$ai_input).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this file' },
+          { type, data: `[base64 ${mime_type} redacted]`, mime_type },
+        ],
+      },
+    ])
+    expect(JSON.stringify(captured(posthog).properties.$ai_input)).not.toContain(mediaData)
+  })
+
+  test.each([
+    { privacy: false, fullCapture: false },
+    { privacy: false, fullCapture: true },
+    { privacy: true, fullCapture: true },
+  ])(
+    'assembles image stream deltas without changing provider events (privacy=$privacy, full capture=$fullCapture)',
+    async ({ privacy, fullCapture }) => {
+      const { posthog, gemini } = setup()
+      ;(posthog as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = fullCapture
+      const imageData = 'A'.repeat(80)
+      const events = [
+        { event_type: 'interaction.created', interaction: { id: 'v1_image_stream', model: 'gemini-3.8-flash' } },
+        { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+        { event_type: 'step.delta', index: 0, delta: { type: 'text', text: 'Here is the image.' } },
+        { event_type: 'step.delta', index: 0, delta: { type: 'image', data: imageData, mime_type: 'image/png' } },
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'v1_image_stream',
+            model: 'gemini-3.8-flash',
+            status: 'completed',
+            usage: { total_input_tokens: 3, total_output_tokens: 5 },
+          },
+        },
+      ]
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield* events
+        })()
+      )
+
+      const stream = await gemini.interactions.create({
+        model: 'gemini-3.8-flash',
+        input: 'Draw an image',
+        stream: true,
+        posthogPrivacyMode: privacy,
+      } as any)
+      const received = []
+      for await (const event of stream) received.push(event)
+
+      expect(received).toEqual(events)
+      expect(received[3]).toBe(events[3])
+      expect(events[3].delta.data).toBe(imageData)
+      const properties = captured(posthog).properties
+      expect(properties.$ai_output_choices).toEqual(
+        privacy
+          ? null
+          : [
+              {
+                role: 'assistant',
+                content: [
+                  { type: 'text', text: 'Here is the image.' },
+                  {
+                    type: 'image',
+                    data: fullCapture ? imageData : '[base64 image/png redacted]',
+                    mime_type: 'image/png',
+                  },
+                ],
+              },
+            ]
+      )
+      if (privacy || !fullCapture) expect(JSON.stringify(properties)).not.toContain(imageData)
+    }
+  )
+
+  test('keeps an image-only partial stream when the provider ends before completion', async () => {
+    const { posthog, gemini } = setup()
+    const imageData = 'A'.repeat(80)
+    const events = [
+      { event_type: 'interaction.created', interaction: { id: 'v1_partial_image', model: 'gemini-3.8-flash' } },
+      { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'image', data: imageData, mime_type: 'image/png' } },
+    ]
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield* events
+      })()
+    )
+
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Draw', stream: true })
+    const received = []
+    for await (const event of stream) received.push(event)
+
+    expect(received).toEqual(events)
+    expect(received[2]).toBe(events[2])
+    const properties = captured(posthog).properties
+    expect(properties.$ai_stop_reason).toBe('incomplete')
+    expect(properties.$ai_is_error).toBe(true)
+    expect(properties.$ai_output_choices).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'image', data: '[base64 image/png redacted]', mime_type: 'image/png' }],
+      },
+    ])
+    expect(JSON.stringify(properties)).not.toContain(imageData)
   })
 
   test('preserves stream events and assembles text and split tool arguments without summing interim usage', async () => {
@@ -745,7 +982,7 @@ describe('Gemini Interactions API', () => {
           { type: 'function', id: 'call_history', function: { name: 'weather', arguments: { city: 'Paris' } } },
         ],
       },
-      { role: 'tool', content: [input[3]] },
+      { role: 'tool', content: [{ type: 'tool_result', tool_use_id: 'call_history', content: 'Sunny' }] },
     ])
   })
 

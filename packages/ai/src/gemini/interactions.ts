@@ -89,10 +89,36 @@ function inputFromRequest(input: unknown, systemInstruction?: unknown): Formatte
   const messages: FormattedMessage[] = []
   if (typeof systemInstruction === 'string') messages.push({ role: 'system', content: systemInstruction })
 
+  let userContent: unknown[] = []
+  const flushUserContent = () => {
+    if (userContent.length) messages.push({ role: 'user', content: userContent })
+    userContent = []
+  }
+
   for (const part of Array.isArray(input) ? input : [input]) {
     const step = record(part)
+    if (
+      step?.type === 'text' ||
+      step?.type === 'image' ||
+      step?.type === 'audio' ||
+      step?.type === 'video' ||
+      step?.type === 'document'
+    ) {
+      userContent.push(part)
+      continue
+    }
+    flushUserContent()
     if (step?.type === 'function_result') {
-      messages.push({ role: 'tool', content: [part] })
+      messages.push({
+        role: 'tool',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: step.call_id,
+            content: step.result,
+          },
+        ],
+      })
     } else if (step?.type === 'user_input') {
       messages.push({ role: 'user', content: step.content ?? [part] })
     } else if (step?.type === 'model_output') {
@@ -104,6 +130,7 @@ function inputFromRequest(input: unknown, systemInstruction?: unknown): Formatte
       messages.push({ role: 'user', content: part })
     }
   }
+  flushUserContent()
   return messages
 }
 
@@ -368,6 +395,9 @@ export class WrappedInteractions {
               const text = record(last)
               if (text?.type === 'text') text.text = `${text.text ?? ''}${delta.text}`
               else step.content?.push({ type: 'text', text: delta.text })
+              firstTokenTime ??= Date.now()
+            } else if (step && delta?.type === 'image') {
+              step.content?.push({ ...delta })
               firstTokenTime ??= Date.now()
             } else if (step && delta?.type === 'arguments_delta' && typeof delta.arguments === 'string') {
               step.argumentChunks = `${step.argumentChunks ?? ''}${delta.arguments}`
