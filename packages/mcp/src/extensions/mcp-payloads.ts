@@ -14,10 +14,10 @@ const BASE64URL_SPECIFIC_CHAR_PATTERN = /[-_]/
 const BASE64_DATA_URL_PREFIX_PATTERN = /^data:[^,\s]*;base64,/i
 const BASE64_DATA_URL_PAYLOAD_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/
 const SIZE_GATE = 10_240
-// Twice what truncation keeps, so a token or URL straddling truncation's cut is
-// still whole when the patterns run, and redactions shrinking the head cannot
-// pull unscanned text back under the cut.
-const MAX_SCANNED_LENGTH = 2 * MAX_STRING_LENGTH
+const SCANNED_HEAD_LENGTH = 4 * MAX_STRING_LENGTH
+// Twice what truncation keeps, so a match split where the head was cut sits past
+// the part truncation keeps.
+const MIN_REDACTED_HEAD_LENGTH = 2 * MAX_STRING_LENGTH
 const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
@@ -511,13 +511,19 @@ function redactUrls(value: string): string {
 
 /**
  * Runs `redact` over only the head of `value` that truncation can keep, so a
- * multi-megabyte tool result costs the same to sanitize as the part captured.
+ * multi-megabyte tool result costs about the same as the part captured.
+ * Redaction shrinks text, so a head that ends up too short to cover truncation's
+ * cut falls back to the whole string: the kept part always reads exactly as if
+ * the whole string were redacted.
  */
 function redactCapturedHead(value: string, redact: (value: string) => string): string {
-  if (value.length <= MAX_SCANNED_LENGTH) {
-    return redact(value)
+  if (value.length > SCANNED_HEAD_LENGTH) {
+    const head = redact(value.slice(0, SCANNED_HEAD_LENGTH))
+    if (head.length >= MIN_REDACTED_HEAD_LENGTH) {
+      return head + TRUNCATION_SUFFIX
+    }
   }
-  return redact(value.slice(0, MAX_SCANNED_LENGTH)) + TRUNCATION_SUFFIX
+  return redact(value)
 }
 
 function sanitizeString(value: string): string {

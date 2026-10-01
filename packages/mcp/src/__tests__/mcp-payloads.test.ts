@@ -516,22 +516,37 @@ describe('redactPii', () => {
 })
 
 describe('sanitizing strings longer than truncation keeps', () => {
-  const WINDOW = 65_536
+  const WINDOW = 131_072
   const token = 'phc_123456789012345678901234567890'
   const filler = (length: number): string => 'lorem ipsum '.repeat(Math.ceil(length / 12)).slice(0, length)
 
   it.each([
     ['plain text', filler(5_000_000), `${filler(WINDOW)}...`],
-    ['a token cut at the window edge', filler(WINDOW - 28) + token, `${filler(WINDOW - 28)}[redacted]...`],
+    ['a token cut at the window edge', filler(WINDOW - 32) + token, `${filler(WINDOW - 32)}[redacted]...`],
     [
       'a credential URL cut at the window edge',
-      `${filler(WINDOW - 40)}https://example.com/?api_key=secretsecretsecretsecret more`,
-      `${filler(WINDOW - 40)}https://example.com/?api_key=%5Bredacted%5D...`,
+      `${filler(WINDOW - 44)}https://example.com/?api_key=secretsecretsecretsecret more`,
+      `${filler(WINDOW - 44)}https://example.com/?api_key=%5Bredacted%5D...`,
     ],
     [
       'an attachment',
       Buffer.alloc(3_000_000, 7).toString('base64'),
       '[binary data redacted - not supported by PostHog MCP analytics]',
+    ],
+    // Redacting shrinks these heads below the window, so the cut must move out until it is past what truncation keeps.
+    [
+      'tokens with one cut at the window edge',
+      `${filler(12)}a. ${`${token} `.repeat(4_000)}and more`,
+      `${filler(12)}a. ${'[redacted] '.repeat(4_000)}and more`,
+    ],
+    [
+      'pre-signed URLs',
+      `https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=${'Z'.repeat(1_200)}&X-Amz-Signature=${'a'.repeat(64)}\n`.repeat(
+        200
+      ),
+      'https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Security-Token=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D\n'.repeat(
+        200
+      ),
     ],
   ])('scans only the window truncation can keep: %s', (_case, value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
