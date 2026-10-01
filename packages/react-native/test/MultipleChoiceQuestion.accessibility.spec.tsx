@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type { PressableProps, TextInputProps, TouchableOpacityProps } from 'react-native'
 import { MultipleSurveyQuestion, SurveyQuestionType } from '@posthog/core'
 import { MultipleChoiceQuestion } from '../src/surveys/components/QuestionTypes'
@@ -26,10 +26,12 @@ vi.mock('react-native', async (importOriginal) => ({
   TouchableOpacity: ({ children, onPress, disabled }: TouchableOpacityProps) =>
     React.createElement('button', { onClick: onPress, disabled }, children),
   TextInput: (await import('react')).forwardRef<HTMLInputElement, TextInputProps>(
-    ({ accessibilityLabel, onChangeText }, ref) =>
+    ({ accessibilityLabel, onChangeText, onFocus, onPressIn }, ref) =>
       React.createElement('input', {
         ref,
         'aria-label': accessibilityLabel,
+        onFocus,
+        onMouseDown: onPressIn,
         onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChangeText?.(event.target.value),
       })
   ),
@@ -46,6 +48,59 @@ const question: MultipleSurveyQuestion = {
 afterEach(cleanup)
 
 describe('open choice accessibility', () => {
+  it.each([SurveyQuestionType.SingleChoice, SurveyQuestionType.MultipleChoice] as const)(
+    'reselects a draft by pressing the input while it is still focused for %s',
+    (type) => {
+      const onSubmit = vi.fn()
+      const { getByRole } = render(
+        <MultipleChoiceQuestion
+          question={{ ...question, type }}
+          appearance={defaultSurveyAppearance}
+          onSubmit={onSubmit}
+        />
+      )
+      const role = type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
+      fireEvent.click(getByRole(role, { name: 'Speed' }))
+      const input = getByRole('textbox', { name: 'Other' })
+      act(() => input.focus())
+      fireEvent.change(input, { target: { value: 'Search' } })
+      fireEvent.click(getByRole(role, { name: type === SurveyQuestionType.SingleChoice ? 'Speed' : 'Other' }))
+      expect(document.activeElement).toBe(input)
+      expect(getByRole(role, { name: 'Other', checked: false })).toBeTruthy()
+      fireEvent.mouseDown(input)
+      expect(getByRole(role, { name: 'Other', checked: true })).toBeTruthy()
+      fireEvent.mouseDown(input)
+      fireEvent.click(getByRole('button', { name: 'Submit' }))
+      expect(onSubmit).toHaveBeenCalledWith(type === SurveyQuestionType.SingleChoice ? 'Search' : ['Speed', 'Search'])
+    }
+  )
+
+  it.each([SurveyQuestionType.SingleChoice, SurveyQuestionType.MultipleChoice] as const)(
+    'selects the open choice on focus without typing or adding duplicate answers for %s',
+    (type) => {
+      const onSubmit = vi.fn()
+      const { getByRole } = render(
+        <MultipleChoiceQuestion
+          question={{ ...question, type }}
+          appearance={defaultSurveyAppearance}
+          onSubmit={onSubmit}
+        />
+      )
+      const role = type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
+      fireEvent.click(getByRole(role, { name: 'Speed' }))
+      const input = getByRole('textbox', { name: 'Other' })
+      fireEvent.focus(input)
+      expect(getByRole(role, { name: 'Other', checked: true })).toBeTruthy()
+      expect(getByRole(role, { name: 'Speed', checked: type === SurveyQuestionType.MultipleChoice })).toBeTruthy()
+      expect(getByRole('button', { name: 'Submit' }).hasAttribute('disabled')).toBe(true)
+      fireEvent.blur(input)
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'Search' } })
+      fireEvent.click(getByRole('button', { name: 'Submit' }))
+      expect(onSubmit).toHaveBeenCalledWith(type === SurveyQuestionType.SingleChoice ? 'Search' : ['Speed', 'Search'])
+    }
+  )
+
   it.each([SurveyQuestionType.SingleChoice, SurveyQuestionType.MultipleChoice] as const)(
     'exposes a named text field outside a selectable accessibility wrapper for %s',
     (type) => {

@@ -343,6 +343,11 @@ export function MultipleChoiceQuestion({
   const [selectedChoiceIndices, setSelectedChoiceIndices] = useState<number[]>([])
   const [openEndedInput, setOpenEndedInput] = useState('')
   const openEndedInputRef = useRef<TextInput>(null)
+  const selectOpenChoice = () => {
+    setSelectedChoiceIndices((prev) =>
+      prev.includes(openChoiceIndex) ? prev : allowMultiple ? [...prev, openChoiceIndex] : [openChoiceIndex]
+    )
+  }
 
   // Only skip submit for single-choice questions without open choice
   const shouldSkipSubmit = question.skipSubmitButton && isSingleChoice && !question.hasOpenChoice
@@ -428,6 +433,8 @@ export function MultipleChoiceQuestion({
                   accessibilityLabel={choice}
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
                   style={styles.openEndedInput}
+                  onFocus={selectOpenChoice}
+                  onPressIn={selectOpenChoice}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
                     if (!isSelected) {
@@ -535,9 +542,9 @@ const styles = createSafeStyleSheet({
     flexGrow: 0,
   },
   openEndedInput: {
-    padding: 5,
-    marginHorizontal: 10,
-    marginBottom: 10,
+    paddingTop: 5,
+    paddingHorizontal: 15,
+    paddingBottom: 15,
   },
   validationHint: {
     fontSize: 12,
