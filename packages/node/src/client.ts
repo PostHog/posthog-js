@@ -69,6 +69,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { type Messaging, PostHogMessaging } from './messaging'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -151,6 +152,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _messaging?: Messaging
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -641,6 +643,31 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.messaging` API: set the email preferences of your recipients from your server.
+   * Needs the `secretKey` client option.
+   *
+   * @example
+   * ```ts
+   * await client.messaging.setPreferences('jane@example.com', {
+   *   categories: { newsletter: false, 'product-updates': true },
+   * })
+   * ```
+   *
+   * {@label Messaging}
+   */
+  public get messaging(): Messaging {
+    if (!this._messaging) {
+      this._messaging = new PostHogMessaging({
+        isDisabled: () => this.disabled,
+        hasSecretKey: () => this.options.personalApiKey !== undefined,
+        warn: (message) => this._logger.warn(message),
+        post: (path, body) => this._postWithSecretKey(path, body),
+      })
+    }
+    return this._messaging
   }
 
   /**
@@ -2936,6 +2963,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (abortTimeout) {
         clearTimeout(abortTimeout)
       }
+    }
+  }
+
+  private async _postWithSecretKey(path: string, body: Record<string, string>): Promise<PostHogFetchResponse> {
+    const controller = new AbortController()
+    const abortTimeout = safeSetTimeout(() => controller.abort(), this.requestTimeout)
+    try {
+      return await this.fetch(`${this.host}${path}?token=${encodeURIComponent(this.apiKey)}`, {
+        method: 'POST',
+        headers: {
+          ...this.getCustomHeaders(),
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.options.personalApiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(abortTimeout)
     }
   }
 
