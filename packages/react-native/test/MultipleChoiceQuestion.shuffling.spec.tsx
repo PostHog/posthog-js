@@ -23,8 +23,9 @@ vi.mock('react-native', async () => {
   const Pressable = ({ children, onPress }: any) => ReactActual.createElement('button', { onClick: onPress }, children)
   const TouchableOpacity = ({ children, onPress, disabled }: any) =>
     ReactActual.createElement('button', { onClick: onPress, disabled }, children)
-  const TextInput = ({ onChangeText }: any) =>
-    ReactActual.createElement('input', { onChange: (event: any) => onChangeText?.(event.target.value) })
+  const TextInput = ReactActual.forwardRef<HTMLInputElement, any>(({ onChangeText }, ref) =>
+    ReactActual.createElement('input', { ref, onChange: (event: any) => onChangeText?.(event.target.value) })
+  )
 
   return {
     View,
