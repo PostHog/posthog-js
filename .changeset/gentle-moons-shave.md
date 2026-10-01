@@ -2,4 +2,4 @@
 'posthog-react-native': patch
 ---
 
-Surveys now follow the confirmation message setting from PostHog instead of always showing the screen
+Surveys follow the confirmation message setting from PostHog instead of always showing the screen. A confirmation message that carries only a description now shows that description.
