@@ -280,6 +280,9 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.upperBoundLabel ? '50%' : undefined,
+              textAlign: 'left',
             }}
           >
             {question.lowerBoundLabel}
@@ -289,6 +292,9 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.lowerBoundLabel ? '50%' : undefined,
+              textAlign: 'right',
             }}
           >
             {question.upperBoundLabel}
@@ -516,6 +522,7 @@ const styles = createSafeStyleSheet({
   ratingText: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
     padding: 10,
   },
   multipleChoiceOptions: {
