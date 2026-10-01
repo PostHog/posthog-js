@@ -246,7 +246,7 @@ export function RatingQuestion({
           )}
           {question.display === SurveyRatingDisplay.Number && (
             <View style={[styles.ratingOptionsNumber, { borderColor: appearance.borderColor }]}>
-              {getScaleNumbers(question.scale).map((number, idx) => {
+              {getScaleNumbers(question.scale).map((number, idx, numbers) => {
                 const active = rating === number
                 return (
                   <RatingButton
@@ -255,6 +255,13 @@ export function RatingQuestion({
                     active={active}
                     appearance={appearance}
                     num={number}
+                    accessibilityLabel={[
+                      String(number),
+                      question.question,
+                      idx === 0 ? question.lowerBoundLabel : idx === numbers.length - 1 ? question.upperBoundLabel : '',
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
                     setActiveNumber={(response) => {
                       setRating(response)
                       if (question.skipSubmitButton) {
@@ -298,12 +305,14 @@ export function RatingButton({
   active,
   appearance,
   setActiveNumber,
+  accessibilityLabel,
 }: {
   index: number
   num: number
   active: boolean
   appearance: SurveyAppearanceTheme
   setActiveNumber: (num: number) => void
+  accessibilityLabel?: string
 }): JSX.Element {
   const backgroundColor = active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
   // Active state always auto-calculates for contrast; inactive uses inputTextColor override if provided
@@ -313,6 +322,9 @@ export function RatingButton({
 
   return (
     <TouchableOpacity
+      accessibilityRole="radio"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: active }}
       style={[
         styles.ratingsNumber,
         index === 0 && { borderLeftWidth: 0 },
