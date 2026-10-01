@@ -2,7 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
-| PostHog/posthog-js | [issue 5178](https://github.com/PostHog/posthog-js/issues/5178) | Confirmed React Native survey accessibility bug with a focused, non-public-API fix path. | react-native, feature/surveys, team/client-libraries, bug |  | no | 2026-10-01T09:57:33.753Z |
+| PostHog/posthog-js | [issue 5178](https://github.com/PostHog/posthog-js/issues/5178) | Confirmed React Native survey accessibility bug with a focused fix path, pending native screen-reader verification of the revised hierarchy. | feature/surveys, react-native, team/client-libraries, bug |  | no | 2026-10-01T10:01:54.071Z |
 | PostHog/posthog-js | [issue 5177](https://github.com/PostHog/posthog-js/issues/5177) | Confirmed React Native survey accessibility bug with a small, localized fix. | react-native, feature/surveys, iOS, Android, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5180 | no | 2026-10-01T09:56:18.175Z |
 | PostHog/posthog-js | [issue 5176](https://github.com/PostHog/posthog-js/issues/5176) | Confirmed React Native survey layout bug; a small, focused accessibility fix is appropriate. | react-native, feature/surveys, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5179 | no | 2026-10-01T09:53:11.780Z |
 | PostHog/posthog-js | [issue 5166](https://github.com/PostHog/posthog-js/issues/5166) | Confirmed browser SDK regression in the disabled-persistence/consent path. | feature/product-analytics, web, javascript, team/client-libraries, bug |  | no | 2026-09-30T18:54:10.549Z |
