@@ -2836,12 +2836,12 @@
       "name": "MessagingPreferences",
       "properties": [
         {
-          "description": "`false` opts the recipient out of every marketing message. `true` lifts that opt-out.",
+          "description": "`false` opts the recipient out of every marketing message. `true` lifts that opt-out but keeps any category they opted out of, so pass those categories as `true` to resubscribe them fully.",
           "type": "boolean",
           "name": "allMarketing"
         },
         {
-          "description": "Message category keys, as listed under Workflows opt-outs, mapped to whether the recipient wants that category. `true` for one category while the recipient is opted out of all marketing resubscribes them to that category only.",
+          "description": "Message category keys, as listed under Workflows opt-outs, mapped to whether the recipient wants that category. `true` for one category while the recipient is opted out of all marketing resubscribes them to that category only, and opts them out of every other marketing category.",
           "type": "Record<string, boolean>",
           "name": "categories"
         }

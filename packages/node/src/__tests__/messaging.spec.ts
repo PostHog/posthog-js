@@ -72,7 +72,11 @@ describe('messaging.setPreferences', () => {
     ],
     ['a missing permission', respondWith(403, { detail: 'No access' }), { status: 403, message: 'No access' }],
     ['an unreadable error body', respondWith(500, 'oops'), { status: 500, message: 'HTTP 500' }],
-    ['a network error', new Error('socket hang up'), { message: 'socket hang up' }],
+    [
+      'a network error',
+      new Error('socket hang up for jane@example.com, Bearer phx_secret'),
+      { message: 'Request failed' },
+    ],
   ])('reports %s per category and still applies the rest', async (_, newsletterOutcome, expectedFailure) => {
     fetch.mockImplementation(async (_url: string, init: { body: string }) => {
       if (JSON.parse(init.body).category_key !== 'newsletter') {
@@ -99,8 +103,10 @@ describe('messaging.setPreferences', () => {
     ['no secret key is configured', { secretKey: undefined }, 'jane@example.com', { allMarketing: false }, 'secretKey'],
     ['the identifier is empty', {}, '', { allMarketing: false }, 'identifier'],
     ['the identifier is blank', {}, '  ', { allMarketing: false }, 'identifier'],
+    ['the identifier has surrounding whitespace', {}, ' jane@example.com', { allMarketing: false }, 'identifier'],
     ['allMarketing is not a boolean', {}, 'jane@example.com', { allMarketing: 'false' }, 'allMarketing'],
     ['a category is not a boolean', {}, 'jane@example.com', { categories: { newsletter: 'no' } }, 'newsletter'],
+    ['categories is an array', {}, 'jane@example.com', { categories: [false] }, 'categories'],
     ['preferences are missing', {}, 'jane@example.com', undefined, 'preferences'],
   ])('rejects without sending anything when %s', async (_, options, identifier, preferences, mentioned) => {
     const client = createClient(fetch, options)
@@ -124,17 +130,47 @@ describe('messaging.setPreferences', () => {
     await client.shutdown()
   })
 
-  it('gives up on a request that outlasts requestTimeout', async () => {
-    fetch.mockImplementation(
-      (_url: string, init: { signal: AbortSignal }) =>
-        new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))))
-    )
+  it('reports a failed category even when its key is __proto__', async () => {
+    fetch.mockResolvedValue(respondWith(404, { error: 'Category not found' }))
+
+    const error = await posthog.messaging
+      .setPreferences('jane@example.com', { categories: JSON.parse('{"__proto__": false}') })
+      .catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(MessagingPreferencesError)
+    expect(Object.entries((error as MessagingPreferencesError).categories)).toEqual([
+      ['__proto__', { status: 404, message: 'Category not found' }],
+    ])
+  })
+
+  it('waits for an earlier call for the same recipient before sending the next', async () => {
+    let finishFirstRequest = (): void => {}
+    fetch.mockImplementationOnce(() => new Promise((resolve) => (finishFirstRequest = () => resolve(respondWith(200)))))
+
+    const first = posthog.messaging.setPreferences('jane@example.com', { categories: { newsletter: false } })
+    const second = posthog.messaging.setPreferences('jane@example.com', { categories: { offers: false } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    finishFirstRequest()
+    await Promise.all([first, second])
+    expect(sentRequests(fetch).map(({ body }) => body)).toEqual([
+      { identifier: 'jane@example.com', category_key: 'newsletter' },
+      { identifier: 'jane@example.com', category_key: 'offers' },
+    ])
+  })
+
+  it.each([
+    ['no response arrives', () => new Promise(() => {})],
+    ['the error body never finishes', () => Promise.resolve({ status: 500, json: () => new Promise(() => {}) })],
+  ])('gives up after requestTimeout when %s', async (_, hangingFetch) => {
+    fetch.mockImplementation(hangingFetch)
     const client = createClient(fetch, { requestTimeout: 500 })
 
     const result = client.messaging.setPreferences('jane@example.com', { allMarketing: false }).catch((e: unknown) => e)
     await vi.advanceTimersByTimeAsync(500)
 
-    expect(await result).toMatchObject({ allMarketing: { message: 'aborted' } })
+    expect(await result).toMatchObject({ allMarketing: { message: 'Request timed out after 500ms' } })
     await client.shutdown()
   })
 })
