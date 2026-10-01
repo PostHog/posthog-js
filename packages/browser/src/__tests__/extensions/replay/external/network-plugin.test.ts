@@ -475,6 +475,36 @@ describe('network plugin', () => {
             cleanup()
         })
 
+        it('emits request payloads that postMessage can clone when toJSON keeps server timing objects', () => {
+            const { mockWindow, observerCallbacks } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const callback = vi.fn()
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+            const entry = createResourceTimingEntry('https://example.com/api/data', 'db', 5)
+            const browserServerTiming = {
+                name: 'db',
+                duration: 5,
+                description: '',
+                toJSON() {
+                    return { name: this.name, duration: this.duration, description: this.description }
+                },
+            }
+            const baseToJSON = entry.toJSON
+            entry.toJSON = function () {
+                return { ...baseToJSON.call(this), serverTiming: [browserServerTiming] }
+            }
+
+            observerCallbacks[0](createObserverEntryList([entry as PerformanceEntry]))
+
+            const payload = callback.mock.calls[0][0]
+            expect(() => structuredClone(payload)).not.toThrow()
+            expect(payload.requests[0].serverTiming).toEqual([{ name: 'db', duration: 5, description: '' }])
+            cleanup()
+        })
+
         it('drops server timings derived from a masked PostHog ingestion request', () => {
             const { mockWindow, observerCallbacks } = createMockWindow()
             global.PerformanceObserver = mockWindow.PerformanceObserver

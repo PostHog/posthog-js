@@ -1,5 +1,14 @@
 # @posthog/mcp
 
+## 0.21.2
+
+### Patch Changes
+
+- [#5160](https://github.com/PostHog/posthog-js/pull/5160) [`1ed05cf`](https://github.com/PostHog/posthog-js/commit/1ed05cf253612aa8c45bc17723f364ff778c405c) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop copying the full tool list into `$mcp_response` on `$mcp_tools_list` events, so instrumented servers answer `tools/list` faster.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
 ## 0.21.1
 
 ### Patch Changes

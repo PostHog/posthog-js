@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.435.5
+
+### Patch Changes
+
+- [#5167](https://github.com/PostHog/posthog-js/pull/5167) [`59b93a3`](https://github.com/PostHog/posthog-js/commit/59b93a30a05f2cc181c0868b7158b4c153f1dc3f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve session attribution and registered properties across initialization and configuration updates when persistence writes are debounced.
+  (2026-09-30)
+
+## 1.435.4
+
+### Patch Changes
+
+- [#5158](https://github.com/PostHog/posthog-js/pull/5158) [`5c92e83`](https://github.com/PostHog/posthog-js/commit/5c92e83619a18c32ccf374125623599cbc04a517) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `DataCloneError` when session replay records network timing inside a cross-origin iframe.
+  (2026-09-30)
+
 ## 1.435.3
 
 ### Patch Changes
