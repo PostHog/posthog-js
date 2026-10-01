@@ -175,15 +175,26 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backButtonText: 'Back',
 }
 
-// The confirmation message needs both the setting in PostHog and some header text. A survey with
-// the confirmation message turned off keeps its header text, so the text alone does not show it.
+// The confirmation message needs both the setting in PostHog and some copy to put on the screen,
+// the same pair `shouldShowIntro` asks for. A survey with the confirmation message turned off
+// keeps its copy, so the copy alone does not show the screen.
 // Only an explicit `false` hides the screen: the theme is survey JSON spread over the defaults
 // above, so a survey saved without the setting can still carry `null` here, and that is not the
 // author turning it off.
 export function shouldShowConfirmationMessage(
-  appearance: Pick<SurveyAppearance, 'displayThankYouMessage' | 'thankYouMessageHeader'>
+  appearance: Pick<
+    SurveyAppearance,
+    | 'displayThankYouMessage'
+    | 'thankYouMessageHeader'
+    | 'thankYouMessageDescription'
+    | 'thankYouMessageDescriptionContentType'
+  >
 ): boolean {
-  return (appearance.displayThankYouMessage ?? true) && Boolean(appearance.thankYouMessageHeader)
+  return (
+    (appearance.displayThankYouMessage ?? true) &&
+    (Boolean(appearance.thankYouMessageHeader) ||
+      shouldRenderDescription(appearance.thankYouMessageDescription, appearance.thankYouMessageDescriptionContentType))
+  )
 }
 
 export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'

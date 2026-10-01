@@ -144,6 +144,27 @@ const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
   return { ...result, onClose }
 }
 
+// Mount SurveyModal with a given appearance and submit the stubbed questions, which is what
+// drives isSurveySent. Returns the query helper and the onClose spy.
+const renderAndSubmit = (appearance: SurveyAppearanceTheme) => {
+  const onClose = vi.fn()
+  const { queryByTestId, getByTestId } = render(
+    <SurveyModal
+      survey={baseSurvey}
+      surveyLanguage={null}
+      appearance={appearance}
+      onShow={() => {}}
+      onClose={onClose}
+    />
+  )
+
+  act(() => {
+    fireEvent.click(getByTestId('questions-stub'))
+  })
+
+  return { queryByTestId, onClose }
+}
+
 const clickCancel = (getByTestId: (id: string) => HTMLElement) => {
   act(() => {
     fireEvent.click(getByTestId('cancel-stub'))
@@ -220,22 +241,9 @@ describe('SurveyModal close behavior', () => {
 
   it.each([
     ['the survey turns it off', appearanceWithConfirmationOff],
-    ['the survey has no header text', appearanceWithoutThankYou],
+    ['the survey has no copy for it', appearanceWithoutThankYou],
   ])('closes without a confirmation message when %s', (_case, appearance) => {
-    const onClose = vi.fn()
-    const { queryByTestId, getByTestId } = render(
-      <SurveyModal
-        survey={baseSurvey}
-        surveyLanguage={null}
-        appearance={appearance}
-        onShow={() => {}}
-        onClose={onClose}
-      />
-    )
-
-    act(() => {
-      fireEvent.click(getByTestId('questions-stub'))
-    })
+    const { queryByTestId, onClose } = renderAndSubmit(appearance)
 
     expect(queryByTestId('confirmation-stub')).toBeNull()
 
@@ -248,23 +256,14 @@ describe('SurveyModal close behavior', () => {
   })
 
   it.each([
-    ['unset', undefined],
-    ['null', null],
-  ])('keeps the confirmation message when the setting is %s', (_case, setting) => {
-    const onClose = vi.fn()
-    const { queryByTestId, getByTestId } = render(
-      <SurveyModal
-        survey={baseSurvey}
-        surveyLanguage={null}
-        appearance={withConfirmationSetting(setting)}
-        onShow={() => {}}
-        onClose={onClose}
-      />
-    )
-
-    act(() => {
-      fireEvent.click(getByTestId('questions-stub'))
-    })
+    ['the setting is unset', withConfirmationSetting(undefined)],
+    ['the setting is null', withConfirmationSetting(null)],
+    [
+      'only the description carries copy',
+      { ...appearanceWithoutThankYou, thankYouMessageDescription: 'We read every answer.' },
+    ],
+  ])('keeps the confirmation message when %s', (_case, appearance) => {
+    const { queryByTestId, onClose } = renderAndSubmit(appearance)
 
     expect(queryByTestId('confirmation-stub')).not.toBeNull()
 
