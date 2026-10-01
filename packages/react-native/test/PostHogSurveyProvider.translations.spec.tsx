@@ -13,8 +13,18 @@ vi.mock('react-native', async () => {
   const native = await vi.importActual<typeof import('./mocks/react-native')>('./mocks/react-native')
   const R = await vi.importActual<typeof import('react')>('react')
   const Box = ({ children }: any) => R.createElement('div', null, children)
-  const Button = ({ children, onPress, disabled }: any) =>
-    R.createElement('button', { onClick: onPress, disabled }, children)
+  const Button = ({ children, onPress, disabled, accessibilityRole, accessibilityLabel, accessibilityState }: any) =>
+    R.createElement(
+      'button',
+      {
+        onClick: onPress,
+        disabled,
+        role: accessibilityRole,
+        'aria-label': accessibilityLabel,
+        'aria-checked': accessibilityState?.checked,
+      },
+      children
+    )
   return {
     ...native,
     View: Box,
@@ -273,9 +283,13 @@ it('preserves a selected rating when translating', async () => {
     },
   ]
   const ui = await mount(survey)
-  fireEvent.click(ui.getByText('4'))
+  const ratingOption = ui.getByRole('radio', { name: 'Rate: 4', checked: false })
+  fireEvent.click(ratingOption)
+  expect(ui.getByRole('radio', { name: 'Rate: 4', checked: true })).toBeTruthy()
+
   act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
   expect(ui.queryByText('Califica')).not.toBeNull()
+  expect(ui.getByRole('radio', { name: 'Califica: 4', checked: true })).toBeTruthy()
   expect(ui.queryByText('Bajo')).not.toBeNull()
   fireEvent.click(ui.getByText('Siguiente'))
   expect(posthog.capture).toHaveBeenCalledWith(
