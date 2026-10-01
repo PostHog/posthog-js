@@ -1,3 +1,5 @@
+import type { PostHogApiResponse } from '@posthog/core'
+
 const PREFERENCES_PATH = '/api/projects/@current/messaging_preferences'
 
 /**
@@ -72,16 +74,11 @@ export class MessagingPreferencesError extends Error {
   }
 }
 
-export interface MessagingResponse {
-  status: number
-  body: unknown
-}
-
 export interface MessagingHost {
   isDisabled(): boolean
   hasSecretKey(): boolean
   warn(message: string): void
-  post(path: string, body: Record<string, string>): Promise<MessagingResponse>
+  post(path: string, body: Record<string, string>): Promise<PostHogApiResponse>
 }
 
 interface PreferenceUpdate {
@@ -186,11 +183,11 @@ function assertValidPreferences(preferences: unknown): asserts preferences is Me
   }
 }
 
-function isSuccess({ status }: MessagingResponse): boolean {
+function isSuccess({ status }: PostHogApiResponse): boolean {
   return status >= 200 && status < 300
 }
 
-function serverMessage({ status, body }: MessagingResponse): string {
+function serverMessage({ status, body }: PostHogApiResponse): string {
   const message = isRecord(body) ? (body.error ?? body.detail) : undefined
   return typeof message === 'string' ? message : `HTTP ${status}`
 }

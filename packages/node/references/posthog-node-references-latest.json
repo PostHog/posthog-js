@@ -3027,6 +3027,21 @@
       "path": "../core/src/error-tracking/types.ts"
     },
     {
+      "id": "PostHogApiResponse",
+      "name": "PostHogApiResponse",
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "unknown",
+          "name": "body"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
       "id": "PostHogCaptureOptions",
       "name": "PostHogCaptureOptions",
       "properties": [

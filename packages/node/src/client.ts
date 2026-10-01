@@ -7,9 +7,11 @@ import {
   isBlockedUA,
   isPlainObject,
   isPostHogFetchContentTooLargeError,
+  isPostHogFetchNetworkError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
+  PostHogApiResponse,
   PostHogCoreStateless,
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -69,7 +71,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
-import { type Messaging, type MessagingResponse, PostHogMessaging } from './messaging'
+import { type Messaging, PostHogMessaging } from './messaging'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -112,6 +114,10 @@ function normalizePersonalApiKey(value?: unknown): string | undefined {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NODE_HOST
+}
+
+function isTimeout(error: unknown): boolean {
+  return isPostHogFetchNetworkError(error) && error.error instanceof Error && error.error.name === 'AbortError'
 }
 
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
@@ -2966,37 +2972,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  private async _postWithSecretKey(path: string, body: Record<string, string>): Promise<MessagingResponse> {
-    const controller = new AbortController()
-    const timeoutError = new Error(`Request timed out after ${this.requestTimeout}ms`)
-    let abortTimeout: ReturnType<typeof safeSetTimeout> | undefined
-    const deadline = new Promise<never>((_resolve, reject) => {
-      abortTimeout = safeSetTimeout(() => {
-        reject(timeoutError)
-        controller.abort()
-      }, this.requestTimeout)
-    })
+  private async _postWithSecretKey(path: string, body: Record<string, string>): Promise<PostHogApiResponse> {
     try {
-      const response = await Promise.race([
-        this.fetch(`${this.host}${path}?token=${encodeURIComponent(this.apiKey)}`, {
-          method: 'POST',
-          headers: {
-            ...this.getCustomHeaders(),
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.options.personalApiKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        }),
-        deadline,
-      ])
-      const responseBody = await Promise.race([response.json().catch(() => undefined), deadline])
-      return { status: response.status, body: responseBody }
+      return await this.requestJson(`${this.host}${path}?token=${encodeURIComponent(this.apiKey)}`, {
+        method: 'POST',
+        headers: {
+          ...this.getCustomHeaders(),
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.options.personalApiKey}`,
+        },
+        body: JSON.stringify(body),
+      })
     } catch (error) {
-      this._events.emit('error', error)
-      throw error === timeoutError ? timeoutError : new Error('Request failed')
-    } finally {
-      clearTimeout(abortTimeout)
+      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')
     }
   }
 
