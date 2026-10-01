@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5177](https://github.com/PostHog/posthog-js/issues/5177) | Confirmed React Native survey accessibility bug with a small, localized fix. | react-native, feature/surveys, iOS, Android, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5180 | no | 2026-10-01T09:56:18.175Z |
 | PostHog/posthog-js | [issue 5176](https://github.com/PostHog/posthog-js/issues/5176) | Confirmed React Native survey layout bug; a small, focused accessibility fix is appropriate. | react-native, feature/surveys, team/client-libraries, bug | https://github.com/PostHog/posthog-js/pull/5179 | no | 2026-10-01T09:53:11.780Z |
 | PostHog/posthog-js | [issue 5166](https://github.com/PostHog/posthog-js/issues/5166) | Confirmed browser SDK regression in the disabled-persistence/consent path. | feature/product-analytics, web, javascript, team/client-libraries, bug |  | no | 2026-09-30T18:54:10.549Z |
 | PostHog/posthog-js | [issue 5164](https://github.com/PostHog/posthog-js/issues/5164) | Confirmed, documented low-level instrumentation gap; the proposed opt-in resolver is a reasonable way to resolve ownership on fresh server instances without weakening ADR-0011's safety rule. | feature, enhancement, feature/mcp-analytics, team/mcp-analytics |  | no | 2026-09-30T17:14:15.332Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2151](https://github.com/PostHog/posthog-js/issues/2151) | Valid React Native Android session replay feature gap; not a small/surgical fix. | enhancement, feature/replay, feature/mobile, react-native, Android |  | no | 2026-06-26T09:32:59.138Z |
 | PostHog/posthog-js | [issue 3982](https://github.com/PostHog/posthog-js/issues/3982) | Valid feature request: PostHog replay does not currently expose rrweb mouse sampling controls. | enhancement, feature/replay |  | no | 2026-06-25T16:15:48.269Z |
 | PostHog/posthog-js | [issue 3954](https://github.com/PostHog/posthog-js/issues/3954) | Valid toolbar bug; the premature authenticated requests appear to come from the loaded toolbar bundle, not the SDK loader. | feature/toolbar, web |  | no | 2026-06-25T14:53:20.138Z |
-| PostHog/posthog-js | [issue 3972](https://github.com/PostHog/posthog-js/issues/3972) | Valid posthog-node local evaluation bug; flag-level cohort not_in is ignored. | node, feature/flags, team/feature-flags | https://github.com/PostHog/posthog-js/pull/3973 | no | 2026-06-25T10:29:44.811Z |
