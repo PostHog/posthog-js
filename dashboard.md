@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 5187](https://github.com/PostHog/posthog-js/issues/5187) | Valid AI-observability integration request, but the TypeSafe AI client contract and Jev response metadata must be confirmed before designing a public wrapper. | feature, team/ai-observability, enhancement |  | no | 2026-10-01T20:37:02.849Z |
 | PostHog/posthog-js | [issue 5184](https://github.com/PostHog/posthog-js/issues/5184) | Confirmed, high-confidence Next.js/Vercel compatibility bug in Turbopack sourcemap processing. | frameworks/next-js, web, feature/error-tracking, team/client-libraries, team/error-tracking, bug |  | no | 2026-10-01T14:04:06.463Z |
 | PostHog/posthog-js | [issue 5177](https://github.com/PostHog/posthog-js/issues/5177) | Confirmed React Native survey accessibility bug; a small localized fix is appropriate. | feature/surveys, react-native, iOS, Android, team/client-libraries, bug |  | no | 2026-10-01T10:40:21.497Z |
 | PostHog/posthog-js | [issue 5178](https://github.com/PostHog/posthog-js/issues/5178) | Confirmed React Native survey accessibility bug; the open-choice input has no accessible name and is nested within a selectable option. | feature/surveys, react-native, team/client-libraries, bug |  | no | 2026-10-01T10:39:00.980Z |
@@ -201,4 +202,3 @@
 | PostHog/posthog-js | [issue 2167](https://github.com/PostHog/posthog-js/issues/2167) | Keep open as an Expo Router touch-autocapture feature request | enhancement, react-native, feature/mobile, feature/autocapture, help wanted |  | no | 2026-06-26T09:39:13.324Z |
 | PostHog/posthog-js | [issue 2165](https://github.com/PostHog/posthog-js/issues/2165) | Valid feature/enhancement request for RN session replay New Architecture performance; not a straightforward small fix. | enhancement, react-native, feature/mobile, feature/replay |  | no | 2026-06-26T09:37:23.112Z |
 | PostHog/posthog-js | [issue 2161](https://github.com/PostHog/posthog-js/issues/2161) | Valid React Native session replay feature request; not already fixed in JS layer. | enhancement, help wanted, feature/replay, react-native, feature/mobile |  | no | 2026-06-26T09:35:48.612Z |
-| PostHog/posthog-js | [issue 2151](https://github.com/PostHog/posthog-js/issues/2151) | Valid React Native Android session replay feature gap; not a small/surgical fix. | enhancement, feature/replay, feature/mobile, react-native, Android |  | no | 2026-06-26T09:32:59.138Z |
