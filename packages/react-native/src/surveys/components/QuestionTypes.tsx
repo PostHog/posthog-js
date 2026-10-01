@@ -274,7 +274,8 @@ export function RatingQuestion({
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
               flexShrink: 1,
-              maxWidth: '50%',
+              maxWidth: question.upperBoundLabel ? '50%' : undefined,
+              textAlign: 'left',
             }}
           >
             {question.lowerBoundLabel}
@@ -285,7 +286,7 @@ export function RatingQuestion({
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
               flexShrink: 1,
-              maxWidth: '50%',
+              maxWidth: question.lowerBoundLabel ? '50%' : undefined,
               textAlign: 'right',
             }}
           >
