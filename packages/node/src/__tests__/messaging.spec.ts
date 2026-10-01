@@ -143,6 +143,19 @@ describe('messaging.setPreferences', () => {
     expect(api.preferencesOf(JANE)).toEqual({ categories: { offers: false } })
   })
 
+  it('hands the original network error to the client error event for diagnostics', async () => {
+    const networkError = new Error('getaddrinfo ENOTFOUND example.com')
+    api.failWhen(() => true, { networkError })
+    const posthog = createClient()
+    const errors: unknown[] = []
+    posthog.on('error', (error) => errors.push(error))
+
+    const failure = await failureOf(posthog.messaging.setPreferences(JANE, { allMarketing: false }))
+
+    expect(failure.allMarketing).toEqual({ message: 'Request failed' })
+    expect(errors).toEqual([expect.objectContaining({ error: networkError })])
+  })
+
   it('retries a transient server error until the preference is stored', async () => {
     api.failWhen(() => true, { status: 503 }, 1)
 

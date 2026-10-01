@@ -2984,6 +2984,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         body: JSON.stringify(body),
       })
     } catch (error) {
+      this._events.emit('error', error)
       throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')
     }
   }
