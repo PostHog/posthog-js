@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-5176-auto-none-no-comment-no-close-1790850989117",
-      "kind": "issue",
-      "number": 5176,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-10-01T10:36:29.116Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 36850165093,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36850165093"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-5178-auto-none-no-comment-no-close-1790850994267",
       "kind": "issue",
       "number": 5178,
