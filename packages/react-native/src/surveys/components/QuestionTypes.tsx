@@ -255,6 +255,7 @@ export function RatingQuestion({
                     active={active}
                     appearance={appearance}
                     num={number}
+                    question={question.question}
                     setActiveNumber={(response) => {
                       setRating(response)
                       if (question.skipSubmitButton) {
@@ -297,12 +298,14 @@ export function RatingButton({
   num,
   active,
   appearance,
+  question,
   setActiveNumber,
 }: {
   index: number
   num: number
   active: boolean
   appearance: SurveyAppearanceTheme
+  question: string
   setActiveNumber: (num: number) => void
 }): JSX.Element {
   const backgroundColor = active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
@@ -319,6 +322,9 @@ export function RatingButton({
         { backgroundColor, borderColor: appearance.borderColor },
       ]}
       onPress={() => setActiveNumber(num)}
+      accessibilityLabel={`${question}: ${num}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
     >
       <Text maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingNumber')} style={{ color: textColor }}>
         {num}
