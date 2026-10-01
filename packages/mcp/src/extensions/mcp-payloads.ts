@@ -3,6 +3,8 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
+import { MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
+
 const CONTEXT_ARGUMENT_NAME = 'context'
 const REDACTED_VALUE = '[redacted]'
 const BINARY_REDACTED_VALUE = '[binary data redacted - not supported by PostHog MCP analytics]'
@@ -12,6 +14,10 @@ const BASE64URL_SPECIFIC_CHAR_PATTERN = /[-_]/
 const BASE64_DATA_URL_PREFIX_PATTERN = /^data:[^,\s]*;base64,/i
 const BASE64_DATA_URL_PAYLOAD_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/
 const SIZE_GATE = 10_240
+const SCANNED_HEAD_LENGTH = 4 * MAX_STRING_LENGTH
+// Twice what truncation keeps, so a match split where the head was cut sits past
+// the part truncation keeps.
+const MIN_REDACTED_HEAD_LENGTH = 2 * MAX_STRING_LENGTH
 const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
@@ -33,6 +39,8 @@ const SENSITIVE_KEY_PATTERN =
 // harmless: a match with nothing to redact is returned byte-for-byte, so the
 // text around it is never rewritten.
 const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:[^\s<>"]+/gi
+// A character no URL match can contain, so a cut just after one splits no URL.
+const URL_END_PATTERN = /[\s<>"]/
 /** The same pattern without `g`, for asking whether a value holds a URL at all. */
 const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
 /** Finds the first scheme that brings a real authority, i.e. what the pattern required before it went authority-less. */
@@ -315,6 +323,11 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
  * addresses together, because every one of them scanned back to the same `?`.
  */
 function findEmbeddedAuthorityIndexes(value: string): number[] {
+  // The search tries up to 64 scheme characters at every position, which a long
+  // base64 `data:` URI turns into seconds; without `://` it cannot match at all.
+  if (!value.includes('://')) {
+    return []
+  }
   const starts = [...value.matchAll(URL_AUTHORITY_SEARCH_ALL)].map((match) => match.index)
   const indexes: number[] = []
   const delimiters = { query: false, fragment: false, fragmentQuery: false }
@@ -503,8 +516,37 @@ function redactUrls(value: string): string {
   return sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
 }
 
+/**
+ * Runs `redact` over only the head of `value` that truncation can keep, so a
+ * multi-megabyte tool result costs about the same as the part captured. The head
+ * ends where no URL crosses it, because a URL is redacted or kept on the whole
+ * address. Redaction shrinks text, so a head that ends up too short to cover
+ * truncation's cut falls back to the whole string. Either way the kept part
+ * reads exactly as if the whole string were redacted.
+ */
+function redactCapturedHead(value: string, redact: (value: string) => string): string {
+  if (value.length > SCANNED_HEAD_LENGTH) {
+    const head = redact(value.slice(0, headLength(value)))
+    if (head.length >= MIN_REDACTED_HEAD_LENGTH) {
+      return head + TRUNCATION_SUFFIX
+    }
+  }
+  return redact(value)
+}
+
+/** The scanned head, shortened to end just after the last character that ends a URL. */
+function headLength(value: string): number {
+  let end = SCANNED_HEAD_LENGTH
+  while (end > 0 && !URL_END_PATTERN.test(value[end - 1])) {
+    end--
+  }
+  return end
+}
+
 function sanitizeString(value: string): string {
-  return isBinaryBlob(value) ? BINARY_REDACTED_VALUE : redactUrls(redactCredentials(value))
+  return isBinaryBlob(value)
+    ? BINARY_REDACTED_VALUE
+    : redactCapturedHead(value, (head) => redactUrls(redactCredentials(head)))
 }
 
 /**
@@ -523,7 +565,7 @@ export function sanitizeFreeText(value: string): string {
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
-  return redactUrls(redactPii(redactCredentials(value)))
+  return redactCapturedHead(value, (head) => redactUrls(redactPii(redactCredentials(head))))
 }
 
 function passesLuhn(digits: string): boolean {
