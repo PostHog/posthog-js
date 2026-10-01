@@ -356,6 +356,8 @@ describe('PostHog React Native', () => {
           properties: {
             $app_build: '1',
             $app_version: '1.0.0',
+            build: '1',
+            version: '1.0.0',
           },
         })
         expect(onCapture.mock.calls[1][0]).toMatchObject({
@@ -363,6 +365,8 @@ describe('PostHog React Native', () => {
           properties: {
             $app_build: '1',
             $app_version: '1.0.0',
+            build: '1',
+            version: '1.0.0',
           },
         })
       })
@@ -409,6 +413,8 @@ describe('PostHog React Native', () => {
           properties: {
             $app_build: '2',
             $app_version: '2.0.0',
+            build: '2',
+            version: '2.0.0',
             previous_build: '1',
             previous_version: '1.0.0',
           },
@@ -418,8 +424,33 @@ describe('PostHog React Native', () => {
           properties: {
             $app_build: '2',
             $app_version: '2.0.0',
+            build: '2',
+            version: '2.0.0',
           },
         })
+      })
+    })
+
+    it.each([
+      { name: 'missing', appVersion: undefined },
+      { name: 'null', appVersion: null },
+    ])('should omit unavailable lifecycle version metadata when $name', async ({ appVersion }) => {
+      posthog = new PostHog('1', {
+        customStorage: mockStorage,
+        captureAppLifecycleEvents: true,
+        customAppProperties: { $app_build: '1', $app_version: appVersion },
+      })
+      const onCapture = vi.fn()
+      posthog.on('capture', onCapture)
+
+      await waitForExpect(200, () => {
+        expect(onCapture).toHaveBeenCalledTimes(2)
+        expect(onCapture.mock.calls[0][0].event).toBe('Application Installed')
+        expect(onCapture.mock.calls[0][0].properties).toMatchObject({ build: '1' })
+        expect(onCapture.mock.calls[0][0].properties).not.toHaveProperty('version')
+        expect(onCapture.mock.calls[1][0].event).toBe('Application Opened')
+        expect(onCapture.mock.calls[1][0].properties).toMatchObject({ build: '1' })
+        expect(onCapture.mock.calls[1][0].properties).not.toHaveProperty('version')
       })
     })
 
