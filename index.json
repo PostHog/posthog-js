@@ -4,15 +4,15 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 5178",
     "url": "https://github.com/PostHog/posthog-js/issues/5178",
-    "conclusion": "Confirmed React Native survey accessibility bug with a focused, non-public-API fix path.",
+    "conclusion": "Confirmed React Native survey accessibility bug with a focused fix path, pending native screen-reader verification of the revised hierarchy.",
     "labels": [
-      "react-native",
       "feature/surveys",
+      "react-native",
       "team/client-libraries",
       "bug"
     ],
     "closed": false,
-    "updatedAt": "2026-10-01T09:57:33.753Z"
+    "updatedAt": "2026-10-01T10:01:54.071Z"
   },
   "PostHog/posthog-js/issue/5177": {
     "key": "PostHog/posthog-js/issue/5177",
