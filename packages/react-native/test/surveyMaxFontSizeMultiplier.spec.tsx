@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react'
 import { render, cleanup } from '@testing-library/react'
+import { SurveyRatingDisplay, SurveyQuestionType } from '@posthog/core'
 
 // Records the props every Text/TextInput is rendered with, so a test can assert
 // which ceiling reached which node. The minimal react-native shim keeps native
@@ -9,6 +10,7 @@ const renderedTextProps: {
   children: unknown
   maxFontSizeMultiplier: number | undefined
   allowFontScaling: boolean | undefined
+  style: Record<string, unknown> | undefined
 }[] = []
 
 vi.mock('react-native', async () => {
@@ -17,8 +19,8 @@ vi.mock('react-native', async () => {
     RealReact.createElement('div', { ref, 'data-testid': testID }, children)
   )
   const RecordingText = RealReact.forwardRef(
-    ({ children, maxFontSizeMultiplier, allowFontScaling, testID }: any, ref: any) => {
-      renderedTextProps.push({ children, maxFontSizeMultiplier, allowFontScaling })
+    ({ children, maxFontSizeMultiplier, allowFontScaling, style, testID }: any, ref: any) => {
+      renderedTextProps.push({ children, maxFontSizeMultiplier, allowFontScaling, style })
       return RealReact.createElement('div', { ref, 'data-testid': testID }, children)
     }
   )
@@ -27,6 +29,7 @@ vi.mock('react-native', async () => {
     Modal: Box,
     KeyboardAvoidingView: Box,
     Pressable: Box,
+    ScrollView: Box,
     TouchableOpacity: Box,
     Text: RecordingText,
     TextInput: RecordingText,
@@ -41,12 +44,16 @@ vi.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSv
 
 import { BottomSection } from '../src/surveys/components/BottomSection'
 import { QuestionHeader } from '../src/surveys/components/QuestionHeader'
+import { RatingQuestion } from '../src/surveys/components/QuestionTypes'
 import { CancelSVG } from '../src/surveys/icons'
 import { defaultSurveyAppearance, getMaxFontSizeMultiplier, SurveyAppearanceTheme } from '../src/surveys/surveys-utils'
 import type { PostHogSurveyProviderProps, SurveyAppearance, SurveyTextRole } from '../src'
 
 const capOf = (text: string): number | undefined =>
   renderedTextProps.find((entry) => entry.children === text)?.maxFontSizeMultiplier
+
+const styleOf = (text: string): Record<string, unknown> | undefined =>
+  renderedTextProps.find((entry) => entry.children === text)?.style
 
 beforeEach(() => {
   renderedTextProps.length = 0
@@ -157,5 +164,31 @@ describe('survey text ceilings', () => {
     render(<CancelSVG />)
 
     expect(renderedTextProps.find((entry) => entry.children === 'x')?.allowFontScaling).toBe(false)
+  })
+
+  it('constrains rating endpoint labels without capping their font scale', () => {
+    render(
+      <RatingQuestion
+        question={
+          {
+            id: 'rating-question',
+            type: SurveyQuestionType.Rating,
+            question: 'How likely are you to recommend us?',
+            display: SurveyRatingDisplay.Number,
+            scale: 10,
+            lowerBoundLabel: 'Not at all likely',
+            upperBoundLabel: 'Extremely likely',
+            optional: true,
+          } as any
+        }
+        appearance={base}
+        onSubmit={() => {}}
+      />
+    )
+
+    expect(capOf('Not at all likely')).toBeUndefined()
+    expect(capOf('Extremely likely')).toBeUndefined()
+    expect(styleOf('Not at all likely')).toMatchObject({ flex: 1 })
+    expect(styleOf('Extremely likely')).toMatchObject({ flex: 1, textAlign: 'right' })
   })
 })
