@@ -14,6 +14,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36846311443"
       },
       "attempts": 0
+    },
+    {
+      "id": "issue-5176-auto-none-no-comment-no-close-1790848810027",
+      "kind": "issue",
+      "number": 5176,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-10-01T10:00:10.027Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 36846303683,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/36846303683"
+      },
+      "attempts": 0
     }
   ]
 }
