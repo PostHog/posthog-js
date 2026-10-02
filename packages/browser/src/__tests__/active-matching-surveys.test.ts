@@ -1,10 +1,10 @@
 import type { PostHog as PostHogInterface } from '@posthog/types'
 import type { ApiResponse } from '@posthog/browser-common'
-import { BrowserSurveys } from '../browser-surveys'
+import { getSurveyRenderContext, BrowserSurveys } from '../browser-surveys'
 import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT } from '../constants'
-import { SurveyManager } from '../extensions/surveys'
+import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import type { PostHog } from '../posthog-core'
-import { Survey, SurveyEventName, SurveySchedule, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveySchedule, SurveyType } from '@posthog/browser-common'
 import type { CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { createMockConfig, createMockPersistence, createMockPostHog } from './helpers/posthog-instance'
@@ -105,6 +105,8 @@ describe('active matching survey subscriptions', () => {
                 endpointFor: () => 'https://test.com/api/surveys/',
             } as unknown as PostHog['requestRouter'],
             featureFlags: {
+                reloadFeatureFlags: vi.fn(),
+                onFeatureFlags: (callback) => posthog.onFeatureFlags(callback),
                 hasLoadedFlags: true,
                 isFeatureEnabled: vi.fn((key: string) => flags[key]),
                 getFeatureFlag: vi.fn((key: string) => flags[key]),
@@ -115,7 +117,7 @@ describe('active matching survey subscriptions', () => {
         posthog.getSurveys = surveys.getSurveys.bind(surveys)
         posthog.cancelPendingSurvey = vi.fn()
         assignableWindow.__PosthogExtensions__ = {
-            generateSurveys: () => new SurveyManager(posthog),
+            generateSurveys: () => new SurveyManager(getSurveyRenderContext(posthog)!),
         }
         surveys.setup(createSurveysClient(posthog))
     }
@@ -329,7 +331,9 @@ describe('active matching survey subscriptions', () => {
             isLoaded: false,
             error: 'Could not load surveys script',
         })
-        assignableWindow.__PosthogExtensions__ = { generateSurveys: () => new SurveyManager(posthog) }
+        assignableWindow.__PosthogExtensions__ = {
+            generateSurveys: () => new SurveyManager(getSurveyRenderContext(posthog)!),
+        }
         surveys.loadIfEnabled()
         expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
     })
@@ -343,7 +347,9 @@ describe('active matching survey subscriptions', () => {
         const callback = vi.fn()
         surveys.onActiveMatchingSurveysChanged(callback)
         expect(callback.mock.calls).toEqual([[[], { isLoaded: false }]])
-        assignableWindow.__PosthogExtensions__ = { generateSurveys: () => new SurveyManager(posthog) }
+        assignableWindow.__PosthogExtensions__ = {
+            generateSurveys: () => new SurveyManager(getSurveyRenderContext(posthog)!),
+        }
         surveys.loadIfEnabled()
         expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
     })

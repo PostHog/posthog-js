@@ -136,6 +136,7 @@ class PostHogBrowserClient implements PostHog {
     readonly onGroup: BrowserClient['onGroup']
     readonly onReset: BrowserClient['onReset']
     readonly onConsentChange: BrowserClient['onConsentChange']
+    readonly onSession: Client['onSession']
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
@@ -276,6 +277,7 @@ class PostHogBrowserClient implements PostHog {
         this.onReset = this._resetPublisher.listener
         this.onConsentChange = this._consentChangePublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
+        this.onSession = (listener) => this.onNewSession((session) => listener(session.sessionId))
         this._registry = new ExtensionRegistry(
             (extensionName) => this._createExtensionClient(extensionName),
             this.logger
@@ -308,11 +310,28 @@ class PostHogBrowserClient implements PostHog {
         return this._state.session
     }
 
+    get isOptedOut(): boolean {
+        return this.hasOptedOut()
+    }
+
     get canCapture(): boolean {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
     capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
+        try {
+            if (options.delivery === 'unload') {
+                const authority = this._immediateAuthority
+                const message = this._admitCapture(event, properties, options, false, true)
+                if (message) {
+                    this._captureSink?.deliverUnload(message, () => this._immediateAuthority === authority)
+                }
+                return
+            }
+        } catch (error) {
+            this.logger.error('Unload capture failed', error)
+            return
+        }
         this._capture(event, properties, options)
     }
 
@@ -977,6 +996,9 @@ class PostHogBrowserClient implements PostHog {
             get session() {
                 return host.session
             },
+            get isOptedOut() {
+                return host.isOptedOut
+            },
             get canCapture() {
                 return host.canCapture
             },
@@ -993,6 +1015,7 @@ class PostHogBrowserClient implements PostHog {
             onIdentify: host.onIdentify,
             onGroup: host.onGroup,
             onReset: host.onReset,
+            onSession: host.onSession,
             kv,
             logger,
         }

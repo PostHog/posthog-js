@@ -1,0 +1,1016 @@
+/* oxlint-disable compat/compat -- Tests run in Node. */
+// @vitest-environment jsdom
+import './helpers/surveys-setup'
+import type { Mock } from 'vitest'
+vi.mock('../src/utils/logger', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/utils/logger')>()),
+    createLogger: vi.fn().mockReturnValue({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+    }),
+}))
+vi.useFakeTimers()
+
+import { createLogger } from '../src/utils/logger'
+import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT } from '../src/surveys-config'
+import { SurveyManager } from '../src/surveys-renderer'
+import { PostHogSurveys } from '../src/surveys'
+import type { SurveysConfig, SurveysConfigSource, SurveysExtensionHost } from '../src/surveys-config'
+import { TestClient } from './helpers/test-client'
+import { createSurveyRenderContext } from './helpers/survey-render-context'
+import type { MockSurveyRenderContext } from './helpers/survey-render-context'
+import { SurveySchedule, SurveyType } from '../src/survey-constants'
+import type { Survey } from '../src/types/surveys'
+import {
+    DEFAULT_DISPLAY_SURVEY_OPTIONS,
+    SURVEY_IN_PROGRESS_PREFIX,
+    SURVEY_SEEN_PREFIX,
+} from '../src/utils/survey-utils'
+
+const mockLogger = vi.mocked(createLogger).mock.results[0].value
+
+const flushPromises = async (): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(0)
+}
+
+describe('surveys orchestration', () => {
+    describe('PostHogSurveys Class', () => {
+        let client: TestClient
+        let host: MockSurveyRenderContext
+        let config: SurveysConfig
+        let extensions: SurveysExtensionHost | undefined
+        let source: SurveysConfigSource
+        let surveys: PostHogSurveys
+        let mockGenerateSurveys: Mock
+        let mockLoadExternalDependency: Mock
+
+        const survey: Survey = {
+            id: 'completed-survey',
+            name: 'completed survey',
+            description: 'draft survey description',
+            type: SurveyType.Popover,
+            linked_flag_key: 'linked-flag-key',
+            targeting_flag_key: 'targeting-flag-key',
+            internal_targeting_flag_key: 'internal_targeting_flag_key',
+            start_date: new Date('10/10/2022').toISOString(),
+            conditions: {},
+        } as unknown as Survey
+
+        const repeatableSurvey: Survey = {
+            ...survey,
+            id: 'repeatable-survey',
+            name: 'repeatable survey',
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Always,
+        }
+
+        const surveyWithWaitPeriod: Survey = {
+            ...survey,
+            id: 'survey-with-wait-period',
+            name: 'survey with wait period',
+            conditions: {
+                seenSurveyWaitPeriodInDays: 7,
+                events: null,
+                cancelEvents: null,
+                actions: null,
+            },
+        }
+
+        const externalSurvey: Survey = {
+            ...survey,
+            id: 'external-survey',
+            name: 'external survey',
+            type: SurveyType.ExternalSurvey,
+        }
+
+        const flagsResponse = {
+            featureFlags: {
+                'linked-flag-key': true,
+                'survey-targeting-flag-key': true,
+                'linked-flag-key2': true,
+                'survey-targeting-flag-key2': false,
+                'enabled-internal-targeting-flag-key': true,
+                'disabled-internal-targeting-flag-key': false,
+            },
+            surveys: true,
+        }
+
+        beforeEach(() => {
+            vi.clearAllMocks()
+            localStorage.clear()
+            client = new TestClient({ projectToken: 'test-token' })
+            vi.spyOn(client.kv, 'get').mockReturnValue(undefined)
+            vi.spyOn(client.kv, 'set')
+            vi.spyOn(client, 'sendRequest').mockImplementation(() => new Promise(() => {}))
+            config = {
+                disableSurveys: false,
+                cookielessMode: false,
+                advancedEnableSurveys: false,
+                requestTimeoutMs: 10000,
+            }
+            host = createSurveyRenderContext({
+                hasLoadedFlags: true,
+                getCachedSurveys: () => client.kv.get(SURVEYS),
+                getFlag: vi.fn((key) => flagsResponse.featureFlags[key]),
+                isFlagEnabled: vi.fn((key) => flagsResponse.featureFlags[key]),
+            })
+            // Keep the capture permission live as the client changes.
+            Object.defineProperty(host, 'canCapture', { get: () => client.canCapture })
+            mockGenerateSurveys = vi.fn()
+            mockLoadExternalDependency = vi.fn()
+            extensions = { generateSurveys: mockGenerateSurveys, loadExternalDependency: mockLoadExternalDependency }
+            source = {
+                get: () => config,
+                getExtensions: () => extensions,
+            }
+            surveys = new PostHogSurveys(source)
+            surveys.setup(client)
+            surveys.reset()
+        })
+
+        afterEach(() => {
+            surveys.dispose()
+            localStorage.clear()
+        })
+
+        describe('reset', () => {
+            it('does not throw when localStorage access throws (e.g. cross-origin iframe)', () => {
+                const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+                    throw new Error('storage unavailable')
+                })
+
+                expect(() => surveys.reset()).not.toThrow()
+
+                removeItemSpy.mockRestore()
+            })
+        })
+
+        describe('canRenderSurvey', () => {
+            it('should return false if surveys are not loaded', () => {
+                const result = surveys.canRenderSurvey(survey.id)
+                expect(result.visible).toBeFalsy()
+                expect(result.disabledReason).toEqual('SDK is not enabled or survey functionality is not yet loaded')
+            })
+
+            it('should return visible: true if surveys are loaded and the survey is eligible', () => {
+                vi.mocked(client.kv.get).mockReturnValue([survey])
+                surveys['_surveyManager'] = new SurveyManager(host)
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                const result = surveys.canRenderSurvey(survey.id)
+                expect(result.visible).toBeTruthy()
+                expect(result.disabledReason).toBeUndefined()
+            })
+
+            // The public entry point is what an integrator calls before it shows a survey, so the
+            // capture gate has to reach this far. `_checkSurveyRenderability` and
+            // `_checkSurveyEligibility` sit next to each other, and only the first applies the gate.
+            it('reports the capture state through the public entry point', () => {
+                vi.mocked(client.kv.get).mockReturnValue([survey])
+                client.canCapture = false
+                surveys['_surveyManager'] = new SurveyManager(host)
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+
+                const result = surveys.canRenderSurvey(survey.id)
+
+                expect(result.visible).toBe(false)
+                expect(result.disabledReason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+            })
+        })
+
+        describe('displaySurvey', () => {
+            let surveyManager: SurveyManager
+
+            beforeEach(() => {
+                vi.mocked(client.kv.get).mockReturnValue([survey])
+                surveyManager = new SurveyManager(host)
+                surveys['_surveyManager'] = surveyManager
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+            })
+
+            // Regression guard: `ignoreConditions` bypasses the survey's display conditions, not the
+            // capture prerequisite. Forcing a survey on while capturing is opted out would show a
+            // confirmation for an answer `capture()` throws away.
+            it('does not display an opted-out survey, even with ignoreConditions', () => {
+                client.canCapture = false
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey')
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).not.toHaveBeenCalled()
+                expect(mockLogger.critical).not.toHaveBeenCalled()
+            })
+
+            it('displays a survey with ignoreConditions while capturing is on', () => {
+                client.canCapture = true
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey').mockImplementation(() => {})
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).toHaveBeenCalled()
+            })
+
+            it('does not render directly while capturing is off', () => {
+                client.canCapture = false
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+
+                surveys.renderSurvey(survey, 'body')
+
+                expect(render).not.toHaveBeenCalled()
+            })
+
+            it('rechecks capturing after a direct render delay', () => {
+                client.canCapture = true
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+                surveys.renderSurvey({ ...survey, appearance: { surveyPopupDelaySeconds: 1 } }, 'body')
+                client.canCapture = false
+
+                vi.advanceTimersByTime(1000)
+
+                expect(render).not.toHaveBeenCalled()
+            })
+        })
+
+        describe('checkSurveyEligibility', () => {
+            beforeEach(() => {
+                // mock getSurveys response
+                vi.mocked(client.kv.get).mockReturnValue([
+                    survey,
+                    repeatableSurvey,
+                    surveyWithWaitPeriod,
+                    externalSurvey,
+                ])
+                surveys['_surveyManager'] = new SurveyManager(host)
+            })
+
+            it('cannot render completed surveys', () => {
+                const completedSurvey = {
+                    ...survey,
+                    end_date: new Date('11/10/2022').toISOString(),
+                }
+                vi.mocked(client.kv.get).mockReturnValue([completedSurvey])
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(`Survey is not running. It was completed on ${completedSurvey.end_date}`)
+            })
+
+            it('cannot render survey if linked_flag is false', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey linked feature flag is not enabled')
+            })
+
+            it('cannot render survey if targeting_feature_flag is false', () => {
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey targeting feature flag is not enabled')
+            })
+
+            it('cannot render survey if internal_targeting_feature_flag is false', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(
+                    'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
+                )
+            })
+
+            it('cannot render survey if linkedFlagVariant is not the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'cost'
+                survey.conditions.linkedFlagVariant = 'control'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey linked feature flag is not enabled for variant control')
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render survey if linkedFlagVariant is the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'variant'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render survey if linkedFlagVariant is any', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'any'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render if survey can activate repeatedly', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                expect(result.eligible).toBeTruthy()
+            })
+
+            it('can render a survey that is in progress', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                localStorage.setItem(
+                    `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`,
+                    JSON.stringify({
+                        surveySubmissionId: '123',
+                    })
+                )
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+            })
+
+            it('cannot render external surveys', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+
+                const result = surveys['_checkSurveyEligibility'](externalSurvey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(
+                    'Surveys of type external_survey are never eligible to be shown in the app'
+                )
+            })
+
+            describe('integration with wait period and survey seen checks', () => {
+                beforeEach(() => {
+                    // Set all flags to true for integration tests
+                    flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                    flagsResponse.featureFlags[survey.linked_flag_key] = true
+                    flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.linked_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.internal_targeting_flag_key] = true
+                })
+
+                it('integrates wait period check with other eligibility criteria', () => {
+                    // Set last seen survey date to 3 days ago (less than 7 day wait period)
+                    const threeDaysAgo = new Date()
+                    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+                    localStorage.setItem('lastSeenSurveyDate', threeDaysAgo.toISOString())
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithWaitPeriod.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual('Survey wait period has not passed')
+                })
+
+                it('integrates survey seen check with other eligibility criteria', () => {
+                    // Mark survey as seen
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${survey.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](survey.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual("Survey has already been seen and it can't be activated again")
+                })
+
+                it('allows repeatable surveys even when seen', () => {
+                    // Use repeatable survey (has SurveySchedule.Always)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurvey.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                    expect(result.eligible).toBeTruthy()
+                })
+            })
+
+            describe('check order and interaction between multiple eligibility criteria', () => {
+                const surveyWithBothConditions: Survey = {
+                    ...survey,
+                    id: 'survey-with-both-conditions',
+                    conditions: {
+                        seenSurveyWaitPeriodInDays: 5,
+                        events: null,
+                        cancelEvents: null,
+                        actions: null,
+                    },
+                }
+
+                beforeEach(() => {
+                    vi.mocked(client.kv.get).mockReturnValue([surveyWithBothConditions])
+                    // Set all flags to true
+                    flagsResponse.featureFlags[surveyWithBothConditions.targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithBothConditions.linked_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithBothConditions.internal_targeting_flag_key] = true
+                })
+
+                it('checks wait period before survey seen status (early return)', () => {
+                    // Set last seen survey date to 2 days ago (less than 5 day wait period)
+                    const twoDaysAgo = new Date()
+                    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+                    localStorage.setItem('lastSeenSurveyDate', twoDaysAgo.toISOString())
+
+                    // Also mark survey as seen (but this should not be checked since wait period fails first)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual('Survey wait period has not passed')
+                })
+
+                it('checks survey seen status when wait period passes', () => {
+                    // Set last seen survey date to 10 days ago (more than 5 day wait period)
+                    const tenDaysAgo = new Date()
+                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+
+                    // Mark survey as seen and cannot repeat
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual("Survey has already been seen and it can't be activated again")
+                })
+
+                it('allows surveys that pass all checks including repeatability', () => {
+                    // Create a repeatable survey with wait period
+                    const repeatableSurveyWithWaitPeriod: Survey = {
+                        ...repeatableSurvey,
+                        id: 'repeatable-survey-with-wait-period',
+                        conditions: {
+                            seenSurveyWaitPeriodInDays: 5,
+                            events: null,
+                            cancelEvents: null,
+                            actions: null,
+                        },
+                    }
+                    vi.mocked(client.kv.get).mockReturnValue([repeatableSurveyWithWaitPeriod])
+
+                    // Set last seen survey date to 10 days ago (more than 5 day wait period)
+                    const tenDaysAgo = new Date()
+                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+
+                    // Mark survey as seen but can repeat (due to SurveySchedule.Always)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurveyWithWaitPeriod.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](repeatableSurveyWithWaitPeriod.id)
+                    expect(result.eligible).toBeTruthy()
+                })
+            })
+        })
+
+        describe('loadIfEnabled', () => {
+            it('should not initialize if surveys are already loaded', () => {
+                // Set surveyManager to simulate already loaded state
+                surveys['_surveyManager'] = new SurveyManager(host)
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not initialize if already initializing', () => {
+                // Set isInitializingSurveys to true
+                surveys['_isInitializingSurveys'] = true
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not initialize if surveys are disabled', () => {
+                config.disableSurveys = true
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not initialize if renderer extensions are not found', () => {
+                extensions = undefined
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not initialize if flags server response is not ready', () => {
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should set isInitializingSurveys to false after successful initialization', () => {
+                // Set flags server response
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockReturnValue({})
+
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+            })
+
+            it('should set isInitializingSurveys to false after failed initialization', () => {
+                // Set flags server response
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockImplementation(() => {
+                    throw Error('Test error')
+                })
+
+                expect(() => surveys.loadIfEnabled()).toThrow('Test error')
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+            })
+
+            it('should set isInitializingSurveys to false when loadExternalDependency fails', () => {
+                // Set flags server response but no generateSurveys
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys = undefined
+                extensions!.generateSurveys = undefined
+
+                mockLoadExternalDependency.mockImplementation((callback) => {
+                    callback(new Error('Failed to load'))
+                })
+
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+            })
+
+            it('should call the callback with the surveys when they are loaded', () => {
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockReturnValue({})
+                const callback = vi.fn()
+                const mockSurveys = [{ id: 'test-survey' }]
+                vi.mocked(client.kv.get).mockReturnValue(mockSurveys)
+
+                surveys.onSurveysLoaded(callback)
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(callback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
+                expect(callback).toHaveBeenCalledTimes(1)
+
+                surveys.loadIfEnabled()
+                // callback is only called once, even if surveys are loaded again
+                expect(callback).toHaveBeenCalledTimes(1)
+            })
+
+            it('should call the callback with an error when surveys are not loaded', () => {
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockImplementation(() => {
+                    throw new Error('Error initializing surveys')
+                })
+                const callback = vi.fn()
+
+                surveys.onSurveysLoaded(callback)
+                expect(() => surveys.loadIfEnabled()).toThrow('Error initializing surveys')
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(callback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Error initializing surveys',
+                })
+                expect(callback).toHaveBeenCalledTimes(1)
+
+                // callback is only called once, even if surveys are loaded again
+                expect(callback).toHaveBeenCalledTimes(1)
+            })
+
+            it('should call onSurveysLoaded callback with surveys even when generateSurveys triggers an async fetch', async () => {
+                // This test reproduces a race condition on first page load:
+                // 1. generateSurveys is called, which starts an async API fetch
+                // 2. onSurveysLoaded callbacks fire, which call getSurveys
+                // 3. getSurveys reuses the in-flight promise instead of returning an error
+                // 4. When the fetch completes, all callbacks receive the surveys
+
+                const mockSurveys = [{ id: 'test-survey' }]
+                const callback = vi.fn()
+
+                // No cached surveys (simulating first page load)
+                vi.mocked(client.kv.get).mockReturnValue(undefined)
+
+                // Mock sendRequest to simulate async API call
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((reqCallback) => {
+                            setTimeout(() => {
+                                reqCallback({ statusCode: 200, json: { surveys: mockSurveys } })
+                            }, 100)
+                        })
+                )
+
+                // Mock generateSurveys to simulate what the real function does:
+                // it calls getSurveys which starts the async fetch
+                mockGenerateSurveys.mockImplementation(() => {
+                    // This simulates callSurveysAndEvaluateDisplayLogic calling getSurveys
+                    surveys.getSurveys(() => {}, true) // forceReload = true
+                    return {} // return mock SurveyManager
+                })
+
+                surveys['_isSurveysEnabled'] = true
+                surveys.onSurveysLoaded(callback)
+                surveys.loadIfEnabled()
+
+                // Let the async fetch complete
+                vi.advanceTimersByTime(100)
+
+                await flushPromises()
+
+                // The callback should have been called with the actual surveys
+                expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+            })
+
+            it('should not load surveys in cookieless mode without consent', () => {
+                config.cookielessMode = true
+                client.isOptedOut = true
+                surveys['_isSurveysEnabled'] = true
+
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should load surveys in cookieless mode after consent is given', () => {
+                config.cookielessMode = true
+                client.isOptedOut = false
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockReturnValue({})
+
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(mockGenerateSurveys).toHaveBeenCalled()
+            })
+        })
+
+        describe('getSurveys', () => {
+            const mockCallback = vi.fn()
+            const mockSurveys = [{ id: 'test-survey' }]
+
+            beforeEach(() => {
+                mockCallback.mockClear()
+            })
+
+            it('reports unavailable before shared extension setup', () => {
+                const uninitializedSurveys = new PostHogSurveys(source)
+                vi.mocked(client.kv.get).mockReturnValue(mockSurveys)
+                const callback = vi.fn()
+
+                uninitializedSurveys.getSurveys(callback)
+
+                expect(callback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'SDK is not enabled or survey functionality is not yet loaded',
+                })
+                expect(vi.mocked(client.sendRequest)).not.toHaveBeenCalled()
+            })
+
+            it('should return cached surveys and not fetch if they exist', () => {
+                vi.mocked(client.kv.get).mockReturnValue(mockSurveys)
+
+                surveys.getSurveys(mockCallback)
+
+                expect(vi.mocked(client.sendRequest)).not.toHaveBeenCalled()
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
+            })
+
+            it('should reuse in-flight promise when fetch is in progress', async () => {
+                // Start a fetch that doesn't complete immediately
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            setTimeout(() => {
+                                callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                            }, 100)
+                        })
+                )
+
+                const callback1 = vi.fn()
+                const callback2 = vi.fn()
+
+                // First call starts the fetch
+                surveys.getSurveys(callback1)
+                expect(surveys['_getSurveysInFlightPromise']).not.toBeNull()
+
+                // Second call should reuse the promise, not start a new request
+                surveys.getSurveys(callback2)
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalledTimes(1)
+
+                // Complete the request
+                vi.advanceTimersByTime(100)
+
+                await flushPromises()
+
+                // Both callbacks should receive the surveys
+                expect(callback1).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(callback2).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+            })
+
+            it('should propagate errors to all promise subscribers', async () => {
+                // Start a fetch that will fail
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            setTimeout(() => {
+                                callback({ statusCode: 500 })
+                            }, 100)
+                        })
+                )
+
+                const callback1 = vi.fn()
+                const callback2 = vi.fn()
+
+                // Both callers subscribe to the same in-flight request
+                surveys.getSurveys(callback1)
+                surveys.getSurveys(callback2)
+
+                // Complete the request with error
+                vi.advanceTimersByTime(100)
+                await flushPromises()
+
+                // Both callbacks should receive the error
+                const expectedError = { isLoaded: false, error: 'Surveys API could not be loaded, status: 500' }
+                expect(callback1).toHaveBeenCalledWith([], expectedError)
+                expect(callback2).toHaveBeenCalledWith([], expectedError)
+            })
+
+            it('contains callback failures for asynchronous results', async () => {
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                        })
+                )
+                const callbackError = new Error('callback failed')
+
+                surveys.getSurveys(() => {
+                    throw callbackError
+                })
+                await flushPromises()
+
+                expect(mockLogger.error).toHaveBeenCalledWith('Error in survey callback', callbackError)
+            })
+
+            it('should clear promise after successful API call', async () => {
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
+                expect(client.kv.set).toHaveBeenCalledWith({
+                    [SURVEYS]: mockSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
+            })
+
+            it('clears the request and reports an error when a successful response is malformed', async () => {
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 200, json: { surveys: {} } })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 0',
+                })
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Error processing surveys response',
+                    expect.any(TypeError)
+                )
+            })
+
+            it('should clear promise after failed API call (non-200 status)', async () => {
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 500 })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 500',
+                })
+                expect(mockLogger.error).toHaveBeenCalledWith('Surveys API could not be loaded, status: 500')
+            })
+
+            it('should clear promise when request times out', async () => {
+                // Mock a request that will timeout
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            // Simulate a timeout by calling callback with status 0
+                            callback({ statusCode: 0, text: 'timeout' })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 0',
+                })
+                expect(mockLogger.warn).toHaveBeenCalledWith('Surveys API could not be loaded, status: 0')
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('does not re-log status-zero failures already handled by the request layer', async () => {
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(mockLogger.warn).not.toHaveBeenCalled()
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('should handle delayed successful responses correctly', async () => {
+                const delayedSurveys = [{ id: 'delayed-survey' }]
+
+                // Mock a request that takes some time to respond
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            setTimeout(() => {
+                                callback({
+                                    statusCode: 200,
+                                    json: { surveys: delayedSurveys },
+                                })
+                            }, 100)
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+
+                // Initially promise should exist
+                expect(surveys['_getSurveysInFlightPromise']).not.toBeNull()
+
+                // After the response comes in
+                vi.advanceTimersByTime(100)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
+                    isLoaded: true,
+                })
+                expect(client.kv.set).toHaveBeenCalledWith({
+                    [SURVEYS]: delayedSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
+            })
+
+            it('should force reload surveys when forceReload is true', () => {
+                vi.mocked(client.kv.get).mockReturnValue(mockSurveys)
+
+                surveys.getSurveys(mockCallback, true)
+
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalled()
+            })
+
+            it('should not refresh in the background when the cache is fresh', () => {
+                vi.mocked(client.kv.get).mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return Date.now()
+                    return undefined
+                })
+
+                surveys.getSurveys(mockCallback)
+
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(vi.mocked(client.sendRequest)).not.toHaveBeenCalled()
+            })
+
+            it('should serve the cache then refresh in the background when the cache is stale', async () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                const freshSurveys = [{ id: 'fresh-survey' }]
+                vi.mocked(client.kv.get).mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 200, json: { surveys: freshSurveys } })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+
+                // The stale cache is still served synchronously so callers aren't blocked.
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                // A background refresh is triggered so the next poll picks up the new definitions.
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalled()
+                await flushPromises()
+                expect(client.kv.set).toHaveBeenCalledWith({
+                    [SURVEYS]: freshSurveys,
+                    [SURVEYS_LOADED_AT]: expect.any(Number),
+                })
+            })
+
+            it('does not start a second background refresh while one is already in flight', () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                vi.mocked(client.kv.get).mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                // Leave the refresh in flight: never invoke the request callback.
+                vi.mocked(client.sendRequest).mockImplementation(() => new Promise(() => {}))
+
+                surveys.getSurveys(mockCallback)
+                surveys.getSurveys(mockCallback)
+
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalledTimes(1)
+            })
+
+            it('backs off further background refreshes after a failed refresh', async () => {
+                const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
+                vi.mocked(client.kv.get).mockImplementation((key: string) => {
+                    if (key === SURVEYS) return mockSurveys
+                    if (key === SURVEYS_LOADED_AT) return staleLoadedAt
+                    return undefined
+                })
+                vi.mocked(client.sendRequest).mockImplementation(
+                    () =>
+                        new Promise((callback) => {
+                            callback({ statusCode: 500, json: undefined })
+                        })
+                )
+
+                surveys.getSurveys(mockCallback)
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalledTimes(1)
+                await flushPromises()
+
+                // A later stale poll within the back-off window must not re-hit the endpoint,
+                // otherwise a surveys-API outage becomes a per-poll request storm.
+                surveys.getSurveys(mockCallback)
+                expect(vi.mocked(client.sendRequest)).toHaveBeenCalledTimes(1)
+            })
+        })
+
+        describe('markSurveyAsSeen', () => {
+            beforeEach(() => {
+                localStorage.clear()
+            })
+
+            it('marks the survey as seen and records the last seen date', () => {
+                surveys.markSurveyAsSeen('abc-123')
+
+                expect(localStorage.getItem(`${SURVEY_SEEN_PREFIX}abc-123`)).toBe('true')
+                expect(localStorage.getItem('lastSeenSurveyDate')).not.toBeNull()
+            })
+
+            it('includes the iteration in the seen key when provided', () => {
+                surveys.markSurveyAsSeen('abc-123', { iteration: 2 })
+
+                expect(localStorage.getItem(`${SURVEY_SEEN_PREFIX}abc-123_2`)).toBe('true')
+            })
+        })
+    })
+})

@@ -43,7 +43,7 @@ import {
     SurveyEventName,
     SurveyEventProperties,
     type SurveyRenderReason,
-} from './posthog-surveys-types'
+} from '@posthog/browser-common'
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
@@ -106,7 +106,7 @@ import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
     setSurveySeenOnLocalStorage,
-} from './utils/survey-utils'
+} from '@posthog/browser-common/utils/survey-utils'
 import {
     isEmptyString,
     isFunction,

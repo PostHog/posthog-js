@@ -12,7 +12,7 @@ import {
     ProductTourStepButton,
     ShowTourOptions,
 } from '../../posthog-product-tours-types'
-import { SurveyEventName, SurveyEventProperties } from '../../posthog-surveys-types'
+import { SurveyEventName, SurveyEventProperties } from '@posthog/browser-common'
 import {
     addProductTourCSSVariablesToElement,
     ElementFindResult,

@@ -1001,7 +1001,7 @@ describe('@posthog/browser core', () => {
             const persisted = new Map(storage.values)
             vi.advanceTimersByTime(1_000)
 
-            for (const option of ['set', 'setOnce', 'uuid', 'timestamp']) {
+            for (const option of ['set', 'setOnce', 'uuid', 'timestamp', 'delivery']) {
                 const options = Object.defineProperty({}, option, {
                     get() {
                         throw new Error(`${option} getter failed`)

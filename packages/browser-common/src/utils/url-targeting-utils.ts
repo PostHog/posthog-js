@@ -5,7 +5,7 @@ import { window } from './globals'
 import { logger } from './logger'
 
 export type UrlTargetingInstance = {
-    config: Pick<PostHogConfig, 'get_current_url'>
+    config: { get_current_url?: PostHogConfig['get_current_url'] }
 }
 
 /**

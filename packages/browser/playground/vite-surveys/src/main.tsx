@@ -1,7 +1,7 @@
 import { render } from 'preact'
 
-import { retrieveSurveyShadow } from '../../../src/extensions/surveys/surveys-extension-utils.tsx'
-import { SurveyType } from '../../../src/posthog-surveys-types'
+import { retrieveSurveyShadow } from '@posthog/browser-common/surveys/surveys-extension-utils'
+import { SurveyType } from '@posthog/browser-common'
 import { List } from './list.tsx'
 
 const { shadow } = retrieveSurveyShadow({ id: 'playground', type: SurveyType.Popover, appearance: {} })
