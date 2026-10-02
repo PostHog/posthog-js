@@ -5810,8 +5810,8 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
-            // beforeunload, pagehide, offline, online
-            expect(windowAddEventListener).toHaveBeenCalledTimes(4)
+            // beforeunload, pagehide, pageshow, offline, online
+            expect(windowAddEventListener).toHaveBeenCalledTimes(5)
             expect(documentAddEventListener).toHaveBeenCalledWith(
                 'visibilitychange',
                 expect.any(Function),
@@ -9555,6 +9555,28 @@ describe('Lazy SessionRecording', () => {
             window!.dispatchEvent(new Event('pagehide'))
 
             expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+    })
+
+    describe('back/forward cache restore', () => {
+        beforeEach(() => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            _addCustomEvent.mockClear()
+            vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).mockClear()
+        })
+
+        it('takes a full snapshot when the page comes back from the back/forward cache', () => {
+            window!.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+            expect(_addCustomEvent).toHaveBeenCalledWith('$bfcache_restore', { href: window!.location.href })
+        })
+
+        it('does not take a full snapshot on a normal page load', () => {
+            window!.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+            expect(_addCustomEvent).not.toHaveBeenCalledWith('$bfcache_restore', expect.anything())
         })
     })
 
