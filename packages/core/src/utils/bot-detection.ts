@@ -160,4 +160,3 @@ export const isBlockedUA = function (ua: string | undefined, customBlockedUserAg
   UA_CACHE.set(key, result)
   return result
 }
-

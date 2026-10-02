@@ -98,4 +98,3 @@ describe('isBlockedUA cache-key delimiter injection', () => {
     expect(b).toBe(false)
   })
 })
-
