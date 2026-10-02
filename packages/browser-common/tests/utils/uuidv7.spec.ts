@@ -34,3 +34,38 @@ describe('uuidv7 utils', () => {
         })
     })
 })
+
+describe('lazy UUID random source', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+        vi.resetModules()
+    })
+
+    it.each(['crypto', 'fallback', 'deny-weak'] as const)('preserves the %s RNG policy at first use', async (mode) => {
+        vi.resetModules()
+        const random = vi.spyOn(Math, 'random').mockReturnValue(0.25)
+        const strong = vi.fn((buffer: Uint32Array) => buffer.fill(42))
+        vi.stubGlobal('window', mode === 'crypto' ? { crypto: { getRandomValues: strong } } : undefined)
+        vi.stubGlobal('crypto', { getRandomValues: strong })
+        vi.stubGlobal('UUIDV7_DENY_WEAK_RNG', mode === 'deny-weak')
+        const module = await import('../../src/utils/uuidv7')
+        expect(strong).not.toHaveBeenCalled()
+        expect(random).not.toHaveBeenCalled()
+        if (mode === 'deny-weak') {
+            expect(() => module.uuidv7()).toThrow('no cryptographically strong RNG available')
+        } else {
+            const first = module.uuidv7()
+            const second = module.uuidv7()
+            expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+            expect(second > first).toBe(true)
+            if (mode === 'crypto') {
+                expect(strong).toHaveBeenCalledOnce()
+                expect(random).not.toHaveBeenCalled()
+            } else {
+                expect(random).toHaveBeenCalled()
+                expect(strong).not.toHaveBeenCalled()
+            }
+        }
+    })
+})
