@@ -278,6 +278,7 @@ export function RatingQuestion({
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
+              flex: 1,
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
               flexShrink: 1,
@@ -290,6 +291,8 @@ export function RatingQuestion({
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
+              flex: 1,
+              textAlign: 'right',
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
               flexShrink: 1,
