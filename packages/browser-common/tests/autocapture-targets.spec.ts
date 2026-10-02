@@ -1,10 +1,22 @@
-import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { Autocapture } from '../autocapture'
-import type { AutocaptureConfig } from '../autocapture-config'
+// @vitest-environment jsdom
+import { addEventListener } from '../src/utils/general-utils'
+import { Autocapture } from '../src/autocapture'
+import type { AutocaptureConfig } from '../src/autocapture-config'
 
-// jsdom 16 has no PointerEvent; retain pointer identity on its MouseEvent implementation.
+import { createTestClient, type TestClient } from './helpers/test-client'
+
+// jsdom has no PointerEvent; retain pointer identity on its MouseEvent implementation.
 function pointer(target: Element, type: string, init: Partial<PointerEvent> = {}) {
-    const event = new MouseEvent(type, { bubbles: true, clientX: 20, clientY: 20, detail: 1, ...init })
+    const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        detail: 1,
+        ...init,
+    })
+    // Exercise capture without navigating jsdom when the target is an anchor.
+    event.preventDefault()
     Object.defineProperties(event, {
         pointerId: { value: init.pointerId ?? 1 },
         isPrimary: { value: init.isPrimary ?? true },
@@ -17,26 +29,21 @@ describe('Autocapture click targets', () => {
     let extension: Autocapture
     let config: Partial<AutocaptureConfig>
     let capture: ReturnType<typeof vi.fn>
-    let distinctId: string
+    let client: TestClient
 
     beforeEach(() => {
         config = { enabled: true, remoteRequestsDisabled: true }
-        distinctId = 'before-reset'
-        capture = vi.fn().mockResolvedValue(undefined)
+        client = createTestClient({ distinctId: 'before-reset' })
+        capture = vi.spyOn(client, 'capture')
         extension = new Autocapture({ refresh: (target) => Object.assign(target, config) })
-        extension.setup({
-            get distinctId() {
-                return distinctId
-            },
-            capture,
-            kv: { get: vi.fn(), set: vi.fn() },
-            onRemoteConfig: () => ({ dispose: vi.fn() }),
-        } as any)
+        extension.setup(client)
         document.body.innerHTML = '<button><span>Actions</span></button>'
     })
 
     afterEach(() => {
         extension.dispose()
+        client.dispose()
+        vi.restoreAllMocks()
         document.body.innerHTML = ''
         for (const root of [document.documentElement, document.body]) {
             root.removeAttribute('class')
@@ -101,7 +108,7 @@ describe('Autocapture click targets', () => {
         (scenario) => {
             pointer(span(), 'pointerdown')
             if (scenario === 'blur') window.dispatchEvent(new Event('blur'))
-            if (scenario === 'reset') distinctId = 'after-reset'
+            if (scenario === 'reset') client.distinctId = 'after-reset'
             if (scenario === 'disable-reenable') {
                 config.enabled = false
                 extension.startIfEnabled()
@@ -109,8 +116,8 @@ describe('Autocapture click targets', () => {
                 extension.startIfEnabled()
             }
             if (scenario === 'server-opt-out') {
-                extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: true } } as any)
-                extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } } as any)
+                extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: true } })
+                extension.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } })
             }
             if (scenario === 'detached') document.querySelector('button')!.remove()
             pointer(root(), 'pointerup')
@@ -128,12 +135,17 @@ describe('Autocapture click targets', () => {
         expect(capture).toHaveBeenCalledTimes(1)
     })
 
-    it('expires a released pointer before an unrelated later click', async () => {
-        pointer(span(), 'pointerdown')
-        pointer(root(), 'pointerup')
-        await new Promise((resolve) => setTimeout(resolve, 10))
-        pointer(root(), 'click')
-        expect(capture).not.toHaveBeenCalled()
+    it('expires a released pointer before an unrelated later click', () => {
+        vi.useFakeTimers()
+        try {
+            pointer(span(), 'pointerdown')
+            pointer(root(), 'pointerup')
+            vi.advanceTimersByTime(10)
+            pointer(root(), 'click')
+            expect(capture).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it.each(['ph-no-capture', 'ignored'])('retains %s on the recovered pointer origin', (className) => {
