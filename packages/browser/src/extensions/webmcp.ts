@@ -1,6 +1,7 @@
 import { isFunction, isObject, isPromise } from '@posthog/core'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
+import { patch } from './replay/rrweb-plugins/patch'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
 
@@ -57,22 +58,23 @@ export class WebMCP {
         }
 
         const instrumentation: WebMCPInstrumentation = { instances: new Set([this._instance]) }
-        const registerTool = modelContext.registerTool
+        const unpatchedRegisterTool = modelContext.registerTool
         const webMCP = this
 
-        const patchedRegisterTool = function (this: WebMCPModelContext, tool: WebMCPTool, ...args: unknown[]): unknown {
-            let registeredTool = tool
-            try {
-                registeredTool = webMCP._wrapTool(tool, instrumentation)
-            } catch {
-                return registerTool.call(this, tool, ...args)
+        patch(modelContext as any, 'registerTool', (originalRegisterTool) => {
+            const registerTool = originalRegisterTool as WebMCPModelContext['registerTool']
+            return function (this: WebMCPModelContext, tool: WebMCPTool, ...args: unknown[]): unknown {
+                let registeredTool = tool
+                try {
+                    registeredTool = webMCP._wrapTool(tool, instrumentation)
+                } catch {
+                    return registerTool.call(this, tool, ...args)
+                }
+                return registerTool.call(this, registeredTool, ...args)
             }
-            return registerTool.call(this, registeredTool, ...args)
-        }
+        })
 
-        try {
-            modelContext.registerTool = patchedRegisterTool
-        } catch {
+        if (modelContext.registerTool === unpatchedRegisterTool) {
             return
         }
         instrumentedModelContexts.set(modelContext, instrumentation)
