@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.8
+
+### Patch Changes
+
+- [#5152](https://github.com/PostHog/posthog-js/pull/5152) [`2bdc8eb`](https://github.com/PostHog/posthog-js/commit/2bdc8eb28bdc2131dc8c7271d7628b247404143c) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the new PostHog logo in the survey footer branding
+  (2026-10-02)
+
 ## 1.435.7
 
 ### Patch Changes
