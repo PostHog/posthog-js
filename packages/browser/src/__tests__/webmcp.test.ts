@@ -29,6 +29,8 @@ describe('WebMCP', () => {
         return (document as any).modelContext.registerTool(tool, options)
     }
 
+    const registeredTool = (index: number): Tool => registerTool.mock.calls[index][0] as Tool
+
     it('captures synchronous and asynchronous tool calls with the MCP Analytics contract', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)
@@ -40,10 +42,16 @@ describe('WebMCP', () => {
 
         expect(register(webMCP, syncTool, options)).toBe('registration-result')
         register(webMCP, asyncTool)
-        expect(registerTool).toHaveBeenNthCalledWith(1, syncTool, options)
+        expect(registerTool).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ name: syncTool.name, description: syncTool.description }),
+            options
+        )
 
-        expect(syncTool.execute('input')).toBe(syncResult)
-        await expect(asyncTool.execute('input')).resolves.toBe(asyncResult)
+        expect(registeredTool(0).execute('input')).toBe(syncResult)
+        await expect(registeredTool(1).execute('input')).resolves.toBe(asyncResult)
+        expect(syncTool.execute).toHaveBeenCalledWith('input')
+        expect(asyncTool.execute).toHaveBeenCalledWith('input')
 
         expect(posthog.capture).toHaveBeenCalledTimes(2)
         expect(posthog.capture).toHaveBeenNthCalledWith(
@@ -86,9 +94,9 @@ describe('WebMCP', () => {
         register(webMCP, resultTool)
         register(webMCP, throwTool)
         register(webMCP, rejectTool)
-        expect(resultTool.execute()).toBe(errorResult)
-        expect(() => throwTool.execute()).toThrow(thrown)
-        await expect(rejectTool.execute()).rejects.toBe(rejected)
+        expect(registeredTool(0).execute()).toBe(errorResult)
+        expect(() => registeredTool(1).execute()).toThrow(thrown)
+        await expect(registeredTool(2).execute()).rejects.toBe(rejected)
 
         expect(posthog.capture).toHaveBeenCalledTimes(3)
         for (const call of vi.mocked(posthog.capture).mock.calls) {
@@ -107,7 +115,7 @@ describe('WebMCP', () => {
         const tool = { name: 'slow', execute: () => pending }
 
         register(webMCP, tool, { signal: controller.signal })
-        const call = tool.execute()
+        const call = registeredTool(0).execute()
         controller.abort()
         resolve({ content: [] })
         await call
@@ -127,16 +135,27 @@ describe('WebMCP', () => {
         expect((document as any).modelContext.registerTool).not.toBe(registerTool)
     })
 
-    it('does not wrap a tool more than once', () => {
-        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
-        const webMCP = new WebMCP(posthog)
-        const tool = { name: 'once', execute: () => ({ content: [] }) }
+    it('captures to each enabled named instance through one patch', () => {
+        const first = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const second = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const firstWebMCP = new WebMCP(first)
+        const secondWebMCP = new WebMCP(second)
 
-        register(webMCP, tool)
-        register(webMCP, tool)
-        tool.execute()
+        firstWebMCP.initialize()
+        const patchedRegisterTool = (document as any).modelContext.registerTool
+        secondWebMCP.initialize()
+        expect((document as any).modelContext.registerTool).toBe(patchedRegisterTool)
 
-        expect(posthog.capture).toHaveBeenCalledTimes(1)
+        register(firstWebMCP, { name: 'named', execute: () => ({ content: [] }) })
+        registeredTool(0).execute()
+
+        expect(first.capture).toHaveBeenCalledTimes(1)
+        expect(second.capture).toHaveBeenCalledTimes(1)
+
+        second.config.capture_webmcp = false
+        registeredTool(0).execute()
+        expect(first.capture).toHaveBeenCalledTimes(2)
+        expect(second.capture).toHaveBeenCalledTimes(1)
     })
 
     it('does not change tool behavior when capture throws', () => {
@@ -151,14 +170,55 @@ describe('WebMCP', () => {
 
         register(new WebMCP(posthog), tool)
 
-        expect(tool.execute()).toBe(result)
+        expect(registeredTool(0).execute()).toBe(result)
     })
 
-    it('does not change registration when a tool cannot be wrapped', () => {
+    it('does not mutate frozen tools or tools from failed registrations', async () => {
+        const failure = new Error('registration failure')
+        registerTool.mockRejectedValue(failure)
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
-        const tool = Object.freeze({ name: 'frozen', execute: () => ({ content: [] }) })
+        const execute = vi.fn(() => ({ content: [] }))
+        const tool = Object.freeze({ name: 'frozen', execute })
 
-        expect(register(new WebMCP(posthog), tool)).toBe('registration-result')
-        expect(registerTool).toHaveBeenCalledWith(tool, undefined)
+        await expect(register(new WebMCP(posthog), tool)).rejects.toBe(failure)
+        expect(tool.execute).toBe(execute)
+        expect(tool.execute()).toEqual({ content: [] })
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
+    it('does not let throwing result accessors change the tool result', async () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const webMCP = new WebMCP(posthog)
+        const throwingThen = {}
+        Object.defineProperty(throwingThen, 'then', {
+            get: () => {
+                throw new Error('then getter failure')
+            },
+        })
+        const throwingIsError = {}
+        Object.defineProperty(throwingIsError, 'isError', {
+            get: () => {
+                throw new Error('isError getter failure')
+            },
+        })
+
+        register(webMCP, { name: 'then', execute: () => throwingThen })
+        register(webMCP, { name: 'is_error', execute: async () => throwingIsError })
+
+        expect(registeredTool(0).execute()).toBe(throwingThen)
+        await expect(registeredTool(1).execute()).resolves.toBe(throwingIsError)
+        expect(posthog.capture).toHaveBeenCalledTimes(2)
+        expect(posthog.capture).toHaveBeenNthCalledWith(
+            1,
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_is_error: false }),
+            expect.any(Object)
+        )
+        expect(posthog.capture).toHaveBeenNthCalledWith(
+            2,
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_is_error: false }),
+            expect.any(Object)
+        )
     })
 })

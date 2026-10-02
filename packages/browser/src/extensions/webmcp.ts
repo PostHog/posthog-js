@@ -3,6 +3,7 @@ import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
+type WebMCPThen = (onFulfilled: (value: unknown) => unknown, onRejected: (reason: unknown) => unknown) => unknown
 
 interface WebMCPTool {
     name: string
@@ -14,9 +15,30 @@ interface WebMCPModelContext {
     registerTool: (tool: WebMCPTool, ...args: unknown[]) => unknown
 }
 
+interface WebMCPInstrumentation {
+    instances: Set<PostHog>
+}
+
 type WebMCPDocument = Document & { modelContext?: WebMCPModelContext }
 
-const wrappedExecutors = new WeakSet<WebMCPExecute>()
+const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrumentation>()
+
+function getThen(value: unknown): WebMCPThen | undefined {
+    try {
+        const then = (value as { then?: unknown } | undefined)?.then
+        return isFunction(then) ? (then as WebMCPThen) : undefined
+    } catch {
+        return undefined
+    }
+}
+
+function isErrorResult(value: unknown): boolean {
+    try {
+        return isObject(value) && value.isError === true
+    } catch {
+        return false
+    }
+}
 
 export class WebMCP {
     private _isPatched = false
@@ -37,16 +59,25 @@ export class WebMCP {
             return
         }
 
+        const existingInstrumentation = instrumentedModelContexts.get(modelContext)
+        if (existingInstrumentation) {
+            existingInstrumentation.instances.add(this._instance)
+            this._isPatched = true
+            return
+        }
+
+        const instrumentation: WebMCPInstrumentation = { instances: new Set([this._instance]) }
         const registerTool = modelContext.registerTool
         const webMCP = this
 
         const patchedRegisterTool = function (this: WebMCPModelContext, tool: WebMCPTool, ...args: unknown[]): unknown {
+            let registeredTool = tool
             try {
-                webMCP._wrapTool(tool)
+                registeredTool = webMCP._wrapTool(tool, instrumentation)
             } catch {
                 return registerTool.call(this, tool, ...args)
             }
-            return registerTool.call(this, tool, ...args)
+            return registerTool.call(this, registeredTool, ...args)
         }
 
         try {
@@ -54,69 +85,87 @@ export class WebMCP {
         } catch {
             return
         }
+        instrumentedModelContexts.set(modelContext, instrumentation)
         this._isPatched = true
     }
 
-    private _wrapTool(tool: WebMCPTool): void {
-        if (!tool || !isFunction(tool.execute) || wrappedExecutors.has(tool.execute)) {
-            return
+    private _wrapTool(tool: WebMCPTool, instrumentation: WebMCPInstrumentation): WebMCPTool {
+        if (!tool || !isFunction(tool.execute)) {
+            return tool
         }
 
         const execute = tool.execute
         const webMCP = this
+        const wrappedTool = { ...tool }
 
-        tool.execute = function (...args): unknown {
+        wrappedTool.execute = function (...args): unknown {
             const startedAt = new Date()
             let result: unknown
 
             try {
                 result = execute.apply(this, args)
             } catch (error) {
-                webMCP._captureToolCall(tool, startedAt, true)
+                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
                 throw error
             }
 
-            if (isFunction((result as PromiseLike<unknown> | undefined)?.then)) {
-                return Promise.resolve(result).then(
+            const then = getThen(result)
+            if (then) {
+                return new Promise<unknown>((resolve, reject) => {
+                    try {
+                        then.call(result, resolve, reject)
+                    } catch (error) {
+                        reject(error)
+                    }
+                }).then(
                     (value) => {
-                        webMCP._captureToolCall(tool, startedAt, isObject(value) && value.isError === true)
+                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
                         return value
                     },
                     (error) => {
-                        webMCP._captureToolCall(tool, startedAt, true)
+                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
                         throw error
                     }
                 )
             }
 
-            webMCP._captureToolCall(tool, startedAt, isObject(result) && result.isError === true)
+            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result))
             return result
         }
-        wrappedExecutors.add(tool.execute)
+        return wrappedTool
     }
 
-    private _captureToolCall(tool: WebMCPTool, timestamp: Date, isError: boolean): void {
-        if (!this._instance.config.capture_webmcp) {
-            return
-        }
+    private _captureToolCall(
+        instrumentation: WebMCPInstrumentation,
+        tool: WebMCPTool,
+        timestamp: Date,
+        isError: boolean
+    ): void {
+        const duration = Date.now() - timestamp.getTime()
 
-        try {
-            this._instance.capture(
-                '$mcp_tool_call',
-                {
-                    $mcp_source: 'posthog_mcp_analytics',
-                    $mcp_interface: 'webmcp',
-                    $mcp_tool_name: tool.name,
-                    $mcp_resource_name: tool.name,
-                    $mcp_tool_description: tool.description,
-                    $mcp_server_name: location?.hostname,
-                    $mcp_duration_ms: Date.now() - timestamp.getTime(),
-                    $mcp_is_error: isError,
-                },
-                { timestamp }
-            )
-        } catch {
-            return
+        for (const instance of instrumentation.instances) {
+            if (!instance.config.capture_webmcp) {
+                continue
+            }
+
+            try {
+                instance.capture(
+                    '$mcp_tool_call',
+                    {
+                        $mcp_source: 'posthog_mcp_analytics',
+                        $mcp_interface: 'webmcp',
+                        $mcp_tool_name: tool.name,
+                        $mcp_resource_name: tool.name,
+                        $mcp_tool_description: tool.description,
+                        $mcp_server_name: location?.hostname,
+                        $mcp_duration_ms: duration,
+                        $mcp_is_error: isError,
+                    },
+                    { timestamp }
+                )
+            } catch {
+                continue
+            }
         }
     }
 }
