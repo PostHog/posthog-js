@@ -209,6 +209,25 @@ describe('sanitizeEvent - response content blocks', () => {
     })
   })
 
+  it('should redact PostHog tokens exposed by URL field decoding', () => {
+    const event = makeEvent({
+      response: {
+        content: [
+          {
+            type: 'text',
+            text: 'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
+          },
+        ],
+      },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.response.content[0].text).toBe(
+      'https://example.test/?value=[redacted]&token=%5Bredacted%5D'
+    )
+  })
+
   it('should handle null and undefined response without error', () => {
     const resultNull = sanitizeEvent(makeEvent({ response: null }))
     const resultUndef = sanitizeEvent(makeEvent({ response: undefined }))

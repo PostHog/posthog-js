@@ -513,7 +513,10 @@ function redactCredentials(value: string): string {
 
 /** Replaces every URL-shaped match, credentials and all. */
 function redactUrls(value: string): string {
-  return sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
+  const sanitized = sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
+  // URL field parsing can decode an encoded PostHog token. Scan only rewritten
+  // strings again so that decoded credentials cannot leave this pass.
+  return sanitized === value ? value : redactCredentials(sanitized)
 }
 
 /**
