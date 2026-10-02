@@ -71,15 +71,6 @@ export function setup(
   return PosthogReactNativePlugin.setup(sessionId, sdkOptions, pluginConfig)
 }
 
-export function start(
-  sessionId: string,
-  sdkOptions: PostHogReactNativePluginMap,
-  sdkReplayConfig: PostHogReactNativePluginMap,
-  decideReplayConfig: PostHogReactNativePluginMap
-): Promise<void> {
-  return PosthogReactNativePlugin.start(sessionId, sdkOptions, sdkReplayConfig, decideReplayConfig)
-}
-
 export function startSession(sessionId: string): Promise<void> {
   return PosthogReactNativePlugin.startSession(sessionId)
 }
@@ -226,16 +217,6 @@ export interface PostHogReactNativePluginModule {
     pluginConfig?: PostHogReactNativePluginConfig
   ) => Promise<void>
 
-  /**
-   * Legacy session replay setup entrypoint. Prefer setup() for new native features.
-   */
-  start: (
-    sessionId: string,
-    sdkOptions: PostHogReactNativePluginMap,
-    sdkReplayConfig: PostHogReactNativePluginMap,
-    decideReplayConfig: PostHogReactNativePluginMap
-  ) => Promise<void>
-
   startSession: (sessionId: string) => Promise<void>
 
   endSession: () => Promise<void>
@@ -273,7 +254,6 @@ export interface PostHogReactNativePluginModule {
 
 const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   setup,
-  start,
   startSession,
   endSession,
   isEnabled,

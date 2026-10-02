@@ -16,6 +16,12 @@ import type { PostHogPushIdentityProvider } from '../types'
  */
 export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin & {
   setup?: (sessionId: string, sdkOptions: { [key: string]: any }, pluginConfig: { [key: string]: any }) => Promise<void>
+  start?: (
+    sessionId: string,
+    sdkOptions: { [key: string]: any },
+    sdkReplayConfig: { [key: string]: any },
+    decideReplayConfig: { [key: string]: any }
+  ) => Promise<void>
   startRecording?: (resumeCurrent: boolean) => Promise<void>
   stopRecording?: () => Promise<void>
   addExceptionStep?: (message: string, properties?: { [key: string]: any }) => Promise<void>

@@ -85,29 +85,6 @@ class PosthogReactNativePluginModule(
     )
   }
 
-  @ReactMethod
-  fun start(
-    sessionId: String,
-    sdkOptions: ReadableMap,
-    sdkReplayConfig: ReadableMap,
-    decideReplayConfig: ReadableMap,
-    promise: Promise,
-  ) {
-    setupNativeSdk(
-      method = "start",
-      sessionId = sessionId,
-      sdkOptions = sdkOptions,
-      sessionReplayEnabled = true,
-      sdkReplayConfig = sdkReplayConfig,
-      decideReplayConfig = decideReplayConfig,
-      nativeErrorTrackingAutocapture = false,
-      androidNdkCrashes = false,
-      exceptionStepsConfig = null,
-      pushConfig = null,
-      promise = promise,
-    )
-  }
-
   private fun setupNativeSdk(
     method: String,
     sessionId: String,
@@ -181,16 +158,7 @@ class PosthogReactNativePluginModule(
               val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
               val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
 
-              // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
-              val throttleDelayMs =
-                when {
-                  hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  hasKey(
-                    sdkReplayConfig,
-                    "androidDebouncerDelayMs",
-                  ) -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  else -> DEFAULT_THROTTLE_DELAY_MS
-                }
+              val throttleDelayMs = getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
 
               sessionReplay = sessionReplayEnabled
               sessionReplayConfig.screenshot = true
@@ -209,8 +177,8 @@ class PosthogReactNativePluginModule(
                 snapshotEndpoint = endpoint
               }
 
-              // Only set when present: the legacy start() path predates push, and there the
-              // native defaults (both true) must win, matching posthog-android on its own.
+              // Only set when present: setup() from a posthog-react-native that predates push sends
+              // no push config, and there the native defaults (both true) must win, matching posthog-android.
               if (hasKey(pushConfig, "capturePushNotificationSubscriptions")) {
                 capturePushNotificationSubscriptions =
                   getBoolean(pushConfig, "capturePushNotificationSubscriptions", true)
