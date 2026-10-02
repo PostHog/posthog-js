@@ -126,7 +126,7 @@ describe('PostHogSurveys', () => {
                 init: { method: 'GET', query: { token: client.projectToken }, sentAt: 'query', timeoutMs: 10000 },
             },
         ])
-        expect(receiver.register).toHaveBeenCalledWith([definition])
+        expect(receiver.replace).toHaveBeenCalledWith([definition])
         expect(client.kv.get(SURVEYS)).toEqual([definition])
         expect(client.kv.get(SURVEYS_LOADED_AT)).toEqual(expect.any(Number))
         surveys.dispose()

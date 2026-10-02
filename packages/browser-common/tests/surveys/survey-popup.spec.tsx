@@ -5,7 +5,7 @@ import type { Mock } from 'vitest'
 import { createSurveyRenderContext } from '../helpers/survey-render-context'
 
 import '@testing-library/jest-dom'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../src/surveys-renderer'
 import * as surveyUtils from '../../src/surveys/surveys-extension-utils' // Import all utils
 import { SurveyQuestionType, SurveyType } from '../../src/survey-constants'
@@ -133,7 +133,6 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                previewPageIndex={mockSurvey.questions.length} // Force confirmation
                 posthog={host as any}
             />
         )
@@ -154,7 +153,6 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                previewPageIndex={mockSurvey.questions.length} // Force confirmation
                 posthog={host as any}
             />
         )
@@ -238,9 +236,7 @@ describe('SurveyPopup', () => {
     })
 
     test('saves partial response to localStorage when moving to next question', async () => {
-        const realUtils = await vi.importActual<typeof surveyUtils>(
-            '../../../extensions/surveys/surveys-extension-utils'
-        )
+        const realUtils = await vi.importActual<typeof surveyUtils>('../../src/surveys/surveys-extension-utils')
         const initialState = null
         const generatedId = 'newly-generated-id'
         mockedGetInProgressSurveyState.mockReturnValue(initialState)
@@ -321,9 +317,7 @@ describe('SurveyPopup', () => {
     })
 
     test('clears localStorage on final submission', async () => {
-        const realUtils = await vi.importActual<typeof surveyUtils>(
-            '../../../extensions/surveys/surveys-extension-utils'
-        )
+        const realUtils = await vi.importActual<typeof surveyUtils>('../../src/surveys/surveys-extension-utils')
         const existingState = {
             surveySubmissionId: 'existing-uuid-final',
             responses: { $survey_response_q1: 'Answer Q1' },
@@ -375,7 +369,7 @@ describe('SurveyPopup', () => {
 
         await waitFor(() => expect(screen.getByText('Thank you!')).toBeVisible())
         expect(realUtils.getInProgressSurveyState(mockSurvey)).toBeNull()
-        expect(mockPosthog.capture).toHaveBeenCalledWith(
+        expect(host.capture).toHaveBeenCalledWith(
             'survey sent',
             expect.objectContaining({
                 $survey_completed: true,
@@ -408,9 +402,7 @@ describe('SurveyPopup', () => {
     })
 
     test('clears localStorage on dismissal', async () => {
-        const realUtils = await vi.importActual<typeof surveyUtils>(
-            '../../../extensions/surveys/surveys-extension-utils'
-        )
+        const realUtils = await vi.importActual<typeof surveyUtils>('../../src/surveys/surveys-extension-utils')
         const existingState = {
             surveySubmissionId: 'existing-uuid-dismiss',
             responses: { $survey_response_q1: 'Partial answer' },
@@ -442,7 +434,7 @@ describe('SurveyPopup', () => {
             false
         )
         expect(realUtils.getInProgressSurveyState(mockSurvey)).toBeNull()
-        expect(mockPosthog.capture).toHaveBeenCalledWith(
+        expect(host.capture).toHaveBeenCalledWith(
             'survey dismissed',
             expect.objectContaining({ $survey_response_q1: 'Partial answer' })
         )

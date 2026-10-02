@@ -2,12 +2,19 @@ import { getSurveyRenderContext } from '../../browser-surveys'
 import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/browser-common'
 import { beforeEach } from 'vitest'
-import { PostHog } from '../../posthog-core'
+import { PostHog, defaultConfig } from '../../posthog-core'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import { FlagsResponse } from '../../types'
 import { createMockPostHog } from '../helpers/posthog-instance'
+
+const createSurveyFeatureFlags = (values: Record<string, boolean | string>): PostHogFeatureFlags => {
+    const flags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+    vi.spyOn(flags, 'getFeatureFlag').mockImplementation((key) => values[key])
+    vi.spyOn(flags, 'isFeatureEnabled').mockImplementation((key) => !!values[key])
+    return flags
+}
 
 describe('SurveyManager', () => {
     let mockPostHog: PostHog

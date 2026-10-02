@@ -1,3 +1,4 @@
+/* oxlint-disable compat/compat -- Tests run in Node. */
 import '../helpers/surveys-setup'
 import {
     extractPrefillParamsFromUrl,
