@@ -2,6 +2,7 @@ import type { Disposable, Extension } from '@posthog/browser-common'
 import type { SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
 
 export interface SurveysExtension extends Extension {
+    getElementSelectors(): Set<string>
     getSurveys(callback: SurveyCallback, forceReload?: boolean): void
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void
     displaySurvey(id: string, options?: DisplaySurveyOptions): void
