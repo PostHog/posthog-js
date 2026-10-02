@@ -2311,6 +2311,14 @@ export interface PostHogConfig {
     capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
 
     /**
+     * Captures WebMCP tool calls as `$mcp_tool_call` events.
+     * PostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.
+     *
+     * @default false
+     */
+    capture_webmcp?: boolean
+
+    /**
      * Determines whether to capture exceptions.
      *
      * @see {ExceptionAutoCaptureConfig}
