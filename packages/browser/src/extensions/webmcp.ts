@@ -1,9 +1,8 @@
-import { isFunction, isObject } from '@posthog/core'
+import { isFunction, isObject, isPromise } from '@posthog/core'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
-type WebMCPThen = (onFulfilled: (value: unknown) => unknown, onRejected: (reason: unknown) => unknown) => unknown
 
 interface WebMCPTool {
     name: string
@@ -22,15 +21,6 @@ interface WebMCPInstrumentation {
 type WebMCPDocument = Document & { modelContext?: WebMCPModelContext }
 
 const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrumentation>()
-
-function getThen(value: unknown): WebMCPThen | undefined {
-    try {
-        const then = (value as { then?: unknown } | undefined)?.then
-        return isFunction(then) ? (then as WebMCPThen) : undefined
-    } catch {
-        return undefined
-    }
-}
 
 function isErrorResult(value: unknown): boolean {
     try {
@@ -109,15 +99,8 @@ export class WebMCP {
                 throw error
             }
 
-            const then = getThen(result)
-            if (then) {
-                return new Promise<unknown>((resolve, reject) => {
-                    try {
-                        then.call(result, resolve, reject)
-                    } catch (error) {
-                        reject(error)
-                    }
-                }).then(
+            if (isPromise(result)) {
+                return result.then(
                     (value) => {
                         webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
                         return value

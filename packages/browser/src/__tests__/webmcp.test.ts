@@ -186,15 +186,9 @@ describe('WebMCP', () => {
         expect(posthog.capture).not.toHaveBeenCalled()
     })
 
-    it('does not let throwing result accessors change the tool result', async () => {
+    it('does not let a throwing isError accessor change the tool result', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)
-        const throwingThen = {}
-        Object.defineProperty(throwingThen, 'then', {
-            get: () => {
-                throw new Error('then getter failure')
-            },
-        })
         const throwingIsError = {}
         Object.defineProperty(throwingIsError, 'isError', {
             get: () => {
@@ -202,20 +196,11 @@ describe('WebMCP', () => {
             },
         })
 
-        register(webMCP, { name: 'then', execute: () => throwingThen })
         register(webMCP, { name: 'is_error', execute: async () => throwingIsError })
 
-        expect(registeredTool(0).execute()).toBe(throwingThen)
-        await expect(registeredTool(1).execute()).resolves.toBe(throwingIsError)
-        expect(posthog.capture).toHaveBeenCalledTimes(2)
-        expect(posthog.capture).toHaveBeenNthCalledWith(
-            1,
-            '$mcp_tool_call',
-            expect.objectContaining({ $mcp_is_error: false }),
-            expect.any(Object)
-        )
-        expect(posthog.capture).toHaveBeenNthCalledWith(
-            2,
+        await expect(registeredTool(0).execute()).resolves.toBe(throwingIsError)
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
+        expect(posthog.capture).toHaveBeenCalledWith(
             '$mcp_tool_call',
             expect.objectContaining({ $mcp_is_error: false }),
             expect.any(Object)
