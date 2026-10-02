@@ -5,6 +5,7 @@ import { createMockPostHog } from './helpers/posthog-instance'
 type Tool = {
     name: string
     description?: string
+    inputSchema?: Record<string, any>
     execute: (...args: unknown[]) => unknown
 }
 
@@ -68,6 +69,230 @@ describe('WebMCP', () => {
                 $mcp_is_error: false,
             }),
             { timestamp: expect.any(Date) }
+        )
+    })
+
+    it('injects and captures intent and model metadata without mutating the tool', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const webMCP = new WebMCP(posthog)
+        const inputSchema = {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+        }
+        const result = { content: [] }
+        const execute = vi.fn(() => result)
+        const tool = { name: 'search', inputSchema, execute }
+        const options = { signal: new AbortController().signal }
+
+        register(webMCP, tool)
+        const wrappedTool = registeredTool(0)
+
+        expect(wrappedTool.inputSchema).toEqual({
+            type: 'object',
+            properties: {
+                query: { type: 'string' },
+                context: expect.objectContaining({ type: 'string' }),
+                llm_model: expect.objectContaining({ type: 'string' }),
+            },
+            required: ['query', 'context', 'llm_model'],
+        })
+        expect(tool.inputSchema).toBe(inputSchema)
+        expect(inputSchema).toEqual({
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+        })
+
+        expect(
+            wrappedTool.execute(
+                { query: 'flags', context: '  Find the feature flag documentation.  ', llm_model: '  gpt-5.2  ' },
+                options
+            )
+        ).toBe(result)
+        expect(execute).toHaveBeenCalledWith({ query: 'flags' }, options)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({
+                $mcp_intent: 'Find the feature flag documentation.',
+                $mcp_intent_source: 'context_parameter',
+                $mcp_llm_model: 'gpt-5.2',
+                $mcp_llm_model_source: 'self_reported',
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it.each([
+        [{ intent: false }, 'context', 'llm_model', '$mcp_llm_model'],
+        [{ model: false }, 'llm_model', 'context', '$mcp_intent'],
+    ])('supports metadata opt-outs with %o', (config, omittedParameter, injectedParameter, capturedProperty) => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: config } as any })
+        const execute = vi.fn(() => ({ content: [] }))
+
+        register(new WebMCP(posthog), { name: 'configured', inputSchema: { type: 'object' }, execute })
+        const tool = registeredTool(0)
+        expect(tool.inputSchema).not.toHaveProperty(`properties.${omittedParameter}`)
+        expect(tool.inputSchema).toHaveProperty(`properties.${injectedParameter}`)
+
+        tool.execute({ [injectedParameter]: injectedParameter === 'context' ? 'Investigate an issue.' : 'gpt-5' })
+        expect(execute).toHaveBeenCalledWith({})
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ [capturedProperty]: expect.any(String) }),
+            expect.any(Object)
+        )
+    })
+
+    it('preserves application-owned context and model fields', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const execute = vi.fn(() => ({ content: [] }))
+        const inputSchema = {
+            type: 'object',
+            properties: {
+                context: { type: 'string', description: 'Application context.' },
+                llm_model: { type: 'string', description: 'Routing model.' },
+            },
+            required: ['context', 'llm_model'],
+        }
+        const input = { context: 'application-value', llm_model: 'application-model' }
+
+        register(new WebMCP(posthog), { name: 'application_owned', inputSchema, execute })
+        registeredTool(0).execute(input)
+
+        expect(registeredTool(0).inputSchema).toBe(inputSchema)
+        expect(execute).toHaveBeenCalledWith(input)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.not.objectContaining({
+                $mcp_intent: expect.anything(),
+                $mcp_llm_model: expect.anything(),
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it.each([true, { type: 'string' }])(
+        'preserves undeclared application inputs when additionalProperties is %o',
+        (additionalProperties) => {
+            const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+            const execute = vi.fn(() => ({ content: [] }))
+            const inputSchema = { type: 'object', additionalProperties }
+            const input = { context: 'application-value', llm_model: 'application-model' }
+
+            register(new WebMCP(posthog), { name: 'permissive', inputSchema, execute })
+            registeredTool(0).execute(input)
+
+            expect(registeredTool(0).inputSchema).toBe(inputSchema)
+            expect(execute).toHaveBeenCalledWith(input)
+            expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+                expect.not.objectContaining({
+                    $mcp_intent: expect.anything(),
+                    $mcp_llm_model: expect.anything(),
+                })
+            )
+        }
+    )
+
+    it('does not inject metadata into a complex schema', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const execute = vi.fn(() => ({ content: [] }))
+        const inputSchema = { $ref: '#/$defs/input' }
+        const input = { context: 'application-value', llm_model: 'application-model' }
+
+        register(new WebMCP(posthog), { name: 'complex', inputSchema, execute })
+        registeredTool(0).execute(input)
+
+        expect(registeredTool(0).inputSchema).toBe(inputSchema)
+        expect(execute).toHaveBeenCalledWith(input)
+        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+            expect.not.objectContaining({
+                $mcp_intent: expect.anything(),
+                $mcp_llm_model: expect.anything(),
+            })
+        )
+    })
+
+    it('injects the union of named instance options and filters each event', () => {
+        const intentInstance = createMockPostHog({
+            config: { capture_webmcp: { intent: true, model: false } } as any,
+        })
+        const modelInstance = createMockPostHog({
+            config: { capture_webmcp: { intent: false, model: true } } as any,
+        })
+        const intentWebMCP = new WebMCP(intentInstance)
+        const modelWebMCP = new WebMCP(modelInstance)
+        const execute = vi.fn(() => ({ content: [] }))
+
+        intentWebMCP.initialize()
+        modelWebMCP.initialize()
+        register(intentWebMCP, { name: 'named', inputSchema: { type: 'object' }, execute })
+        registeredTool(0).execute({ context: 'Find documentation.', llm_model: 'claude-sonnet-4' })
+
+        expect(execute).toHaveBeenCalledWith({})
+        expect(intentInstance.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_intent: 'Find documentation.' }),
+            expect.any(Object)
+        )
+        expect(intentInstance.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.not.objectContaining({ $mcp_llm_model: expect.anything() }),
+            expect.any(Object)
+        )
+        expect(modelInstance.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_llm_model: 'claude-sonnet-4' }),
+            expect.any(Object)
+        )
+        expect(modelInstance.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.not.objectContaining({ $mcp_intent: expect.anything() }),
+            expect.any(Object)
+        )
+    })
+
+    it('limits metadata and omits blank intent and unknown models', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const webMCP = new WebMCP(posthog)
+
+        register(webMCP, { name: 'bounded', inputSchema: { type: 'object' }, execute: () => ({ content: [] }) })
+        registeredTool(0).execute({ context: ` ${'i'.repeat(2100)} `, llm_model: ` ${'m'.repeat(300)} ` })
+        registeredTool(0).execute({ context: ' {} ', llm_model: ' UNKNOWN ' })
+
+        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+            expect.objectContaining({
+                $mcp_intent: 'i'.repeat(2048),
+                $mcp_llm_model: 'm'.repeat(256),
+            })
+        )
+        expect(vi.mocked(posthog.capture).mock.calls[1][1]).toEqual(
+            expect.not.objectContaining({
+                $mcp_intent: expect.anything(),
+                $mcp_llm_model: expect.anything(),
+            })
+        )
+    })
+
+    it('redacts structured identifiers from intent', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+
+        register(new WebMCP(posthog), {
+            name: 'private',
+            inputSchema: { type: 'object' },
+            execute: () => ({ content: [] }),
+        })
+        registeredTool(0).execute({
+            context:
+                'Contact alice@example.com from 192.168.1.1 or 2001:db8::1 using 4111 1111 1111 1111, SSN 123-45-6789, or +1-202-555-0170.',
+            llm_model: 'gpt-5',
+        })
+
+        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+            expect.objectContaining({
+                $mcp_intent:
+                    'Contact [redacted] from [redacted] or [redacted] using [redacted], SSN [redacted], or [redacted].',
+            })
         )
     })
 

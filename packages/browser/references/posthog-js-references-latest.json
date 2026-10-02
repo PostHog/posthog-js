@@ -3525,8 +3525,8 @@
           "name": "capture_dead_clicks"
         },
         {
-          "description": "Captures WebMCP tool calls as `$mcp_tool_call` events.\nPostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.",
-          "type": "boolean",
+          "description": "Captures WebMCP tool calls as `$mcp_tool_call` events.\nSet this option to `true` to capture intent and model metadata. Use an object to disable either field.\nPostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.\nMetadata options are applied when each tool registers. Changing them does not update registered schemas;\nre-register the tool to apply the new options.",
+          "type": "boolean | WebMCPCaptureConfig",
           "name": "capture_webmcp"
         },
         {
