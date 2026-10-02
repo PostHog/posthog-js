@@ -1729,6 +1729,9 @@ export class PostHog implements PostHogInterface {
         }
 
         if (!this.is_capturing()) {
+            logger.info(
+                `Event "${event_name}" was not captured because capturing is disabled (opted out or consent pending).`
+            )
             return
         }
 
@@ -1746,6 +1749,9 @@ export class PostHog implements PostHogInterface {
         // We drop bot events unless the preview flag to send bot pageviews is enabled
         // or the user has explicitly opted out of useragent filtering
         if (shouldDropBotEvent) {
+            logger.info(
+                `Event "${event_name}" was not captured because the user agent looks like a bot. Set \`opt_out_useragent_filter: true\` to capture it.`
+            )
             return
         }
 
@@ -4939,6 +4945,9 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the current consent status for event tracking and data persistence.
+     *
+     * In cookieless `'always'` mode this returns `true`, because the SDK does not store data for the user. Events are
+     * still captured in this mode. To check if the SDK captures events, use {@link is_capturing}.
      *
      * @example
      * ```js
