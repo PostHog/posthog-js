@@ -2669,32 +2669,37 @@ describe('featureflags', () => {
             })
         })
 
-        it.each(['network', 'timeout'])('calls onFeatureFlags with existing flags after %s failure', async (failure) => {
-            config.requestMaxRetries = 1
-            client.sendRequest = vi.fn().mockImplementation(async () => ({
-                statusCode: 0,
-                text: '',
-                error: failure === 'timeout' ? Object.assign(new Error('timed out'), { name: 'AbortError' }) : undefined,
-            }))
-            const callback = vi.fn()
-            featureFlags.onFeatureFlags(callback)
-            expect(callback).not.toHaveBeenCalled()
+        it.each(['network', 'timeout'])(
+            'calls onFeatureFlags with existing flags after %s failure',
+            async (failure) => {
+                config.requestMaxRetries = 1
+                client.sendRequest = vi.fn().mockImplementation(async () => ({
+                    statusCode: 0,
+                    text: '',
+                    error:
+                        failure === 'timeout'
+                            ? Object.assign(new Error('timed out'), { name: 'AbortError' })
+                            : undefined,
+                }))
+                const callback = vi.fn()
+                featureFlags.onFeatureFlags(callback)
+                expect(callback).not.toHaveBeenCalled()
 
-            featureFlags.reloadFeatureFlags()
-            await vi.runAllTimersAsync()
+                featureFlags.reloadFeatureFlags()
+                await vi.runAllTimersAsync()
 
-            expect(callback).toHaveBeenCalledTimes(1)
-            expect(client.sendRequest).toHaveBeenCalledTimes(failure === 'timeout' ? 2 : 1)
-            expect(client.kv.get('$feature_flag_errors')).toEqual([
-                failure === 'timeout' ? FeatureFlagError.TIMEOUT : FeatureFlagError.apiError(0),
-            ])
-            expect(callback).toHaveBeenCalledWith(
-                ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-                { 'beta-feature': true, 'alpha-feature-2': true, 'multivariate-flag': 'variant-1' },
-                { errorsLoading: true }
-            )
-        })
-
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(client.sendRequest).toHaveBeenCalledTimes(failure === 'timeout' ? 2 : 1)
+                expect(client.kv.get('$feature_flag_errors')).toEqual([
+                    failure === 'timeout' ? FeatureFlagError.TIMEOUT : FeatureFlagError.apiError(0),
+                ])
+                expect(callback).toHaveBeenCalledWith(
+                    ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                    { 'beta-feature': true, 'alpha-feature-2': true, 'multivariate-flag': 'variant-1' },
+                    { errorsLoading: true }
+                )
+            }
+        )
     })
 
     describe('Feature Flag Request ID and Evaluated At', () => {
