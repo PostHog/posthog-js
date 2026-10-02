@@ -418,7 +418,7 @@ describe('surveys', () => {
             fetch: async () => new Response(JSON.stringify({ surveys: [actionable] })),
         })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: false })
-        expect(setElementSelectors).toHaveBeenCalledWith(new Set(['.trigger']))
+        expect(setElementSelectors.mock.calls[0][0]).toEqual(new Set(['.trigger']))
         client.capture('$autocapture', { $element_selectors: ['.trigger'] })
         expect(await getExtension(client).canRenderSurvey(definition.id)).toMatchObject({ visible: true })
         client.reset()
