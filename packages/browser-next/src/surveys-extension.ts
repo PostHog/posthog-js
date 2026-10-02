@@ -1,14 +1,9 @@
 import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import type { Client, Disposable, KeyValueStore, Extension } from '@posthog/browser-common'
 import { PostHogSurveys } from '@posthog/browser-common/surveys'
-import { SURVEYS, type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
+import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
-import {
-    DEFAULT_DISPLAY_SURVEY_OPTIONS,
-    isSurveyRunning,
-    doesSurveyActivateByEvent,
-    doesSurveyActivateByAction,
-} from '@posthog/browser-common/utils/survey-utils'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
 import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
 import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import type { AnalyticsExtension, AnalyticsTeardownSubscription } from './analytics-internal'
@@ -86,22 +81,19 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
     }
     const shared = new (class extends PostHogSurveys {
         protected override _createEventReceiver(value: Client, onActivationChanged?: () => void): SurveyEventReceiver {
-            eventReceiver = new SurveyEventReceiver(value, this, {
-                getActionUrl: () => (runtimeHost ? getTargetingUrl(runtimeHost) : undefined),
-                setElementSelectors: (selectors) => {
-                    elementSelectors = new Set(selectors)
-                    value
-                        .getExtension<AutocaptureSelectors>('autocapture')
-                        ?.setElementSelectors(new Set(elementSelectors))
+            eventReceiver = new SurveyEventReceiver(
+                value,
+                this,
+                {
+                    getActionUrl: () => (runtimeHost ? getTargetingUrl(runtimeHost) : undefined),
+                    setElementSelectors: (selectors) => {
+                        elementSelectors = new Set(selectors)
+                        value
+                            .getExtension<AutocaptureSelectors>('autocapture')
+                            ?.setElementSelectors(new Set(elementSelectors))
+                    },
                 },
-            }, onActivationChanged)
-            const cached = client!.kv.get<Survey[]>(SURVEYS) ?? []
-            replaceTriggers(
-                cached.filter(
-                    (survey) =>
-                        isSurveyRunning(survey) &&
-                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                )
+                onActivationChanged
             )
             return eventReceiver
         }
