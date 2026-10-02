@@ -1504,7 +1504,6 @@ export function usePopupVisibility(
                     sessionRecordingUrl: getSurveyReplayUrl(posthog),
                 })
             }
-
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
