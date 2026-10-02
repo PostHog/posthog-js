@@ -277,15 +277,17 @@ describe('deferred extension initialization', () => {
             expect(setup).not.toHaveBeenCalled()
         })
 
-        it('disposes logs created after shutdown', async () => {
+        it('cancels deferred extension construction during shutdown', async () => {
             const savedDefaults = PostHog.__defaultExtensionClasses
             PostHog.__defaultExtensionClasses = {}
             const setup = vi.fn()
-            const dispose = vi.fn()
+            const construct = vi.fn()
             class TestLogs {
                 readonly name = 'logs'
                 setup = setup
-                dispose = dispose
+                constructor() {
+                    construct()
+                }
             }
 
             try {
@@ -298,7 +300,7 @@ describe('deferred extension initialization', () => {
                 await new Promise((resolve) => setTimeout(resolve, 20))
 
                 expect(setup).not.toHaveBeenCalled()
-                expect(dispose).toHaveBeenCalledTimes(1)
+                expect(construct).not.toHaveBeenCalled()
             } finally {
                 PostHog.__defaultExtensionClasses = savedDefaults
             }
