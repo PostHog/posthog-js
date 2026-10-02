@@ -193,6 +193,19 @@ describe('messaging.setPreferences', () => {
     expect(api.preferencesOf(JANE)).toEqual({ categories: { newsletter: false, offers: false } })
   })
 
+  it('applies the preferences as they were when called, even if the caller changes them later', async () => {
+    const preferences = { allMarketing: false, categories: { newsletter: false } }
+    const resume = api.pause()
+
+    const done = createClient().messaging.setPreferences(JANE, preferences)
+    preferences.allMarketing = true
+    preferences.categories.newsletter = true
+    resume()
+    await done
+
+    expect(api.preferencesOf(JANE)).toEqual({ allMarketing: false, categories: { newsletter: false } })
+  })
+
   it.each([
     ['no response arrives', { hang: 'response' as const }, { message: 'Request timed out after 500ms' }],
     [

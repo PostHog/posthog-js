@@ -101,8 +101,9 @@ export class PostHogMessaging implements Messaging {
     }
     assertValidIdentifier(identifier)
     assertValidPreferences(preferences)
+    const requested = copyOf(preferences)
 
-    return this.afterPendingCallsFor(identifier, () => this.applyAll(identifier, preferences))
+    return this.afterPendingCallsFor(identifier, () => this.applyAll(identifier, requested))
   }
 
   private afterPendingCallsFor(identifier: string, run: () => Promise<void>): Promise<void> {
@@ -181,6 +182,10 @@ function assertValidPreferences(preferences: unknown): asserts preferences is Me
       throw new TypeError(`Category "${key}" must be true or false`)
     }
   }
+}
+
+function copyOf({ allMarketing, categories }: MessagingPreferences): MessagingPreferences {
+  return { allMarketing, categories: categories && { ...categories } }
 }
 
 function isSuccess({ status }: PostHogApiResponse): boolean {
