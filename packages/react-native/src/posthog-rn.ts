@@ -3055,7 +3055,7 @@ export class PostHog extends PostHogCore {
           return false
         }
         if (!(await OptionalReactNativePlugin.isEnabled())) {
-          await OptionalReactNativePlugin.start(
+          await OptionalReactNativePlugin.start?.(
             String(sessionId),
             sdkOptions,
             sdkReplayConfig,
