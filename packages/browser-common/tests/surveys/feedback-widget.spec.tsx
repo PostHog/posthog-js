@@ -63,7 +63,6 @@ const urlConditionWidgetSurvey: Survey = {
         url: 'http://test.com/specific-page',
         urlMatchType: 'exact',
         seenSurveyWaitPeriodInDays: null,
-        cancelEvents: null,
         events: null,
         actions: null,
     },

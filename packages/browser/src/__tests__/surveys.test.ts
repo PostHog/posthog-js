@@ -2,8 +2,6 @@
 import { expect, it, describe, beforeEach, afterEach, vi } from 'vitest'
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { PostHog } from '../posthog-core'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
-import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { PostHogPersistence } from '../posthog-persistence'
 import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/browser-common'

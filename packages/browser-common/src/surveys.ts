@@ -73,7 +73,7 @@ export class PostHogSurveys implements Extension {
     private _surveyInitializationFailed = false
     private _surveyCallbacks: SurveyCallback[] = []
     private _activeMatchingSurveyCallbacks: ActiveMatchingSurveySubscription[] = []
-    private _activeMatchingSurveyConditionsUnsubscribe?: () => void
+    private _activeMatchingSurveyConditionsUnsubscribe: (() => void) | undefined
     // Promise for in-flight survey fetch - allows multiple callers to await the same request
     private _getSurveysInFlightPromise: Promise<SurveyFetchResult> | null = null
     // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
@@ -293,8 +293,12 @@ export class PostHogSurveys implements Extension {
             return
         }
         this._surveyManager = generateSurveysFn(isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(this._client!, this, this._notifyActiveMatchingSurveyCallbacks)
-        const cachedSurveys = (this._client ?? this._getClient?.())?.kv.get<Survey[]>(SURVEYS)
+        this._surveyEventReceiver = new SurveyEventReceiver(
+            this._client!,
+            this,
+            this._notifyActiveMatchingSurveyCallbacks
+        )
+        const cachedSurveys = this._client?.kv.get<Survey[]>(SURVEYS)
         if (cachedSurveys) {
             this._registerEventOrActionBasedSurveys(cachedSurveys)
         }
@@ -535,7 +539,7 @@ export class PostHogSurveys implements Extension {
         const subscription: ActiveMatchingSurveySubscription = { callback, active: true, revision: 0 }
         this._activeMatchingSurveyCallbacks.push(subscription)
         this._startActiveMatchingSurveyConditions()
-        const cached = (this._client ?? this._getClient?.())?.kv.get<Survey[]>(SURVEYS)
+        const cached = this._client?.kv.get<Survey[]>(SURVEYS)
         const unavailable =
             this._config.disableSurveys ||
             (!this._surveyManager && this._surveyInitializationFailed && !this._isInitializingSurveys) ||

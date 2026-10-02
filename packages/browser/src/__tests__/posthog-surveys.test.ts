@@ -10,23 +10,21 @@ vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
     }),
 }))
 vi.useFakeTimers()
-import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '@posthog/browser-common/surveys-renderer'
 import { PostHog, defaultConfig } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { BrowserSurveys } from '../browser-surveys'
-import { Survey, SurveyEventName, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveyType } from '@posthog/browser-common'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
-import { createMockPostHog } from './helpers/posthog-instance'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS, SURVEY_SEEN_PREFIX } from '@posthog/browser-common/utils/survey-utils'
 import { createSurveysClient } from './helpers/surveys-client'
 
 const flushPromises = async (): Promise<void> => {
-    await Promise.resolve()
-    await Promise.resolve()
+    for (let i = 0; i < 8; i++) await Promise.resolve()
 }
 
 describe('posthog-surveys', () => {
@@ -234,7 +232,7 @@ describe('posthog-surveys', () => {
                 mockPostHog.surveys = surveys
                 mockPostHog.getSurveys = surveys.getSurveys.bind(surveys)
                 mockPostHog.cancelPendingSurvey = vi.fn()
-                mockGenerateSurveys.mockImplementation(() => new SurveyManager(mockPostHog))
+                mockGenerateSurveys.mockImplementation(() => new SurveyManager(getSurveyRenderContext(mockPostHog)!))
                 surveys['_isSurveysEnabled'] = true
                 const callback = vi.fn()
 
@@ -287,7 +285,7 @@ describe('posthog-surveys', () => {
                 mockPostHog.surveys = surveys
                 mockPostHog.getSurveys = surveys.getSurveys.bind(surveys)
                 mockPostHog.cancelPendingSurvey = vi.fn()
-                mockGenerateSurveys.mockImplementation(() => new SurveyManager(mockPostHog))
+                mockGenerateSurveys.mockImplementation(() => new SurveyManager(getSurveyRenderContext(mockPostHog)!))
                 surveys['_isSurveysEnabled'] = true
                 const callback = vi.fn()
 
