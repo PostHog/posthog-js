@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.12.4
+
+### Patch Changes
+
+- [#5193](https://github.com/PostHog/posthog-js/pull/5193) [`e4672b6`](https://github.com/PostHog/posthog-js/commit/e4672b6602b8f03bdf0f81571e5eded63899b985) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-ios 3.88.2 to fix replay attribution across session and identity changes and a camera-picker replay crash.
+  (2026-10-02)
+
 ## 2.12.3
 
 ### Patch Changes
