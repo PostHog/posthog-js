@@ -55,7 +55,10 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     private _captureHookUnsubscribe: (() => void) | undefined
     private _sessionIdUnsubscribe: (() => void) | undefined
 
-    constructor(host: SurveyEventHost, private readonly _onActivationChanged?: () => void) {
+    constructor(
+        host: SurveyEventHost,
+        private readonly _onActivationChanged?: () => void
+    ) {
         this._host = host
         this._eventToItems = new Map<string, string[]>()
         this._cancelEventToItems = new Map<string, string[]>()
