@@ -3101,6 +3101,155 @@ describe('posthog instance persistence', () => {
     )
 
     it.each([
+        { cookieWinsOnConflict: false, startsOptedIn: false, calculateOnly: false },
+        { cookieWinsOnConflict: true, startsOptedIn: false, calculateOnly: false },
+        { cookieWinsOnConflict: false, startsOptedIn: true, calculateOnly: false },
+        { cookieWinsOnConflict: true, startsOptedIn: true, calculateOnly: false },
+        { cookieWinsOnConflict: false, startsOptedIn: false, calculateOnly: true },
+        { cookieWinsOnConflict: true, startsOptedIn: false, calculateOnly: true },
+        { cookieWinsOnConflict: false, startsOptedIn: true, calculateOnly: true },
+        { cookieWinsOnConflict: true, startsOptedIn: true, calculateOnly: true },
+    ])(
+        'isolates restored state after shared rejection with cookieWins=$cookieWinsOnConflict / granted=$startsOptedIn / calculateOnly=$calculateOnly',
+        ({ cookieWinsOnConflict, startsOptedIn, calculateOnly }) => {
+            const token = uuidv7()
+            const key = `ph_${token}_posthog`
+            cookieStore._set(
+                key,
+                { distinct_id: 'stored-user', $device_id: 'stored-device', $user_state: 'identified' },
+                365,
+                true,
+                true
+            )
+            if (startsOptedIn) {
+                localStore._set(`__ph_opt_in_out_${token}`, 1)
+            }
+            const captured = vi.fn((event) => event)
+            const posthog = defaultPostHog().init(
+                token,
+                {
+                    cookieless_mode: 'on_reject',
+                    opt_out_capturing_persistence_type: 'localStorage',
+                    cookieWinsOnConflict,
+                    cross_subdomain_cookie: true,
+                    capture_pageview: false,
+                    advanced_disable_flags: true,
+                    before_send: captured,
+                },
+                uuidv7()
+            )
+            expect(posthog.get_distinct_id()).toBe('stored-user')
+            posthog.register({ private_user_property: 'private', $groups: { company: 'stored-company' } })
+            posthog.register_for_session({ private_session_property: 'private' })
+            const recorder = posthog.sessionRecording!
+            const disposeRecorder = vi.spyOn(recorder, 'dispose')
+            const resetConsent = vi.spyOn(posthog.consent, 'reset')
+            const writeConsent = vi.spyOn(posthog.consent, 'optInOut')
+            const localSpy = vi.spyOn(localStore, '_set')
+            const cookieSpy = vi.spyOn(cookieStore, '_set')
+            const sessionSpy = vi.spyOn(sessionStore, '_set')
+
+            localStore._set(`__ph_opt_in_out_${token}`, 0)
+            const properties = calculateOnly
+                ? posthog.calculateEventProperties('rejected-event', {})
+                : posthog.capture('rejected-event')!.properties
+
+            expect(properties).toMatchObject({
+                distinct_id: '$posthog_cookieless',
+                $device_id: null,
+                $cookieless_mode: true,
+                $is_identified: false,
+            })
+            expect(properties.$user_id).toBeUndefined()
+            expect(properties.$groups).toBeUndefined()
+            expect(properties.private_user_property).toBeUndefined()
+            expect(properties.private_session_property).toBeUndefined()
+            expect(properties.$session_id).toBeUndefined()
+            expect(properties.$window_id).toBeUndefined()
+            expect(disposeRecorder).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(posthog.sessionRecording).toBeUndefined()
+            expect(posthog.sessionManager).toBeUndefined()
+            expect(posthog['_extensions']).not.toContain(recorder)
+            expect(resetConsent).not.toHaveBeenCalled()
+            expect(writeConsent).not.toHaveBeenCalled()
+            expect(posthog.get_explicit_consent_status()).toBe('denied')
+            expect(localStore._get(key)).toBeNull()
+            expect(cookieStore._get(key)).toBeNull()
+            expect(localSpy.mock.calls.filter(([name]) => name.startsWith(key))).toEqual([])
+            expect(
+                cookieSpy.mock.calls.filter(([name, , days]) => name.startsWith(key) && !(isNumber(days) && days < 0))
+            ).toEqual([])
+            expect(sessionSpy.mock.calls.filter(([name]) => name.startsWith(key))).toEqual([])
+
+            posthog.register({ cookieless_property: 'retained' })
+            expect(posthog.capture('next-rejected-event')!.properties.cookieless_property).toBe('retained')
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(posthog.get_distinct_id()).not.toBe('stored-user')
+            expect(posthog.get_distinct_id()).not.toBe('$posthog_cookieless')
+            expect(posthog.get_property('$device_id')).not.toBe('stored-device')
+        }
+    )
+
+    it('drops a replay batch that first observes shared rejection', () => {
+        const token = uuidv7()
+        const captured = vi.fn((event) => event)
+        const posthog = defaultPostHog().init(
+            token,
+            {
+                cookieless_mode: 'on_reject',
+                capture_pageview: false,
+                advanced_disable_flags: true,
+                before_send: captured,
+            },
+            uuidv7()
+        )
+        const sessionId = posthog.get_session_id()
+        localStore._set(`__ph_opt_in_out_${token}`, 0)
+
+        expect(
+            posthog.capture('$snapshot', {
+                $session_id: sessionId,
+                $snapshot_data: [{ type: 2, data: { private_recorded_content: 'private' } }],
+            })
+        ).toBeUndefined()
+        expect(captured).not.toHaveBeenCalled()
+        expect(posthog.sessionRecording).toBeUndefined()
+        expect(posthog.sessionManager).toBeUndefined()
+        expect(posthog.capture('after-shared-rejection')!.properties.distinct_id).toBe('$posthog_cookieless')
+    })
+
+    it('does not capture partially reset state from callbacks during shared rejection', () => {
+        const token = uuidv7()
+        const captured = vi.fn((event) => event)
+        const posthog = defaultPostHog().init(
+            token,
+            {
+                cookieless_mode: 'on_reject',
+                capture_pageview: false,
+                advanced_disable_flags: true,
+                before_send: captured,
+            },
+            uuidv7()
+        )
+        posthog.set_config({
+            get_device_id: (id) => {
+                posthog.capture('during-consent-transition')
+                return id
+            },
+        })
+        localStore._set(`__ph_opt_in_out_${token}`, 0)
+
+        expect(() => posthog.capture('after-shared-rejection')).not.toThrow()
+        expect(captured).toHaveBeenCalledTimes(1)
+        expect(captured).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: 'after-shared-rejection',
+                properties: expect.objectContaining({ distinct_id: '$posthog_cookieless', $device_id: null }),
+            })
+        )
+    })
+
+    it.each([
         { cookieless_mode: 'always', opt_out_capturing_by_default: true, storedConsent: undefined },
         { cookieless_mode: 'on_reject', opt_out_capturing_by_default: true, storedConsent: undefined },
         { cookieless_mode: 'on_reject', opt_out_capturing_by_default: false, storedConsent: 0 },

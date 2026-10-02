@@ -83,6 +83,69 @@ test.describe('opting out', () => {
             })
         }
 
+        for (const startsOptedIn of [false, true]) {
+            test(`clears restored identity when another tab rejects ${startsOptedIn ? 'granted' : 'pending'} consent`, async ({
+                page,
+                context,
+            }) => {
+                await context.route(/^https:\/\/(www|app)\.example\.com\/$/, (route) =>
+                    route.fulfill({ path: './playground/cypress/index.html', contentType: 'text/html' })
+                )
+                const options = {
+                    defaults: '2026-01-30' as const,
+                    cookieless_mode: 'on_reject' as const,
+                    opt_out_capturing_persistence_type: 'localStorage' as const,
+                    cross_subdomain_cookie: true,
+                    capture_pageview: false,
+                    autocapture: false,
+                    disable_session_recording: true,
+                    request_batching: false,
+                    disable_compression: true,
+                    debug: false,
+                }
+                await start({ options, waitForFlags: false, url: 'https://www.example.com/' }, page, context)
+                await page.waitForFunction(() => (window as WindowWithPostHog).posthog?.__loaded)
+                await page.evaluate(() => {
+                    const ph = (window as WindowWithPostHog).posthog!
+                    ph.opt_in_capturing({ captureEventName: false })
+                    ph.identify('shared-user')
+                })
+
+                await start({ options, waitForFlags: false, url: 'https://app.example.com/' }, page, context)
+                await page.waitForFunction(() => (window as WindowWithPostHog).posthog?.__loaded)
+                expect(await page.evaluate(() => (window as WindowWithPostHog).posthog!.get_distinct_id())).toBe(
+                    'shared-user'
+                )
+                if (startsOptedIn) {
+                    await page.evaluate(() =>
+                        (window as WindowWithPostHog).posthog!.opt_in_capturing({ captureEventName: false })
+                    )
+                }
+                const otherTab = await context.newPage()
+                await start({ options, waitForFlags: false, url: 'https://app.example.com/' }, otherTab, context)
+                await otherTab.waitForFunction(() => (window as WindowWithPostHog).posthog?.__loaded)
+                await otherTab.evaluate(() => (window as WindowWithPostHog).posthog!.opt_out_capturing())
+
+                const outgoing = page.waitForRequest('**/e/*')
+                await page.evaluate(() => (window as WindowWithPostHog).posthog!.capture('after-other-tab-rejects'))
+                const request = await outgoing
+                const properties = request.postDataJSON().batch[0].properties
+                expect(properties).toMatchObject({
+                    distinct_id: '$posthog_cookieless',
+                    $device_id: null,
+                    $cookieless_mode: true,
+                    $is_identified: false,
+                })
+                expect(properties.$user_id).toBeUndefined()
+                expect(properties.$session_id).toBeUndefined()
+                expect(properties.$window_id).toBeUndefined()
+                expect(
+                    await page.evaluate(() => (window as WindowWithPostHog).posthog!.get_explicit_consent_status())
+                ).toBe('denied')
+                await otherTab.close()
+            })
+        }
+
         test('does not capture events when config opts out by default', async ({ page, context }) => {
             await start(
                 {

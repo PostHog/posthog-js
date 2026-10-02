@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Preserve shared identity after consent when using cookieless mode on rejection.
+Preserve shared identity while consent is pending and clear it after shared rejection in cookieless mode.
