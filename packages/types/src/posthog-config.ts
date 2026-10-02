@@ -117,18 +117,28 @@ export interface RageclickConfig {
     css_selector_ignorelist?: string[]
     /**
      * Controls automatic exclusion of elements by text content from rageclick detection.
-     * Useful for pagination buttons, loading spinners, and other repeatedly-clicked UI elements.
-     * - `true`: Use default keywords ['next', 'previous', 'prev', '>', '<']
+     * Useful for pagination buttons and other repeatedly-clicked UI elements.
+     * - `true`: Use the default keywords, which cover next/previous/prev wording
+     *   and arrow glyphs such as '>', '<', '→', '←', '»', '«'
      * - `false`: Disable content-based exclusion
-     * - `string[]`: Use custom keywords (max 10 items, otherwise use css_selector_ignorelist)
+     * - `string[]`: Use custom keywords (max 29 items, otherwise use css_selector_ignorelist)
      *
-     * Checks if element text content or aria-label matches any of the keywords (case-insensitive).
-     * Word keywords match as substrings; symbol-only keywords (e.g. '+', '-', '>') match exactly,
-     * so they don't suppress text like "sign-up", "5 > 3", or "C++".
+     * Checks the text and aria-label of the clicked control (the nearest button, link or other
+     * interactive ancestor) against the keywords, case-insensitive. The label of a surrounding
+     * region is not checked, so a labelled wrapper does not suppress the controls inside it.
+     * The built-in word keywords (next/previous/prev/etc.) match whole words
+     * wherever they appear, even inside a list you pass yourself, so 'prev' doesn't suppress
+     * "Preview". Any other word keyword you add matches as a substring. Symbol-only keywords
+     * (e.g. '+', '-', '>') always match exactly, so they don't suppress text like "sign-up", "5 > 3",
+     * or "C++".
+     *
+     * Below the `'2025-11-30'` defaults, and in any `set_config` call, a `rageclick` object you pass
+     * replaces the default instead of merging with it, so set this property explicitly there to keep
+     * content filtering.
      *
      * @default undefined
      * (`true` when `defaults` is `'2025-11-30'` or later;
-     * `['next', 'previous', 'prev', '>', '<', '+', '-', '−', '–']` when `defaults` is `'2026-05-30'` or later)
+     * the default keywords plus the '+', '-', '−', '–' steppers when `defaults` is `'2026-05-30'` or later)
      */
     content_ignorelist?: boolean | string[]
 
@@ -1346,7 +1356,8 @@ export interface PostHogConfig {
      * Determines whether PostHog should capture rage clicks.
      *
      * By default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.
-     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.
+     * When `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`, which also ignores repeat-click
+     * controls such as pagination arrows and pagers (see `content_ignorelist`).
      * When `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.
      *
      * @default true
