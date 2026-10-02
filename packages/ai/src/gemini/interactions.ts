@@ -396,7 +396,13 @@ export class WrappedInteractions {
               if (text?.type === 'text') text.text = `${text.text ?? ''}${delta.text}`
               else step.content?.push({ type: 'text', text: delta.text })
               firstTokenTime ??= Date.now()
-            } else if (step && delta?.type === 'image') {
+            } else if (
+              step &&
+              (delta?.type === 'image' ||
+                delta?.type === 'audio' ||
+                delta?.type === 'video' ||
+                delta?.type === 'document')
+            ) {
               step.content?.push({ ...delta })
               firstTokenTime ??= Date.now()
             } else if (step && delta?.type === 'arguments_delta' && typeof delta.arguments === 'string') {

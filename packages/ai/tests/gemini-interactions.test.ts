@@ -500,6 +500,147 @@ describe('Gemini Interactions API', () => {
     expect(JSON.stringify(properties)).not.toContain(imageData)
   })
 
+  test.each([
+    { privacy: false, fullCapture: false },
+    { privacy: false, fullCapture: true },
+    { privacy: true, fullCapture: true },
+  ])(
+    'keeps streamed audio chunks in capture without changing caller events (privacy=$privacy, full capture=$fullCapture)',
+    async ({ privacy, fullCapture }) => {
+      const { posthog, gemini } = setup()
+      ;(posthog as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = fullCapture
+      const chunks = ['A'.repeat(80), 'B'.repeat(80)]
+      const model = 'gemini-3.8-flash-tts'
+      const events = [
+        { event_type: 'interaction.created', interaction: { id: 'v1_audio_stream', model } },
+        { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+        ...chunks.map((data) => ({
+          event_type: 'step.delta',
+          index: 0,
+          delta: { type: 'audio', data, mime_type: 'audio/l16', sample_rate: 24000, channels: 1 },
+        })),
+        { event_type: 'interaction.completed', interaction: { id: 'v1_audio_stream', model, status: 'completed' } },
+      ]
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield* events
+        })()
+      )
+
+      const request = {
+        model,
+        input: 'Have a wonderful day!',
+        response_format: { type: 'audio' },
+        stream: true,
+        posthogPrivacyMode: privacy,
+      }
+      const stream = await gemini.interactions.create(request as any)
+      const received = []
+      for await (const event of stream) received.push(event)
+
+      expect(provider.create).toHaveBeenCalledWith({
+        model,
+        input: request.input,
+        response_format: request.response_format,
+        stream: true,
+      })
+      expect(received).toEqual(events)
+      expect(received[2]).toBe(events[2])
+      expect(received[3]).toBe(events[3])
+      const properties = captured(posthog).properties
+      expect(properties.$ai_output_choices).toEqual(
+        privacy
+          ? null
+          : [
+              {
+                role: 'assistant',
+                content: chunks.map((data) => ({
+                  type: 'audio',
+                  data: fullCapture ? data : '[base64 audio/l16 redacted]',
+                  mime_type: 'audio/l16',
+                  sample_rate: 24000,
+                  channels: 1,
+                })),
+              },
+            ]
+      )
+      if (privacy || !fullCapture) {
+        expect(JSON.stringify(properties)).not.toContain(chunks[0])
+        expect(JSON.stringify(properties)).not.toContain(chunks[1])
+      }
+    }
+  )
+
+  test.each([
+    { type: 'video', mime_type: 'video/mp4' },
+    { type: 'document', mime_type: 'application/pdf' },
+  ])('keeps a typed $type delta in partial-stream capture', async ({ type, mime_type }) => {
+    const { posthog, gemini } = setup()
+    const data = 'A'.repeat(80)
+    const events = [
+      { event_type: 'interaction.created', interaction: { id: 'v1_media_stream', model: 'gemini-3.8-flash' } },
+      { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+      { event_type: 'step.delta', index: 0, delta: { type, data, mime_type } },
+    ]
+    provider.create.mockResolvedValue(
+      (async function* () {
+        yield* events
+      })()
+    )
+
+    const stream = await gemini.interactions.create({ model: 'gemini-3.8-flash', input: 'Hello', stream: true })
+    const received = []
+    for await (const event of stream) received.push(event)
+
+    expect(received).toEqual(events)
+    expect(received[2]).toBe(events[2])
+    const properties = captured(posthog).properties
+    expect(properties.$ai_stop_reason).toBe('incomplete')
+    expect(properties.$ai_output_choices).toEqual([
+      { role: 'assistant', content: [{ type, data: `[base64 ${mime_type} redacted]`, mime_type }] },
+    ])
+    expect(JSON.stringify(properties)).not.toContain(data)
+  })
+
+  test.each([
+    { privacy: false, fullCapture: false, expected: '[base64 audio redacted]' },
+    { privacy: false, fullCapture: true, expected: 'AAAA' },
+    { privacy: true, fullCapture: true, expected: null },
+  ])(
+    'handles short MIME-less audio chunks (privacy=$privacy, full capture=$fullCapture)',
+    async ({ privacy, fullCapture, expected }) => {
+      const { posthog, gemini } = setup()
+      ;(posthog as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = fullCapture
+      const events = [
+        { event_type: 'interaction.created', interaction: { id: 'v1_short_audio', model: 'gemini-3.8-flash-tts' } },
+        { event_type: 'step.start', index: 0, step: { type: 'model_output' } },
+        { event_type: 'step.delta', index: 0, delta: { type: 'audio', data: 'AAAA' } },
+      ]
+      provider.create.mockResolvedValue(
+        (async function* () {
+          yield* events
+        })()
+      )
+
+      const stream = await gemini.interactions.create({
+        model: 'gemini-3.8-flash-tts',
+        input: 'Hello',
+        stream: true,
+        posthogPrivacyMode: privacy,
+      } as any)
+      const received = []
+      for await (const event of stream) received.push(event)
+
+      expect(received).toEqual(events)
+      expect(received[2]).toBe(events[2])
+      const properties = captured(posthog).properties
+      expect(properties.$ai_output_choices).toEqual(
+        expected === null ? null : [{ role: 'assistant', content: [{ type: 'audio', data: expected }] }]
+      )
+      if (privacy || !fullCapture) expect(JSON.stringify(properties)).not.toContain('AAAA')
+    }
+  )
+
   test('preserves stream events and assembles text and split tool arguments without summing interim usage', async () => {
     const { posthog, gemini } = setup()
     const events = [
