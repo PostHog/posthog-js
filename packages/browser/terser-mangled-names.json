@@ -403,7 +403,6 @@
         "_isActivityChangeBelowGranularity",
         "_isBelowMinimumDuration",
         "_isCacheStale",
-        "_isClosing",
         "_isConsentTransition",
         "_isConsoleLogCaptureEnabled",
         "_isConversationsEnabled",
