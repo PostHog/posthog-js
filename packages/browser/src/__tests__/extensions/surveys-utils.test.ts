@@ -4,6 +4,8 @@ import {
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
+    getInProgressSurveyState,
+    setInProgressSurveyState,
 } from '@posthog/browser-common/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveyType } from '@posthog/browser-common'
