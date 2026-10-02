@@ -101,14 +101,14 @@ describe('PostHogSurveys', () => {
         surveys.dispose()
     })
 
-    it('keeps the default additive trigger policy on an empty successful refresh', async () => {
+    it('replaces trigger definitions on an empty successful refresh', async () => {
         const { client, surveys, receiver } = create({ advancedEnableSurveys: true })
         await surveys.setup(client)
         await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve))
-        expect(receiver.register).toHaveBeenCalledWith([definition])
+        expect(receiver.replace).toHaveBeenCalledWith([definition])
         vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: { surveys: [] } })
         await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve, true))
-        expect(receiver.register).toHaveBeenCalledTimes(1)
+        expect(receiver.replace).toHaveBeenLastCalledWith([])
         surveys.dispose()
     })
 

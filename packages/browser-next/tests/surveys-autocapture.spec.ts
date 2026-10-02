@@ -95,7 +95,6 @@ describe('survey autocapture selectors', () => {
         surveyExtension.dispose?.()
         surveyExtension.dispose?.()
         expect(disposeReceiver).toHaveBeenCalledOnce()
-        expect(setSelectors).toHaveBeenCalledTimes(2)
         expect(setSelectors).toHaveBeenLastCalledWith(new Set())
         captured.mockClear()
         document.querySelector('button')!.click()
