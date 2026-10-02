@@ -100,7 +100,7 @@ export class WebMCP {
             }
 
             if (isPromise(result)) {
-                return result.then(
+                return Promise.resolve(result).then(
                     (value) => {
                         webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
                         return value

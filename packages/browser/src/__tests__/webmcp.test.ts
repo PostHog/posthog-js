@@ -206,4 +206,23 @@ describe('WebMCP', () => {
             expect.any(Object)
         )
     })
+
+    it('captures a thenable whose then method throws', async () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const failure = new Error('then failure')
+        const thenable = {
+            then: () => {
+                throw failure
+            },
+        }
+
+        register(new WebMCP(posthog), { name: 'throwing_then', execute: () => thenable })
+
+        await expect(registeredTool(0).execute()).rejects.toBe(failure)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_is_error: true }),
+            expect.any(Object)
+        )
+    })
 })
