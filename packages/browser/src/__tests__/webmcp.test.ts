@@ -172,6 +172,28 @@ describe('WebMCP', () => {
         )
     })
 
+    it.each([true, { type: 'string' }])(
+        'preserves undeclared application inputs when additionalProperties is %o',
+        (additionalProperties) => {
+            const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+            const execute = vi.fn(() => ({ content: [] }))
+            const inputSchema = { type: 'object', additionalProperties }
+            const input = { context: 'application-value', llm_model: 'application-model' }
+
+            register(new WebMCP(posthog), { name: 'permissive', inputSchema, execute })
+            registeredTool(0).execute(input)
+
+            expect(registeredTool(0).inputSchema).toBe(inputSchema)
+            expect(execute).toHaveBeenCalledWith(input)
+            expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+                expect.not.objectContaining({
+                    $mcp_intent: expect.anything(),
+                    $mcp_llm_model: expect.anything(),
+                })
+            )
+        }
+    )
+
     it('does not inject metadata into a complex schema', () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const execute = vi.fn(() => ({ content: [] }))
@@ -248,6 +270,28 @@ describe('WebMCP', () => {
             expect.not.objectContaining({
                 $mcp_intent: expect.anything(),
                 $mcp_llm_model: expect.anything(),
+            })
+        )
+    })
+
+    it('redacts structured identifiers from intent', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+
+        register(new WebMCP(posthog), {
+            name: 'private',
+            inputSchema: { type: 'object' },
+            execute: () => ({ content: [] }),
+        })
+        registeredTool(0).execute({
+            context:
+                'Contact alice@example.com from 192.168.1.1 or 2001:db8::1 using 4111 1111 1111 1111, SSN 123-45-6789, or +1-202-555-0170.',
+            llm_model: 'gpt-5',
+        })
+
+        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+            expect.objectContaining({
+                $mcp_intent:
+                    'Contact [redacted] from [redacted] or [redacted] using [redacted], SSN [redacted], or [redacted].',
             })
         )
     })
