@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.21.3
+
+### Patch Changes
+
+- [#5186](https://github.com/PostHog/posthog-js/pull/5186) [`80b9e5f`](https://github.com/PostHog/posthog-js/commit/80b9e5f6520f5261c706176039da8879da50fc58) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Sanitize only the part of a long string that the captured event can keep, so a tool call returning megabytes of HTML or text no longer blocks the event loop while it is scanned. A 10 MB HTML response now costs about 5 ms to capture instead of 2.7 s. The captured event does not change.
+  (2026-10-02)
+
 ## 0.21.2
 
 ### Patch Changes
