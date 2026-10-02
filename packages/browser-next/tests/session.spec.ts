@@ -4,7 +4,6 @@ import { createPostHog, type NewSessionInfo, type StorageLike } from '../src/cor
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
-const EMPTY_SESSION = { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
 const STATE_KEY = 'ph_ph_test_posthog_browser_v2'
 const WINDOW_KEY = 'ph_ph_test_window_id'
 const PRIMARY_WINDOW_KEY = 'ph_ph_test_primary_window_exists'
@@ -80,9 +79,9 @@ describe('browser-next session state', () => {
         const listener = vi.fn()
         posthog.onNewSession(listener)
 
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         await posthog.capture('')
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         expect(listener).not.toHaveBeenCalled()
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}')).not.toHaveProperty('session')
     })
@@ -101,7 +100,7 @@ describe('browser-next session state', () => {
 
         await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         expect(JSON.parse(local.values.get(STATE_KEY) ?? '{}')).not.toHaveProperty('session')
         expect(tabRead).not.toHaveBeenCalled()
         expect(tab.values.size).toBe(0)
@@ -113,7 +112,7 @@ describe('browser-next session state', () => {
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
         await posthog.capture('first')
-        const first = posthog.session
+        const first = posthog.session!
         const persisted = storage.values.get(STATE_KEY)
         vi.setSystemTime(START + 1_800_001)
 
@@ -123,7 +122,7 @@ describe('browser-next session state', () => {
         expect(storage.values.get(STATE_KEY)).toBe(persisted)
         expect(changes).toEqual([])
         await posthog.capture('admitted')
-        expect(posthog.session.sessionId).not.toBe(first.sessionId)
+        expect(posthog.session!.sessionId).not.toBe(first.sessionId)
         expect(changes.map(({ reason }) => reason)).toEqual(['idleTimeout'])
     })
 
@@ -177,11 +176,11 @@ describe('browser-next session state', () => {
 
         await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         expect(storage.values.get(STATE_KEY)).toBe(resetState)
         expect(changes).toEqual([])
         await posthog.capture('admitted')
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         expect(changes.map(({ reason }) => reason)).toEqual(['reset'])
     })
 
@@ -193,12 +192,12 @@ describe('browser-next session state', () => {
 
         await posthog.capture('first')
 
-        expect(posthog.session.sessionId).not.toBe('')
-        expect(posthog.session.windowId).not.toBe('')
-        expect(posthog.session.sessionStartTimestamp).toBe(START)
+        expect(posthog.session!.sessionId).not.toBe('')
+        expect(posthog.session!.windowId).not.toBe('')
+        expect(posthog.session!.sessionStartTimestamp).toBe(START)
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}')).toMatchObject({
             session: {
-                sessionId: posthog.session.sessionId,
+                sessionId: posthog.session!.sessionId,
                 sessionStartTimestamp: START,
                 lastActivityTimestamp: START,
             },
@@ -226,12 +225,12 @@ describe('browser-next session state', () => {
             })
         )
         const posthog = await createMemoryClient(storage)
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
 
         await posthog.capture('first')
 
-        expect(posthog.session.sessionId).toBe('persisted-session')
-        expect(posthog.session.windowId).not.toBe('')
+        expect(posthog.session!.sessionId).toBe('persisted-session')
+        expect(posthog.session!.windowId).not.toBe('')
     })
 
     it('uses strict idle boundaries and rotates both IDs after the boundary', async () => {
@@ -239,16 +238,21 @@ describe('browser-next session state', () => {
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
         await posthog.capture('first')
-        const first = posthog.session
+        const first = posthog.session!
 
         vi.setSystemTime(START + 1_800_000)
         await posthog.capture('at-boundary')
-        expect(posthog.session).toEqual(first)
+        expect(posthog.session).toMatchObject({
+            sessionId: first.sessionId,
+            windowId: first.windowId,
+            sessionStartTimestamp: first.sessionStartTimestamp,
+        })
+        expect(posthog.session!.lastActivityTimestamp).toBe(START + 1_800_000)
 
         vi.setSystemTime(START + 3_600_001)
         await posthog.capture('after-boundary')
-        expect(posthog.session.sessionId).not.toBe(first.sessionId)
-        expect(posthog.session.windowId).not.toBe(first.windowId)
+        expect(posthog.session!.sessionId).not.toBe(first.sessionId)
+        expect(posthog.session!.windowId).not.toBe(first.windowId)
         expect(changes.map(({ reason }) => reason)).toEqual(['idleTimeout'])
     })
 
@@ -296,14 +300,14 @@ describe('browser-next session state', () => {
         await posthog.capture('adopt')
         vi.setSystemTime(START + 1_800_001)
         await posthog.capture('rotate')
-        const rotated = posthog.session
+        const rotated = posthog.session!
         const persistedRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
         expect(typeof persistedRevision).toBe('string')
         expect(persistedRevision).toBe('9007199254740992')
 
         const reloaded = await createMemoryClient(storage)
         await reloaded.capture('reload')
-        expect(reloaded.session.sessionId).toBe(rotated.sessionId)
+        expect(reloaded.session!.sessionId).toBe(rotated.sessionId)
     })
 
     it('carries decimal revisions and preserves the newer reset across a stale write', async () => {
@@ -347,18 +351,23 @@ describe('browser-next session state', () => {
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
         await posthog.capture('first')
-        const first = posthog.session
+        const first = posthog.session!
 
         for (let interval = 1; interval <= 72; interval++) {
             vi.setSystemTime(START + interval * 20 * 60 * 1000)
             await posthog.capture(`tick-${interval}`)
         }
-        expect(posthog.session).toEqual(first)
+        expect(posthog.session).toMatchObject({
+            sessionId: first.sessionId,
+            windowId: first.windowId,
+            sessionStartTimestamp: first.sessionStartTimestamp,
+        })
+        expect(posthog.session!.lastActivityTimestamp).toBe(START + 86_400_000)
 
         vi.setSystemTime(START + 86_400_001)
         await posthog.capture('after-maximum')
-        expect(posthog.session.sessionId).not.toBe(first.sessionId)
-        expect(posthog.session.windowId).not.toBe(first.windowId)
+        expect(posthog.session!.sessionId).not.toBe(first.sessionId)
+        expect(posthog.session!.windowId).not.toBe(first.windowId)
         expect(changes.map(({ reason }) => reason)).toEqual(['maxLength'])
     })
 
@@ -383,17 +392,17 @@ describe('browser-next session state', () => {
     it('defers reset session creation and notification until the next capture', async () => {
         const posthog = await createMemoryClient(false)
         await posthog.capture('before-reset')
-        const before = posthog.session
+        const before = posthog.session!
         const changes: NewSessionInfo[] = []
         posthog.onNewSession((change) => changes.push(change))
 
         posthog.reset()
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         expect(changes).toEqual([])
 
         await posthog.capture('after-reset')
-        expect(posthog.session.sessionId).not.toBe(before.sessionId)
-        expect(posthog.session.windowId).not.toBe(before.windowId)
+        expect(posthog.session!.sessionId).not.toBe(before.sessionId)
+        expect(posthog.session!.windowId).not.toBe(before.windowId)
         expect(changes).toEqual([{ ...posthog.session, reason: 'reset' }])
     })
 
@@ -403,16 +412,16 @@ describe('browser-next session state', () => {
         const second = await createMemoryClient(storage)
         await first.capture('first')
         await second.capture('second')
-        const shared = second.session.sessionId
-        const secondWindow = second.session.windowId
+        const shared = second.session!.sessionId
+        const secondWindow = second.session!.windowId
 
         vi.setSystemTime(START + 29 * 60 * 1000)
         await first.capture('recent-sibling-activity')
         vi.setSystemTime(START + 31 * 60 * 1000)
         await second.capture('after-local-idle')
 
-        expect(second.session.sessionId).toBe(shared)
-        expect(second.session.windowId).toBe(secondWindow)
+        expect(second.session!.sessionId).toBe(shared)
+        expect(second.session!.windowId).toBe(secondWindow)
     })
 
     it('adopts a sibling rotation while retaining the local window', async () => {
@@ -421,16 +430,16 @@ describe('browser-next session state', () => {
         const second = await createMemoryClient(storage)
         await first.capture('first')
         await second.capture('second')
-        const oldSession = first.session.sessionId
-        const secondWindow = second.session.windowId
+        const oldSession = first.session!.sessionId
+        const secondWindow = second.session!.windowId
 
         vi.setSystemTime(START + 1_800_001)
         await first.capture('rotated')
-        expect(first.session.sessionId).not.toBe(oldSession)
+        expect(first.session!.sessionId).not.toBe(oldSession)
         await second.capture('adopt')
 
-        expect(second.session.sessionId).toBe(first.session.sessionId)
-        expect(second.session.windowId).toBe(secondWindow)
+        expect(second.session!.sessionId).toBe(first.session!.sessionId)
+        expect(second.session!.windowId).toBe(secondWindow)
     })
 
     it('discards an event when tab-state hooks write newer authority during commit', async () => {
@@ -464,7 +473,7 @@ describe('browser-next session state', () => {
         const durableReset = JSON.parse(local.values.get(STATE_KEY) ?? '{}')
         expect(reset).toBe(true)
         expect(observed).toEqual([])
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toBeUndefined()
         expect(durableReset.session).toBeUndefined()
         expect(durableReset.sessionReset).toEqual(expect.any(String))
         expect(tab.values.has(WINDOW_KEY)).toBe(false)
@@ -530,11 +539,11 @@ describe('browser-next session state', () => {
         await staleKv.capture('stale-kv')
         await staleIdentity.capture('stale-identity')
         await staleGroup.capture('stale-group')
-        const oldSessionId = first.session.sessionId
+        const oldSessionId = first.session!.sessionId
 
         vi.setSystemTime(START + 1_800_001)
         await first.capture('rotate')
-        const rotatedSessionId = first.session.sessionId
+        const rotatedSessionId = first.session!.sessionId
         expect(rotatedSessionId).not.toBe(oldSessionId)
 
         staleKv.kv.set('key', true)
@@ -545,7 +554,7 @@ describe('browser-next session state', () => {
         expect(JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.sessionId).toBe(rotatedSessionId)
 
         await staleKv.capture('adopt')
-        expect(staleKv.session.sessionId).toBe(rotatedSessionId)
+        expect(staleKv.session!.sessionId).toBe(rotatedSessionId)
     })
 
     it('preserves an explicit reset tombstone across a stale whole-record write', async () => {
@@ -554,7 +563,7 @@ describe('browser-next session state', () => {
         const stale = await createMemoryClient(storage)
         await first.capture('first')
         await stale.capture('stale')
-        const oldSessionId = first.session.sessionId
+        const oldSessionId = first.session!.sessionId
 
         first.reset()
         stale.kv.set('key', true)
@@ -563,8 +572,8 @@ describe('browser-next session state', () => {
         expect(resetState.sessionReset).toEqual(expect.any(String))
 
         await stale.capture('after-reset')
-        expect(stale.session.sessionId).not.toBe(oldSessionId)
-        expect(stale.session.windowId).not.toBe('')
+        expect(stale.session!.sessionId).not.toBe(oldSessionId)
+        expect(stale.session!.windowId).not.toBe('')
     })
 
     it('does not treat lazy absence or malformed session values as a reset', async () => {
@@ -607,14 +616,14 @@ describe('browser-next session state', () => {
         await seed.capture('seed')
         const persisted = storage.values.get(STATE_KEY)
         const identity = seed.anonymousId
-        const sessionId = seed.session.sessionId
+        const sessionId = seed.session!.sessionId
         storage.failReadsRemaining = 1
 
         const posthog = await createMemoryClient(storage)
         expect(storage.values.get(STATE_KEY)).toBe(persisted)
         expect(posthog.anonymousId).toBe(identity)
         await posthog.capture('recovered')
-        expect(posthog.session.sessionId).toBe(sessionId)
+        expect(posthog.session!.sessionId).toBe(sessionId)
     })
 
     it('retains safe local session state when shared-state reads fail', async () => {
@@ -657,14 +666,14 @@ describe('browser-next session state', () => {
         setDefaultStorage(local, tab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await first.capture('first')
-        const firstSession = first.session
+        const firstSession = first.session!
         expect(tab.values.get(PRIMARY_WINDOW_KEY)).toBe('1')
         await first.dispose()
         expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(false)
         expect(tab.values.get(WINDOW_KEY)).toBe(firstSession.windowId)
 
         const reloaded = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
-        expect(reloaded.session).toEqual(EMPTY_SESSION)
+        expect(reloaded.session).toBeUndefined()
         await reloaded.capture('reload')
         expect(reloaded.session).toEqual(firstSession)
     })
@@ -682,7 +691,7 @@ describe('browser-next session state', () => {
 
         await posthog.capture('first')
 
-        expect(tab.values.get('custom-state_window_id')).toBe(posthog.session.windowId)
+        expect(tab.values.get('custom-state_window_id')).toBe(posthog.session!.windowId)
         expect(tab.values.get('custom-state_primary_window_exists')).toBe('1')
     })
 
@@ -710,7 +719,7 @@ describe('browser-next session state', () => {
         setDefaultStorage(local, originalTab)
         const first = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await first.capture('first')
-        const firstSession = first.session
+        const firstSession = first.session!
 
         const copiedTab = new MemoryStorage()
         originalTab.values.forEach((value, key) => copiedTab.values.set(key, value))
@@ -724,9 +733,9 @@ describe('browser-next session state', () => {
         const duplicate = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await duplicate.capture('duplicate')
 
-        expect(duplicate.session.sessionId).toBe(firstSession.sessionId)
-        expect(duplicate.session.windowId).not.toBe(firstSession.windowId)
-        expect(copiedTab.values.get(WINDOW_KEY)).toBe(duplicate.session.windowId)
+        expect(duplicate.session!.sessionId).toBe(firstSession.sessionId)
+        expect(duplicate.session!.windowId).not.toBe(firstSession.windowId)
+        expect(copiedTab.values.get(WINDOW_KEY)).toBe(duplicate.session!.windowId)
     })
 
     it('flushes pending activity and removes the primary marker during beforeunload', async () => {
@@ -781,7 +790,7 @@ describe('browser-next session state', () => {
         await second.capture('pending-activity')
         vi.setSystemTime(START + 1_800_001)
         await first.capture('rotated')
-        const rotatedSession = first.session.sessionId
+        const rotatedSession = first.session!.sessionId
 
         globalThis.dispatchEvent(new Event('beforeunload'))
 
@@ -831,7 +840,7 @@ describe('browser-next session state', () => {
 
         await posthog.capture('safe')
 
-        expect(posthog.session.windowId).not.toBe('')
+        expect(posthog.session!.windowId).not.toBe('')
         expect(tab.values.has(WINDOW_KEY)).toBe(false)
         expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(false)
     })
@@ -859,7 +868,7 @@ describe('browser-next session state', () => {
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
 
         expect(() => posthog.capture('safe')).not.toThrow()
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         await expect(posthog.dispose()).resolves.toBeUndefined()
     })
 

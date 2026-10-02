@@ -31,6 +31,8 @@ export interface Extension {
      * after construction; return a promise when setup needs asynchronous state.
      */
     setup(client: Client): void | Promise<void>
+    /** Flush buffered work. Shutdown awaits this within the host's timeout before disposal. */
+    flush?(reason?: 'flush' | 'shutdown'): Promise<void>
     /** Release final resources synchronously. Feature-level start/stop remains extension-owned. */
     dispose?(): void
 }
