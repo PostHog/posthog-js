@@ -3273,7 +3273,10 @@ export class PostHog extends PostHogCore {
 
     const isMemoryPersistence = this._persistence === 'memory'
 
-    const properties: PostHogEventProperties = {}
+    const properties: PostHogEventProperties = {
+      ...maybeAdd('version', appVersion ?? undefined),
+      ...maybeAdd('build', appBuild ?? undefined),
+    }
 
     if (!isMemoryPersistence) {
       const prevAppBuild = this.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild) as string | undefined
