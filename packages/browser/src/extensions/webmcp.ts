@@ -1,13 +1,21 @@
-import { isFunction, isObject, isPromise } from '@posthog/core'
+import { isArray, isFunction, isObject, isPromise, isString, isUndefined } from '@posthog/core'
+import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
 import { patch } from './replay/rrweb-plugins/patch'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
 
+interface WebMCPInputSchema extends Record<string, unknown> {
+    properties?: Record<string, unknown>
+    required?: unknown[]
+    type?: unknown
+}
+
 interface WebMCPTool {
     name: string
     description?: string
+    inputSchema?: WebMCPInputSchema
     execute: WebMCPExecute
 }
 
@@ -19,9 +27,156 @@ interface WebMCPInstrumentation {
     instances: Set<PostHog>
 }
 
+interface WebMCPMetadataOptions {
+    intent: boolean
+    model: boolean
+}
+
+interface WebMCPMetadata {
+    intent?: string
+    model?: string
+}
+
 type WebMCPDocument = Document & { modelContext?: WebMCPModelContext }
 
 const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrumentation>()
+
+const CONTEXT_PARAMETER_DESCRIPTION = `Explain why this tool is called and how it supports the user's goal. Describe the abstract purpose only. Do not include personal or identifying information. Generalize specific entities as roles such as "a customer".`
+const MODEL_PARAMETER_DESCRIPTION =
+    'The exact model identifier you are running as, taken from your system prompt or environment. Pass "unknown" if you do not know it. Never guess.'
+const MAX_INTENT_LENGTH = 2048
+const MAX_MODEL_LENGTH = 256
+
+function getMetadataOptions(config: boolean | WebMCPCaptureConfig | undefined): WebMCPMetadataOptions | undefined {
+    if (!config) {
+        return undefined
+    }
+    if (config === true) {
+        return { intent: true, model: true }
+    }
+    return { intent: config.intent !== false, model: config.model !== false }
+}
+
+function getRequestedMetadata(instrumentation: WebMCPInstrumentation): WebMCPMetadataOptions {
+    const requested = { intent: false, model: false }
+    for (const instance of instrumentation.instances) {
+        const options = getMetadataOptions(instance.config.capture_webmcp)
+        requested.intent ||= options?.intent === true
+        requested.model ||= options?.model === true
+    }
+    return requested
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(value, key)
+}
+
+function injectMetadataParameters(
+    tool: WebMCPTool,
+    requested: WebMCPMetadataOptions
+): { tool: WebMCPTool; injected: WebMCPMetadataOptions } {
+    const injected = { intent: false, model: false }
+    const schema = tool.inputSchema
+
+    if (
+        (schema &&
+            (hasOwn(schema, '$ref') ||
+                hasOwn(schema, 'oneOf') ||
+                hasOwn(schema, 'anyOf') ||
+                hasOwn(schema, 'allOf') ||
+                (schema.type && schema.type !== 'object') ||
+                (schema.properties && !isObject(schema.properties)) ||
+                (schema.required && !isArray(schema.required)))) ||
+        (!isUndefined(schema) && !isObject(schema))
+    ) {
+        return { tool: { ...tool }, injected }
+    }
+
+    const properties = schema?.properties || {}
+    injected.intent = requested.intent && !hasOwn(properties, 'context')
+    injected.model = requested.model && !hasOwn(properties, 'llm_model')
+
+    if (!injected.intent && !injected.model) {
+        return { tool: { ...tool }, injected }
+    }
+
+    const nextProperties = { ...properties }
+    const required = isArray(schema?.required) ? [...schema.required] : []
+
+    if (injected.intent) {
+        nextProperties.context = { type: 'string', description: CONTEXT_PARAMETER_DESCRIPTION }
+        if (!required.includes('context')) {
+            required.push('context')
+        }
+    }
+    if (injected.model) {
+        nextProperties.llm_model = { type: 'string', description: MODEL_PARAMETER_DESCRIPTION }
+        if (!required.includes('llm_model')) {
+            required.push('llm_model')
+        }
+    }
+
+    return {
+        tool: {
+            ...tool,
+            inputSchema: {
+                ...schema,
+                type: schema?.type || 'object',
+                properties: nextProperties,
+                required,
+            },
+        },
+        injected,
+    }
+}
+
+function normalizeMetadata(value: unknown, maxLength: number): string | undefined {
+    if (!isString(value)) {
+        return undefined
+    }
+    const normalized = value.trim()
+    return normalized ? normalized.slice(0, maxLength) : undefined
+}
+
+function getCallMetadata(input: unknown, injected: WebMCPMetadataOptions): WebMCPMetadata {
+    if (!isObject(input)) {
+        return {}
+    }
+    try {
+        const intent = injected.intent ? normalizeMetadata(input.context, MAX_INTENT_LENGTH) : undefined
+        const model = injected.model ? normalizeMetadata(input.llm_model, MAX_MODEL_LENGTH) : undefined
+        return {
+            ...(intent && intent !== '{}' ? { intent } : {}),
+            ...(model && model.toLowerCase() !== 'unknown' ? { model } : {}),
+        }
+    } catch {
+        return {}
+    }
+}
+
+function stripInjectedMetadata(args: unknown[], injected: WebMCPMetadataOptions): unknown[] {
+    const input = args[0]
+    if (!isObject(input)) {
+        return args
+    }
+    try {
+        const removeIntent = injected.intent && hasOwn(input, 'context')
+        const removeModel = injected.model && hasOwn(input, 'llm_model')
+        if (!removeIntent && !removeModel) {
+            return args
+        }
+        const toolInput = { ...input }
+        if (removeIntent) {
+            delete toolInput.context
+        }
+        if (removeModel) {
+            delete toolInput.llm_model
+        }
+        return [toolInput, ...args.slice(1)]
+    } catch {
+        return args
+    }
+}
 
 function isErrorResult(value: unknown): boolean {
     try {
@@ -88,33 +243,35 @@ export class WebMCP {
 
         const execute = tool.execute
         const webMCP = this
-        const wrappedTool = { ...tool }
+        const { tool: wrappedTool, injected } = injectMetadataParameters(tool, getRequestedMetadata(instrumentation))
 
         wrappedTool.execute = function (...args): unknown {
             const startedAt = new Date()
+            const metadata = getCallMetadata(args[0], injected)
+            const toolArgs = stripInjectedMetadata(args, injected)
             let result: unknown
 
             try {
-                result = execute.apply(this, args)
+                result = execute.apply(this, toolArgs)
             } catch (error) {
-                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
+                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true, metadata)
                 throw error
             }
 
             if (isPromise(result)) {
                 return Promise.resolve(result).then(
                     (value) => {
-                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
+                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value), metadata)
                         return value
                     },
                     (error) => {
-                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
+                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true, metadata)
                         throw error
                     }
                 )
             }
 
-            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result))
+            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result), metadata)
             return result
         }
         return wrappedTool
@@ -124,12 +281,14 @@ export class WebMCP {
         instrumentation: WebMCPInstrumentation,
         tool: WebMCPTool,
         timestamp: Date,
-        isError: boolean
+        isError: boolean,
+        metadata: WebMCPMetadata
     ): void {
         const duration = Date.now() - timestamp.getTime()
 
         for (const instance of instrumentation.instances) {
-            if (!instance.config.capture_webmcp) {
+            const options = getMetadataOptions(instance.config.capture_webmcp)
+            if (!options) {
                 continue
             }
 
@@ -145,6 +304,12 @@ export class WebMCP {
                         $mcp_server_name: location?.hostname,
                         $mcp_duration_ms: duration,
                         $mcp_is_error: isError,
+                        ...(options.intent && metadata.intent
+                            ? { $mcp_intent: metadata.intent, $mcp_intent_source: 'context_parameter' }
+                            : {}),
+                        ...(options.model && metadata.model
+                            ? { $mcp_llm_model: metadata.model, $mcp_llm_model_source: 'self_reported' }
+                            : {}),
                     },
                     { timestamp }
                 )
