@@ -17,6 +17,7 @@ import { getAnalyticsParameterOwnership } from './analytics-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
+import { unwrapInputSchema } from './mcp-sdk-compat'
 import { getReportMissingToolDescriptor, handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -140,7 +141,9 @@ async function handleToolCallRequest(
     extra,
     execute: (downstreamRequest: MCPRequestLike) =>
       runOriginalToolHandler(originalCallToolHandler, downstreamRequest, extra),
-    parameterOwnership: originalTool ? getAnalyticsParameterOwnership(originalTool.inputSchema) : undefined,
+    parameterOwnership: originalTool
+      ? getAnalyticsParameterOwnership(unwrapInputSchema(originalTool.inputSchema))
+      : undefined,
     inputSchema: originalTool?.inputSchema,
   })
 }

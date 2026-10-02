@@ -365,6 +365,33 @@ describe('low-level reserved analytics arguments on a fresh instance', () => {
   })
 
   it.each([
+    [
+      'a Zod 3 refinement',
+      z
+        .object({ context: z.string(), value: z.string() })
+        .strict()
+        .refine(({ value }) => value.length > 0),
+    ],
+    [
+      'a Zod 4 refinement',
+      z4
+        .object({ context: z4.string(), value: z4.string() })
+        .strict()
+        .refine(({ value }) => value.length > 0),
+    ],
+  ])('keeps a required context argument declared behind %s', async (_label, inputSchema) => {
+    const { response, received, event } = await callFreshInstance(
+      'declares_context',
+      { context: 'tool context', value: 'kept' },
+      { resolveOriginalTool: () => ({ inputSchema }) }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it.each([
     ['returns undefined', () => undefined, 0],
     [
       'throws',
