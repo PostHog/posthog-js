@@ -46,6 +46,18 @@
             ],
             "feature-flags-config": [
                 "dist/feature-flags-config.d.ts"
+            ],
+            "logs": [
+                "dist/logs.d.ts"
+            ],
+            "logs-types": [
+                "dist/logs-types.d.ts"
+            ],
+            "logs-config": [
+                "dist/logs-config.d.ts"
+            ],
+            "console-logs": [
+                "dist/console-logs.d.ts"
             ]
         }
     },
@@ -94,6 +106,26 @@
             "types": "./dist/feature-flags-config.d.ts",
             "require": "./dist/feature-flags-config.js",
             "import": "./dist/feature-flags-config.mjs"
+        },
+        "./logs": {
+            "types": "./dist/logs.d.ts",
+            "require": "./dist/logs.js",
+            "import": "./dist/logs.mjs"
+        },
+        "./logs-types": {
+            "types": "./dist/logs-types.d.ts",
+            "require": "./dist/logs-types.js",
+            "import": "./dist/logs-types.mjs"
+        },
+        "./logs-config": {
+            "types": "./dist/logs-config.d.ts",
+            "require": "./dist/logs-config.js",
+            "import": "./dist/logs-config.mjs"
+        },
+        "./console-logs": {
+            "types": "./dist/console-logs.d.ts",
+            "import": "./dist/console-logs.mjs",
+            "require": "./dist/console-logs.js"
         }
     },
     "scripts": {
