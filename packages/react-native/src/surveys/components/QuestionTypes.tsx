@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo, useState } from 'react'
+import React, { ReactNode, useMemo, useRef, useState } from 'react'
 import { LayoutChangeEvent, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
@@ -280,6 +280,9 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.upperBoundLabel ? '50%' : undefined,
+              textAlign: 'left',
             }}
           >
             {question.lowerBoundLabel}
@@ -289,6 +292,9 @@ export function RatingQuestion({
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.lowerBoundLabel ? '50%' : undefined,
+              textAlign: 'right',
             }}
           >
             {question.upperBoundLabel}
@@ -354,6 +360,12 @@ export function MultipleChoiceQuestion({
   // Choice labels change with survey translations; keep selection tied to the original order.
   const [selectedChoiceIndices, setSelectedChoiceIndices] = useState<number[]>([])
   const [openEndedInput, setOpenEndedInput] = useState('')
+  const openEndedInputRef = useRef<TextInput>(null)
+  const selectOpenChoice = () => {
+    setSelectedChoiceIndices((prev) =>
+      prev.includes(openChoiceIndex) ? prev : allowMultiple ? [...prev, openChoiceIndex] : [openChoiceIndex]
+    )
+  }
 
   // Only skip submit for single-choice questions without open choice
   const shouldSkipSubmit = question.skipSubmitButton && isSingleChoice && !question.hasOpenChoice
@@ -393,29 +405,39 @@ export function MultipleChoiceQuestion({
           const choiceTextColor = appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
 
           return (
-            <Pressable
+            <View
               key={choiceIndex}
               style={[
                 styles.choiceOption,
                 { backgroundColor: appearance.inputBackground },
                 isSelected ? { borderColor: getContrastingTextColor(appearance.backgroundColor) } : {},
               ]}
-              onPress={() => {
-                if (allowMultiple) {
-                  setSelectedChoiceIndices(
-                    isSelected
-                      ? selectedChoiceIndices.filter((index) => index !== choiceIndex)
-                      : [...selectedChoiceIndices, choiceIndex]
-                  )
-                } else {
-                  setSelectedChoiceIndices([choiceIndex])
-                  if (shouldSkipSubmit && !isOpenChoice) {
-                    onSubmit(choice)
-                  }
-                }
-              }}
             >
-              <View style={styles.choiceText}>
+              <Pressable
+                style={[styles.choiceText, isOpenChoice && { paddingBottom: 0 }]}
+                accessibilityRole={isSingleChoice ? 'radio' : 'checkbox'}
+                accessibilityLabel={choice}
+                accessibilityState={{ checked: isSelected }}
+                onPress={() => {
+                  if (allowMultiple) {
+                    setSelectedChoiceIndices(
+                      isSelected
+                        ? selectedChoiceIndices.filter((index) => index !== choiceIndex)
+                        : [...selectedChoiceIndices, choiceIndex]
+                    )
+                  } else {
+                    setSelectedChoiceIndices([choiceIndex])
+                    if (shouldSkipSubmit && !isOpenChoice) {
+                      onSubmit(choice)
+                    }
+                  }
+                  if (isOpenChoice && (!allowMultiple || !isSelected)) {
+                    openEndedInputRef.current?.focus()
+                  } else {
+                    openEndedInputRef.current?.blur()
+                  }
+                }}
+              >
                 <Text
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'choice')}
                   style={{ flexGrow: 1, color: choiceTextColor }}
@@ -424,11 +446,14 @@ export function MultipleChoiceQuestion({
                   {isOpenChoice ? ':' : ''}
                 </Text>
                 <View style={styles.rightCheckArea}>{isSelected && <CheckSVG />}</View>
-              </View>
+              </Pressable>
               {isOpenChoice && (
                 <TextInput
+                  ref={openEndedInputRef}
+                  accessibilityLabel={choice}
                   maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
                   style={styles.openEndedInput}
+                  onFocus={selectOpenChoice}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
                     if (!isSelected) {
@@ -437,7 +462,7 @@ export function MultipleChoiceQuestion({
                   }}
                 />
               )}
-            </Pressable>
+            </View>
           )
         })}
       </View>
@@ -516,6 +541,7 @@ const styles = createSafeStyleSheet({
   ratingText: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
     padding: 10,
   },
   multipleChoiceOptions: {
@@ -527,16 +553,18 @@ const styles = createSafeStyleSheet({
     borderWidth: 1,
     borderColor: 'grey',
     borderRadius: 5,
-    padding: 10,
   },
   choiceText: {
     flexDirection: 'row',
+    padding: 10,
   },
   rightCheckArea: {
     flexGrow: 0,
   },
   openEndedInput: {
-    padding: 5,
+    paddingTop: 5,
+    paddingHorizontal: 15,
+    paddingBottom: 15,
   },
   validationHint: {
     fontSize: 12,

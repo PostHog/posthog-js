@@ -121,6 +121,65 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await assertThatRecordingStarted(page)
     })
 
+    test('disposes an active recorder when another tab rejects shared consent', async ({ page, context }) => {
+        const config: Partial<PostHogConfig> = {
+            cookieless_mode: 'on_reject',
+            opt_out_capturing_persistence_type: 'localStorage',
+            capture_pageview: false,
+            autocapture: false,
+            request_batching: false,
+            disable_compression: true,
+        }
+        const snapshotBodies: string[] = []
+        page.on('request', (request) => {
+            if (new URL(request.url()).pathname === '/ses/') {
+                snapshotBodies.push(request.postData() || '')
+            }
+        })
+        await startWith(config, page, context)
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await page.evaluate(() =>
+                    (window as WindowWithPostHog).posthog!.opt_in_capturing({ captureEventName: false })
+                )
+            },
+        })
+        await page.locator('[data-cy-input]').type('before rejection')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+
+        const otherTab = await context.newPage()
+        await startWith(config, otherTab, context)
+        await otherTab.evaluate(() => (window as WindowWithPostHog).posthog!.opt_out_capturing())
+        await page.resetCapturedEvents()
+        const sensitiveContent = 'private-content-after-shared-rejection'
+        await page.evaluate((sensitiveContent) => {
+            const ph = (window as WindowWithPostHog).posthog!
+            ph.capture(
+                '$snapshot',
+                {
+                    $session_id: ph.get_session_id(),
+                    $snapshot_data: [{ type: 5, timestamp: Date.now(), data: { tag: sensitiveContent, payload: {} } }],
+                },
+                { _url: ph.requestRouter.endpointFor('api', '/ses/'), _noTruncate: true }
+            )
+            ph.capture('after-shared-rejection')
+        }, sensitiveContent)
+        expect(
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog!
+                return { recorderDetached: !ph.sessionRecording, sessionDetached: !ph.sessionManager }
+            })
+        ).toEqual({ recorderDetached: true, sessionDetached: true })
+
+        await page.locator('[data-cy-input]').type(sensitiveContent)
+        await page.waitForTimeout(250)
+        await page.expectCapturedEventsToBe(['after-shared-rejection'])
+        expect(snapshotBodies.join('\n')).not.toContain(sensitiveContent)
+        await otherTab.close()
+    })
+
     test('session recording auto-starts after opt_in_capturing without explicit startSessionRecording call', async ({
         page,
         context,

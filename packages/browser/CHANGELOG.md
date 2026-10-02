@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.7
+
+### Patch Changes
+
+- [#5188](https://github.com/PostHog/posthog-js/pull/5188) [`8a005ca`](https://github.com/PostHog/posthog-js/commit/8a005ca4938c28b3a015fb71083024023aaf4164) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve shared identity while consent is pending and clear it after shared rejection in cookieless mode.
+  (2026-10-02)
+
 ## 1.435.6
 
 ### Patch Changes

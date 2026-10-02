@@ -1,5 +1,15 @@
 # posthog-react-native
 
+## 4.78.4
+
+### Patch Changes
+
+- [#5183](https://github.com/PostHog/posthog-js/pull/5183) [`cfd635a`](https://github.com/PostHog/posthog-js/commit/cfd635a71afd30bf00d88fa9c942c35ca4aa4b1e) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Expose open-ended survey choices as named, reachable text inputs and focus the input when its choice is selected.
+  (2026-10-02)
+
+- [#5181](https://github.com/PostHog/posthog-js/pull/5181) [`1087687`](https://github.com/PostHog/posthog-js/commit/108768731bbb68440e963e5ee0f0adb7607363b4) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Keep survey rating endpoint labels within the survey at large text sizes.
+  (2026-10-02)
+
 ## 4.78.3
 
 ### Patch Changes
