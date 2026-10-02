@@ -181,16 +181,7 @@ class PosthogReactNativePluginModule(
               val maskAllImages = getBoolean(sdkReplayConfig, "maskAllImages", DEFAULT_MASK_ALL_IMAGES)
               val captureLog = getBoolean(sdkReplayConfig, "captureLog", DEFAULT_CAPTURE_LOG)
 
-              // read throttleDelayMs and use androidDebouncerDelayMs as a fallback for back compatibility
-              val throttleDelayMs =
-                when {
-                  hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  hasKey(
-                    sdkReplayConfig,
-                    "androidDebouncerDelayMs",
-                  ) -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  else -> DEFAULT_THROTTLE_DELAY_MS
-                }
+              val throttleDelayMs = getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
 
               sessionReplay = sessionReplayEnabled
               sessionReplayConfig.screenshot = true
