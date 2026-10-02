@@ -96,7 +96,14 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { vertical, horizontal } = resolveSurveyAlignment(appearance.position)
   const isBottom = vertical === 'flex-end'
 
-  const shouldShowConfirmation = isSurveySent && appearance.thankYouMessageHeader
+  const shouldShowConfirmation = isSurveySent && appearance.displayThankYouMessage
+
+  // Mirror the web popover: with no confirmation message, close as soon as the survey is sent.
+  useEffect(() => {
+    if (isSurveySent && !appearance.displayThankYouMessage) {
+      onClose()
+    }
+  }, [isSurveySent, appearance.displayThankYouMessage, onClose])
 
   useEffect(() => {
     if (isVisible) {
