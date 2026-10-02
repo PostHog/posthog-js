@@ -119,10 +119,14 @@ describe('sanitizeEvent - response content blocks', () => {
     expect(result.response.content[0]).toEqual(textResource)
   })
 
-  it('should redact unknown content types with type name in message', () => {
+  it.each([
+    ['video', 'video'],
+    ['phc_123456789012345678901234567890', '[redacted]'],
+    [makeLargeBase64(), '[binary data redacted - not supported by PostHog MCP analytics]'],
+  ])('should redact unknown content types with type name in message (case %#)', (type, shownType) => {
     const event = makeEvent({
       response: {
-        content: [{ type: 'video', data: 'somestuff', mimeType: 'video/mp4' }],
+        content: [{ type, data: 'somestuff', mimeType: 'video/mp4' }],
       },
     })
 
@@ -130,7 +134,7 @@ describe('sanitizeEvent - response content blocks', () => {
 
     expect(result.response.content[0]).toEqual({
       type: 'text',
-      text: '[unsupported content type "video" redacted - not supported by PostHog MCP analytics]',
+      text: `[unsupported content type "${shownType}" redacted - not supported by PostHog MCP analytics]`,
     })
   })
 
@@ -203,6 +207,25 @@ describe('sanitizeEvent - response content blocks', () => {
       project: 'Default project',
       api_token: '[redacted]',
     })
+  })
+
+  it('should redact PostHog tokens exposed by URL field decoding', () => {
+    const event = makeEvent({
+      response: {
+        content: [
+          {
+            type: 'text',
+            text: 'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
+          },
+        ],
+      },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.response.content[0].text).toBe(
+      'https://example.test/?value=[redacted]&token=%5Bredacted%5D'
+    )
   })
 
   it('should handle null and undefined response without error', () => {
