@@ -560,6 +560,8 @@ describe('posthog core', () => {
                 ;(mockedGlobals as any).document.cookie = value
             }
 
+            const flushRequestQueue = (posthog: PostHog) => posthog['_requestQueue']!['_flush']()
+
             afterEach(() => setMetaCookies(''))
 
             it('should not send campaign params as null if there are no non-null ones', () => {
@@ -668,6 +670,7 @@ describe('posthog core', () => {
                 })
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.first-click')
                 expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('$fbc')
@@ -739,15 +742,16 @@ describe('posthog core', () => {
                 })
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 statusCode = 200
                 posthog.capture('retry-event')
+                flushRequestQueue(posthog)
                 posthog.capture('after-delivery')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
                 expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
                 expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
                 expect(sendSpy).toHaveBeenCalledTimes(2)
-                expect(sendSpy.mock.calls[0][0].fireCallbackOnDrop).toBe(true)
                 now.mockRestore()
             })
 
@@ -805,8 +809,10 @@ describe('posthog core', () => {
                     options.callback?.({ statusCode: 200 })
                 })
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
 
                 posthog.setPersonProperties({ $fbc: 'fb.1.1700000000000.caller-click' })
+                flushRequestQueue(posthog)
                 posthog.setPersonProperties({ plan: 'paid' })
 
                 expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
@@ -900,12 +906,58 @@ describe('posthog core', () => {
                 setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 posthog.capture('$pageview')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
                 expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('$fbp')
                 expect(beforeSendMock.mock.calls[1][0].$set?.$fbp).toBeUndefined()
             })
+
+            it.each([
+                ['capture()', 'signed_up', (posthog: PostHog) => posthog.capture('signed_up')],
+                ['alias()', '$create_alias', (posthog: PostHog) => posthog.alias('known-user')],
+                ['setPersonProperties()', '$set', (posthog: PostHog) => posthog.setPersonProperties({ plan: 'paid' })],
+            ])(
+                'should queue the %s event with a pending $fbp instead of sending it beside $identify',
+                (_, expectedEvent, act) => {
+                    const token = uuidv7()
+                    const { posthog } = setup({
+                        token,
+                        persistence_name: token,
+                        persistence: 'localStorage',
+                        person_profiles: 'identified_only',
+                        request_batching: true,
+                    })
+                    const sendSpy = vi.spyOn(posthog, '_send_retriable_request').mockImplementation(() => {})
+                    setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
+
+                    posthog.identify('identified-user', { email: 'user@example.com' })
+                    act(posthog)
+
+                    expect(sendSpy).toHaveBeenCalledTimes(1)
+                    expect(sendSpy.mock.calls[0][0].data).toMatchObject({
+                        event: '$identify',
+                        $set: { $fbp: 'fb.1.1699999000000.1234567890' },
+                    })
+
+                    flushRequestQueue(posthog)
+
+                    expect(sendSpy).toHaveBeenCalledTimes(2)
+                    const batch = sendSpy.mock.calls[1][0]
+                    expect(batch.data).toMatchObject([
+                        { event: expectedEvent, $set: { $fbp: 'fb.1.1699999000000.1234567890' } },
+                    ])
+                    expect(batch.callback).toBeDefined()
+
+                    batch.callback?.({ statusCode: 200 })
+                    posthog.capture('next-event')
+                    flushRequestQueue(posthog)
+
+                    expect(sendSpy.mock.calls[2][0].data[0].event).toBe('next-event')
+                    expect(sendSpy.mock.calls[2][0].data[0].$set?.$fbp).toBeUndefined()
+                }
+            )
 
             it('should ignore an _fbp cookie that is not in the format Meta expects', () => {
                 const token = uuidv7()
@@ -1014,6 +1066,7 @@ describe('posthog core', () => {
                 setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 posthog.capture('$pageview')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
