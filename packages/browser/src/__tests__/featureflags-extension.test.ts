@@ -104,7 +104,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(callback).toHaveBeenCalledWith(
             ['early-access-flag'],
             { 'early-access-flag': true },
-            { errorsLoading: undefined }
+            { errorsLoading: false }
         )
         const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => undefined)
         posthog.getFeatureFlag('early-access-flag')
@@ -155,7 +155,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         expect(posthog.getFeatureFlag('flag', { send_event: false })).toBe('fresh-sibling')
         expect(posthog.getFeatureFlagPayload('flag')).toEqual({ source: 'fresh-sibling' })
-        expect(callback).toHaveBeenCalledWith(['flag'], { flag: 'fresh-sibling' }, { errorsLoading: undefined })
+        expect(callback).toHaveBeenCalledWith(['flag'], { flag: 'fresh-sibling' }, { errorsLoading: false })
 
         siblingPersistence.destroy()
         await posthog.shutdown()
