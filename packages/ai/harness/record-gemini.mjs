@@ -11,6 +11,8 @@ async function record() {
   const model = group === 'embed' ? process.env.GEMINI_EMBEDDING_MODEL : process.env.GEMINI_MODEL
   if (!apiKey || !model) throw new Error('Missing recording configuration')
   const scenario = geminiScenario(group, model)
+  if (scenario.operation === 'interactions.create' && scenario.request.store !== false)
+    throw new Error('Gemini interaction recording must be stateless')
   const sdkPackage = JSON.parse(
     await readFile(new URL('../../package.json', import.meta.resolve('@google/genai')), 'utf8')
   )
