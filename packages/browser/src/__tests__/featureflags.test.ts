@@ -4,7 +4,7 @@ import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
 import { BrowserClientAdapter } from '../extensions/browser-client'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
-import { isArray, isNumber, isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
+import { isNumber, isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import type { PostHog } from '../posthog-core'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
@@ -601,12 +601,6 @@ describe('featureflags', () => {
 describe('getRemoteConfigPayload', () => {
     let instance: PostHog
     let featureFlags: PostHogFeatureFlags
-
-    const getRequestData = () => {
-        const data = vi.mocked(instance._send_request).mock.calls[0][0].data
-        if (!data || isArray(data)) throw new Error('Expected a single flags request')
-        return data
-    }
 
     beforeEach(() => {
         assignableWindow.POSTHOG_DEBUG = true
