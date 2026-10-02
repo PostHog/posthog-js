@@ -13,13 +13,11 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
-import { makeMouseEvent } from './helpers/mouse-event'
 
 const simulateClick = (element: Element) => element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
 describe('Autocapture system', () => {
     const originalWindowLocation = window!.location
-    const originalGetSelection = window!.getSelection
 
     let autocapture: Autocapture
     let posthog: PostHog
