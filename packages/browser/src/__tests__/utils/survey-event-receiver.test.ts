@@ -1,3 +1,4 @@
+import type { Mock as VitestMock, SpyInstance as VitestSpyInstance } from 'vitest'
 import { BrowserClientAdapter } from '../../extensions/browser-client'
 /// <reference lib="dom" />
 import { SurveyType, SurveyQuestionType, Survey, SurveyEventName, SurveySchedule } from '@posthog/browser-common'

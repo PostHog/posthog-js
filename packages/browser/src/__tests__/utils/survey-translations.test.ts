@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { getSurveyRenderContext } from '../../browser-surveys'
 /// <reference lib="dom" />
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
