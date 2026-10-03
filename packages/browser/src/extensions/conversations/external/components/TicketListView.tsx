@@ -11,6 +11,7 @@ interface TicketListViewProps {
     onSelectTicket: (ticketId: string) => void
     onNewConversation: () => void
     onOpenRestoreRequest: () => void
+    showRestore: boolean
 }
 
 /**
@@ -30,7 +31,8 @@ const EmptyState: FunctionComponent<{
     styles: ReturnType<typeof getStyles>
     onNewConversation: () => void
     onOpenRestoreRequest: () => void
-}> = ({ styles, onNewConversation, onOpenRestoreRequest }) => (
+    showRestore: boolean
+}> = ({ styles, onNewConversation, onOpenRestoreRequest, showRestore }) => (
     <div style={styles.ticketListEmpty}>
         <div style={styles.emptyStateIcon}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -51,18 +53,20 @@ const EmptyState: FunctionComponent<{
         >
             Start a conversation
         </button>
-        <button
-            style={styles.fetchPreviousButton}
-            onClick={onOpenRestoreRequest}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.8'
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1'
-            }}
-        >
-            Fetch previous conversations
-        </button>
+        {showRestore && (
+            <button
+                style={styles.fetchPreviousButton}
+                onClick={onOpenRestoreRequest}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.opacity = '0.8'
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = '1'
+                }}
+            >
+                Fetch previous conversations
+            </button>
+        )}
     </div>
 )
 
@@ -76,6 +80,7 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
     onSelectTicket,
     onNewConversation,
     onOpenRestoreRequest,
+    showRestore,
 }) => {
     // Show loading state
     if (isLoading && tickets.length === 0) {
@@ -89,6 +94,7 @@ export const TicketListView: FunctionComponent<TicketListViewProps> = ({
                 styles={styles}
                 onNewConversation={onNewConversation}
                 onOpenRestoreRequest={onOpenRestoreRequest}
+                showRestore={showRestore}
             />
         )
     }
