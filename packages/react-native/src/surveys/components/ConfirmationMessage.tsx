@@ -35,12 +35,14 @@ export function ConfirmationMessage({
   return (
     <View style={styleOverrides}>
       <View style={styles.thankYouMessageContainer}>
-        <Text
-          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
-          style={[styles.thankYouMessageHeader, { color: textColor }]}
-        >
-          {header}
-        </Text>
+        {header ? (
+          <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
+            style={[styles.thankYouMessageHeader, { color: textColor }]}
+          >
+            {header}
+          </Text>
+        ) : null}
         {shouldRenderDescription(description, contentType) && (
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
