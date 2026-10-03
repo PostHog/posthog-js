@@ -134,9 +134,16 @@ describe('shutdown()', () => {
         expect(order).toEqual(['extension-dispose', 'request-unload'])
     })
 
-    it('does not throw when called before the client has loaded', async () => {
+    it('does not throw when called before the client has loaded, and says so in the console', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
         const uninitialized = new PostHog()
 
         await expect(uninitialized.shutdown()).resolves.toBeUndefined()
+
+        expect(consoleError).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            'You must initialize PostHog before calling posthog.shutdown'
+        )
+        consoleError.mockRestore()
     })
 })

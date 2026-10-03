@@ -11,7 +11,9 @@ describe('_send_request fireCallbackOnDrop', () => {
     let posthog: PostHog
 
     beforeEach(async () => {
-        posthog = await createPosthogInstance(uuidv7())
+        // No initial pageview: it is captured on a timer, and the "client not loaded" case below
+        // would then make that deferred capture warn about an uninitialized client.
+        posthog = await createPosthogInstance(uuidv7(), { capture_pageview: false })
     })
 
     describe('server rate limited', () => {

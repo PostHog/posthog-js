@@ -23,6 +23,8 @@ export type PosthogJsLogger = Omit<Logger, 'createLogger' | 'debug' | 'info' | '
 }
 
 const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {}): PosthogJsLogger => {
+    const uninitializedWarningsSent = new Set<string>()
+
     const logger: PosthogJsLogger = {
         _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
@@ -63,7 +65,13 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
         },
 
         uninitializedWarning: (methodName: string) => {
-            logger.error(`You must initialize PostHog before calling ${methodName}`)
+            // Always logged, because the call is dropped without a trace otherwise.
+            // Once per method only, so that a handler which captures on every click cannot flood the console.
+            if (uninitializedWarningsSent.has(methodName)) {
+                return
+            }
+            uninitializedWarningsSent.add(methodName)
+            logger.critical(`You must initialize PostHog before calling ${methodName}`)
         },
 
         createLogger: (additionalPrefix: string, options?: CreateLoggerOptions) =>
