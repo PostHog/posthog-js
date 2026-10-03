@@ -207,6 +207,15 @@ export interface MCPAnalyticsOptions {
    */
   resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
   /**
+   * Return the tool as the server registered it, before PostHog preparation, or
+   * `undefined` when the tool is unknown. Low-level servers use it on `tools/call`
+   * to resolve which analytics arguments the SDK owns without a prior `tools/list`
+   * on the same instance, so a server that builds a fresh instance per request
+   * strips them before the handler runs. A parameter the tool declares is never
+   * stripped. Ignored on a high-level `McpServer`, which reads its tool registry.
+   */
+  resolveOriginalTool?: (toolName: string) => { inputSchema?: unknown } | undefined
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */

@@ -1,16 +1,19 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
+import { z as z4 } from 'zod4'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION, DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
 import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
 
-async function connect(server: McpServer) {
+async function connect(server: McpServer | Server) {
   const client = new Client({ name: 'reserved-argument-test-client', version: '1.0.0' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-  await Promise.all([client.connect(clientTransport), server.server.connect(serverTransport)])
+  const lowLevelServer = server instanceof McpServer ? server.server : server
+  await Promise.all([client.connect(clientTransport), lowLevelServer.connect(serverTransport)])
 
   return {
     client,
@@ -283,4 +286,135 @@ describe('high-level reserved analytics arguments', () => {
       await cleanup()
     }
   })
+})
+
+describe('low-level reserved analytics arguments on a fresh instance', () => {
+  const STRICT_SCHEMAS: Record<string, z.ZodTypeAny> = {
+    strict_schema: z.object({ value: z.string() }).strict(),
+    declares_context: z.object({ context: z.string(), value: z.string() }).strict(),
+  }
+
+  async function callFreshInstance(
+    toolName: string,
+    args: Record<string, unknown>,
+    options: Parameters<typeof instrument>[2] = {}
+  ) {
+    const server = new Server({ name: 'fresh-low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const received: unknown[] = []
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const parsed = STRICT_SCHEMAS[request.params.name].safeParse(request.params.arguments ?? {})
+      if (!parsed.success) {
+        return { isError: true, content: [{ type: 'text' as const, text: parsed.error.issues[0].message }] }
+      }
+      received.push(parsed.data)
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
+    })
+    const capture = new EventCapture()
+    await capture.start()
+    const { client, cleanup } = await connect(server)
+    try {
+      instrument(server, fakePostHog(), { enableConversationId: false, ...options })
+      const response = await client.request(
+        { method: 'tools/call', params: { name: toolName, arguments: args } },
+        CallToolResultSchema
+      )
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = capture.getEvents().find((candidate) => candidate.resourceName === toolName)
+      return { response, received, event }
+    } finally {
+      await capture.stop()
+      await cleanup()
+    }
+  }
+
+  const ANALYTICS_ARGS = { context: 'analytics context', llm_model: 'model-a', value: 'kept' }
+
+  it('passes analytics arguments to a strict tool when ownership is unresolved', async () => {
+    const { response, received, event } = await callFreshInstance('strict_schema', ANALYTICS_ARGS)
+
+    expect(response.isError).toBe(true)
+    expect(received).toEqual([])
+    expect(event?.userIntent).toBe('analytics context')
+  })
+
+  it.each([
+    ['a Zod 3 schema', STRICT_SCHEMAS.strict_schema],
+    ['a Zod 4 schema', z4.object({ value: z4.string() }).strict()],
+    ['a JSON Schema', { type: 'object', properties: { value: { type: 'string' } }, additionalProperties: false }],
+  ])('strips analytics arguments when resolveOriginalTool returns %s', async (_label, inputSchema) => {
+    const { response, received, event } = await callFreshInstance('strict_schema', ANALYTICS_ARGS, {
+      resolveOriginalTool: () => ({ inputSchema }),
+    })
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ value: 'kept' }])
+    expect(event?.userIntent).toBe('analytics context')
+    expect(event?.llmModel).toBe('model-a')
+  })
+
+  it('keeps a context argument that the resolved tool declares', async () => {
+    const { response, received, event } = await callFreshInstance(
+      'declares_context',
+      { context: 'tool context', value: 'kept' },
+      { resolveOriginalTool: (toolName) => ({ inputSchema: STRICT_SCHEMAS[toolName] }) }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it.each([
+    [
+      'a Zod 3 refinement',
+      z
+        .object({ context: z.string(), value: z.string() })
+        .strict()
+        .refine(({ value }) => value.length > 0),
+    ],
+    [
+      'a Zod 4 refinement',
+      z4
+        .object({ context: z4.string(), value: z4.string() })
+        .strict()
+        .refine(({ value }) => value.length > 0),
+    ],
+  ])('keeps a required context argument declared behind %s', async (_label, inputSchema) => {
+    const { response, received, event } = await callFreshInstance(
+      'declares_context',
+      { context: 'tool context', value: 'kept' },
+      { resolveOriginalTool: () => ({ inputSchema }) }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it.each([
+    ['returns undefined', () => undefined, 0],
+    [
+      'throws',
+      () => {
+        throw new Error('registry unavailable')
+      },
+      1,
+    ],
+  ])(
+    'falls back to unresolved ownership when resolveOriginalTool %s',
+    async (_label, resolveOriginalTool, warnings) => {
+      const logger = vi.fn()
+      const { response, received, event } = await callFreshInstance('strict_schema', ANALYTICS_ARGS, {
+        resolveOriginalTool,
+        logger,
+      })
+
+      expect(response.isError).toBe(true)
+      expect(received).toEqual([])
+      expect(event?.userIntent).toBe('analytics context')
+      expect(
+        logger.mock.calls.filter(([message]) => String(message).includes('resolveOriginalTool failed'))
+      ).toHaveLength(warnings)
+    }
+  )
 })
