@@ -18,14 +18,12 @@ import {
   withPrivacyMode,
   buildInlineDataBlock,
   getModelParams,
-  truncate,
-  utf8ByteLength,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
-import { isString } from '../typeGuards'
+import { isObject, isString } from '../typeGuards'
+import { formatToolResult } from '../toolResult'
 import { mapGeminiUsage } from './usage'
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
@@ -37,8 +35,6 @@ interface FormattedGeminiFunctionResponse {
   tool_use_id?: string
   content: unknown
 }
-
-const TOOL_RESULT_MAX_BYTES = 5000
 
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
@@ -78,7 +74,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: formatResponseGemini(response, this.phClient),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -96,7 +92,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -199,7 +195,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
+        input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -225,7 +221,7 @@ export class WrappedModels {
           ...posthogParams,
           model: geminiParams.model,
           provider: 'gemini',
-          input: this.formatInputForPostHog(geminiParams),
+          input: this.formatInputForPostHog(geminiParams, posthogParams.privacyMode),
           output,
           latency,
           timeToFirstToken,
@@ -329,25 +325,13 @@ export class WrappedModels {
           blocks.push({
             type: 'tool_result',
             ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
-            content: this.boundToolResult(content),
+            content,
           })
         }
       }
     }
 
     return blocks
-  }
-
-  private boundToolResult(content: unknown): unknown {
-    if (isFullAiCaptureEnabled(this.phClient)) return content
-    try {
-      const serialized = JSON.stringify(content)
-      return utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
-        ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
-        : content
-    } catch {
-      return '[Unserializable tool result]'
-    }
   }
 
   private formatInput(contents: unknown): FormattedMessage[] {
@@ -443,21 +427,66 @@ export class WrappedModels {
     return null
   }
 
-  private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
-    const sanitized = sanitizeGemini(params.contents, this.phClient)
-    const messages = this.formatInput(sanitized)
+  private formatInputForPostHog(params: GenerateContentParameters, privacyMode: boolean): unknown {
+    try {
+      if (withPrivacyMode(this.phClient, privacyMode, false) === null) return null
 
-    const systemInstruction = this.extractSystemInstruction(params)
-
-    if (systemInstruction) {
-      const hasSystemMessage = messages.some((msg: FormattedMessage) => msg.role === 'system')
-
-      if (!hasSystemMessage) {
+      const preparePart = (part: unknown): unknown => {
+        if (!isObject(part) || !Object.hasOwn(part, 'functionResponse') || !isObject(part.functionResponse)) return part
+        const response = part.functionResponse
+        const hasParts = response.parts !== undefined
+        const hasResponse = Object.hasOwn(response, 'response')
+        if (!hasParts && !hasResponse) return part
+        const content = hasParts
+          ? {
+              ...(response.response !== undefined && { response: response.response }),
+              parts: response.parts,
+            }
+          : response.response
+        const formatted = formatToolResult(content, this.phClient)
+        const prepared = { ...response }
+        if (hasParts && isObject(formatted)) {
+          if (hasResponse) prepared.response = formatted.response
+          prepared.parts = formatted.parts
+        } else {
+          // A failed/depth-bounded combined payload can be a marker instead of
+          // an object. Keep that marker as result content, never spread a string.
+          prepared.response = formatted
+          if (hasParts) delete prepared.parts
+        }
+        return { ...part, functionResponse: prepared }
+      }
+      const prepareContent = (content: unknown): unknown => {
+        const part = preparePart(content)
+        if (!isObject(part)) return part
+        const originalParts = Object.hasOwn(part, 'parts') ? part.parts : undefined
+        const originalContent = Object.hasOwn(part, 'content') ? part.content : undefined
+        const parts = Array.isArray(originalParts) ? originalParts.map(preparePart) : undefined
+        const blocks = Array.isArray(originalContent) ? originalContent.map(preparePart) : undefined
+        const partsChanged = parts?.some((value, index) => value !== (originalParts as unknown[])[index])
+        const contentChanged = blocks?.some((value, index) => value !== (originalContent as unknown[])[index])
+        if (!partsChanged && !contentChanged) return part
+        return {
+          ...part,
+          ...(partsChanged && { parts }),
+          ...(contentChanged && { content: blocks }),
+        }
+      }
+      const contents = Array.isArray(params.contents)
+        ? params.contents.map(prepareContent)
+        : prepareContent(params.contents)
+      // Bound typed tool results before the existing whole-input redactor.
+      // Keep redaction before fallback JSON serialization for single Content/Part inputs.
+      const sanitized = sanitizeGemini(contents, this.phClient)
+      const messages = this.formatInput(sanitized)
+      const systemInstruction = this.extractSystemInstruction(params)
+      if (systemInstruction && !messages.some((message) => message.role === 'system')) {
         return [{ role: 'system', content: systemInstruction }, ...messages]
       }
+      return messages
+    } catch {
+      return '[Unserializable]'
     }
-
-    return messages
   }
 }
 

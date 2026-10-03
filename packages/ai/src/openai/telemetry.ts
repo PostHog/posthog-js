@@ -13,6 +13,8 @@ import {
   withPrivacyMode,
 } from '../utils'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
+import { formatToolResult } from '../toolResult'
+import { isObject } from '../typeGuards'
 import { captureAiGeneration } from './capture'
 import { getBackgroundResponseLatency } from './background-responses'
 import {
@@ -43,6 +45,32 @@ type CommonContext<Params> = {
   params: Params
   monitoring: MonitoringEventPropertiesWithDefaults
   modelParametersSource: Parameters<typeof getModelParams>[0]
+}
+
+const RESPONSE_TOOL_RESULT_TYPES = new Set([
+  'function_call_output',
+  'custom_tool_call_output',
+  'computer_call_output',
+  'local_shell_call_output',
+  'shell_call_output',
+  'apply_patch_call_output',
+  'mcp_call',
+])
+
+function buildSanitizedChatInput(context: CommonContext<ChatParams>): unknown {
+  try {
+    if (withPrivacyMode(context.client, context.monitoring.privacyMode, false) === null) return null
+    const messages = context.params.messages.map((message) => {
+      if ((message.role === 'tool' || message.role === 'function') && Object.hasOwn(message, 'content')) {
+        return { ...message, content: formatToolResult(message.content, context.client) }
+      }
+      return message
+    })
+    return sanitizeOpenAI(messages, context.client)
+  } catch {
+    // Selection, traversal, and redaction are all telemetry preparation.
+    return '[Unserializable]'
+  }
 }
 
 export function captureAiGenerationInBackground(...args: Parameters<typeof captureAiGeneration>): void {
@@ -107,7 +135,7 @@ export function buildChatSuccessOptions(
     ...context.monitoring,
     model: context.params.model ?? result.model,
     provider: context.provider,
-    input: sanitizeOpenAI(context.params.messages, context.client),
+    input: buildSanitizedChatInput(context),
     output: sanitizeOpenAIResponse(result.output, context.client),
     latency: result.latency,
     timeToFirstToken: result.timeToFirstToken,
@@ -140,7 +168,7 @@ export function buildChatErrorOptions(
     ...context.monitoring,
     model: context.params.model,
     provider: context.provider,
-    input: sanitizeOpenAI(context.params.messages, context.client),
+    input: buildSanitizedChatInput(context),
     output: [],
     latency: metadata.latency,
     baseURL: context.baseURL,
@@ -153,10 +181,30 @@ export function buildChatErrorOptions(
 }
 
 function buildSanitizedResponsesInput(context: CommonContext<ResponsesParams>): unknown {
-  return formatOpenAIResponsesInput(
-    sanitizeOpenAIResponse(context.params.input, context.client),
-    sanitizeOpenAIResponse(context.params.instructions, context.client) as string | null | undefined
-  )
+  try {
+    if (withPrivacyMode(context.client, context.monitoring.privacyMode, false) === null) return null
+    const input = Array.isArray(context.params.input)
+      ? context.params.input.map((item) => {
+          if (
+            isObject(item) &&
+            typeof item.type === 'string' &&
+            RESPONSE_TOOL_RESULT_TYPES.has(item.type) &&
+            Object.hasOwn(item, 'output')
+          ) {
+            return { ...item, output: formatToolResult(item.output, context.client) }
+          }
+          return item
+        })
+      : context.params.input
+    // Preserve the existing Responses analytics representation. Only result
+    // values are capped, never the subsequently serialized envelope or its IDs.
+    return formatOpenAIResponsesInput(
+      sanitizeOpenAIResponse(input, context.client),
+      sanitizeOpenAIResponse(context.params.instructions, context.client) as string | null | undefined
+    )
+  } catch {
+    return '[Unserializable]'
+  }
 }
 
 export function buildResponsesSuccessOptions(
