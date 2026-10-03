@@ -3,5 +3,6 @@
 // without breaking backwards compatibility
 
 import * as customizations from '../customizations'
-import { assignableWindow } from '../utils/globals'
-assignableWindow.posthogCustomizations = customizations
+import { publishCustomizations } from '../customizations/deferred'
+
+publishCustomizations(customizations)
