@@ -670,6 +670,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         isDisabled: () => this.disabled,
         hasSecretKey: () => this.options.personalApiKey !== undefined,
         warn: (message) => this._logger.warn(message),
+        track: (work) => this.addPendingPromise(work),
         post: (path, body) => this._postWithSecretKey(path, body),
       })
     }
@@ -2974,14 +2975,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private async _postWithSecretKey(path: string, body: Record<string, string>): Promise<PostHogApiResponse> {
     try {
-      return await this.requestJson(`${this.host}${path}?token=${encodeURIComponent(this.apiKey)}`, {
+      return await this.requestJson(`${this.host}${path}`, {
         method: 'POST',
         headers: {
           ...this.getCustomHeaders(),
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
           Authorization: `Bearer ${this.options.personalApiKey}`,
         },
-        body: JSON.stringify(body),
+        body: new URLSearchParams({ ...body, token: this.apiKey }).toString(),
       })
     } catch (error) {
       this._events.emit('error', error)

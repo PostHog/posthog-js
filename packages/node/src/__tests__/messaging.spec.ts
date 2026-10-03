@@ -40,6 +40,7 @@ describe('messaging.setPreferences', () => {
         offers: 'marketing',
         receipts: 'transactional',
       },
+      lastViewedProjectToken: 'phc_other_project',
     })
   })
 
@@ -84,17 +85,17 @@ describe('messaging.setPreferences', () => {
     expect(api.wouldReceive(JANE, 'offers')).toBe(true)
   })
 
-  it('authenticates with the secret key and names the project with its token', async () => {
+  it('authenticates with the secret key', async () => {
     await createClient().messaging.setPreferences(JANE, { allMarketing: false })
 
-    expect(api.received).toEqual([
-      expect.objectContaining({
-        method: 'POST',
-        token: 'phc_project_token',
-        authorization: 'Bearer phx_secret',
-        contentType: 'application/json',
-      }),
-    ])
+    expect(api.received).toEqual([expect.objectContaining({ method: 'POST', authorization: 'Bearer phx_secret' })])
+  })
+
+  it('writes to the project its token names, not the one the key owner last viewed', async () => {
+    await createClient().messaging.setPreferences(JANE, { allMarketing: false, categories: { newsletter: false } })
+
+    expect(api.preferencesOf(JANE)).toEqual({ allMarketing: false, categories: { newsletter: false } })
+    expect(api.preferencesOf(JANE, 'phc_other_project')).toBeUndefined()
   })
 
   it('changes nothing when the secret key is not accepted', async () => {
@@ -191,6 +192,18 @@ describe('messaging.setPreferences', () => {
 
     expect(api.maxConcurrentRequests).toBe(1)
     expect(api.preferencesOf(JANE)).toEqual({ categories: { newsletter: false, offers: false } })
+  })
+
+  it('finishes a preference change still in flight before shutdown resolves', async () => {
+    const posthog = createClient()
+    const resume = api.pause()
+
+    void posthog.messaging.setPreferences(JANE, { allMarketing: false, categories: { newsletter: false } })
+    const shutdown = posthog.shutdown()
+    resume()
+    await shutdown
+
+    expect(api.preferencesOf(JANE)).toEqual({ allMarketing: false, categories: { newsletter: false } })
   })
 
   it('applies the preferences as they were when called, even if the caller changes them later', async () => {

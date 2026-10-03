@@ -39,11 +39,12 @@ export interface FakeMessagingPreferencesApiOptions {
   projectToken: string
   secretKey: string
   categories: Record<string, CategoryType>
+  lastViewedProjectToken: string
 }
 
 export class FakeMessagingPreferencesApi {
   readonly received: ReceivedRequest[] = []
-  private readonly records = new Map<string, Map<string, PreferenceStatus>>()
+  private readonly recordsByProject = new Map<string, Map<string, Map<string, PreferenceStatus>>>()
   private readonly faults: ScheduledFault[] = []
   private pausedUntil: Promise<void> | undefined
   private inFlight = 0
@@ -65,8 +66,8 @@ export class FakeMessagingPreferencesApi {
     }
   }
 
-  preferencesOf(identifier: string): RecipientPreferences | undefined {
-    const record = this.records.get(identifier)
+  preferencesOf(identifier: string, projectToken = this.options.projectToken): RecipientPreferences | undefined {
+    const record = this.recordsOf(projectToken).get(identifier)
     if (!record) {
       return undefined
     }
@@ -84,7 +85,7 @@ export class FakeMessagingPreferencesApi {
     if (this.categoryType(categoryKey) === 'transactional') {
       return true
     }
-    const record = this.records.get(identifier)
+    const record = this.recordsOf(this.options.projectToken).get(identifier)
     return record?.get(categoryKey) !== 'OPTED_OUT' && record?.get(ALL_MARKETING) !== 'OPTED_OUT'
   }
 
@@ -107,16 +108,17 @@ export class FakeMessagingPreferencesApi {
 
   private async describe(request: Request): Promise<ReceivedRequest> {
     const url = new URL(request.url)
-    const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {}
+    const contentType = request.headers.get('Content-Type')
+    const body = await readBody(request, contentType)
     return {
       method: request.method,
       path: url.pathname,
       action: PREFERENCES_PATH.exec(url.pathname)?.[1] as PreferenceAction | undefined,
-      token: url.searchParams.get('token'),
+      token: tokenAsDjangoReadsIt(request.method, url, body),
       authorization: request.headers.get('Authorization'),
-      contentType: request.headers.get('Content-Type'),
-      identifier: typeof body.identifier === 'string' ? body.identifier.trim() : undefined,
-      categoryKey: typeof body.category_key === 'string' ? body.category_key : undefined,
+      contentType,
+      identifier: body.get('identifier')?.trim(),
+      categoryKey: body.get('category_key') ?? undefined,
     }
   }
 
@@ -140,11 +142,12 @@ export class FakeMessagingPreferencesApi {
     if (request.method !== 'POST' || !request.action) {
       return json(404, { detail: 'Not found.' })
     }
-    if (request.token !== this.options.projectToken) {
-      return json(401, { detail: 'Project API key invalid.' })
-    }
     if (request.authorization !== `Bearer ${this.options.secretKey}`) {
       return json(401, { detail: 'Personal API key is invalid.' })
+    }
+    const projectToken = request.token ?? this.options.lastViewedProjectToken
+    if (projectToken !== this.options.projectToken && projectToken !== this.options.lastViewedProjectToken) {
+      return json(401, { detail: 'Project API key invalid.' })
     }
     if (!request.identifier) {
       return json(400, { identifier: ['This field may not be blank.'] })
@@ -153,9 +156,10 @@ export class FakeMessagingPreferencesApi {
       return json(404, { error: 'Category not found' })
     }
 
-    const created = !this.records.has(request.identifier)
-    const record = this.records.get(request.identifier) ?? new Map<string, PreferenceStatus>()
-    this.records.set(request.identifier, record)
+    const records = this.recordsOf(projectToken)
+    const created = !records.has(request.identifier)
+    const record = records.get(request.identifier) ?? new Map<string, PreferenceStatus>()
+    records.set(request.identifier, record)
     if (request.action === 'add_opt_out') {
       record.set(request.categoryKey ?? ALL_MARKETING, 'OPTED_OUT')
     } else {
@@ -184,11 +188,31 @@ export class FakeMessagingPreferencesApi {
     }
   }
 
+  private recordsOf(projectToken: string): Map<string, Map<string, PreferenceStatus>> {
+    const records = this.recordsByProject.get(projectToken) ?? new Map<string, Map<string, PreferenceStatus>>()
+    this.recordsByProject.set(projectToken, records)
+    return records
+  }
+
   private categoryType(categoryKey: string): CategoryType | undefined {
     return Object.prototype.hasOwnProperty.call(this.options.categories, categoryKey)
       ? this.options.categories[categoryKey]
       : undefined
   }
+}
+
+async function readBody(request: Request, contentType: string | null): Promise<Map<string, string>> {
+  const text = await request.text()
+  if (contentType === 'application/x-www-form-urlencoded') {
+    return new Map(new URLSearchParams(text))
+  }
+  const parsed: unknown = text ? JSON.parse(text) : {}
+  const entries = Object.entries(parsed && typeof parsed === 'object' ? parsed : {})
+  return new Map(entries.filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+}
+
+function tokenAsDjangoReadsIt(method: string, url: URL, body: Map<string, string>): string | null {
+  return method === 'GET' ? url.searchParams.get('token') : (body.get('token') ?? null)
 }
 
 function json(status: number, body: unknown): PostHogFetchResponse {
