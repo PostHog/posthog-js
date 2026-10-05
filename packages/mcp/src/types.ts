@@ -207,12 +207,15 @@ export interface MCPAnalyticsOptions {
    */
   resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
   /**
-   * Return the tool as the server registered it, before PostHog preparation, or
-   * `undefined` when the tool is unknown. Low-level servers use it on `tools/call`
-   * to resolve which analytics arguments the SDK owns without a prior `tools/list`
-   * on the same instance, so a server that builds a fresh instance per request
-   * strips them before the handler runs. A parameter the tool declares is never
-   * stripped. Ignored on a high-level `McpServer`, which reads its tool registry.
+   * Return the tool's input schema as your `tools/list` advertises it, before
+   * PostHog preparation, or `undefined` when the tool is unknown. Low-level servers
+   * use it on `tools/call` to resolve which analytics arguments the SDK owns
+   * without a prior `tools/list` on the same instance, so a server that builds a
+   * fresh instance per request strips them before the handler runs. Ownership
+   * follows the same rule as a served listing: a Zod schema is read the way the
+   * MCP SDK advertises it, and a host that lists its own JSON Schema returns that.
+   * Ownership learned from a listing on the instance wins. Ignored on a
+   * high-level `McpServer`, which reads its tool registry.
    */
   resolveOriginalTool?: (toolName: string) => { inputSchema?: unknown } | undefined
   /**

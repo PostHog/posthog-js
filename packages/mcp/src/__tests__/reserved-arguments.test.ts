@@ -2,7 +2,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { CallToolRequestSchema, CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  CallToolResultSchema,
+  ListToolsRequestSchema,
+  ListToolsResultSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { z as z4 } from 'zod4'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION, DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
@@ -289,19 +294,21 @@ describe('high-level reserved analytics arguments', () => {
 })
 
 describe('low-level reserved analytics arguments on a fresh instance', () => {
-  const STRICT_SCHEMAS: Record<string, z.ZodTypeAny> = {
+  const STRICT_SCHEMAS: Record<string, { safeParse: z.ZodTypeAny['safeParse'] }> = {
     strict_schema: z.object({ value: z.string() }).strict(),
     declares_context: z.object({ context: z.string(), value: z.string() }).strict(),
+    union_schema: z.union([z.object({ value: z.string() }).strict(), z.object({ other: z.string() }).strict()]),
+    union4_schema: z4.union([z4.object({ value: z4.string() }).strict(), z4.object({ other: z4.string() }).strict()]),
+    record_schema: z.record(z.number()),
+    record4_schema: z4.record(z4.string(), z4.number()),
     union_context: z.union([
       z.object({ context: z.string(), value: z.string() }).strict(),
       z.object({ context: z.string(), other: z.string() }).strict(),
     ]),
-    union4_context: z4.union([
-      z4.object({ context: z4.string(), value: z4.string() }).strict(),
-      z4.object({ context: z4.string(), other: z4.string() }).strict(),
-    ]) as unknown as z.ZodTypeAny,
-    intersection_context: z.intersection(z.object({ context: z.string() }), z.object({ value: z.string() })),
-    record_schema: z.record(z.string()),
+    refined_context: z
+      .object({ context: z.string(), value: z.string() })
+      .strict()
+      .refine(({ value }) => value.length > 0),
   }
 
   async function callFreshInstance(
@@ -374,58 +381,140 @@ describe('low-level reserved analytics arguments on a fresh instance', () => {
     expect(event?.userIntent).toBeUndefined()
   })
 
-  it.each([
-    [
-      'a Zod 3 refinement',
-      z
-        .object({ context: z.string(), value: z.string() })
-        .strict()
-        .refine(({ value }) => value.length > 0),
+  const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} }
+  const ANY_OF_CONTEXT_SCHEMA = {
+    type: 'object',
+    anyOf: [
+      {
+        type: 'object',
+        properties: { context: { type: 'string' }, value: { type: 'string' } },
+        required: ['context', 'value'],
+        additionalProperties: false,
+      },
     ],
-    [
-      'a Zod 4 refinement',
-      z4
-        .object({ context: z4.string(), value: z4.string() })
-        .strict()
-        .refine(({ value }) => value.length > 0),
-    ],
-  ])('keeps a required context argument declared behind %s', async (_label, inputSchema) => {
-    const { response, received, event } = await callFreshInstance(
-      'declares_context',
-      { context: 'tool context', value: 'kept' },
-      { resolveOriginalTool: () => ({ inputSchema }) }
-    )
+  }
 
-    expect(response.isError).not.toBe(true)
-    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
-    expect(event?.userIntent).toBeUndefined()
-  })
-
-  it.each([
-    ['a Zod 3 union', 'union_context'],
-    ['a Zod 4 union', 'union4_context'],
-    ['a Zod 3 intersection', 'intersection_context'],
-  ])('keeps a required context argument declared by %s', async (_label, toolName) => {
-    const { response, received, event } = await callFreshInstance(
-      toolName,
-      { context: 'tool context', value: 'kept' },
-      { resolveOriginalTool: (name) => ({ inputSchema: STRICT_SCHEMAS[name] }) }
-    )
-
-    expect(response.isError).not.toBe(true)
-    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
-    expect(event?.userIntent).toBeUndefined()
-  })
-
-  it('leaves ownership unresolved when the resolved schema has no object shape', async () => {
-    const { response, received, event } = await callFreshInstance('record_schema', ANALYTICS_ARGS, {
-      resolveOriginalTool: (name) => ({ inputSchema: STRICT_SCHEMAS[name] }),
+  function lowLevelServer(toolName: string, listedSchema: unknown, received: unknown[]) {
+    const server = new Server({ name: 'fresh-low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{ name: toolName, inputSchema: listedSchema as { type: 'object' } }],
+    }))
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const parsed = STRICT_SCHEMAS[request.params.name].safeParse(request.params.arguments ?? {})
+      if (!parsed.success) {
+        return { isError: true, content: [{ type: 'text' as const, text: parsed.error.issues[0].message }] }
+      }
+      received.push(parsed.data)
+      return { content: [{ type: 'text' as const, text: 'ok' }] }
     })
+    return server
+  }
 
+  async function listThenCall(
+    toolName: string,
+    listedSchema: unknown,
+    args: Record<string, unknown>,
+    options: { resolvedSchema: unknown; sameInstance?: boolean }
+  ) {
+    const received: unknown[] = []
+    const capture = new EventCapture()
+    await capture.start()
+    const instrumentOptions = {
+      enableConversationId: false,
+      resolveOriginalTool: () => ({ inputSchema: options.resolvedSchema }),
+    }
+    const listingServer = lowLevelServer(toolName, listedSchema, received)
+    const callingServer = options.sameInstance ? listingServer : lowLevelServer(toolName, listedSchema, received)
+    const listing = await connect(listingServer)
+    const calling = options.sameInstance ? listing : await connect(callingServer)
+    try {
+      instrument(listingServer, fakePostHog(), instrumentOptions)
+      if (callingServer !== listingServer) {
+        instrument(callingServer, fakePostHog(), instrumentOptions)
+      }
+      const listResult = await listing.client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const advertised = listResult.tools.find((tool) => tool.name === toolName)?.inputSchema
+      const response = await calling.client.request(
+        { method: 'tools/call', params: { name: toolName, arguments: args } },
+        CallToolResultSchema
+      )
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = capture.getEvents().find((candidate) => candidate.resourceName === toolName)
+      return { advertised, response, received, event }
+    } finally {
+      await capture.stop()
+      await listing.cleanup()
+      if (calling !== listing) {
+        await calling.cleanup()
+      }
+    }
+  }
+
+  it.each([
+    ['a Zod 3 union', 'union_schema', { value: 'kept' }],
+    ['a Zod 4 union', 'union4_schema', { value: 'kept' }],
+    ['a Zod 3 record', 'record_schema', { value: 1 }],
+    ['a Zod 4 record', 'record4_schema', { value: 1 }],
+  ])('strips the arguments a listing injected into %s on a fresh call', async (_label, toolName, toolArgs) => {
+    const { advertised, response, received, event } = await listThenCall(
+      toolName,
+      EMPTY_OBJECT_SCHEMA,
+      { ...toolArgs, context: 'analytics context', llm_model: 'model-a' },
+      { resolvedSchema: STRICT_SCHEMAS[toolName] }
+    )
+
+    expect(advertised?.properties).toHaveProperty('context')
+    expect(advertised?.properties).toHaveProperty('llm_model')
     expect(response.isError).not.toBe(true)
-    expect(received).toEqual([ANALYTICS_ARGS])
+    expect(received).toEqual([toolArgs])
     expect(event?.userIntent).toBe('analytics context')
     expect(event?.llmModel).toBe('model-a')
+  })
+
+  it('keeps the arguments of a resolved JSON Schema the listing could not inject into', async () => {
+    const { advertised, response, received, event } = await listThenCall(
+      'union_context',
+      ANY_OF_CONTEXT_SCHEMA,
+      { context: 'tool context', value: 'kept' },
+      { resolvedSchema: ANY_OF_CONTEXT_SCHEMA }
+    )
+
+    expect(advertised?.properties).toBeUndefined()
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it('prefers the ownership a served listing learned over the resolved schema', async () => {
+    const { response, received, event } = await listThenCall(
+      'union_context',
+      ANY_OF_CONTEXT_SCHEMA,
+      { context: 'tool context', value: 'kept' },
+      { resolvedSchema: STRICT_SCHEMAS.union_context, sameInstance: true }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it('keeps a context argument a refined tool declares when the resolver returns its listed schema', async () => {
+    const listedSchema = {
+      type: 'object',
+      properties: { context: { type: 'string' }, value: { type: 'string' } },
+      required: ['context', 'value'],
+      additionalProperties: false,
+    }
+    const { response, received, event } = await listThenCall(
+      'refined_context',
+      listedSchema,
+      { context: 'tool context', value: 'kept' },
+      { resolvedSchema: listedSchema }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
   })
 
   it.each([

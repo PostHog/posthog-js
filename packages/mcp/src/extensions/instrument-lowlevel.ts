@@ -13,7 +13,7 @@ import {
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
 } from './feedback'
-import { getAnalyticsParameterOwnership, getResolvedAnalyticsParameterOwnership } from './analytics-parameters'
+import { getAnalyticsParameterOwnership } from './analytics-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
@@ -140,7 +140,10 @@ async function handleToolCallRequest(
     extra,
     execute: (downstreamRequest: MCPRequestLike) =>
       runOriginalToolHandler(originalCallToolHandler, downstreamRequest, extra),
-    parameterOwnership: originalTool ? getResolvedAnalyticsParameterOwnership(originalTool.inputSchema) : undefined,
+    parameterOwnership:
+      originalTool && !(toolName && data.toolAnalyticsParameterOwnership.has(toolName))
+        ? getAnalyticsParameterOwnership(originalTool.inputSchema)
+        : undefined,
     inputSchema: originalTool?.inputSchema,
   })
 }

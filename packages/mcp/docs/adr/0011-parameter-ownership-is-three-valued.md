@@ -98,10 +98,10 @@ mis-owning every tool beyond it.
   **Update:** a low-level server can now supply the registered schema through `resolveOriginalTool`,
   which resolves ownership per request without a listing, as the high-level path does. The strip
   still requires positive ownership. The host's answer supplies that ownership, and the SDK never
-  replays a listing to get it. The host also advertised that schema itself, so the SDK owns only what
-  its listing could have injected: a resolved union or intersection lists as `anyOf`/`allOf` and gains
-  nothing, so its arguments are all the tool's; any other resolved Zod schema without an object shape
-  leaves ownership unresolved. Both keep every argument.
+  replays a listing to get it. The answer is read exactly as a served listing would be: the
+  resolver returns the schema as `tools/list` advertises it, a Zod schema is read the way the MCP
+  SDK advertises it (non-object schemas as an empty object), and ownership already learned from a
+  listing on the instance takes precedence.
 
 ## References
 

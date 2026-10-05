@@ -238,9 +238,11 @@ open where the SDK cannot tell who declared it, stripping it requires proof that
 - Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
   that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
   answer, so it records `llm_model` as the self-reported model and strips nothing, unless
-  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above); a resolved union or
-  intersection, or a Zod schema without an object shape, keeps every argument, since the listing
-  you advertised could not have injected into it. A tool that
+  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above). Return the schema as
+  your `tools/list` advertises it: ownership follows the same rule as a served listing, and a
+  listing served on the instance wins. A Zod schema is read the way the MCP SDK advertises it, so a
+  union, record or refined object lists as an empty object, gains the injected fields and has them
+  stripped; a host that lists its own JSON Schema (an `anyOf`, say) returns that schema. A tool that
   declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
   until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
   are the escapes. The SDK never replays your listing handler on the call path to find out.

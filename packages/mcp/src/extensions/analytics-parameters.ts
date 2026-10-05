@@ -1,12 +1,6 @@
 import type { AnalyticsParameterOwnership } from '../types'
 import { log, type LoggerFn } from './logger'
-import {
-  getObjectShape,
-  isComposedZodSchema,
-  isZodRawShapeCompat,
-  isZodTypeLike,
-  unwrapInputSchema,
-} from './mcp-sdk-compat'
+import { getObjectShape, isZodRawShapeCompat } from './mcp-sdk-compat'
 import { canDeclareOutputInstructions } from './output-instructions'
 
 const JSON_SCHEMA_KEYWORDS = [
@@ -166,25 +160,6 @@ export function getAnalyticsParameterOwnership(
     llmModel: analyticsOwnsParameter(inputSchema, 'llm_model'),
     outputInstructions: canDeclareOutputInstructions(outputSchema),
   }
-}
-
-/**
- * Ownership for a schema the host resolved per request, on an instance that
- * never served a listing. The host advertised that schema itself, so the SDK
- * owns only what the listing could have injected. A union or intersection lists
- * as `anyOf`/`allOf` and gains nothing, so every argument is the tool's. Any
- * other Zod schema without an object shape cannot say what was advertised, so
- * ownership stays unresolved: nothing is stripped, as without a resolver.
- */
-export function getResolvedAnalyticsParameterOwnership(inputSchema: unknown): AnalyticsParameterOwnership | undefined {
-  const schema = unwrapInputSchema(inputSchema)
-  if (isComposedZodSchema(schema)) {
-    return { ...getAnalyticsParameterOwnership(schema), context: false, conversationId: false, llmModel: false }
-  }
-  if (isZodTypeLike(schema) && !getObjectShape(schema)) {
-    return undefined
-  }
-  return getAnalyticsParameterOwnership(schema)
 }
 
 /**
