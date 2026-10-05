@@ -132,7 +132,7 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
       expect(order).toEqual(['user', 'upload'])
       expect(userHook).toHaveBeenCalledWith({ distDir, projectDir: distDir })
       expect(processMaps).toHaveBeenCalledTimes(1)
-      expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'process')
+      expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'process', false)
       for (const [file, code] of Object.entries(files)) {
         const stripped = deleteAfterUpload && (file === 'deleted.js' || file === 'missing.js')
         expect(await fs.readFile(path.join(distDir, 'static', file), 'utf8')).toBe(
@@ -195,7 +195,7 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
 
     await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
 
-    expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'upload')
+    expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'upload', true)
     expect(await fs.readFile(path.join(distDir, 'static/app.js'), 'utf8')).toBe(source)
     await expect(fs.access(path.join(distDir, 'static/app.js.map'))).rejects.toThrow()
     await expect(fs.access(path.join(distDir, 'server/app.js.map'))).rejects.toThrow()

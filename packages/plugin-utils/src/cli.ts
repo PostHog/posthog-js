@@ -36,7 +36,8 @@ function buildReleaseArgs(config: ResolvedPluginConfig): string[] {
 export function buildSourcemapCliArgs(
     config: ResolvedPluginConfig,
     mode: { stdin: true } | { directory: string },
-    command: SourcemapCliCommand = 'process'
+    command: SourcemapCliCommand = 'process',
+    skipMissingDebugIds = false
 ): string[] {
     const args = ['sourcemap', command]
 
@@ -58,11 +59,11 @@ export function buildSourcemapCliArgs(
     // the .js files (stripping sourcemap references), and callers pick `upload`
     // precisely because the written files must not change — e.g. Subresource
     // Integrity hashes were already computed from them.
-    if (command === 'upload') {
+    if (command === 'upload' && skipMissingDebugIds) {
         // Native-debug-ID bundlers can emit runtime helpers without IDs alongside
-        // instrumented chunks. Keep direct CLI uploads strict unless a plugin opts in.
+        // instrumented chunks. Keep other plugin uploads strict unless they opt in.
         args.push('--skip-missing-debug-ids')
-    } else if (config.sourcemaps.deleteAfterUpload) {
+    } else if (command === 'process' && config.sourcemaps.deleteAfterUpload) {
         args.push('--delete-after')
     }
 
@@ -95,10 +96,13 @@ export function buildCliEnv(config: ResolvedPluginConfig): NodeJS.ProcessEnv {
  */
 export async function runSourcemapCli(
     config: ResolvedPluginConfig,
-    options: ({ filePaths: string[] } | { directory: string }) & { command?: SourcemapCliCommand }
+    options: ({ filePaths: string[] } | { directory: string }) & {
+        command?: SourcemapCliCommand
+        skipMissingDebugIds?: boolean
+    }
 ): Promise<void> {
     const mode = 'filePaths' in options ? { stdin: true as const } : { directory: options.directory }
-    const args = buildSourcemapCliArgs(config, mode, options.command ?? 'process')
+    const args = buildSourcemapCliArgs(config, mode, options.command ?? 'process', options.skipMissingDebugIds ?? false)
     const env = buildCliEnv(config)
 
     const spawnOptions: Parameters<typeof spawnLocal>[2] = {

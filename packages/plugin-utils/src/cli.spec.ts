@@ -40,11 +40,17 @@ describe('buildSourcemapCliArgs', () => {
         expect(args).toContain('--delete-after')
     })
 
-    it('keeps upload non-mutating and permits bundler helpers without native debug IDs', () => {
+    it('keeps regular uploads non-mutating and strict', () => {
         const args = buildSourcemapCliArgs(config, { stdin: true }, 'upload')
 
         expect(args.slice(0, 3)).toEqual(['sourcemap', 'upload', '--stdin'])
         expect(args).not.toContain('--delete-after')
+        expect(args).not.toContain('--skip-missing-debug-ids')
+    })
+
+    it('permits bundler helpers without IDs only when the caller opts in', () => {
+        const args = buildSourcemapCliArgs(config, { directory: 'dist' }, 'upload', true)
+
         expect(args).toContain('--skip-missing-debug-ids')
     })
 

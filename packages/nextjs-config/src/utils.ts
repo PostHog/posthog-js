@@ -17,9 +17,10 @@ export function hasCompilerHook(): boolean {
 export async function processSourceMaps(
   posthogOptions: ResolvedPluginConfig,
   directory: string,
-  command: SourcemapCliCommand = 'process'
+  command: SourcemapCliCommand = 'process',
+  skipMissingDebugIds = false
 ) {
-  await runSourcemapCli(posthogOptions, { directory, command })
+  await runSourcemapCli(posthogOptions, { directory, command, skipMissingDebugIds })
 }
 
 export async function resolveReleaseId(posthogOptions: ResolvedPluginConfig): Promise<string | undefined> {
