@@ -121,6 +121,35 @@ describe('RequestQueue', () => {
             ])
         })
 
+        it.each([true, false])(
+            'notifies every batch callback when the first request has a callback: %s',
+            (firstHasCallback) => {
+                const first = vi.fn()
+                const second = vi.fn()
+                const otherBatch = vi.fn()
+                queue.enqueue({
+                    url: '/e',
+                    data: { event: 'first' },
+                    ...(firstHasCallback ? { callback: first, fireCallbackOnDrop: true } : {}),
+                })
+                queue.enqueue({ url: '/e', data: { event: 'second' }, callback: second })
+                queue.enqueue({ url: '/s', data: { event: 'other-batch' }, callback: otherBatch })
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+
+                const batch = vi.mocked(sendRequest).mock.calls[0][0]
+                expect(batch.data).toEqual([{ event: 'first' }, { event: 'second' }])
+                expect(batch.fireCallbackOnDrop).toBeUndefined()
+                expect(batch.callback).toBeDefined()
+                const response = { statusCode: 200 }
+                batch.callback!(response)
+                expect(first).toHaveBeenCalledTimes(firstHasCallback ? 1 : 0)
+                expect(second).toHaveBeenCalledTimes(1)
+                expect(second).toHaveBeenCalledWith(response)
+                expect(otherBatch).not.toHaveBeenCalled()
+            }
+        )
+
         it('does not merge requests that share a batch key but not a batch group', () => {
             queue.enqueue({
                 data: { event: '$snapshot', timestamp: EPOCH - 2000 },
@@ -219,13 +248,15 @@ describe('RequestQueue', () => {
         })
 
         it('handles unload', () => {
+            const callback = vi.fn()
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
-            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, callback })
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
             queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
             queue.unload()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
+            expect(vi.mocked(sendRequest).mock.calls[0][0].callback).toBeUndefined()
             expect(sendRequest).toHaveBeenNthCalledWith(
                 1,
                 {
