@@ -1,4 +1,5 @@
 import { Platform } from 'react-native'
+import { minimizeFlagCalledEventProperties } from '@posthog/core'
 import { PostHog } from '../src'
 import { getReactNativeVersion } from '../src/utils'
 
@@ -47,6 +48,12 @@ describe('$react_native_version', () => {
     expect(posthog.getCommonEventProperties().$react_native_version).toBe('0.79.6')
 
     await posthog.shutdown()
+  })
+
+  it('survives minimal $feature_flag_called events', () => {
+    expect(minimizeFlagCalledEventProperties({ $react_native_version: '0.79.6', custom: 'dropped' })).toEqual({
+      $react_native_version: '0.79.6',
+    })
   })
 
   it('is omitted when the platform does not report a version', async () => {

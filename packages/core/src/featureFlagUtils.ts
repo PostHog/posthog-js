@@ -252,6 +252,8 @@ export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   '$lib_version',
   '$device_id',
   '$is_server',
+  // Runtime identity, kept for runtime breakdowns of flag calls
+  '$react_native_version',
 ]
 
 /**
