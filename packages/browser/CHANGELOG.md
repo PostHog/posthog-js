@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.436.1
+
+### Patch Changes
+
+- [#5203](https://github.com/PostHog/posthog-js/pull/5203) [`633f5b2`](https://github.com/PostHog/posthog-js/commit/633f5b2249c7e1fe73b448912c937c9857dfd789) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore batching for events carrying pending Meta `$fbc` or `$fbp` identifiers to reduce races with preceding `identify()` calls.
+  (2026-10-05)
+
 ## 1.436.0
 
 ### Minor Changes
