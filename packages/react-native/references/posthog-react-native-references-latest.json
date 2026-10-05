@@ -3348,6 +3348,11 @@
           "name": "$os_version"
         },
         {
+          "description": "React Native version like \"0.79.6\". Set on events captured from JavaScript, not on events the native SDKs capture",
+          "type": "string | null",
+          "name": "$react_native_version"
+        },
+        {
           "description": "Timezone of the device like \"Europe/Berlin\"",
           "type": "string | null",
           "name": "$timezone"

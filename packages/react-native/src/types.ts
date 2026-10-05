@@ -154,7 +154,7 @@ export interface PostHogCustomAppProperties {
   $timezone?: string | null
   /** Whether the app is running on an emulator/simulator */
   $is_emulator?: boolean | null
-  /** React Native version like "0.79.6" */
+  /** React Native version like "0.79.6". Set on events captured from JavaScript, not on events the native SDKs capture */
   $react_native_version?: string | null
 }
 
