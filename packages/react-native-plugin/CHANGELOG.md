@@ -1,5 +1,26 @@
 # @posthog/react-native-plugin
 
+## 2.12.4
+
+### Patch Changes
+
+- [#5193](https://github.com/PostHog/posthog-js/pull/5193) [`e4672b6`](https://github.com/PostHog/posthog-js/commit/e4672b6602b8f03bdf0f81571e5eded63899b985) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-ios 3.88.2 to fix replay attribution across session and identity changes and a camera-picker replay crash.
+  (2026-10-02)
+
+## 2.12.3
+
+### Patch Changes
+
+- [#5151](https://github.com/PostHog/posthog-js/pull/5151) [`512d4c7`](https://github.com/PostHog/posthog-js/commit/512d4c77747b4b436104d746e8ed160680cda176) Thanks [@arnohillen](https://github.com/arnohillen)! - Require posthog-ios 3.86.1 and posthog-android 3.71.4, which stop session replay when the project is over its mobile session replay quota
+  (2026-09-30)
+
+## 2.12.2
+
+### Patch Changes
+
+- [#5142](https://github.com/PostHog/posthog-js/pull/5142) [`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-android 3.71.2, which stops event properties from overriding `$process_person_profile` and `$is_identified` on native events
+  (2026-09-29)
+
 ## 2.12.1
 
 ### Patch Changes

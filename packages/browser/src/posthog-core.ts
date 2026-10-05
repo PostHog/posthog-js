@@ -187,6 +187,22 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+// Recording buttons and capture diagnostics read these from individual events.
+const REQUIRED_REPLAY_PROPERTIES = [
+    '$recording_status',
+    '$sdk_debug_recording_script_not_loaded',
+    '$sdk_debug_replay_url_trigger_status',
+    '$sdk_debug_replay_event_trigger_status',
+    '$sdk_debug_replay_linked_flag_trigger_status',
+    '$sdk_debug_replay_rrweb_error',
+    '$sdk_debug_replay_internal_buffer_length',
+    '$sdk_debug_replay_flushed_size',
+]
+const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$$heatmap', '$snapshot']
+const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
+const isReplayDebugEvent = (eventName: string): boolean =>
+    eventName.charAt(0) === '$' && !includes(EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES, eventName)
+
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 // `fb.<subdomainIndex>.<creationTimeMs>.<randomNumber>`, the shape of Meta's _fbp cookie.
@@ -526,8 +542,10 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _replayDebugPropertiesPaused = false
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
+    private _isConsentTransition = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -613,7 +631,8 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Replace a stale cookieless sentinel distinct_id with an anonymous device id.
+     * Reconcile identity when shared consent changes in another tab.
+     * Rejection must clear retained user state before any cookieless event is constructed.
      *
      * Consent lives in shared cookie/localStorage, but the in-memory distinct_id does not. A tab
      * that started in cookieless mode holds the `$posthog_cookieless` sentinel as its distinct_id;
@@ -623,13 +642,22 @@ export class PostHog implements PostHogInterface {
      * server never hashes it and every affected browser collapses onto a single
      * `$posthog_cookieless` person.
      */
-    private _healCookielessSentinelDistinctId(): void {
-        if (this._inCookielessMode() || this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
+    private _syncCookielessIdentity(): void {
+        const persistence = this.persistence
+        if (!persistence || this._isConsentTransition) {
             return
         }
-
-        const persistence = this.persistence
-        if (!persistence) {
+        if (this._inCookielessMode()) {
+            if (
+                this.config.cookieless_mode === COOKIELESS_ON_REJECT &&
+                this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE
+            ) {
+                this._sync_opt_out_with_persistence()
+                this._enterCookielessMode()
+            }
+            return
+        }
+        if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
             return
         }
 
@@ -875,13 +903,19 @@ export class PostHog implements PostHogInterface {
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
         const persistenceDisabled = this._is_persistence_disabled()
+        const allowDisabledRead = !this._inCookielessMode()
 
-        this.persistence = new PostHogPersistence(this.config, persistenceDisabled)
+        this.persistence = new PostHogPersistence(this.config, persistenceDisabled, true, allowDisabledRead)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
-                  new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
+                  new PostHogPersistence(
+                      { ...this.config, persistence: 'sessionStorage' },
+                      persistenceDisabled,
+                      false,
+                      allowDisabledRead
+                  )
 
         const persistenceName = this.config.persistence_name || this.config.token
         this._sessionRegisteredPropertiesStorageKey = 'ph_' + persistenceName + '_session_registered_properties'
@@ -1721,7 +1755,10 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._healCookielessSentinelDistinctId()
+        this._syncCookielessIdentity()
+        if (event_name === '$snapshot' && this._inCookielessMode()) {
+            return
+        }
 
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
         const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
@@ -1939,6 +1976,11 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        if (this.sessionRecording && !this._replayDebugPropertiesPaused && isReplayDebugEvent(event_name)) {
+            this._replayDebugPropertiesPaused = true
+            setTimeout(() => (this._replayDebugPropertiesPaused = false), REPLAY_DEBUG_PROPERTIES_INTERVAL_MS)
+        }
+
         const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
             const finalValue =
                 data.$set?.[channel.property] ??
@@ -1982,12 +2024,7 @@ export class PostHog implements PostHogInterface {
 
         // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
         // options are unbatched already and `send_instantly` changes nothing for them
-        if (
-            this.config.request_batching &&
-            (!options || options?._batchKey) &&
-            !options?.send_instantly &&
-            !metaIdentifiersToConfirm.length
-        ) {
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             let transportOverride: QueuedRequestWithOptions['transport']
@@ -2091,6 +2128,8 @@ export class PostHog implements PostHogInterface {
             return eventProperties
         }
 
+        this._syncCookielessIdentity()
+
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
@@ -2143,7 +2182,13 @@ export class PostHog implements PostHogInterface {
 
         try {
             if (this.sessionRecording) {
-                extend(properties, this.sessionRecording.sdkDebugProperties)
+                const replayProperties = this.sessionRecording.sdkDebugProperties
+                const includeDebugProperties = !this._replayDebugPropertiesPaused && isReplayDebugEvent(eventName)
+                for (const key in replayProperties) {
+                    if (includeDebugProperties || includes(REQUIRED_REPLAY_PROPERTIES, key)) {
+                        properties[key] = replayProperties[key]
+                    }
+                }
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {
@@ -2989,6 +3034,46 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Register an event listener that runs when the set of active matching surveys changes.
+     * The listener receives the initial matching set and updates after event/action triggers,
+     * cancellation, consumption, session expiry, definitions refresh, captured pageviews,
+     * feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.
+     *
+     * URL conditions are re-evaluated on captured `$pageview` events, including automatic SPA
+     * pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled,
+     * capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time
+     * passing; selector, device and wait-period conditions are checked on the supported updates.
+     *
+     * The optional callback context distinguishes load errors from a successfully loaded empty
+     * result. New subscribers receive the current snapshot without replaying earlier errors:
+     * a settled unavailable state is `([], { isLoaded: false })`, while usable cached definitions
+     * are evaluated normally. An initial load already in progress delivers when it resolves.
+     * Recoverable load failures keep the subscription alive. Unsubscribing prevents any
+     * further delivery, including callbacks from an outstanding initial request.
+     *
+     * {@label Surveys}
+     *
+     * @example
+     * ```js
+     * const unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {
+     *     // respond to changes in currently matching surveys
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @param {SurveyCallback} callback The callback to call with active matching surveys.
+     * @returns A function that can be called to unsubscribe the listener.
+     */
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
+            return () => {}
+        }
+        return this.surveys.onActiveMatchingSurveysChanged(callback)
+    }
+
+    /**
      * Although we recommend using popover surveys and display conditions,
      * if you want to show surveys programmatically without setting up all
      * the extra logic needed for API surveys, you can render surveys
@@ -3198,7 +3283,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._healCookielessSentinelDistinctId()
+        this._syncCookielessIdentity()
 
         // Adopt any sibling identity first, then make this explicit identify
         // authoritative until its complete replacement cookie is published. Keep
@@ -3738,7 +3823,9 @@ export class PostHog implements PostHogInterface {
         // are dropped with no error. Warn instead of failing silently.
         const wasCapturing = this.is_capturing()
 
-        this.consent.reset()
+        if (!isConsentTransition) {
+            this.consent.reset()
+        }
 
         if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
@@ -3747,6 +3834,8 @@ export class PostHog implements PostHogInterface {
         }
 
         const cookieSyncSuppressionStarted = this.persistence?._beginCookieSyncSuppression?.()
+        const wasConsentTransition = this._isConsentTransition
+        this._isConsentTransition = wasConsentTransition || isConsentTransition
         let resetCompleted = false
         try {
             this.persistence?.clear()
@@ -3821,6 +3910,7 @@ export class PostHog implements PostHogInterface {
             delete this.config.identity_claims
             resetCompleted = true
         } finally {
+            this._isConsentTransition = wasConsentTransition
             if (cookieSyncSuppressionStarted) {
                 // Publish the reset identity as one complete cookie before another
                 // sibling tab can resurrect the pre-reset state. Always release
@@ -4119,16 +4209,33 @@ export class PostHog implements PostHogInterface {
             extend(this.config, configRenames(config))
 
             const isPersistenceDisabled = this._is_persistence_disabled()
-            this.persistence?.update_config(this.config, oldConfig, isPersistenceDisabled)
-            this.sessionPersistence =
-                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
-                    ? this.persistence
-                    : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
-                      new PostHogPersistence(
-                          { ...this.config, persistence: 'sessionStorage' },
-                          isPersistenceDisabled,
-                          false
-                      )
+            // _init creates persistence after applying the initial configuration.
+            if (this.persistence) {
+                const sharesPersistence =
+                    this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
+                if (sharesPersistence && this.sessionPersistence !== this.persistence) {
+                    // Drop the outgoing entry and pending write before the primary takes over.
+                    this.sessionPersistence?.remove()
+                    this.sessionPersistence?.destroy()
+                }
+                this.persistence.update_config(this.config, oldConfig, isPersistenceDisabled)
+                if (sharesPersistence) {
+                    this.sessionPersistence = this.persistence
+                } else if (this.sessionPersistence === this.persistence) {
+                    // Leaving a shared backend requires a separate sessionStorage store.
+                    this.sessionPersistence = new PostHogPersistence(
+                        { ...this.config, persistence: 'sessionStorage' },
+                        isPersistenceDisabled,
+                        false
+                    )
+                } else {
+                    this.sessionPersistence?.update_config(
+                        { ...this.config, persistence: 'sessionStorage' },
+                        { ...oldConfig, persistence: 'sessionStorage' },
+                        isPersistenceDisabled
+                    )
+                }
+            }
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
@@ -4662,10 +4769,7 @@ export class PostHog implements PostHogInterface {
         if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
-        if (persistenceDisabled) {
-            this._sessionRegisteredPropKeys.clear()
-            this._persistSessionRegisteredPropKeys()
-        }
+        this._persistSessionRegisteredPropKeys()
         return persistenceDisabled
     }
 
@@ -4792,39 +4896,38 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        const sessionRecording =
-            this.config.cookieless_mode === COOKIELESS_ON_REJECT ? this.sessionRecording : undefined
-        // Identity changes must not let queued recorder work flush under the cookieless identity.
-        sessionRecording?.dispose({ discardBufferedEvents: true })
-
-        if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
-            // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
-            this._reset(true, true)
-        }
-
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT) {
-            // If cookieless_mode is COOKIELESS_ON_REJECT, we start capturing events in cookieless mode
-            this.register({
-                distinct_id: COOKIELESS_SENTINEL_VALUE,
-                $device_id: null,
-            })
-            // Detach the recorder before sessionManager goes away so pending work cannot outlive it.
-            this._removeExtension(sessionRecording)
-            this.sessionRecording = undefined
-            this.sessionManager?.destroy()
-            this.pageViewManager?.destroy()
-            this.sessionManager = undefined
-            this.sessionPropsManager = undefined
-            if (this.config.capture_pageview) {
-                this._captureInitialPageview()
-            }
-            // At init time, consent was PENDING so is_capturing() was false and _start_queue_if_opted_in() was a no-op.
-            // Now that rejection has been recorded, capturing is active — enable the queue so batched events are flushed.
-            this._start_queue_if_opted_in()
+            this._enterCookielessMode()
         }
+    }
+
+    private _enterCookielessMode(): void {
+        const sessionRecording = this.sessionRecording
+        // Identity changes must not let queued recorder work flush under the cookieless identity.
+        sessionRecording?.dispose({ discardBufferedEvents: true })
+
+        if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
+            this._reset(true, true)
+        }
+        this.register({
+            distinct_id: COOKIELESS_SENTINEL_VALUE,
+            $device_id: null,
+        })
+        // Detach the recorder before sessionManager goes away so pending work cannot outlive it.
+        this._removeExtension(sessionRecording)
+        this.sessionRecording = undefined
+        this.sessionManager?.destroy()
+        this.pageViewManager?.destroy()
+        this.sessionManager = undefined
+        this.sessionPropsManager = undefined
+        if (this.config.capture_pageview) {
+            this._captureInitialPageview()
+        }
+        // Pending consent does not start the queue; shared rejection must enable cookieless delivery too.
+        this._start_queue_if_opted_in()
     }
 
     /**
@@ -4920,6 +5023,10 @@ export class PostHog implements PostHogInterface {
      * @returns {boolean} whether the posthog library is capturing events
      */
     is_capturing(): boolean {
+        // Customer callbacks during reset must not emit events with a partially reset identity.
+        if (this._isConsentTransition) {
+            return false
+        }
         if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
             return true
         }

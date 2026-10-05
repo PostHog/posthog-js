@@ -1,5 +1,45 @@
 # posthog-react-native
 
+## 4.78.5
+
+### Patch Changes
+
+- [#5196](https://github.com/PostHog/posthog-js/pull/5196) [`16ee222`](https://github.com/PostHog/posthog-js/commit/16ee2227b66fa548d84b97c387a429bab862b451) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Warn when the deprecated `posthog-react-native-session-replay` package is in use; switch to `@posthog/react-native-plugin`
+  (2026-10-05)
+
+## 4.78.4
+
+### Patch Changes
+
+- [#5183](https://github.com/PostHog/posthog-js/pull/5183) [`cfd635a`](https://github.com/PostHog/posthog-js/commit/cfd635a71afd30bf00d88fa9c942c35ca4aa4b1e) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Expose open-ended survey choices as named, reachable text inputs and focus the input when its choice is selected.
+  (2026-10-02)
+
+- [#5181](https://github.com/PostHog/posthog-js/pull/5181) [`1087687`](https://github.com/PostHog/posthog-js/commit/108768731bbb68440e963e5ee0f0adb7607363b4) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Keep survey rating endpoint labels within the survey at large text sizes.
+  (2026-10-02)
+
+## 4.78.3
+
+### Patch Changes
+
+- [#5182](https://github.com/PostHog/posthog-js/pull/5182) [`e13bd2c`](https://github.com/PostHog/posthog-js/commit/e13bd2c876390d782fcf05efb7a5e8a267ac1611) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Give numeric survey ratings accessible question labels and selection state.
+  (2026-10-01)
+
+## 4.78.2
+
+### Patch Changes
+
+- [#5141](https://github.com/PostHog/posthog-js/pull/5141) [`7faa1db`](https://github.com/PostHog/posthog-js/commit/7faa1dbae2cb63fd1b6f3d9032b82cb2a3216aad) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$screen_width` and `$screen_height` on iOS to report the app's window size on foldables, Stage Manager, and split view
+  (2026-09-29)
+- Updated dependencies [[`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197)]:
+  - @posthog/react-native-plugin@2.12.2
+
+## 4.78.1
+
+### Patch Changes
+
+- [#5145](https://github.com/PostHog/posthog-js/pull/5145) [`890ba01`](https://github.com/PostHog/posthog-js/commit/890ba016d5ec0acd3464f63ff1c3022e31b6e74f) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Add an accessible name and button role to the survey close control.
+  (2026-09-29)
+
 ## 4.78.0
 
 ### Minor Changes

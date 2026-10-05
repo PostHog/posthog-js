@@ -162,6 +162,7 @@ describe('Session Props Manager', () => {
             li_fat_id: null,
             mc_cid: null,
             msclkid: null,
+            oppref: null,
             qclid: null,
             rdt_cid: null,
             sccid: null,

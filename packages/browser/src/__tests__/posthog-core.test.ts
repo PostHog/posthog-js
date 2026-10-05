@@ -384,6 +384,68 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('referrer1.example.com')
             })
 
+            describe('attribution across page reloads', () => {
+                beforeEach(() => {
+                    vi.useFakeTimers()
+                })
+
+                afterEach(() => {
+                    vi.clearAllTimers()
+                    vi.useRealTimers()
+                })
+
+                it.each<Partial<PostHogConfig>>([
+                    { persistence_save_debounce_ms: 0, split_storage: false },
+                    { persistence_save_debounce_ms: 0, split_storage: true },
+                    { persistence_save_debounce_ms: 250, split_storage: false },
+                    { persistence_save_debounce_ms: 250, split_storage: true },
+                    { defaults: '2026-05-30' },
+                ])('preserves session attribution after reinitialization with %j', (persistenceConfig) => {
+                    const persistenceName = uuidv7()
+                    const config: Partial<PostHogConfig> = {
+                        persistence: 'localStorage+cookie',
+                        persistence_name: persistenceName,
+                        capture_pageview: false,
+                        autocapture: false,
+                        disable_session_recording: true,
+                        advanced_disable_flags: true,
+                        ...persistenceConfig,
+                    }
+                    const expectedProperties = {
+                        $referrer: 'https://www.google.com/search?q=analytics',
+                        $referring_domain: 'www.google.com',
+                        $search_engine: 'google',
+                        utm_source: 'newsletter',
+                        gclid: 'test-click-id',
+                        signup_flow: 'campaign',
+                    }
+                    mockReferrer.mockReturnValue(expectedProperties.$referrer)
+                    mockURL.mockReturnValue('https://example.com/?utm_source=newsletter&gclid=test-click-id')
+                    const firstPage = setup(config)
+                    firstPage.beforeSendMock.mockReturnValue(null)
+                    firstPage.posthog.register_for_session({ signup_flow: 'campaign' })
+                    firstPage.posthog.capture('landing')
+                    expect(firstPage.beforeSendMock.mock.calls[0][0].properties).toMatchObject(expectedProperties)
+
+                    // Finish the first page's writes before simulating a reload with the same storage.
+                    vi.advanceTimersByTime(250)
+                    const storageKey = `ph_${persistenceName}`
+                    expect(JSON.parse(sessionStorage.getItem(storageKey)!)).toMatchObject(expectedProperties)
+
+                    mockURL.mockReturnValue('https://example.com/checkout/return')
+                    mockReferrer.mockReturnValue('https://checkout.stripe.com/')
+                    const returningPage = setup(config)
+                    returningPage.beforeSendMock.mockReturnValue(null)
+                    returningPage.posthog.capture('subscription_created')
+
+                    expect
+                        .soft(returningPage.beforeSendMock.mock.calls[0][0].properties)
+                        .toMatchObject(expectedProperties)
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(storageKey)!)).toMatchObject(expectedProperties)
+                })
+            })
+
             it('should use the new referrer in a new session', () => {
                 // arrange
                 const token = uuidv7()
@@ -524,7 +586,56 @@ describe('posthog core', () => {
                 ;(mockedGlobals as any).document.cookie = value
             }
 
+            const flushRequestQueue = (posthog: PostHog) => posthog['_requestQueue']!['_flush']()
+
             afterEach(() => setMetaCookies(''))
+
+            it.each([
+                ['$fbp', '_fbp=fb.1.1699999000000.1234567890', 'fb.1.1699999000000.1234567890'],
+                ['$fbc', '_fbc=fb.1.1699999000000.pixel-click', 'fb.1.1699999000000.pixel-click'],
+            ])('should batch events after identify while %s delivery is pending', (property, cookie, value) => {
+                vi.useFakeTimers()
+                try {
+                    const { posthog, beforeSendMock } = setup({
+                        persistence: 'localStorage',
+                        person_profiles: 'identified_only',
+                        request_batching: true,
+                        capture_pageview: false,
+                    })
+                    const send = vi.spyOn(posthog, '_send_retriable_request').mockImplementation(() => {})
+                    setMetaCookies(cookie)
+
+                    posthog.identify('identified-user', { email: 'user@example.com' })
+                    posthog.capture('signed_up')
+                    posthog.capture('next-event')
+
+                    expect(send).toHaveBeenCalledTimes(1)
+                    expect(send.mock.calls[0][0].data).toMatchObject({
+                        event: '$identify',
+                        $set: { email: 'user@example.com', [property]: value },
+                    })
+
+                    posthog['_requestQueue']!.enable()
+                    vi.advanceTimersByTime(3000)
+
+                    expect(send).toHaveBeenCalledTimes(2)
+                    const batch = send.mock.calls[1][0]
+                    expect(batch.data).toMatchObject([
+                        { event: 'signed_up', $set: { [property]: value } },
+                        { event: 'next-event', $set: { [property]: value } },
+                    ])
+                    expect(batch.callback).toBeDefined()
+                    batch.callback!({ statusCode: 400 })
+                    posthog.capture('after-failure')
+                    expect(beforeSendMock.mock.calls[3][0].$set[property]).toBe(value)
+
+                    batch.callback!({ statusCode: 200 })
+                    posthog.capture('after-delivery')
+                    expect(beforeSendMock.mock.calls[4][0].$set?.[property]).toBeUndefined()
+                } finally {
+                    vi.useRealTimers()
+                }
+            })
 
             it('should not send campaign params as null if there are no non-null ones', () => {
                 // arrange
@@ -632,6 +743,7 @@ describe('posthog core', () => {
                 })
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.first-click')
                 expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('$fbc')
@@ -703,15 +815,17 @@ describe('posthog core', () => {
                 })
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 statusCode = 200
                 posthog.capture('retry-event')
+                flushRequestQueue(posthog)
                 posthog.capture('after-delivery')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
                 expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
                 expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
                 expect(sendSpy).toHaveBeenCalledTimes(2)
-                expect(sendSpy.mock.calls[0][0].fireCallbackOnDrop).toBe(true)
+                expect(sendSpy.mock.calls[0][0].fireCallbackOnDrop).toBeUndefined()
                 now.mockRestore()
             })
 
@@ -769,8 +883,10 @@ describe('posthog core', () => {
                     options.callback?.({ statusCode: 200 })
                 })
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
 
                 posthog.setPersonProperties({ $fbc: 'fb.1.1700000000000.caller-click' })
+                flushRequestQueue(posthog)
                 posthog.setPersonProperties({ plan: 'paid' })
 
                 expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
@@ -864,6 +980,7 @@ describe('posthog core', () => {
                 setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 posthog.capture('$pageview')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
@@ -978,6 +1095,7 @@ describe('posthog core', () => {
                 setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
 
                 posthog.capture('$pageview')
+                flushRequestQueue(posthog)
                 posthog.capture('$pageview')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
@@ -1346,6 +1464,35 @@ describe('posthog core', () => {
 
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
             expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+        })
+
+        it('clears debounced session properties on activity timeout without replacing the store', async () => {
+            vi.useFakeTimers()
+            try {
+                const token = uuidv7()
+                const posthog = await createPosthogInstance(token, {
+                    persistence: 'localStorage',
+                    persistence_save_debounce_ms: 250,
+                    capture_pageview: false,
+                })
+                posthog.capture('landing')
+                const sessionId = posthog.get_session_id()
+                const sessionPersistence = posthog.sessionPersistence
+                posthog.register_for_session({ signup_flow: 'campaign' })
+                vi.advanceTimersByTime(250)
+
+                vi.setSystemTime(Date.now() + 31 * 60 * 1000)
+                posthog.capture('returned after timeout')
+
+                expect(posthog.get_session_id()).not.toBe(sessionId)
+                expect(posthog.sessionPersistence).toBe(sessionPersistence)
+                expect(posthog.sessionPersistence?.props.signup_flow).toBeUndefined()
+                vi.advanceTimersByTime(250)
+                expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).not.toHaveProperty('signup_flow')
+            } finally {
+                vi.clearAllTimers()
+                vi.useRealTimers()
+            }
         })
 
         it('does not collide with user-provided session property names', async () => {

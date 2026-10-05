@@ -1,4 +1,5 @@
 import type { PostHog, EventMessage } from 'posthog-node'
+import type OpenAI from 'openai'
 import type {
   TracingProcessor,
   Trace,
@@ -21,6 +22,7 @@ import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacy
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { captureAiEvent, isFullAiCaptureEnabled } from '../captureAiEvent'
+import { extractCacheWriteTokens } from '../openai/utils'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -523,19 +525,23 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_total_tokens: inputTokens + outputTokens,
     }
 
-    if (usesRawResponseUsage) {
-      // Chat Completions prompt tokens include cached tokens rather than reporting them exclusively.
+    const promptTokenDetails = usage.prompt_tokens_details as OpenAI.CompletionUsage['prompt_tokens_details'] | null
+    if (usesRawResponseUsage || promptTokenDetails != null) {
+      // Chat Completions prompt tokens include cached tokens, including when a custom model
+      // supplies OpenAI-shaped details through canonical span usage.
       properties.$ai_cache_reporting_exclusive = false
     }
 
-    // Raw Chat Completions usage keeps token details under provider-specific fields.
-    const promptTokenDetails = (usage as any).prompt_tokens_details
+    // Chat Completions usage keeps token details under provider-specific fields.
     const completionTokenDetails = (usage as any).completion_tokens_details
     if (completionTokenDetails?.reasoning_tokens) {
       properties.$ai_reasoning_tokens = completionTokenDetails.reasoning_tokens
     }
-    if (promptTokenDetails?.cached_tokens) {
+    if (promptTokenDetails?.cached_tokens != null) {
       properties.$ai_cache_read_input_tokens = promptTokenDetails.cached_tokens
+    }
+    if (promptTokenDetails?.cache_write_tokens != null) {
+      properties.$ai_cache_creation_input_tokens = extractCacheWriteTokens(promptTokenDetails)
     }
 
     if (usage.details) {
@@ -594,10 +600,20 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
       $ai_model: model,
       $ai_response_id: responseId,
+      // Responses API input tokens include cache reads and writes.
+      $ai_cache_reporting_exclusive: false,
       $ai_input: this._prepareCapturedValue(normalizeInputRoles(responseSpanData._input)),
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
+    }
+
+    const inputTokenDetails = usage.input_tokens_details
+    if (inputTokenDetails?.cached_tokens != null) {
+      properties.$ai_cache_read_input_tokens = inputTokenDetails.cached_tokens
+    }
+    if (inputTokenDetails?.cache_write_tokens != null) {
+      properties.$ai_cache_creation_input_tokens = extractCacheWriteTokens(inputTokenDetails)
     }
 
     // Extract output from response

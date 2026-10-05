@@ -18,8 +18,11 @@ import {
   withPrivacyMode,
   buildInlineDataBlock,
   getModelParams,
+  truncate,
+  utf8ByteLength,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
+import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
@@ -28,6 +31,14 @@ import { mapGeminiUsage } from './usage'
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
 }
+
+interface FormattedGeminiFunctionResponse {
+  type: 'tool_result'
+  tool_use_id?: string
+  content: unknown
+}
+
+const TOOL_RESULT_MAX_BYTES = 5000
 
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
@@ -279,8 +290,8 @@ export class WrappedModels {
     }
   }
 
-  private formatPartsAsContentBlocks(parts: unknown[]): FormattedContent {
-    const blocks: FormattedContent = []
+  private formatPartsAsContentBlocks(parts: unknown[]): Array<FormattedContentItem | FormattedGeminiFunctionResponse> {
+    const blocks: Array<FormattedContentItem | FormattedGeminiFunctionResponse> = []
 
     for (const part of parts) {
       // Handle dict/object with text field
@@ -296,10 +307,47 @@ export class WrappedModels {
         const inlineData = (part as any).inlineData
         const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
         blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
+      } else if (part && typeof part === 'object' && 'functionCall' in part) {
+        const functionCall = (part as Part).functionCall
+        if (functionCall?.name) {
+          blocks.push({
+            type: 'function',
+            ...(functionCall.id != null && { id: functionCall.id }),
+            function: { name: functionCall.name, arguments: functionCall.args ?? {} },
+          })
+        }
+      } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+        const functionResponse = (part as Part).functionResponse
+        if (functionResponse?.name) {
+          const content =
+            functionResponse.parts !== undefined
+              ? {
+                  ...(functionResponse.response !== undefined && { response: functionResponse.response }),
+                  parts: functionResponse.parts,
+                }
+              : (functionResponse.response ?? {})
+          blocks.push({
+            type: 'tool_result',
+            ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
+            content: this.boundToolResult(content),
+          })
+        }
       }
     }
 
     return blocks
+  }
+
+  private boundToolResult(content: unknown): unknown {
+    if (isFullAiCaptureEnabled(this.phClient)) return content
+    try {
+      const serialized = JSON.stringify(content)
+      return utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
+        ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
+        : content
+    } catch {
+      return '[Unserializable tool result]'
+    }
   }
 
   private formatInput(contents: unknown): FormattedMessage[] {

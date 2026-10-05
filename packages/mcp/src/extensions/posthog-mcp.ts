@@ -1,4 +1,4 @@
-import { PostHog, type PostHogOptions } from 'posthog-node'
+import { PostHog, type EventMessage, type PostHogOptions } from 'posthog-node'
 
 import type {
   FeedbackCaptureData,
@@ -39,6 +39,7 @@ import {
   isContextEnabled,
   type ContextInjectableTool,
 } from './context-parameters'
+import { PostHogMCPAnalyticsProperty } from './constants'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { normalizeHeaderString } from './headers'
@@ -182,6 +183,15 @@ export class PostHogMCP extends PostHog {
 
   get #feedbackToolName(): string {
     return this.#feedbackOptions?.toolName ?? SEND_FEEDBACK_TOOL_NAME
+  }
+
+  /** Add the configured build to SDK events and custom events captured through this client. */
+  override capture(event: EventMessage): void {
+    super.capture(this.#withServerBuild(event))
+  }
+
+  override captureImmediate(event: EventMessage): Promise<void> {
+    return super.captureImmediate(this.#withServerBuild(event))
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
@@ -499,6 +509,20 @@ export class PostHogMCP extends PostHog {
     void this.#sink
       .capture(event, { enableExceptionAutocapture: this.options.enableExceptionAutocapture ?? true })
       .catch((error) => log(`Warning: PostHogMCP failed to capture event - ${error}`))
+  }
+
+  #withServerBuild(event: EventMessage): EventMessage {
+    if (!this.#serverBuild) {
+      return event
+    }
+    return {
+      ...event,
+      properties: {
+        ...event.properties,
+        [PostHogMCPAnalyticsProperty.ServerBuild]:
+          event.properties?.[PostHogMCPAnalyticsProperty.ServerBuild] ?? this.#serverBuild,
+      },
+    }
   }
 }
 

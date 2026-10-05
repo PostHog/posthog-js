@@ -3735,6 +3735,7 @@
           "name": "enableExceptionAutocapture"
         },
         {
+          "description": "The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.\nSet to null to disable automatic polling. Definitions are still loaded on initialization;\ncall reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.",
           "type": "number",
           "name": "featureFlagsPollingInterval"
         },

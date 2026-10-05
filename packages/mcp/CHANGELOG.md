@@ -1,5 +1,42 @@
 # @posthog/mcp
 
+## 0.22.0
+
+### Minor Changes
+
+- [#5165](https://github.com/PostHog/posthog-js/pull/5165) [`3394548`](https://github.com/PostHog/posthog-js/commit/339454849c6efa3a309f1d4905e1016abb5e4863) Thanks [@OrbitingBucket](https://github.com/OrbitingBucket)! - Strip SDK-owned analytics arguments on fresh low-level server instances through `resolveOriginalTool`.
+  (2026-10-05)
+
+## 0.21.4
+
+### Patch Changes
+
+- [#5161](https://github.com/PostHog/posthog-js/pull/5161) [`9e42cc2`](https://github.com/PostHog/posthog-js/commit/9e42cc202c3d7c68641dd77b3131f2076b40e004) Thanks [@pauldambra](https://github.com/pauldambra)! - Make oversized events cheaper to truncate. The depth reduction now starts at the first depth that removes anything, so shallow payloads such as rows of data no longer normalize and measure the whole event again for each depth that changes nothing.
+  (2026-10-02)
+
+## 0.21.3
+
+### Patch Changes
+
+- [#5186](https://github.com/PostHog/posthog-js/pull/5186) [`80b9e5f`](https://github.com/PostHog/posthog-js/commit/80b9e5f6520f5261c706176039da8879da50fc58) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Sanitize only the part of a long string that the captured event can keep, so a tool call returning megabytes of HTML or text no longer blocks the event loop while it is scanned. A 10 MB HTML response now costs about 5 ms to capture instead of 2.7 s. The captured event does not change.
+  (2026-10-02)
+
+## 0.21.2
+
+### Patch Changes
+
+- [#5160](https://github.com/PostHog/posthog-js/pull/5160) [`1ed05cf`](https://github.com/PostHog/posthog-js/commit/1ed05cf253612aa8c45bc17723f364ff778c405c) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop copying the full tool list into `$mcp_response` on `$mcp_tools_list` events, so instrumented servers answer `tools/list` faster.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 0.21.1
+
+### Patch Changes
+
+- [#5157](https://github.com/PostHog/posthog-js/pull/5157) [`e2a3e3d`](https://github.com/PostHog/posthog-js/commit/e2a3e3d90c4d50e5333c1d0b9ea0f15745e6b247) Thanks [@gesh](https://github.com/gesh)! - Add the configured server build to custom events captured through `PostHogMCP`.
+  (2026-09-30)
+
 ## 0.21.0
 
 ### Minor Changes

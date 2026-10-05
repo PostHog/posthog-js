@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.55.0
+
+### Minor Changes
+
+- [#5140](https://github.com/PostHog/posthog-js/pull/5140) [`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow `featureFlagsPollingInterval: null` to disable automatic local flag polling while retaining initialization and manual refresh.
+  (2026-09-30)
+
 ## 5.54.1
 
 ### Patch Changes
