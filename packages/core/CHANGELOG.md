@@ -1,5 +1,59 @@
 # @posthog/core
 
+## 1.55.3
+
+### Patch Changes
+
+- [#5046](https://github.com/PostHog/posthog-js/pull/5046) [`c360da1`](https://github.com/PostHog/posthog-js/commit/c360da1e93ba7fc04eea7cc4f96dd9782dd931a7) Thanks [@luke-belton](https://github.com/luke-belton)! - Capture the OpenAI Ads click identifier (`oppref`) as a campaign parameter, so it is set on events and as `$initial_oppref` like every other ad click ID.
+  (2026-10-01)
+
+## 1.55.2
+
+### Patch Changes
+
+- [#5078](https://github.com/PostHog/posthog-js/pull/5078) [`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1) Thanks [@rubychilds](https://github.com/rubychilds)! - Honor `filters.holdout` during local feature flag evaluation. A user in an experiment holdout now receives the `holdout-<id>` variant instead of being bucketed into a regular variant, matching how the server evaluates the same flag. The holdout is resolved before the release conditions, so a held-out user never reaches the flag's targeting — including when those conditions would have excluded them, so `isFeatureEnabled` can return true where it previously returned false. Experiments with an active holdout will see variant assignment change for the held-out share of traffic on upgrade, bringing locally evaluated assignments in line with server-evaluated ones.
+  (2026-09-23)
+
+## 1.55.1
+
+### Patch Changes
+
+- [#5018](https://github.com/PostHog/posthog-js/pull/5018) [`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop dropping long spans that end: `maxSpanAgeMs` now evicts spans only once `maxLiveSpans` is reached, so a span that runs past the age limit and then ends is exported, and its children are no longer orphaned.
+  (2026-09-21)
+
+- [#4800](https://github.com/PostHog/posthog-js/pull/4800) [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect the definitions response's `property_matching_version` during local feature flag evaluation. Version 2 uses explicit boolean/string equality and per-member array matching, while missing or other versions retain service legacy matching (including empty-array truthiness). Preserve the version in Node definition caches and Convex persisted definitions, and propagate it through person, group, cohort and dependency evaluation without mixing snapshots during reloads. Existing numeric ambiguity fallback and SemVer parsing policies are unchanged.
+  (2026-09-21)
+- Updated dependencies [[`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431)]:
+  - @posthog/types@1.412.3
+
+## 1.55.0
+
+### Minor Changes
+
+- [#4904](https://github.com/PostHog/posthog-js/pull/4904) [`5cfec8b`](https://github.com/PostHog/posthog-js/commit/5cfec8bdc3f1311fab0c1fa8a5b248f4f8b0fba9) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Support partial survey responses and persistent resume in React Native, moving surveys toward feature parity across SDKs.
+  (2026-09-18)
+
+## 1.54.5
+
+### Patch Changes
+
+- [#5012](https://github.com/PostHog/posthog-js/pull/5012) [`5c12a4c`](https://github.com/PostHog/posthog-js/commit/5c12a4c98f0131b9be53c2e105937f2e05ba3bde) Thanks [@yoarajota](https://github.com/yoarajota)! - Coerce survey and product tour property filter values to strings before matching, so a numeric filter value from the `/surveys` response no longer throws in `icontains`/`not_icontains`
+  (2026-09-18)
+
+## 1.54.4
+
+### Patch Changes
+
+- [#4977](https://github.com/PostHog/posthog-js/pull/4977) [`0257a29`](https://github.com/PostHog/posthog-js/commit/0257a295e552b1b68ef9f92f05ba853a188e38d0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.
+  (2026-09-17)
+
+## 1.54.3
+
+### Patch Changes
+
+- [#5005](https://github.com/PostHog/posthog-js/pull/5005) [`6545d3f`](https://github.com/PostHog/posthog-js/commit/6545d3f059131774678643eb638e35564575e25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix declaration source mappings for DOMExceptionCoercer.
+  (2026-09-17)
+
 ## 1.54.2
 
 ### Patch Changes

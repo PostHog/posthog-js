@@ -48,6 +48,7 @@
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.1.2",
     "eslint-plugin-regexp": "2.10.0",
+    "typescript": "catalog:",
     "nitro": "3.0.260610-beta",
     "nitropack": "2.13.4"
   }

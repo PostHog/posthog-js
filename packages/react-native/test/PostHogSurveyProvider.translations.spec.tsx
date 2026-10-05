@@ -13,8 +13,18 @@ vi.mock('react-native', async () => {
   const native = await vi.importActual<typeof import('./mocks/react-native')>('./mocks/react-native')
   const R = await vi.importActual<typeof import('react')>('react')
   const Box = ({ children }: any) => R.createElement('div', null, children)
-  const Button = ({ children, onPress, disabled }: any) =>
-    R.createElement('button', { onClick: onPress, disabled }, children)
+  const Button = ({ children, onPress, disabled, accessibilityRole, accessibilityLabel, accessibilityState }: any) =>
+    R.createElement(
+      'button',
+      {
+        onClick: onPress,
+        disabled,
+        role: accessibilityRole,
+        'aria-label': accessibilityLabel,
+        'aria-checked': accessibilityState?.checked,
+      },
+      children
+    )
   return {
     ...native,
     View: Box,
@@ -24,8 +34,9 @@ vi.mock('react-native', async () => {
     KeyboardAvoidingView: Box,
     TouchableOpacity: Button,
     Pressable: Button,
-    TextInput: ({ value, onChangeText }: any) =>
-      R.createElement('input', { value, onChange: (e: any) => onChangeText(e.target.value) }),
+    TextInput: R.forwardRef<HTMLInputElement, any>(({ value, onChangeText }, ref) =>
+      R.createElement('input', { ref, value, onChange: (e: any) => onChangeText(e.target.value) })
+    ),
   }
 })
 vi.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
@@ -128,7 +139,7 @@ it.each(['unset', 'reset properties', 'reset', 'unmatched'])(
     const ui = await mount()
     act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
     expect(ui.queryByText('Pregunta 0')).not.toBeNull()
-    act(() => {
+    await act(async () => {
       if (operation === 'unset') posthog.unsetPersonProperties('language', false)
       else if (operation === 'reset properties') posthog.resetPersonPropertiesForFlags(false)
       else if (operation === 'reset') posthog.reset()
@@ -142,7 +153,9 @@ it.each(['unset', 'reset properties', 'reset', 'unmatched'])(
     const sent = vi.mocked(posthog.capture).mock.calls.find(([event]) => event === 'survey sent')
     expect(sent).toBeDefined()
     expect(sent![1]).not.toHaveProperty('$survey_language')
-    expectOnlyOneShown()
+    expect(vi.mocked(posthog.capture).mock.calls.filter(([event]) => event === 'survey shown')).toHaveLength(
+      operation === 'reset' ? 2 : 1
+    )
   }
 )
 
@@ -271,8 +284,14 @@ it('preserves a selected rating when translating', async () => {
     },
   ]
   const ui = await mount(survey)
-  fireEvent.click(ui.getByText('4'))
+  fireEvent.click(ui.getByRole('radio', { name: '4, Rate', checked: false }))
+  expect(ui.getByRole('radio', { name: '4, Rate', checked: true })).toBeTruthy()
   act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
+  expect(ui.getByRole('radio', { name: '4, Califica', checked: true })).toBeTruthy()
+  expect(ui.getAllByRole('radio', { checked: true })).toHaveLength(1)
+  expect(ui.queryByRole('radio', { name: '4, Rate' })).toBeNull()
+  expect(ui.getByRole('radio', { name: '1, Califica, Bajo', checked: false })).toBeTruthy()
+  expect(ui.getByRole('radio', { name: '5, Califica, Alto', checked: false })).toBeTruthy()
   expect(ui.queryByText('Califica')).not.toBeNull()
   expect(ui.queryByText('Bajo')).not.toBeNull()
   fireEvent.click(ui.getByText('Siguiente'))
@@ -284,4 +303,25 @@ it('preserves a selected rating when translating', async () => {
     })
   )
   expectOnlyOneShown()
+})
+
+it('preserves answer-time question text across partial responses and language changes', async () => {
+  const ui = await mount({ ...makeSurvey(), enable_partial_responses: true })
+  fireEvent.change(ui.getByRole('textbox'), { target: { value: 'First answer' } })
+  fireEvent.click(ui.getByText('Next'))
+  act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
+  fireEvent.change(ui.getByRole('textbox'), { target: { value: 'Second answer' } })
+  fireEvent.click(ui.getByText('Siguiente'))
+  const sent = vi.mocked(posthog.capture).mock.calls.filter(([event]) => event === 'survey sent')
+  expect(sent).toHaveLength(2)
+  expect(sent[0][1]).toMatchObject({ $survey_completed: false })
+  expect(sent[1][1]).toMatchObject({
+    $survey_completed: true,
+    $survey_submission_id: sent[0][1]?.$survey_submission_id,
+    $survey_language: 'es',
+    $survey_questions: [
+      { id: 'q0', question: 'Question 0', response: 'First answer' },
+      { id: 'q1', question: 'Pregunta 1', response: 'Second answer' },
+    ],
+  })
 })

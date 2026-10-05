@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:13:32.033Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data"
+        },
+        "body": {
+          "fields": [
+            ["language", "en"],
+            ["model", "gpt-4o-mini-transcribe-2025-12-15"],
+            ["response_format", "json"],
+            ["stream", "true"]
+          ],
+          "files": [
+            {
+              "name": "file",
+              "filename": "openai-audio.wav",
+              "type": "audio/wav",
+              "size": 60078,
+              "sha256": "4caafa4ec93a87ca344d0cd44082ef99cbf3c24a1ace90111bc3b1a09806b4b1"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream",
+          "x-request-id": "req_a02ac933c0ec4591abe64e8f3ddbe2db"
+        },
+        "body": {
+          "kind": "sse",
+          "chunks": [
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\"The\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\" weather\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\" in\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\" Paris\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\" is\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\" sunny\"}\n\n",
+            "data: {\"type\":\"transcript.text.delta\",\"delta\":\".\"}\n\n",
+            "data: {\"type\":\"transcript.text.done\",\"text\":\"The weather in Paris is sunny.\",\"usage\":{\"type\":\"tokens\",\"total_tokens\":27,\"input_tokens\":18,\"input_token_details\":{\"text_tokens\":0,\"audio_tokens\":18},\"output_tokens\":9}}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        }
+      }
+    }
+  ]
+}

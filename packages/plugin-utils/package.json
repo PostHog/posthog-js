@@ -45,6 +45,7 @@
         "@rslib/core": "catalog:",
         "@types/cross-spawn": "^6.0.6",
         "@vitest/coverage-v8": "catalog:",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
     }
 }

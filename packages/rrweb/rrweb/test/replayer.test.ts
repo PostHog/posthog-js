@@ -38,6 +38,12 @@ import adoptedStyleSheetModification from './events/adopted-style-sheet-modifica
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
+import hugeAddMutationEvents from './events/huge-add-mutation';
+import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
+import hugeAddCssomRulesEvents, {
+  HEAD_ID,
+  DIV_ID,
+} from './events/huge-add-cssom-rules';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
 import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
@@ -1001,6 +1007,99 @@ describe('replayer', function () {
     expect(status).toEqual(false);
   });
 
+  it('applies a huge add mutation with sibling order intact', async () => {
+    await page.evaluate(`events = ${JSON.stringify(hugeAddMutationEvents)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const div = doc.querySelector('#root');
+        const children = Array.from(div.children);
+        return {
+          childCount: children.length,
+          first: children[0].textContent,
+          last: children[children.length - 1].textContent,
+          styleAfterA: children[1].textContent,
+          lastOfBatch1: children[1100].textContent,
+          firstOfBatch2: children[1101].textContent,
+          lastOfBatch2: children[1700].textContent,
+          bodyOrder: Array.from(doc.body.children).map(
+            (el) => el.id || el.tagName,
+          ),
+        };
+      })()
+    `);
+    expect(result).toEqual({
+      // A + 1100 batch-1 styles + 600 batch-2 styles + B
+      childCount: 1702,
+      first: 'A',
+      last: 'B',
+      styleAfterA: '.m1c0 { color: red; }',
+      lastOfBatch1: '.m1c1099 { color: red; }',
+      firstOfBatch2: '.m2c0 { color: red; }',
+      lastOfBatch2: '.m2c599 { color: red; }',
+      // the sibling-of-root add must land between #root and #d-span
+      bodyOrder: ['root', 'c-span', 'd-span'],
+    });
+  });
+
+  it.each([
+    ['<head>', HEAD_ID],
+    ['a body <div>', DIV_ID],
+  ])(
+    'keeps CSSOM rules when a huge add batch lands in %s',
+    async (_, batchParentId) => {
+      await page.evaluate(
+        `events = ${JSON.stringify(hugeAddCssomRulesEvents(batchParentId))}`,
+      );
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const rules = (id) =>
+          Array.from(doc.getElementById(id).sheet.cssRules, (r) => r.cssText);
+        return {
+          metaCount: doc.getElementsByTagName('meta').length,
+          head: rules('head-style').map((r) => r.split(' ')[0]),
+          div: rules('div-style'),
+          paddingLeft: getComputedStyle(doc.getElementById('padded'))
+            .paddingLeft,
+        };
+      })()
+    `);
+      expect(result).toEqual({
+        metaCount: 1100,
+        head: ['.from-6', '.padded'],
+        div: ['.from-11 { color: red; }'],
+        paddingLeft: '7px',
+      });
+    },
+  );
+
+  it('opens a modal dialog added inside a huge add mutation', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(hugeAddMutationDialogEvents)}`,
+    );
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const dialog = doc.querySelector('dialog');
+        return {
+          open: dialog.open,
+          isModal: dialog.matches('dialog:modal'),
+        };
+      })()
+    `);
+    expect(result).toEqual({ open: true, isModal: true });
+  });
+
   it('replays same timestamp events in correct order', async () => {
     await page.evaluate(`events = ${JSON.stringify(orderingEvents)}`);
     await page.evaluate((finishEvent) => {
@@ -1730,18 +1829,26 @@ describe('replayer', function () {
         (async () => {
           const { Replayer } = rrweb;
           const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
-          replayer.pause(2600);
-          // wait for a mutation chunk to move the rebuild onto the virtual dom
-          await new Promise((resolve, reject) => {
-            const startedAt = Date.now();
-            const poll = () => {
-              if (replayer.usingVirtualDom) return resolve();
-              if (Date.now() - startedAt > 2000)
-                return reject(new Error('virtual dom never engaged'));
-              setTimeout(poll, 1);
-            };
-            poll();
-          });
+          // Browser clock precision can let the entire seek finish between polls,
+          // even with a tiny budget. Force each event to exhaust its chunk budget.
+          const originalNow = performance.now;
+          let tick = originalNow.call(performance);
+          performance.now = () => ++tick;
+          try {
+            replayer.pause(2600);
+            await new Promise((resolve, reject) => {
+              const startedAt = Date.now();
+              const poll = () => {
+                if (replayer.usingVirtualDom) return resolve();
+                if (Date.now() - startedAt > 2000)
+                  return reject(new Error('virtual dom never engaged'));
+                setTimeout(poll, 1);
+              };
+              poll();
+            });
+          } finally {
+            performance.now = originalNow;
+          }
           const baseline = Date.now();
           replayer.startLive(baseline);
           // cancelling the rebuild must commit and drain the virtual dom —

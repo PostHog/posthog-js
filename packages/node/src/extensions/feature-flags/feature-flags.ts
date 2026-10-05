@@ -1,8 +1,16 @@
-import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
+import {
+  FeatureFlagCondition,
+  FeatureFlagEvaluationRuntime,
+  FlagProperty,
+  FlagPropertyValue,
+  PostHogFeatureFlag,
+  PropertyGroup,
+} from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import {
   getFeatureFlagHash,
   getFeatureFlagVariant,
+  getHoldoutVariant,
   getFeatureFlagVariantLookupTable,
   InconclusiveMatchError,
   matchFeatureFlagProperty,
@@ -12,9 +20,20 @@ import {
   resolveFeatureFlagPayload,
   safeSetTimeout,
 } from '@posthog/core'
-import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
+import { FlagDefinitionCacheProvider, FlagDefinitionCacheData, FlagDefinitionCacheInput } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
+
+// A definition with no runtime, or one from a server that does not know the field, reports the
+// default PostHog applies rather than a third "unknown" state callers would have to handle.
+function normalizeEvaluationRuntime(value: unknown): FeatureFlagEvaluationRuntime {
+  return value === 'client' || value === 'server' ? value : 'all'
+}
+
+// `all` matches every runtime, so the check is symmetric.
+function evaluationRuntimesMatch(a: FeatureFlagEvaluationRuntime, b: FeatureFlagEvaluationRuntime): boolean {
+  return a === b || a === 'all' || b === 'all'
+}
 
 // Outcome of evaluating a single condition group. `out_of_rollout_bound` means the group's property
 // filters matched (or there were none) but the rollout percentage excluded the user — the only case
@@ -51,7 +70,7 @@ type FeatureFlagsPollerOptions = {
   personalApiKey: string
   projectApiKey: string
   host: string
-  pollingInterval: number
+  pollingInterval: number | null
   timeout?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
@@ -64,7 +83,7 @@ type FeatureFlagsPollerOptions = {
    */
   onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
-  cacheProvider?: FlagDefinitionCacheProvider
+  cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   strictLocalEvaluation?: boolean
   /**
    * When set, the poller keeps only flags whose evaluation contexts are empty or share at
@@ -73,12 +92,21 @@ type FeatureFlagsPollerOptions = {
   evaluationContexts?: readonly string[]
 }
 
+type FlagEvaluationSnapshot = {
+  featureFlagsByKey: Record<string, PostHogFeatureFlag>
+  groupTypeMapping: Record<string, string>
+  cohorts: Record<string, PropertyGroup>
+  filteredOutFlagKeys: Set<string>
+  propertyMatchingVersion?: number
+}
+
 export type FeatureFlagEvaluationContext = {
   distinctId: string
   groups: Record<string, string>
   personProperties: Record<string, any>
   groupProperties: Record<string, Record<string, any>>
   evaluationCache: Record<string, FeatureFlagValue>
+  definitions?: FlagEvaluationSnapshot
 }
 
 type ComputeFlagAndPayloadOptions = {
@@ -87,7 +115,7 @@ type ComputeFlagAndPayloadOptions = {
 }
 
 class FeatureFlagsPoller {
-  pollingInterval: number
+  pollingInterval: number | null
   personalApiKey: string
   projectApiKey: string
   featureFlags: Array<PostHogFeatureFlag>
@@ -95,6 +123,7 @@ class FeatureFlagsPoller {
   groupTypeMapping: Record<string, string>
   cohorts: Record<string, PropertyGroup>
   loadedSuccessfullyOnce: boolean
+  propertyMatchingVersion?: number
   timeout?: number
   host: FeatureFlagsPollerOptions['host']
   poller?: NodeJS.Timeout
@@ -105,7 +134,7 @@ class FeatureFlagsPoller {
   shouldBeginExponentialBackoff: boolean = false
   backOffCount: number = 0
   onLoad?: (count: number) => void
-  private cacheProvider?: FlagDefinitionCacheProvider
+  private cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
@@ -157,6 +186,23 @@ class FeatureFlagsPoller {
   private logMsgIfDebug(fn: () => void): void {
     if (this.debugMode) {
       fn()
+    }
+  }
+
+  // Keep definitions and their matching version stable across asynchronous hashes/dependencies.
+  private withEvaluationSnapshot(context: FeatureFlagEvaluationContext): FeatureFlagEvaluationContext {
+    if (context.definitions) return context
+    return {
+      ...context,
+      // Dependency results belong to this evaluation snapshot, never a prior invocation.
+      evaluationCache: {},
+      definitions: {
+        featureFlagsByKey: this.featureFlagsByKey,
+        groupTypeMapping: this.groupTypeMapping,
+        cohorts: this.cohorts,
+        filteredOutFlagKeys: this.filteredOutFlagKeys,
+        propertyMatchingVersion: this.propertyMatchingVersion,
+      },
     }
   }
 
@@ -230,17 +276,18 @@ class FeatureFlagsPoller {
       ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
       : this.featureFlags
 
-    const sharedEvaluationContext = {
+    const sharedEvaluationContext = this.withEvaluationSnapshot({
       ...evaluationContext,
-      evaluationCache: evaluationContext.evaluationCache ?? {},
-    }
+      definitions: undefined,
+    })
 
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
           const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
             flag,
-            sharedEvaluationContext
+            sharedEvaluationContext,
+            { skipLoadCheck: true }
           )
           response[flag.key] = matchValue
           if (matchPayload) {
@@ -269,6 +316,9 @@ class FeatureFlagsPoller {
     payload: JsonType | null
   }> {
     const { matchValue, skipLoadCheck = false } = options
+    if (this.loadedSuccessfullyOnce) {
+      evaluationContext = this.withEvaluationSnapshot(evaluationContext)
+    }
 
     // Only load flags if not already loaded and not skipping the check
     if (!skipLoadCheck) {
@@ -279,6 +329,8 @@ class FeatureFlagsPoller {
       return { value: false, payload: null }
     }
 
+    evaluationContext = this.withEvaluationSnapshot(evaluationContext)
+    flag = evaluationContext.definitions!.featureFlagsByKey[flag.key] ?? flag
     let flagValue: FeatureFlagValue
 
     // If matchValue is provided, use it directly; otherwise evaluate the flag
@@ -289,7 +341,7 @@ class FeatureFlagsPoller {
     }
 
     // Always compute payload based on the final flagValue (whether provided or computed)
-    const payload = this.getFeatureFlagPayload(flag.key, flagValue)
+    const payload = resolveFeatureFlagPayload(flag.filters?.payloads, flagValue)
 
     return { value: flagValue, payload }
   }
@@ -315,7 +367,7 @@ class FeatureFlagsPoller {
     const aggregation_group_type_index = flagFilters.aggregation_group_type_index
 
     if (aggregation_group_type_index != undefined) {
-      const groupName = this.groupTypeMapping[String(aggregation_group_type_index)]
+      const groupName = evaluationContext.definitions!.groupTypeMapping[String(aggregation_group_type_index)]
 
       if (!groupName) {
         this.logMsgIfDebug(() =>
@@ -383,10 +435,6 @@ class FeatureFlagsPoller {
     return distinctId
   }
 
-  private getFeatureFlagPayload(key: string, flagValue: FeatureFlagValue): JsonType | null {
-    return resolveFeatureFlagPayload(this.featureFlagsByKey?.[key]?.filters?.payloads, flagValue)
-  }
-
   private async evaluateFlagDependency(
     property: FlagProperty,
     properties: Record<string, any>,
@@ -395,7 +443,7 @@ class FeatureFlagsPoller {
     const { evaluationCache } = evaluationContext
     const targetFlagKey = property.key
 
-    if (!this.featureFlagsByKey) {
+    if (!evaluationContext.definitions!.featureFlagsByKey) {
       throw new InconclusiveMatchError('Feature flags not available for dependency evaluation')
     }
 
@@ -426,9 +474,9 @@ class FeatureFlagsPoller {
     for (const depFlagKey of dependencyChain) {
       if (!(depFlagKey in evaluationCache)) {
         // Need to evaluate this dependency first
-        const depFlag = this.featureFlagsByKey[depFlagKey]
+        const depFlag = evaluationContext.definitions!.featureFlagsByKey[depFlagKey]
         if (!depFlag) {
-          if (this.filteredOutFlagKeys.has(depFlagKey)) {
+          if (evaluationContext.definitions!.filteredOutFlagKeys.has(depFlagKey)) {
             // Dependency was dropped by evaluation-context filtering, not genuinely missing. The
             // remote evaluator pre-seeds context-filtered flags as false so conditions like
             // `flag_evaluates_to=false` still match; do the same here instead of throwing.
@@ -490,7 +538,16 @@ class FeatureFlagsPoller {
     properties: Record<string, any>,
     evaluationContext: FeatureFlagEvaluationContext
   ): Promise<FeatureFlagValue> {
+    evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+
+    // Holdouts are resolved before the release conditions, so a held-out value is excluded
+    // from the flag's targeting rather than being bucketed into a variant.
+    const holdoutVariant = await getHoldoutVariant(flagFilters.holdout, bucketingValue)
+    if (holdoutVariant !== undefined) {
+      return holdoutVariant
+    }
+
     const flagConditions = flagFilters.groups || []
     const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
@@ -515,7 +572,7 @@ class FeatureFlagsPoller {
         // This assumes flag-level aggregation is null/undefined for mixed flags.
         if (conditionAggregation !== flagAggregation) {
           if (conditionAggregation !== null && conditionAggregation !== undefined) {
-            const groupName = this.groupTypeMapping[String(conditionAggregation)]
+            const groupName = evaluationContext.definitions!.groupTypeMapping[String(conditionAggregation)]
             if (!groupName || !(groupName in groups)) {
               this.logMsgIfDebug(() =>
                 console.debug(
@@ -590,6 +647,8 @@ class FeatureFlagsPoller {
     properties: Record<string, any>,
     evaluationContext: FeatureFlagEvaluationContext
   ): Promise<ConditionMatchResult> {
+    evaluationContext = this.withEvaluationSnapshot(evaluationContext)
+    const definitions = evaluationContext.definitions!
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
       this.logMsgIfDebug(() => console.warn(msg))
@@ -600,8 +659,13 @@ class FeatureFlagsPoller {
         let matches = false
 
         if (propertyType === 'cohort') {
-          const inCohort = await matchCohort(prop, properties, this.cohorts, this.debugMode, (depProp) =>
-            this.evaluateFlagDependency(depProp, properties, evaluationContext)
+          const inCohort = await matchCohort(
+            prop,
+            properties,
+            definitions.cohorts,
+            this.debugMode,
+            (depProp) => this.evaluateFlagDependency(depProp, properties, evaluationContext),
+            definitions.propertyMatchingVersion
           )
           // A flag-level cohort condition carries a membership operator ('in' | 'not_in').
           // `matchCohort` only reports raw membership, so the operator must be applied here.
@@ -611,7 +675,7 @@ class FeatureFlagsPoller {
         } else if (propertyType === 'flag') {
           matches = await this.evaluateFlagDependency(prop, properties, evaluationContext)
         } else {
-          matches = matchProperty(prop, properties, warnFunction)
+          matches = matchProperty(prop, properties, warnFunction, definitions.propertyMatchingVersion)
         }
 
         if (!matches) {
@@ -671,7 +735,18 @@ class FeatureFlagsPoller {
     })
   }
 
-  private updateFlagState(flagData: FlagDefinitionCacheData): void {
+  getEvaluationRuntimeForFlag(key: string): FeatureFlagEvaluationRuntime | undefined {
+    const flag = this.featureFlagsByKey[key]
+    return flag ? normalizeEvaluationRuntime(flag.evaluation_runtime) : undefined
+  }
+
+  getFlagKeysByEvaluationRuntime(runtime: FeatureFlagEvaluationRuntime): string[] {
+    return this.featureFlags
+      .filter((flag) => evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), runtime))
+      .map((flag) => flag.key)
+  }
+
+  private updateFlagState(flagData: FlagDefinitionCacheInput): void {
     const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
     this.featureFlags = flags
     this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
@@ -682,11 +757,12 @@ class FeatureFlagsPoller {
     // treat them as false (mirroring the remote path) rather than as genuinely missing.
     const keptKeys = new Set(flags.map((flag) => flag.key))
     this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
-    this.groupTypeMapping = flagData.groupTypeMapping
+    this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
+    this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
-    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
+    this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
   }
 
   /**
@@ -787,11 +863,13 @@ class FeatureFlagsPoller {
    * @returns The polling interval to use for the next request.
    */
   private getPollingInterval(): number {
+    // Keep on-demand error backoff even when automatic polling is disabled.
+    const interval = this.pollingInterval ?? 30_000
     if (!this.shouldBeginExponentialBackoff) {
-      return this.pollingInterval
+      return interval
     }
 
-    return Math.min(SIXTY_SECONDS, this.pollingInterval * 2 ** this.backOffCount)
+    return Math.min(SIXTY_SECONDS, interval * 2 ** this.backOffCount)
   }
 
   /**
@@ -905,6 +983,7 @@ class FeatureFlagsPoller {
           this.filteredOutFlagKeys = new Set()
           this.groupTypeMapping = {}
           this.cohorts = {}
+          this.propertyMatchingVersion = undefined
           this.onMinimalFlagCalledEvents?.(false)
           return
 
@@ -934,12 +1013,19 @@ class FeatureFlagsPoller {
           // Clear it if server stops sending one
           this.flagsEtag = res.headers?.get('ETag') ?? undefined
 
+          const groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
+          // Absence of the field always flips the gate off — fail safe to full events.
+          const minimalFlagCalledEvents = responseJson.minimal_flag_called_events === true
           const flagData: FlagDefinitionCacheData = {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
-            groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
+            group_type_mapping: groupTypeMapping,
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
-            // Absence of the field always flips the gate off — fail safe to full events.
-            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
+            minimal_flag_called_events: minimalFlagCalledEvents,
+            property_matching_version: responseJson.property_matching_version,
+            propertyMatchingVersion: responseJson.property_matching_version,
+            // Keep existing providers and older Node SDKs compatible with newly written entries.
+            groupTypeMapping,
+            minimalFlagCalledEvents,
           }
 
           this.updateFlagState(flagData)
@@ -975,7 +1061,7 @@ class FeatureFlagsPoller {
         this.onError?.(err)
       }
     } finally {
-      if (!this.pollerStopped) {
+      if (!this.pollerStopped && this.pollingInterval !== null) {
         this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
       }
     }
@@ -1081,9 +1167,10 @@ class FeatureFlagsPoller {
 function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
-  warnFunction?: (msg: string) => void
+  warnFunction?: (msg: string) => void,
+  propertyMatchingVersion?: number
 ): boolean {
-  return matchFeatureFlagProperty(property, propertyValues, { warnFunction })
+  return matchFeatureFlagProperty(property, propertyValues, { warnFunction, propertyMatchingVersion })
 }
 
 function parseSemver(value: string): [number, number, number] {
@@ -1105,13 +1192,21 @@ async function matchCohort(
   propertyValues: Record<string, any>,
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
-  flagDependencyEvaluator?: FlagDependencyEvaluator
+  flagDependencyEvaluator?: FlagDependencyEvaluator,
+  propertyMatchingVersion?: number
 ): Promise<boolean> {
   const cohortId = String(property.value)
   checkCohortExists(cohortId, cohortProperties)
 
   const propertyGroup = cohortProperties[cohortId]
-  return matchPropertyGroup(propertyGroup, propertyValues, cohortProperties, debugMode, flagDependencyEvaluator)
+  return matchPropertyGroup(
+    propertyGroup,
+    propertyValues,
+    cohortProperties,
+    debugMode,
+    flagDependencyEvaluator,
+    propertyMatchingVersion
+  )
 }
 
 async function matchPropertyGroup(
@@ -1119,7 +1214,8 @@ async function matchPropertyGroup(
   propertyValues: Record<string, any>,
   cohortProperties: FeatureFlagsPoller['cohorts'],
   debugMode: boolean = false,
-  flagDependencyEvaluator?: FlagDependencyEvaluator
+  flagDependencyEvaluator?: FlagDependencyEvaluator,
+  propertyMatchingVersion?: number
 ): Promise<boolean> {
   if (!propertyGroup) {
     return true
@@ -1144,7 +1240,8 @@ async function matchPropertyGroup(
           propertyValues,
           cohortProperties,
           debugMode,
-          flagDependencyEvaluator
+          flagDependencyEvaluator,
+          propertyMatchingVersion
         )
         if (propertyGroupType === 'AND') {
           if (!matches) {
@@ -1181,7 +1278,14 @@ async function matchPropertyGroup(
       try {
         let matches: boolean
         if (prop.type === 'cohort') {
-          matches = await matchCohort(prop, propertyValues, cohortProperties, debugMode, flagDependencyEvaluator)
+          matches = await matchCohort(
+            prop,
+            propertyValues,
+            cohortProperties,
+            debugMode,
+            flagDependencyEvaluator,
+            propertyMatchingVersion
+          )
         } else if (prop.type === 'flag') {
           if (!flagDependencyEvaluator) {
             throw new InconclusiveMatchError(
@@ -1190,7 +1294,7 @@ async function matchPropertyGroup(
           }
           matches = await flagDependencyEvaluator(prop)
         } else {
-          matches = matchProperty(prop, propertyValues)
+          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion)
         }
 
         const negation = prop.negation || false

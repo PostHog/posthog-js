@@ -10,7 +10,7 @@ The SDK injects a `context` property into every advertised tool's `inputSchema` 
 answered: **is this `context` argument ours, or one the host's own tool declares?**
 
 The answer was learned in the `tools/list` wrapper and cached on the server instance. Where the next
-request builds a *new* instance — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode
+request builds a _new_ instance — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode
 (`statelessMode: true` on 1.x, `statefulMode: false` on 2.x) — the instance serving a `tools/call`
 never served a listing. Ownership read `false`, and `$mcp_intent` was discarded on every call.
 
@@ -24,11 +24,11 @@ The defect is in what the answer could express, not in the lookup.
 `AnalyticsParameterOwnership.context` was a boolean, so it collapsed two states that call for
 opposite handling:
 
-| Real state | Old value | Strip it? | Capture it? |
-|---|---|---|---|
-| We injected it | `true` | yes | yes |
-| The host's tool declares it | `false` | no | no |
-| We cannot tell | `false` | no | **yes — this was the bug** |
+| Real state                  | Old value | Strip it? | Capture it?                |
+| --------------------------- | --------- | --------- | -------------------------- |
+| We injected it              | `true`    | yes       | yes                        |
+| The host's tool declares it | `false`   | no        | no                         |
+| We cannot tell              | `false`   | no        | **yes — this was the bug** |
 
 "No idea" and "the host owns it" were indistinguishable, so the answer that is correct for stripping
 was also applied to capture, where it is wrong and where being wrong is cheap.
@@ -37,7 +37,7 @@ was also applied to capture, where it is wrong and where being wrong is cheap.
 
 **Ownership is three-valued, and the two questions it answers are decided separately.**
 
-- **Reading the argument fails open.** Capture `$mcp_intent` when ownership is *ours* or *unknown*;
+- **Reading the argument fails open.** Capture `$mcp_intent` when ownership is _ours_ or _unknown_;
   skip only when we positively know the host declared it. The argument arrived because an advertised
   listing asked for it.
 - **Removing the argument fails closed.** Strip only on positive ownership. Deleting an argument the
@@ -51,8 +51,10 @@ should have kept costs them the call. These are not comparable, so they do not s
 into `structuredContent` fails the host's entire tool result under client-side ajv validation
 (ADR-0004), which is the breaking direction.
 
+**Representation update (ADR-0013):** the current request-scoped type uses explicit `strip` and `read` groups. The following describes the original implementation.
+
 **How it is represented.** `AnalyticsParameterOwnership.context` stays a boolean and keeps meaning
-exactly what it did — *we injected this, so it is safe to strip*. The third state is carried
+exactly what it did — _we injected this, so it is safe to strip_. The third state is carried
 alongside it, as `contextOwnershipKnown` on the request-scoped `ActiveAnalyticsParameterOwnership`.
 Deliberately additive rather than a `ParameterOwner` union: every existing strip site reads the
 boolean and needed no edit, so the change cannot alter stripping by accident, and the diff shows that
@@ -60,7 +62,7 @@ on its face. Only intent resolution reads the new flag.
 
 ## Correction to ADR-0004
 
-ADR-0004's Consequences closed with *"Open follow-up: a process-scoped ownership cache."*
+ADR-0004's Consequences closed with _"Open follow-up: a process-scoped ownership cache."_
 **Do not build that.** It corrupts data by construction: keyed on `_serverInfo` name/version, two
 servers sharing a name answer each other's ownership questions. A host tool that declares `context`
 as required then has that argument stripped and receives `{}`, while the user's text is shipped as
@@ -74,7 +76,7 @@ protects that case unconditionally, which is why ownership resolution — not a 
 answer here.
 
 Re-deriving ownership by replaying the host's `tools/list` handler on the call path is also rejected.
-Where instances are per-request, "once per instance" means once per *call*, so a listing backed by a database or a
+Where instances are per-request, "once per instance" means once per _call_, so a listing backed by a database or a
 permissions filter is re-run on every tool call; a time-box converts a deadlock into a stall on every
 call rather than avoiding it; and a replay that passes no cursor rebuilds only the first page, silently
 mis-owning every tool beyond it.

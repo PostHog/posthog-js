@@ -1309,6 +1309,35 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "Surveys",
+          "description": "Register an event listener that runs when the set of active matching surveys changes. The listener receives the initial matching set and updates after event/action triggers, cancellation, consumption, session expiry, definitions refresh, captured pageviews, feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.\nURL conditions are re-evaluated on captured `$pageview` events, including automatic SPA pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled, capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time passing; selector, device and wait-period conditions are checked on the supported updates.\nThe optional callback context distinguishes load errors from a successfully loaded empty result. New subscribers receive the current snapshot without replaying earlier errors: a settled unavailable state is `([], { isLoaded: false })`, while usable cached definitions are evaluated normally. An initial load already in progress delivers when it resolves. Recoverable load failures keep the subscription alive. Unsubscribing prevents any further delivery, including callbacks from an outstanding initial request.",
+          "details": null,
+          "id": "onActiveMatchingSurveysChanged",
+          "showDocs": true,
+          "title": "onActiveMatchingSurveysChanged",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {\n    // respond to changes in currently matching surveys\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The callback to call with active matching surveys.",
+              "isOptional": false,
+              "type": "SurveyCallback",
+              "name": "callback"
+            }
+          ],
+          "returnType": {
+            "id": "() => void",
+            "name": "() => void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.",
           "details": null,
@@ -3408,6 +3437,11 @@
           "name": "feature_flag_request_timeout_ms"
         },
         {
+          "description": "How many times to retry a `/flags` request before giving up.\n\nOnly failures that are plausibly transient are retried: HTTP 502 and 504, and a\nrequest that timed out. Every other status is terminal, as is a transport failure\nthat is not a timeout — in a browser those are usually an ad blocker, an extension\nor CORS, which the status-zero circuit breaker already handles, so retrying them\nwould only add a second doomed request.\n\nSet to 0 to disable retries.",
+          "type": "number",
+          "name": "feature_flag_request_max_retries"
+        },
+        {
           "description": "Sets the maximum age (in milliseconds) for cached feature flag values.\nWhen the cache is older than this value:\n- `getFeatureFlag()` will return `undefined` instead of stale cached values\n- `$feature/` properties will not be attached to events\n- A background refresh will be triggered automatically\n\nThis prevents stale feature flag values from being used when the `/flags` request\nfails (e.g., due to ad blockers or network issues).\n\nWhen not set or set to `0`, cache expiration is disabled (cached values never expire).",
           "type": "number",
           "name": "feature_flag_cache_ttl_ms"
@@ -3949,6 +3983,11 @@
           "description": "Get active surveys that match the current user.",
           "type": "(callback: (surveys: any[]) => void, forceReload?: boolean) => void",
           "name": "getActiveMatchingSurveys"
+        },
+        {
+          "description": "Observe the initial matching surveys and updates after event/action and survey lifecycle\nchanges, definitions refreshes, captured pageviews, feature-flag updates, and reset.\nURL changes require a captured pageview; arbitrary DOM mutations and elapsed time\nare not observed. Unchanged results are suppressed. Recoverable load errors are\nreported through the optional context without ending the subscription.",
+          "type": "(callback: (surveys: any[], context?: { isLoaded: boolean; error?: string; }) => void) => () => void",
+          "name": "onActiveMatchingSurveysChanged"
         },
         {
           "description": "Render a survey in a specific container.",

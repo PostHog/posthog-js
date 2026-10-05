@@ -32,7 +32,7 @@ function createMockXhrClass(setHeaderCalls: SetHeaderCall[], sendCalls: unknown[
         response = ''
         responseText = ''
 
-        open() {}
+        open(_method: string, _url: string) {}
         send(body: unknown) {
             sendCalls.push(body)
         }
@@ -214,8 +214,11 @@ describe('xhr wrapper', () => {
             const body = makeBody()
             xhr.send(body)
 
-            await triggerDoneAndFlush(xhr, cbInvocations)
+            const captured = await triggerDoneAndFlush(xhr, cbInvocations)
             cleanup()
+            expect(captured).not.toBeNull()
+            expect(captured!.requests).toHaveLength(1)
+            expect(captured!.requests[0].name).toBe('https://example.com/api/internal/surveys')
 
             // The underlying send must receive the EXACT same body
             // reference — copying it would change FormData boundaries,

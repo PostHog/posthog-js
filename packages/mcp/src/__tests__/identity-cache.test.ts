@@ -1,4 +1,4 @@
-import { IdentityCache } from '../extensions/internal'
+import { BoundedCache, IdentityCache } from '../extensions/internal'
 
 describe('IdentityCache', () => {
   it('stores and retrieves identities by session id', () => {
@@ -29,5 +29,19 @@ describe('IdentityCache', () => {
 
     expect(serverA.get('ses_shared')).toEqual({ distinctId: 'from-a' })
     expect(serverB.get('ses_shared')).toBeUndefined()
+  })
+})
+
+describe('BoundedCache', () => {
+  it('evicts the least-recently-used entry', () => {
+    const cache = new BoundedCache<number>(2)
+    cache.set('one', 1)
+    cache.set('two', 2)
+    expect(cache.get('one')).toBe(1)
+    cache.set('three', 3)
+
+    expect(cache.get('two')).toBeUndefined()
+    expect(cache.get('one')).toBe(1)
+    expect(cache.get('three')).toBe(3)
   })
 })

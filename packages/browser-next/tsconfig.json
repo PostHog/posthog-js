@@ -13,10 +13,9 @@
         "verbatimModuleSyntax": true,
         "exactOptionalPropertyTypes": true,
         "noUncheckedIndexedAccess": true,
-        "baseUrl": ".",
         "paths": {
             "@posthog/browser-common/tests/client-conformance": [
-                "../browser-common/tests/helpers/client-conformance.ts"
+                "./../browser-common/tests/helpers/client-conformance.ts"
             ]
         }
     },

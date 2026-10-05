@@ -1,6 +1,6 @@
 {
   "name": "@posthog/openfeature-node-provider",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -68,6 +68,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "posthog-node": "workspace:*",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   }
 }

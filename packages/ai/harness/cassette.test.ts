@@ -154,7 +154,7 @@ describe('provider cassettes', () => {
     await expect(
       client(replay.url).messages.create({ ...request, model: 'wrong-model', stream: true })
     ).rejects.toThrow()
-    await expect(replay.finish()).rejects.toThrow()
+    await expect(replay.finish()).rejects.toThrow('Cassette interaction 1: mismatch failure')
   })
 
   it('rejects an extra request instead of reusing the last response', async () => {
@@ -163,7 +163,7 @@ describe('provider cassettes', () => {
     cleanup.push(() => replay.close())
     await consume(replay.url)
     await expect(consume(replay.url)).rejects.toThrow()
-    await expect(replay.finish()).rejects.toThrow()
+    await expect(replay.finish()).rejects.toThrow('Cassette interaction 2: mismatch failure')
   })
 
   it('rejects unconsumed interactions', async () => {
@@ -228,8 +228,30 @@ describe('provider cassettes', () => {
     const recorder = await startRecorder({ path, upstreamURL: source.url, provenance })
     cleanup.push(() => recorder.close())
     await consume(recorder.url).catch(() => undefined)
-    await expect(recorder.finish()).rejects.toThrow()
+    await expect(recorder.finish()).rejects.toThrow('Cassette interaction 1: stream failure')
     expect(await readFile(path, 'utf8')).toBe(original)
+  })
+
+  it.each([
+    ['response', 401, 'provider response containing fake-provider-secret'],
+    ['secret', 200, chunks.join('').replace('Hello.', 'fake-provider-secret')],
+  ] as const)('reports a safe %s category without exposing the provider payload', async (category, status, body) => {
+    const source = await upstream((response) => response.end(body), status)
+    const recorder = await startRecorder({ path, upstreamURL: source.url, provenance })
+    cleanup.push(() => recorder.close())
+    await consume(recorder.url).catch(() => undefined)
+    await expect(recorder.finish()).rejects.toThrow(`Cassette interaction 1: ${category} failure`)
+    await expect(readFile(path)).rejects.toThrow()
+  })
+
+  it('reports a request category without reflecting malformed JSON', async () => {
+    await record()
+    const replay = await startReplay({ path })
+    cleanup.push(() => replay.close())
+    const response = await fetch(`${replay.url}/v1/messages`, { method: 'POST', body: 'fake-provider-secret' })
+    expect(response.status).toBe(500)
+    expect(await response.text()).toBe('Cassette request failed')
+    await expect(replay.finish()).rejects.toThrow('Cassette interaction 1: request failure')
   })
 
   it.each([

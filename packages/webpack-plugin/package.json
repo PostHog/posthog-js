@@ -4,7 +4,7 @@
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
-    "description": "Webpack plugin for Posthog 🦔",
+    "description": "Webpack plugin for Posthog \ud83e\udd94",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -36,7 +36,8 @@
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "webpack": "^5",
-        "vitest": "catalog:"
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
     },
     "scripts": {
         "check-types": "tsc --noEmit --project tsconfig.build.json",

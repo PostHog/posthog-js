@@ -304,6 +304,7 @@ export class Autocapture implements Extension {
     _isDisabledServerSide: boolean | null = null
     _hasReceivedConfigResponse: boolean = false
     _elementSelectors: Set<string> | null
+    private _elementSelectorsByOwner = new Map<object, Set<string>>()
     rageclicks: RageClick
     _elementsChainAsString = false
     private _client?: Client
@@ -460,6 +461,8 @@ export class Autocapture implements Extension {
         this._client = undefined
         this._remoteConfigSubscription?.dispose()
         this._remoteConfigSubscription = undefined
+        this._elementSelectorsByOwner.clear()
+        this._elementSelectors = null
         this._removeDomEventHandlers()
     }
 
@@ -588,8 +591,21 @@ export class Autocapture implements Extension {
         this.startIfEnabled()
     }
 
-    public setElementSelectors(selectors: Set<string>): void {
-        this._elementSelectors = selectors
+    public setElementSelectors(selectors: Set<string>, owner: object = this): void {
+        if (this._disposed) {
+            return
+        }
+        if (selectors.size) {
+            this._elementSelectorsByOwner.set(owner, new Set(selectors))
+        } else {
+            this._elementSelectorsByOwner.delete(owner)
+        }
+        // Survey and product-tour actions can watch the same selector independently.
+        const combined = new Set<string>()
+        this._elementSelectorsByOwner.forEach((contribution) => {
+            contribution.forEach((selector) => combined.add(selector))
+        })
+        this._elementSelectors = combined
     }
 
     public getElementSelectors(element: Element | null, additionalElement?: Element): string[] | null {

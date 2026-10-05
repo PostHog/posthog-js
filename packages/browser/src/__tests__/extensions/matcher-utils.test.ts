@@ -13,7 +13,9 @@ function setUserAgent(ua: string | undefined) {
 }
 
 describe('doesDeviceTypeMatch', () => {
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     it.each([
         ['no device types', undefined, DESKTOP_UA, true],

@@ -197,6 +197,12 @@ export const cookieStore: PersistentStore = {
         if (!document?.cookie) {
             return
         }
+        // Resolving the cross-subdomain domain writes probe cookies that browsers
+        // reject on public suffix hosts, so skip it when no cookie by this name is
+        // visible to delete.
+        if (cross_subdomain && isNull(getCookieValue(name))) {
+            return
+        }
         try {
             cookieStore._set(name, '', -1, cross_subdomain)
         } catch {
@@ -402,7 +408,8 @@ export const getCookiePropertiesFingerprint = (name: string, cookieValue: string
  */
 export const createLocalPlusCookieStore = (
     customCookieProperties: readonly string[] = [],
-    preferCookieOnConflict: boolean = false
+    preferCookieOnConflict: boolean = false,
+    isReadOnly: () => boolean = () => false
 ): PersistentStore => {
     const cookiePropertiesToPersist = [...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties]
 
@@ -507,7 +514,9 @@ export const createLocalPlusCookieStore = (
                 } else {
                     value = extend(cookieProperties, localStorageData)
                 }
-                localStore._set(name, value)
+                if (!isReadOnly()) {
+                    localStore._set(name, value)
+                }
                 return value
             } catch {
                 // noop

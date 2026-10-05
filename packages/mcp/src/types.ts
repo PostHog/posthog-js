@@ -6,7 +6,7 @@
 import type { ErrorTracking } from '@posthog/core'
 import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
-import type { IdentityCache } from './extensions/internal'
+import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
@@ -95,6 +95,13 @@ export interface McpAnalytics {
 
 export interface MCPAnalyticsOptions {
   /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest.
+   * MCP does not advertise this value, so the host must supply it. The value
+   * must contain 1 to 256 characters.
+   */
+  serverBuild?: string
+  /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.
    */
@@ -122,7 +129,7 @@ export interface MCPAnalyticsOptions {
    */
   missingCapabilityToolName?: string
   /**
-   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * Enable session correlation for the MCP **2026-07-28** revision, which removed
    * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
    * server instance per HTTP request. With none of those left to anchor on, the only
    * thing that can carry a session across calls is the agent itself.
@@ -132,7 +139,7 @@ export interface MCPAnalyticsOptions {
    * that handle — so calls correlate across reconnects, restarts, and per-request
    * instances.
    *
-   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * On by default, and fully inert when disabled: no parameter is injected, no schema is
    * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
    * before (the request's own session id, else this instance's).
    */
@@ -148,7 +155,7 @@ export interface MCPAnalyticsOptions {
   /**
    * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
    * takes precedence, with an injected `llm_model` parameter as the fallback.
-   * Off by default.
+   * On by default; set to `false` to disable capture.
    *
    * MCP does not standardize model identity. Some clients expose it through
    * vendor metadata; other harnesses inject it into the agent's system prompt
@@ -186,6 +193,19 @@ export interface MCPAnalyticsOptions {
    * suppress specific events. A throw drops that event.
    */
   beforeSend?: BeforeSendFn
+  /**
+   * Decide which argument names `$mcp_input_keys` records on tool-call events.
+   * By default only names the tool's input schema declares are recorded; every
+   * other name becomes one `[redacted]` entry, because a name can carry private data.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * Return the alternative argument names accepted by one tool. The map is
+   * canonical name to aliases in the order the server tries them. Automatic
+   * instrumentation uses it for `$mcp_input_keys` and
+   * `$mcp_input_aliases_used`; it never changes the tool arguments.
+   */
+  resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
   /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
@@ -304,6 +324,30 @@ export type RegisteredTool = {
  */
 export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
 
+/**
+ * Decides whether one top-level argument name appears in `$mcp_input_keys`.
+ * `declared` is true when the server's input schema declares the name.
+ * Return `true` to record the name; any other result, or a throw, records `[redacted]`.
+ */
+export type ShouldRecordInputKeyFn = (key: string, details: { declared: boolean }) => boolean
+
+export interface ToolInputOptions {
+  /**
+   * Replace the default rule, which records only declared names. The SDK still
+   * drops names longer than 64 characters and records at most 20 names.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * The alternative argument names the server accepts, as canonical name to aliases in the
+   * order the server tries them, for example `{ id: ['experimentId'] }`. Must be owned by the
+   * server, never taken from the caller. Alias names count as declared in `$mcp_input_keys`,
+   * and `$mcp_input_aliases_used` records each alias the server needed, as `alias:canonical`.
+   */
+  inputAliases?: InputAliasMap
+}
+
+export type InputAliasMap = Readonly<Record<string, readonly string[]>>
+
 export interface Event {
   actorId?: string
   clientName?: string
@@ -363,6 +407,7 @@ export interface Event {
   response?: unknown
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
   sessionId: string
@@ -485,6 +530,7 @@ export interface SessionInfo {
   protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
 }
@@ -515,6 +561,7 @@ export interface MCPAnalyticsData {
   toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
+  toolInputSchemas: BoundedCache<Map<string, unknown>>
 }
 
 export interface CaptureEventData {
@@ -541,6 +588,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Conversation handle → `$mcp_conversation_id`. For custom dispatchers,
+   * use the value returned by {@link PostHogMCP.prepareToolResult} so a newly
+   * minted handle is captured only when it reached the client.
+   */
+  conversationId?: string
   /**
    * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
    * every capture for the session (like `sessionId`) so later events carry it too,
@@ -695,9 +748,15 @@ export interface PrepareToolCallOptions {
    * Passing it also disambiguates a feedback-tool name collision: a real tool
    * by that name is dispatched normally instead of being flagged as feedback.
    */
-  originalTool?: { inputSchema?: unknown }
+  originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
   /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
   requestMeta?: JsonRecord
+  /**
+   * A session id carried by the request or transport. A valid echoed
+   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
+   * from minting a second session handle.
+   */
+  sessionId?: string
 }
 
 /**
@@ -714,8 +773,16 @@ export interface PreparedToolCall {
   llmModel?: string
   /** How the model id was obtained. */
   llmModelSource?: MCPAnalyticsModelSource
-  /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
+  /** The call arguments with SDK-owned analytics keys removed. */
   args?: Record<string, unknown>
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /**
+   * The resolved conversation handle. Use the value from
+   * {@link PostHogMCP.prepareToolResult} for capture because result delivery can
+   * remove a newly minted handle from analytics.
+   */
+  conversationId?: string
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
   /**
@@ -732,6 +799,16 @@ export interface PreparedToolCall {
    * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
    */
   feedbackReport?: FeedbackReport
+}
+
+/** Result of {@link PostHogMCP.prepareToolResult}. */
+export interface PreparedToolResult<TResult = unknown> {
+  /** The result to return to the MCP client. */
+  result: TResult
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /** The conversation handle to capture, if it reached the client. */
+  conversationId?: string
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */

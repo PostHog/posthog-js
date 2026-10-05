@@ -8,24 +8,29 @@ describe('PostHogCaptureOnViewed component', () => {
     let mockObserverCallback: any = null
 
     let fakePosthog: PostHog
+    const mockIntersectionObserver = vi.fn()
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
 
     beforeEach(() => {
         fakePosthog = {
             capture: vi.fn(),
         } as unknown as PostHog
 
-        const mockIntersectionObserver = vi.fn((callback) => {
+        mockIntersectionObserver.mockImplementation((callback) => {
             mockObserverCallback = callback
             return {
-                observe: vi.fn(),
+                observe,
                 unobserve: vi.fn(),
-                disconnect: vi.fn(),
+                disconnect,
             }
         })
 
         mockIntersectionObserver.prototype = {}
-        // oxlint-disable-next-line compat/compat
-        window.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver
+        vi.stubGlobal('IntersectionObserver', mockIntersectionObserver)
     })
 
     it('should render children', () => {
@@ -41,7 +46,7 @@ describe('PostHogCaptureOnViewed component', () => {
     })
 
     it('should track when element comes into view', () => {
-        render(
+        const { unmount } = render(
             <PostHogProvider client={fakePosthog}>
                 <PostHogCaptureOnViewed name="test-element">
                     <div data-testid="child">Hello</div>
@@ -49,6 +54,8 @@ describe('PostHogCaptureOnViewed component', () => {
             </PostHogProvider>
         )
 
+        expect(observe).toHaveBeenCalledWith(screen.getByTestId('child').parentElement)
+        expect(mockIntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { threshold: 0.1 })
         expect(fakePosthog.capture).not.toHaveBeenCalled()
 
         mockObserverCallback([{ isIntersecting: true }])
@@ -57,6 +64,8 @@ describe('PostHogCaptureOnViewed component', () => {
             element_name: 'test-element',
         })
         expect(fakePosthog.capture).toHaveBeenCalledTimes(1)
+        unmount()
+        expect(disconnect).toHaveBeenCalledTimes(1)
     })
 
     it('should only track visibility once', () => {

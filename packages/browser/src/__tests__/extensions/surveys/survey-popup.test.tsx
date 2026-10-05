@@ -1,5 +1,6 @@
+import type { Mock as VitestMock } from 'vitest'
 import '@testing-library/jest-dom'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
@@ -66,21 +67,24 @@ describe('SurveyPopup', () => {
     }
 
     // Mock functions passed as props
-    let mockRemoveSurveyFromFocus: vi.Mock
-    let mockOnCloseConfirmationMessage: vi.Mock
+    let mockRemoveSurveyFromFocus: VitestMock
+    let mockOnCloseConfirmationMessage: VitestMock
 
     // Type cast mocks for easier usage
-    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
+    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as VitestMock
     // Removed unused mocks for set/clear state
     // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
     // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as vi.Mock
-    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
-    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as vi.Mock
-    const mockedUuidv7 = uuid.uuidv7 as vi.Mock
+    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as VitestMock
+    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as VitestMock
+    const mockedUuidv7 = uuid.uuidv7 as VitestMock
 
     beforeEach(() => {
         cleanup()
         vi.clearAllMocks()
+        localStorage.clear()
+        mockedSendSurveyEvent.mockReset()
+        mockedDismissedSurveyEvent.mockReset()
         // Mock uuidv7 to return a predictable value
         mockedUuidv7.mockReturnValue('new-uuid-generated')
         // Default mock for getInProgressSurveyState (no state)
@@ -124,11 +128,15 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                previewPageIndex={mockSurvey.questions.length} // Force confirmation
                 posthog={mockPosthog as any}
             />
         )
+        act(() => {
+            window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        })
+        expect(screen.getByText('Thank you!')).toBeVisible()
         const cancelButton = screen.getByRole('button', { name: /close survey/i })
+        expect(cancelButton).toBeEnabled()
         fireEvent.click(cancelButton)
         expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
     })
@@ -140,11 +148,15 @@ describe('SurveyPopup', () => {
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                previewPageIndex={mockSurvey.questions.length} // Force confirmation
                 posthog={mockPosthog as any}
             />
         )
-        const closeButton = screen.getByRole('button', { name: /close/i })
+        act(() => {
+            window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        })
+        expect(screen.getByText('Thank you!')).toBeVisible()
+        const closeButton = screen.getByRole('button', { name: /submit survey/i })
+        expect(closeButton).toBeEnabled()
         fireEvent.click(closeButton)
         expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
     })
@@ -218,7 +230,10 @@ describe('SurveyPopup', () => {
         expect(screen.getByRole('textbox')).toHaveValue(keepsResponses ? 'Previous answer' : '')
     })
 
-    test('saves partial response to localStorage when moving to next question', () => {
+    test('saves partial response to localStorage when moving to next question', async () => {
+        const realUtils = await vi.importActual<typeof surveyUtils>(
+            '../../../extensions/surveys/surveys-extension-utils'
+        )
         const initialState = null
         const generatedId = 'newly-generated-id'
         mockedGetInProgressSurveyState.mockReturnValue(initialState)
@@ -259,6 +274,13 @@ describe('SurveyPopup', () => {
             },
         })
         expect(screen.getByText('Question 2')).toBeVisible()
+        expect(realUtils.getInProgressSurveyState(partialResponsesSurvey)).toEqual(
+            expect.objectContaining({
+                surveySubmissionId: generatedId,
+                responses: { $survey_response_q1: 'Answer Q1' },
+                lastQuestionIndex: 1,
+            })
+        )
     })
 
     test('preserves questionSnapshots when navigating back', () => {
@@ -292,11 +314,17 @@ describe('SurveyPopup', () => {
     })
 
     test('clears localStorage on final submission', async () => {
+        const realUtils = await vi.importActual<typeof surveyUtils>(
+            '../../../extensions/surveys/surveys-extension-utils'
+        )
         const existingState = {
             surveySubmissionId: 'existing-uuid-final',
             responses: { $survey_response_q1: 'Answer Q1' },
         }
         mockedGetInProgressSurveyState.mockReturnValue(existingState)
+        realUtils.setInProgressSurveyState(mockSurvey, { ...existingState, lastQuestionIndex: 0 })
+        expect(realUtils.getInProgressSurveyState(mockSurvey)).not.toBeNull()
+        mockedSendSurveyEvent.mockImplementation(realUtils.sendSurveyEvent)
 
         render(
             <SurveyPopup
@@ -338,14 +366,16 @@ describe('SurveyPopup', () => {
             },
         })
 
-        // *** Manually dispatch the event that the real function would dispatch ***
-        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
-
-        // Now wait for the confirmation message triggered by the event
         await waitFor(() => expect(screen.getByText('Thank you!')).toBeVisible())
-
-        // We've verified sendSurveyEvent was called with isSurveyCompleted=true,
-        // implicitly testing that clearInProgressSurveyState would be called internally.
+        expect(realUtils.getInProgressSurveyState(mockSurvey)).toBeNull()
+        expect(mockPosthog.capture).toHaveBeenCalledWith(
+            'survey sent',
+            expect.objectContaining({
+                $survey_completed: true,
+                $survey_response_q1: 'Answer Q1',
+                $survey_response_q2: 'Answer Q2',
+            })
+        )
     })
 
     test('clears the auto-disappear timer when unmounted', () => {
@@ -371,14 +401,17 @@ describe('SurveyPopup', () => {
     })
 
     test('clears localStorage on dismissal', async () => {
+        const realUtils = await vi.importActual<typeof surveyUtils>(
+            '../../../extensions/surveys/surveys-extension-utils'
+        )
         const existingState = {
             surveySubmissionId: 'existing-uuid-dismiss',
             responses: { $survey_response_q1: 'Partial answer' },
         }
         mockedGetInProgressSurveyState.mockReturnValue(existingState)
-        mockedDismissedSurveyEvent.mockImplementation(() => {
-            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
-        })
+        realUtils.setInProgressSurveyState(mockSurvey, { ...existingState, lastQuestionIndex: 0 })
+        expect(realUtils.getInProgressSurveyState(mockSurvey)).not.toBeNull()
+        mockedDismissedSurveyEvent.mockImplementation(realUtils.dismissedSurveyEvent)
 
         render(
             <SurveyPopup
@@ -397,6 +430,11 @@ describe('SurveyPopup', () => {
         await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
 
         expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(mockSurvey, mockPosthog, false)
+        expect(realUtils.getInProgressSurveyState(mockSurvey)).toBeNull()
+        expect(mockPosthog.capture).toHaveBeenCalledWith(
+            'survey dismissed',
+            expect.objectContaining({ $survey_response_q1: 'Partial answer' })
+        )
     })
 
     test('always shows external surveys even if millisecondDelay is set', () => {

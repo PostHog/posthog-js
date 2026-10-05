@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Mirror } from '@posthog/rrweb-snapshot';
 
 // jsdom's ShadowRoot doesn't pass isNativeShadowDom's toString check,
@@ -19,9 +19,25 @@ import { mutationBuffers } from '../../src/record/observer';
 import MutationBuffer from '../../src/record/mutation';
 
 describe('ShadowDomManager', () => {
+  const managers: ShadowDomManager[] = [];
+  const elements: HTMLElement[] = [];
+
+  afterEach(() => {
+    try {
+      for (const manager of managers.splice(0).reverse()) {
+        manager.reset();
+      }
+    } finally {
+      for (const element of elements.splice(0)) {
+        element.remove();
+      }
+      vi.restoreAllMocks();
+    }
+  });
+
   function createManager() {
     const mirror = new Mirror();
-    return new ShadowDomManager({
+    const manager = new ShadowDomManager({
       mutationCb: vi.fn(),
       scrollCb: vi.fn(),
       bypassOptions: {
@@ -57,12 +73,62 @@ describe('ShadowDomManager', () => {
       },
       mirror,
     });
+    managers.push(manager);
+    return manager;
   }
+
+  it('ignores SecurityError when a frame navigates cross-origin', () => {
+    const manager = createManager();
+    const iframe = {
+      contentWindow: {
+        get Element() {
+          throw new DOMException('Cross-origin frame', 'SecurityError');
+        },
+      },
+      contentDocument: document,
+    } as unknown as HTMLIFrameElement;
+
+    expect(() => manager.observeAttachShadow(iframe)).not.toThrow();
+  });
+
+  it('does not swallow unrelated errors while observing a frame', () => {
+    const manager = createManager();
+    const iframe = {
+      contentWindow: {
+        get Element() {
+          throw new TypeError('Broken Element getter');
+        },
+      },
+      contentDocument: document,
+    } as unknown as HTMLIFrameElement;
+
+    expect(() => manager.observeAttachShadow(iframe)).toThrow(
+      'Broken Element getter',
+    );
+  });
+
+  it('still patches same-origin iframe shadow roots', () => {
+    const manager = createManager();
+    const iframe = document.createElement('iframe');
+    elements.push(iframe);
+    document.body.appendChild(iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const iframeElement = iframe.contentWindow?.Element;
+
+    expect(iframeElement).toBeDefined();
+    const before = iframeElement?.prototype.attachShadow;
+    manager.observeAttachShadow(iframe);
+    expect(iframeElement?.prototype.attachShadow).not.toBe(before);
+
+    manager.reset();
+    expect(iframeElement?.prototype.attachShadow).toBe(before);
+  });
 
   it('reset() should not call MutationBuffer.reset() from restoreHandler to avoid infinite recursion', () => {
     const manager = createManager();
 
     const host = document.createElement('div');
+    elements.push(host);
     document.body.appendChild(host);
     host.attachShadow({ mode: 'open' });
 
@@ -73,15 +139,13 @@ describe('ShadowDomManager', () => {
     manager.reset();
 
     expect(resetSpy).not.toHaveBeenCalled();
-
-    resetSpy.mockRestore();
-    document.body.removeChild(host);
   });
 
   it('reset() removes shadow root buffers from mutationBuffers', () => {
     const manager = createManager();
 
     const host = document.createElement('div');
+    elements.push(host);
     document.body.appendChild(host);
 
     const buffersBeforeAdd = mutationBuffers.length;
@@ -91,28 +155,26 @@ describe('ShadowDomManager', () => {
     manager.reset();
 
     expect(mutationBuffers.length).toBe(buffersBeforeAdd);
-
-    document.body.removeChild(host);
   });
 
   it('reset() clears restore handlers so a second reset is a no-op', () => {
     const manager = createManager();
 
     const host = document.createElement('div');
+    elements.push(host);
     document.body.appendChild(host);
     host.attachShadow({ mode: 'open' });
 
     manager.reset();
 
     expect(() => manager.reset()).not.toThrow();
-
-    document.body.removeChild(host);
   });
 
   it('resetForDoc() only tears down handlers owned by the given document', () => {
     const manager = createManager();
 
     const host = document.createElement('div');
+    elements.push(host);
     document.body.appendChild(host);
 
     const buffersBeforeAdd = mutationBuffers.length;
@@ -127,14 +189,13 @@ describe('ShadowDomManager', () => {
     // Tearing down the owning document removes them.
     manager.resetForDoc(document);
     expect(mutationBuffers.length).toBe(buffersBeforeAdd);
-
-    document.body.removeChild(host);
   });
 
   it('keys a shadow root by its host owner document, not the passed document', () => {
     const manager = createManager();
 
     const iframe = document.createElement('iframe');
+    elements.push(iframe);
     document.body.appendChild(iframe);
     const iframeDoc = iframe.contentDocument as Document;
     const host = iframeDoc.createElement('div');
@@ -154,7 +215,5 @@ describe('ShadowDomManager', () => {
     // Tearing down the iframe's own document does.
     manager.resetForDoc(iframeDoc);
     expect(mutationBuffers.length).toBe(buffersBeforeAdd);
-
-    document.body.removeChild(iframe);
   });
 });

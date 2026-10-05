@@ -24,6 +24,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     beforeEach(async () => {
         vi.setSystemTime(1000)
+        document.body.replaceChildren()
         selection = { type: 'Caret', focusNode: null }
         vi.spyOn(document, 'getSelection').mockImplementation(() => selection as Selection | null)
 
@@ -50,6 +51,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     afterEach(() => {
         lazyLoadedDeadClicksAutocapture.stop()
+        vi.clearAllTimers()
         vi.mocked(document.getSelection).mockRestore()
     })
 
@@ -642,15 +644,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
     })
 
-    // i think there's some kind of jsdom fangling happening where the mutation observer
-    // started by the detector isn't passed details of mutations made in the tests
-    // js-dom supports mutation observer since v13.x but 🤷
-    it.skip('tracks last mutation', () => {
+    it('tracks last mutation', async () => {
         expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).not.toBeDefined()
-
+        vi.setSystemTime(1234)
         document.body.append(document.createElement('div'))
-
-        expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBeDefined()
+        await Promise.resolve()
+        expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(1234)
     })
 
     describe('click ignore', () => {
@@ -738,10 +737,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             anchor.appendChild(child)
             shadowRoot.appendChild(anchor)
             document.body.append(host)
-
-            triggerMouseEvent(child, 'click')
-
+            triggerMouseEvent(child, 'click', { composed: true })
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            const control = document.createElement('span')
+            shadowRoot.appendChild(control)
+            triggerMouseEvent(control, 'click', { composed: true })
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
         })
 
         // buttons, inputs, selects, textareas, labels, forms all rely on app JS handlers
@@ -1092,6 +1093,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a selection change outside of threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1099,6 +1101,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 selectionChangedDelayMs: 100,
             })
 
+            vi.setSystemTime(1000)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -1106,7 +1109,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 '$dead_click',
                 {
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 100,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
@@ -1135,13 +1138,14 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a mutation after threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900 + 2501
-
+            vi.setSystemTime(3401)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -1149,7 +1153,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 '$dead_click',
                 {
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 2501,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: 3401,
@@ -1178,6 +1182,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a scroll after threshold, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1185,16 +1190,15 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 scrollDelayMs: 2501,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
-
+            vi.setSystemTime(3401)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 {
-                    // faked system timestamp isn't moving so this is negative
                     $ce_version: 1,
-                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_delay_ms: 2501,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
@@ -1223,6 +1227,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by nothing for too long, dead click', () => {
+            document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
@@ -1345,6 +1350,175 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             triggerMouseEvent(document.body, 'click', { ctrlKey: true, shiftKey: true })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
+    })
+
+    describe('shadow roots', () => {
+        let host: HTMLElement
+        let shadowRoot: ShadowRoot
+        let shadowButton: HTMLButtonElement
+
+        const attachHost = (): void => {
+            host = document.createElement('div')
+            document.body.appendChild(host)
+            shadowRoot = host.attachShadow({ mode: 'open' })
+            shadowButton = document.createElement('button')
+            shadowButton.textContent = 'shadow control'
+            shadowRoot.appendChild(shadowButton)
+        }
+
+        afterEach(() => {
+            host?.remove()
+        })
+
+        it('observes an open shadow root that exists when detection starts', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            attachHost()
+
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes an open shadow root attached after detection starts when a click happens inside it', () => {
+            attachHost()
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
+
+            // a real click crosses the shadow boundary, so the root is in its composed path
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the shadow root of added content', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const wrapper = document.createElement('div')
+            wrapper.appendChild(host)
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([{ addedNodes: [wrapper] } as unknown as MutationRecord])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes a shadow root nested in content added parent first within one batch', () => {
+            const outer = document.createElement('div')
+            document.body.appendChild(outer)
+            attachHost()
+            outer.appendChild(host)
+            const querySelectorAll = vi.spyOn(Element.prototype, 'querySelectorAll')
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [outer] },
+                { target: outer, addedNodes: [host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+            expect(querySelectorAll.mock.instances).not.toContain(host)
+            querySelectorAll.mockRestore()
+            outer.remove()
+        })
+
+        it('does not treat a change inside a detached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            host.remove()
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(undefined)
+        })
+
+        it('treats a change inside an attached root as a sign of life', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: shadowButton, addedNodes: [] } as unknown as MutationRecord,
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
+        it('keeps the sign of life for the rest of the batch when a record cannot be read', () => {
+            attachHost()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            // Firefox denies property access on a node from another origin or a dead realm
+            const denied = {
+                get isConnected(): boolean {
+                    throw new Error('Permission denied to access property "isConnected"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: denied, addedNodes: [] },
+                { target: shadowButton, addedNodes: [] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_lastMutation']).toBe(Date.now())
+        })
+
+        it('scans the other added nodes when one added node cannot be read', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture.start(document)
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+
+            lazyLoadedDeadClicksAutocapture['_onMutation']([
+                { target: document.body, addedNodes: [denied, host] },
+            ] as unknown as MutationRecord[])
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('observes the other roots in a gesture path when one entry cannot be read', () => {
+            attachHost()
+            const denied = {
+                get nodeType(): number {
+                    throw new Error('Permission denied to access property "nodeType"')
+                },
+            }
+            const event = {
+                composedPath: () => [denied, host],
+            } as unknown as Event
+
+            lazyLoadedDeadClicksAutocapture['_observeGesturePath'](event)
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(true)
+        })
+
+        it('does not throw when a selection endpoint cannot be read', () => {
+            attachHost()
+            const denied = document.createElement('div')
+            Object.defineProperty(denied, 'getRootNode', {
+                value: () => {
+                    throw new Error('Permission denied to access property "getRootNode"')
+                },
+            })
+
+            expect(() =>
+                lazyLoadedDeadClicksAutocapture['_selectionIsInGesture'](denied, {
+                    path: [shadowButton],
+                    trusted: true,
+                    selectionChanged: false,
+                } as any)
+            ).not.toThrow()
+        })
+
+        it('forgets observed roots after stopping', () => {
+            attachHost()
+            triggerMouseEvent(shadowButton, 'click', { composed: true })
+
+            lazyLoadedDeadClicksAutocapture.stop()
+
+            expect(lazyLoadedDeadClicksAutocapture['_observedRoots'].has(shadowRoot)).toBe(false)
         })
     })
 })

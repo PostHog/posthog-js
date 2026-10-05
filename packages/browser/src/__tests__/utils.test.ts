@@ -28,9 +28,7 @@ import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
 import '../config'
 
 function userAgentFor(botString: string) {
-    const randOne = (Math.random() + 1).toString(36).substring(7)
-    const randTwo = (Math.random() + 1).toString(36).substring(7)
-    return `Mozilla/5.0 (compatible; ${botString}/${randOne}; +http://a.com/bot/${randTwo})`
+    return `Mozilla/5.0 (compatible; ${botString}/1.0; +https://example.com/client)`
 }
 
 describe('utils', () => {
@@ -116,12 +114,20 @@ describe('utils', () => {
     })
 
     describe('isLikelyBot', () => {
+        it('only blocks a custom marker when configured', () => {
+            const navigator = { userAgent: userAgentFor('testington') } as Navigator
+            expect(isLikelyBot(navigator, undefined)).toBe(false)
+            expect(isLikelyBot(navigator, ['unrelated-marker'])).toBe(false)
+            expect(isLikelyBot(navigator, ['testington'])).toBe(true)
+            expect(isLikelyBot({ userAgent: userAgentFor('ordinary-client') } as Navigator, ['testington'])).toBe(false)
+        })
+
         it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
             'blocks a bot based on the user agent %s',
             (botString) => {
-                const randomisedUserAgent = userAgentFor(botString)
+                const userAgent = userAgentFor(botString)
 
-                expect(isLikelyBot({ userAgent: randomisedUserAgent } as Navigator, ['testington'])).toBe(true)
+                expect(isLikelyBot({ userAgent } as Navigator, ['testington'])).toBe(true)
             }
         )
 
@@ -459,6 +465,8 @@ describe('utils', () => {
         })
 
         const icontainsCases: [string[], string[], boolean][] = [
+            [['ONE'], ['a message with one'], true],
+            [['one'], ['A MESSAGE WITH ONE'], true],
             [[], ['one'], false], // no targets
             [['one', 'two', 'three'], [], false], // no values
             [['one', 'two', 'three'], ['one'], true], // full match

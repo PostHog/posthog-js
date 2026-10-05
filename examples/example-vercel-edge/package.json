@@ -1,0 +1,21 @@
+{
+    "name": "example-vercel-edge",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "vercel:dev": "vercel dev",
+        "vercel:build": "vercel build",
+        "deploy": "vercel",
+        "check-types": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@vercel/functions": "^2.0.0",
+        "posthog-node": "*"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "typescript": "^5.8.2",
+        "vercel": "^48.0.0"
+    }
+}

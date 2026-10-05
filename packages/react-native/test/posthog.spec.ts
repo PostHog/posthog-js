@@ -1,5 +1,5 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
-import { Linking, AppState, AppStateStatus } from 'react-native'
+import { Linking, AppState, AppStateStatus, Dimensions, Platform } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { FeatureFlagError, JsonType } from '@posthog/core'
@@ -221,6 +221,27 @@ describe('PostHog React Native', () => {
     expect(posthog.getDistinctId()).toEqual('bar')
   })
 
+  it.each([
+    { surveys: [], expected: [] },
+    { surveys: false, expected: undefined },
+  ])('caches remote config surveys $surveys as $expected', async ({ surveys, expected }) => {
+    ;(globalThis as any).window.fetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({ surveys }),
+    }))
+    posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+    })
+
+    await posthog.ready()
+    await posthog._onSurveysReady()
+
+    expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual(expected)
+  })
+
   it('should allow customising of native app properties', async () => {
     posthog = new PostHog('test-token', {
       customAppProperties: { $app_name: 'custom' },
@@ -268,6 +289,31 @@ describe('PostHog React Native', () => {
     })
 
     await posthog2.shutdown()
+  })
+
+  describe('$screen_width and $screen_height', () => {
+    const originalOS = Platform.OS
+
+    afterEach(() => {
+      Platform.OS = originalOS
+      vi.mocked(Dimensions.get).mockRestore()
+    })
+
+    it.each([
+      { os: 'ios', expected: { $screen_width: 951, $screen_height: 669 } },
+      { os: 'android', expected: { $screen_width: 466, $screen_height: 678 } },
+      { os: 'web', expected: { $screen_width: 466, $screen_height: 678 } },
+    ])('on $os reports $expected', async ({ os, expected }) => {
+      Platform.OS = os as typeof Platform.OS
+      vi.spyOn(Dimensions, 'get').mockImplementation((dim) =>
+        dim === 'window'
+          ? { width: 951, height: 669, scale: 3, fontScale: 1 }
+          : { width: 466, height: 678, scale: 3, fontScale: 1 }
+      )
+      posthog = new PostHog('test-token', { flushInterval: 0 })
+
+      expect(posthog.getCommonEventProperties()).toMatchObject(expected)
+    })
   })
 
   describe('screen', () => {
@@ -541,6 +587,90 @@ describe('PostHog React Native', () => {
       }
       rnStorage = createEventsStorage(storage)
       await rnStorage.preloadPromise
+    })
+
+    it.each(['reset', 'optOut'] as const)('clears unfinished survey storage on %s before restart', async (action) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      posthog.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, [{ submissionId: 'old-user' }])
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      await posthog[action]()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+    })
+
+    it.each([false, true])('clears only this project on opt-out (pending preload=%s)', async (pendingPreload) => {
+      const otherProgress = {
+        project: 'other-project',
+        surveyKey: 'survey',
+        shape: 'shape',
+        updatedAt: Date.now(),
+        progress: { submissionId: 'other' },
+      }
+      rnStorage.setItem(PostHogPersistedProperty.SurveysInProgress, [
+        { project: '1', progress: { submissionId: 'old-user' } },
+        otherProgress,
+        { ...otherProgress, updatedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 },
+      ])
+      await rnStorage.waitForPersist()
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const backend = {
+        ...storage,
+        getItem: (key: string) => {
+          const value = cache[key] ?? null
+          return pendingPreload ? gate.then(() => value) : value
+        },
+      }
+      posthog = new PostHog('1', { customStorage: backend, captureAppLifecycleEvents: false, flushInterval: 0 })
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      const optedOut = posthog.optOut()
+      release()
+      await optedOut
+      await posthog.ready()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      expect(restored.getItem(PostHogPersistedProperty.OptedOut)).toBe(true)
+    })
+
+    it.each(['resolve', 'reject'])('optOut awaits and propagates the core result (%s)', async (outcome) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      let resolve!: () => void
+      let reject!: (error: Error) => void
+      const coreResult = new Promise<void>((yes, no) => {
+        resolve = yes
+        reject = no
+      })
+      const coreOptOut = vi.spyOn(Object.getPrototypeOf(PostHog.prototype), 'optOut').mockReturnValue(coreResult)
+      try {
+        const settled = vi.fn()
+        const result = posthog.optOut()
+        void result.then(settled, settled)
+        await rnStorage.waitForPersist()
+        await Promise.resolve()
+        expect(settled).not.toHaveBeenCalled()
+        if (outcome === 'resolve') {
+          resolve()
+          await expect(result).resolves.toBeUndefined()
+        } else {
+          const error = new Error('core opt-out failed')
+          reject(error)
+          await expect(result).rejects.toBe(error)
+        }
+      } finally {
+        coreOptOut.mockRestore()
+      }
     })
 
     it('should allow immediate calls without delay for stored values', async () => {

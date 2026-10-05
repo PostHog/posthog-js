@@ -1,5 +1,54 @@
 # posthog-node
 
+## 5.55.0
+
+### Minor Changes
+
+- [#5140](https://github.com/PostHog/posthog-js/pull/5140) [`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow `featureFlagsPollingInterval: null` to disable automatic local flag polling while retaining initialization and manual refresh.
+  (2026-09-30)
+
+## 5.54.1
+
+### Patch Changes
+
+- [#4832](https://github.com/PostHog/posthog-js/pull/4832) [`ac479db`](https://github.com/PostHog/posthog-js/commit/ac479db0b3542ec9ec4ef991470be3450e2bad2e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Support snake_case feature flag cache payloads while preserving compatibility with camelCase providers and cached data.
+  (2026-09-25)
+
+## 5.54.0
+
+### Minor Changes
+
+- [#5099](https://github.com/PostHog/posthog-js/pull/5099) [`e3955f8`](https://github.com/PostHog/posthog-js/commit/e3955f894d583dcda1da41b7580b002db924e552) Thanks [@marandaneto](https://github.com/marandaneto)! - Expose feature flag evaluation reasons and preserve them in OpenFeature resolution metadata.
+  (2026-09-25)
+
+## 5.53.0
+
+### Minor Changes
+
+- [#5050](https://github.com/PostHog/posthog-js/pull/5050) [`31dd1ad`](https://github.com/PostHog/posthog-js/commit/31dd1adbe2fbf938902ec284e81b87622bf218cc) Thanks [@posthog](https://github.com/apps/posthog)! - Read a feature flag's evaluation runtime with `getFeatureFlagEvaluationRuntime(key)` and `getFeatureFlagKeysByEvaluationRuntime(runtime)`
+  (2026-09-23)
+
+## 5.52.6
+
+### Patch Changes
+
+- [#5078](https://github.com/PostHog/posthog-js/pull/5078) [`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1) Thanks [@rubychilds](https://github.com/rubychilds)! - Honor `filters.holdout` during local feature flag evaluation. A user in an experiment holdout now receives the `holdout-<id>` variant instead of being bucketed into a regular variant, matching how the server evaluates the same flag. The holdout is resolved before the release conditions, so a held-out user never reaches the flag's targeting — including when those conditions would have excluded them, so `isFeatureEnabled` can return true where it previously returned false. Experiments with an active holdout will see variant assignment change for the held-out share of traffic on upgrade, bringing locally evaluated assignments in line with server-evaluated ones.
+  (2026-09-23)
+- Updated dependencies [[`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1)]:
+  - @posthog/core@1.55.2
+
+## 5.52.5
+
+### Patch Changes
+
+- [#5018](https://github.com/PostHog/posthog-js/pull/5018) [`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop dropping long spans that end: `maxSpanAgeMs` now evicts spans only once `maxLiveSpans` is reached, so a span that runs past the age limit and then ends is exported, and its children are no longer orphaned.
+  (2026-09-21)
+
+- [#4800](https://github.com/PostHog/posthog-js/pull/4800) [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect the definitions response's `property_matching_version` during local feature flag evaluation. Version 2 uses explicit boolean/string equality and per-member array matching, while missing or other versions retain service legacy matching (including empty-array truthiness). Preserve the version in Node definition caches and Convex persisted definitions, and propagate it through person, group, cohort and dependency evaluation without mixing snapshots during reloads. Existing numeric ambiguity fallback and SemVer parsing policies are unchanged.
+  (2026-09-21)
+- Updated dependencies [[`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431), [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7)]:
+  - @posthog/core@1.55.1
+
 ## 5.52.4
 
 ### Patch Changes

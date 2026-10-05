@@ -92,6 +92,11 @@ function isSameOrigin(url: string, host: string): boolean {
   }
 }
 
+/** Formats a batch-fetch reference for logs and errors. */
+function promptListReference(label: string | undefined): string {
+  return label === undefined ? 'all prompts' : `prompts with label "${label}"`
+}
+
 /**
  * Classify how a list row relates to the requested label, via its all_labels
  * field.
@@ -162,6 +167,9 @@ function isPromptsWithPostHog(options: PromptsOptions): options is PromptsWithPo
  *
  * // Or fetch all prompts at a label in one request and warm the cache
  * const prodPrompts = await prompts.getAll({ label: 'production' })
+ *
+ * // Or fetch the latest version of every prompt in one request
+ * const allPrompts = await prompts.getAll()
  *
  * // Compile with variables
  * const systemPrompt = prompts.compile(result.prompt, {
@@ -254,27 +262,30 @@ export class Prompts {
   }
 
   /**
-   * Fetch every prompt that carries a label, in one batch.
+   * Fetch every prompt in one batch.
    *
-   * Returns an object mapping prompt name to `PromptRemoteResult`, with each
-   * prompt at the version the label points to. Prompts without the label are
-   * not included.
+   * Returns an object mapping prompt name to `PromptRemoteResult`. With a
+   * label, each prompt is at the version the label points to, and prompts
+   * without the label are not included. Without a label, every prompt is
+   * included at its latest version, matching what `get(name)` returns.
    *
    * Each fetched prompt is stored in the cache, so later
-   * `get(name, { label })` calls are served from cache within the TTL. An app
-   * with many prompts can call this once per cache cycle instead of making one
-   * `get()` request per prompt.
+   * `get(name, { label })` (or plain `get(name)`) calls are served from cache
+   * within the TTL. An app with many prompts can call this once per cache
+   * cycle instead of making one `get()` request per prompt.
    *
    * Unlike `get()`, there is no `fallback` option, so callers should handle
    * the error themselves.
    *
    * @throws {Error} When the request fails, when the response is malformed,
-   * or when the server does not support fetching prompts by label on the list
-   * endpoint (PostHog releases from before September 2026).
+   * or when a label was passed and the server does not support fetching
+   * prompts by label on the list endpoint (PostHog releases from before
+   * September 2026).
    */
-  async getAll(options: { label: string }): Promise<Record<string, PromptRemoteResult>> {
-    const label = options.label
+  async getAll(options?: { label?: string }): Promise<Record<string, PromptRemoteResult>> {
+    const label = options?.label
     const rows = await this.fetchPromptListFromApi(label)
+    const reference = promptListReference(label)
 
     // Validate every row before caching any, so a rejected batch leaves the
     // cache untouched.
@@ -282,7 +293,11 @@ export class Prompts {
     const skipped: string[] = []
     for (const row of rows) {
       if (!isPromptApiResponse(row)) {
-        throw new Error(`[PostHog Prompts] Invalid response format for prompts with label "${label}"`)
+        throw new Error(`[PostHog Prompts] Invalid response format for ${reference}`)
+      }
+      if (label === undefined) {
+        resolvedRows.push(row)
+        continue
       }
       const labelState = rowLabelState(row, label)
       if (labelState === 'absent') {
@@ -303,7 +318,7 @@ export class Prompts {
       resolvedRows.push(row)
     }
 
-    if (rows.length > 0 && resolvedRows.length === 0) {
+    if (label !== undefined && rows.length > 0 && resolvedRows.length === 0) {
       // Every returned row was skipped as moved. One moved label is a
       // mid-request race, but all of them means the server most likely
       // ignored the label param and served latest versions.
@@ -480,15 +495,21 @@ export class Prompts {
   }
 
   /**
-   * Fetch all prompts at a label from the paginated list endpoint.
+   * Fetch all prompts from the paginated list endpoint.
+   *
+   * Without a label the endpoint serves the latest version of every prompt;
+   * the param is then omitted entirely, since the server treats any value as
+   * a label name to filter by.
+   *
    * Follows pagination links until the last page and returns the raw rows.
    */
-  private async fetchPromptListFromApi(label: string): Promise<unknown[]> {
+  private async fetchPromptListFromApi(label: string | undefined): Promise<unknown[]> {
     this.requireCredentials()
 
-    const query = `token=${encodeURIComponent(this.projectApiKey)}&label=${encodeURIComponent(label)}&content=full`
+    const labelQuery = label === undefined ? '' : `&label=${encodeURIComponent(label)}`
+    const query = `token=${encodeURIComponent(this.projectApiKey)}${labelQuery}&content=full`
     let url: string | undefined = `${this.host}/api/environments/@current/llm_prompts/?${query}`
-    const reference = `prompts with label "${label}"`
+    const reference = promptListReference(label)
 
     const rows: unknown[] = []
     let pages = 0

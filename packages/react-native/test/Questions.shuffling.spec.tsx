@@ -60,7 +60,7 @@ afterEach(() => {
 
 describe('Questions shuffling', () => {
   it('advances through shuffled display order without skipping questions', () => {
-    vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0)
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     const onSubmit = vi.fn()
     const onResponsesChange = vi.fn()
     const { getByTestId, queryByTestId } = render(

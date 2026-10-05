@@ -40,9 +40,8 @@ const survey = {
     schedule: null,
 } as unknown as Survey
 
-// Sort keys drive shuffle(); the two orders below differ so a reshuffle on resume is detectable.
-const shuffleTo = (a: number, b: number, c: number) =>
-    vi.spyOn(Math, 'random').mockReturnValueOnce(a).mockReturnValueOnce(b).mockReturnValueOnce(c).mockReturnValue(0)
+// Different random draws would produce a different order if resume shuffled again.
+const shuffleWith = (random: number) => vi.spyOn(Math, 'random').mockReturnValue(random)
 
 const currentQuestion = () => document.querySelector('.survey-question')?.textContent
 
@@ -56,10 +55,12 @@ describe('Surveys: resuming a shuffled survey', () => {
         HTMLFormElement.prototype.submit = vi.fn()
     })
 
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     test('resumes on the question the respondent left off on', () => {
-        shuffleTo(0.5, 0.1, 0.9)
+        shuffleWith(0)
         const { unmount } = show()
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'an answer' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -68,14 +69,15 @@ describe('Surveys: resuming a shuffled survey', () => {
         cleanup()
         vi.restoreAllMocks()
 
-        shuffleTo(0.9, 0.5, 0.1)
+        shuffleWith(0.999999)
         show()
 
+        expect(leftOffOn).toBe('Question 3')
         expect(currentQuestion()).toBe(leftOffOn)
     })
 
     test('keeps showing the remaining questions in the order the respondent started with', () => {
-        shuffleTo(0.5, 0.1, 0.9)
+        shuffleWith(0)
         const { unmount } = show()
         const startingOrder = [currentQuestion()]
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'an answer' } })
@@ -85,11 +87,12 @@ describe('Surveys: resuming a shuffled survey', () => {
         cleanup()
         vi.restoreAllMocks()
 
-        shuffleTo(0.9, 0.5, 0.1)
+        shuffleWith(0.999999)
         show()
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'another answer' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
 
-        expect(startingOrder).not.toContain(currentQuestion())
+        expect(startingOrder).toEqual(['Question 2', 'Question 3'])
+        expect(currentQuestion()).toBe('Question 1')
     })
 })

@@ -1,0 +1,110 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "gemini",
+    "recordedAt": "2026-09-23T04:03:55.086Z",
+    "providerSdkVersion": "1.52.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Call describe_shape for a blue triangle with three sides."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "describe_shape",
+                  "description": "Describe an artificial shape.",
+                  "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                      "color": {
+                        "type": "STRING"
+                      },
+                      "sides": {
+                        "type": "INTEGER"
+                      }
+                    },
+                    "required": ["color", "sides"]
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "allowedFunctionNames": ["describe_shape"],
+              "mode": "ANY"
+            }
+          },
+          "generationConfig": {
+            "maxOutputTokens": 256
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "candidates": [
+              {
+                "content": {
+                  "parts": [
+                    {
+                      "functionCall": {
+                        "name": "describe_shape",
+                        "args": {
+                          "color": "blue",
+                          "sides": 3
+                        },
+                        "id": "call_649034"
+                      },
+                      "thoughtSignature": "EnEKbwFpFH0TYBsn3XsB5HaR6F9VCbFvn/5lamiw2uPHqesx4MiUGTAnCRMToClYK6/xvPSbWn8ZqSHS/DTDi2gaat3WT8uQDDmTMXFD/LjhValz3I6X5SEH/W6mPkvGb7ixA54Oe3Hq7f5bYU7XXmtVGg=="
+                    }
+                  ],
+                  "role": "model"
+                },
+                "finishReason": "STOP",
+                "index": 0,
+                "finishMessage": "Model generated function call(s)."
+              }
+            ],
+            "usageMetadata": {
+              "promptTokenCount": 67,
+              "candidatesTokenCount": 20,
+              "totalTokenCount": 87,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 67
+                }
+              ],
+              "serviceTier": "standard"
+            },
+            "modelVersion": "gemini-3.1-flash-lite",
+            "responseId": "q0-zasTVEoXAz7IP9_2E4AU"
+          }
+        }
+      }
+    }
+  ]
+}

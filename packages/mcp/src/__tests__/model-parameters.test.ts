@@ -181,8 +181,8 @@ describe('Model capture — integration with an instrumented server', () => {
     await cleanup()
   })
 
-  it('does not inject llm_model when captureModel is off (default)', async () => {
-    instrument(server, fakePostHog(), {})
+  it('does not inject llm_model when captureModel is explicitly off', async () => {
+    instrument(server, fakePostHog(), { captureModel: false })
 
     const toolsResponse = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
     for (const tool of toolsResponse.tools) {
@@ -399,7 +399,7 @@ describe('Model capture — integration with an instrumented server', () => {
     const capture = new EventCapture()
     await capture.start()
     try {
-      instrument(server, fakePostHog(), {})
+      instrument(server, fakePostHog(), { captureModel: false })
       await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       await client.request(

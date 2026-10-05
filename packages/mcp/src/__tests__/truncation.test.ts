@@ -1,5 +1,5 @@
 import { sanitizeEvent } from '../extensions/sanitization'
-import { normalize, truncateEvent } from '../extensions/truncation'
+import { MAX_EVENT_BYTES, normalize, truncateEvent } from '../extensions/truncation'
 import type { Event, StackFrame } from '../types'
 
 describe('normalize - string truncation', () => {
@@ -181,6 +181,19 @@ describe('normalize - undefined property handling', () => {
   })
 })
 
+function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length
+}
+
+/** Each level holds `text` under `data`, so keeping `depth` levels keeps `depth` copies of it. */
+function chainOf(levels: number, text: string): Record<string, unknown> {
+  let chain: Record<string, unknown> = { data: text }
+  for (let level = 1; level < levels; level++) {
+    chain = { data: text, next: chain }
+  }
+  return chain
+}
+
 // --- truncateEvent tests ---
 
 function makeEvent(overrides: Partial<Event> = {}): Event {
@@ -208,7 +221,7 @@ describe('truncateEvent - field-level string limits', () => {
     expect(result.resourceName!.endsWith('...')).toBe(true)
   })
 
-  it('should truncate serverName, serverVersion, clientName, clientVersion exceeding 256 chars', () => {
+  it('should truncate serverName, serverVersion, clientName, and clientVersion exceeding 256 chars', () => {
     const event = makeEvent({
       serverName: 's'.repeat(300),
       serverVersion: 'v'.repeat(300),
@@ -220,6 +233,14 @@ describe('truncateEvent - field-level string limits', () => {
     expect(result.serverVersion!.length).toBe(256 + 3)
     expect(result.clientName!.length).toBe(256 + 3)
     expect(result.clientVersion!.length).toBe(256 + 3)
+  })
+
+  it('preserves the exact serverBuild while reducing an oversized event', () => {
+    const serverBuild = 'b'.repeat(256)
+    const response = { chunks: Array.from({ length: 5 }, () => 'r'.repeat(30_000)) }
+    const result = truncateEvent(makeEvent({ serverBuild, response }))
+
+    expect(result.serverBuild).toBe(serverBuild)
   })
 
   it('should leave short field values unchanged', () => {
@@ -346,6 +367,27 @@ describe('truncateEvent - size targeting', () => {
     expect(size).toBeLessThanOrEqual(102_400)
   })
 
+  it.each([
+    ['a deep chain', { parameters: chainOf(6, 'x'.repeat(30_000)) }, 3],
+    ['wide rows', { parameters: { rows: Array.from({ length: 100 }, () => ({ text: 'y'.repeat(1_500) })) } }, 2],
+    [
+      'a shallow field next to a deep one',
+      {
+        parameters: { rows: Array.from({ length: 100 }, () => ({ text: 'p'.repeat(300) })) },
+        response: chainOf(6, 'r'.repeat(20_000)),
+      },
+      3,
+    ],
+  ])('keeps the deepest depth that fits for %s', (_, fields: Partial<Event>, depth) => {
+    const result = truncateEvent(makeEvent(fields))
+
+    expect(jsonBytes(result)).toBeLessThanOrEqual(MAX_EVENT_BYTES)
+    expect(result.parameters).toEqual(normalize(fields.parameters, depth))
+    if (fields.response) {
+      expect(result.response).toEqual(normalize(fields.response, depth))
+    }
+  })
+
   it('should truncate largest string fields as last resort', () => {
     // Create event with a single huge string that exceeds 100KB even at depth 1
     const event = makeEvent({
@@ -355,6 +397,26 @@ describe('truncateEvent - size targeting', () => {
 
     const size = new TextEncoder().encode(JSON.stringify(result)).length
     expect(size).toBeLessThanOrEqual(102_400)
+  })
+
+  it('falls through to last-resort truncation when the depth-1 reduction is still oversized', () => {
+    // A sibling object gives the field nesting above 1, so the loop reaches depth 1
+    // before giving up; four oversized strings keep it over budget even there.
+    const event = makeEvent({
+      parameters: {
+        a: 'x'.repeat(60_000),
+        b: 'y'.repeat(60_000),
+        c: 'z'.repeat(60_000),
+        d: 'w'.repeat(60_000),
+        nested: {},
+      },
+    })
+    const result = truncateEvent(event)
+
+    expect(jsonBytes(result)).toBeLessThanOrEqual(MAX_EVENT_BYTES)
+    // Confirms the depth-1 reduction ran (and its result carried through to the
+    // last-resort step) rather than the last resort truncating the raw event.
+    expect((result.parameters as any).nested).toBe('[Object]')
   })
 
   it('should guarantee 100KB max for pathological payloads', () => {

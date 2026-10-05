@@ -26,7 +26,11 @@ export async function startCollector() {
       if (payload.api_key !== 'phc_cassette_test' || !Array.isArray(payload.batch))
         throw new Error('Invalid analytics payload')
       for (const item of payload.batch) {
-        if (item.event !== '$ai_generation' || typeof item.distinct_id !== 'string' || !item.properties)
+        if (
+          !['$ai_generation', '$ai_embedding'].includes(item.event) ||
+          typeof item.distinct_id !== 'string' ||
+          !item.properties
+        )
           throw new Error('Unexpected analytics event')
         events.push(item)
       }

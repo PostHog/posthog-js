@@ -10,7 +10,6 @@
         ".": "./index.ts"
     },
     "dependencies": {
-        "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "vite": "catalog:"
     }
 }
