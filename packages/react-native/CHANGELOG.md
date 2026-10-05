@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.78.5
+
+### Patch Changes
+
+- [#5196](https://github.com/PostHog/posthog-js/pull/5196) [`16ee222`](https://github.com/PostHog/posthog-js/commit/16ee2227b66fa548d84b97c387a429bab862b451) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Warn when the deprecated `posthog-react-native-session-replay` package is in use; switch to `@posthog/react-native-plugin`
+  (2026-10-05)
+
 ## 4.78.4
 
 ### Patch Changes
