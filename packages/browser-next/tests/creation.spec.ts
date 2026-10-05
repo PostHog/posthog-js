@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { createPostHog } from '../src'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
@@ -9,6 +10,7 @@ import type { CorePostHogOptions, Extension, PostHogOptions } from '../src/types
 import { createFetch, type SentRequest } from './helpers'
 
 const baseOptions = {
+    remoteConfig: localRemoteConfig,
     projectToken: 'ph_test',
     capturePageview: false,
     storage: false,
@@ -148,6 +150,7 @@ describe('client creation', () => {
             ...baseOptions,
             fetch: createFetch(requests),
             analytics: configuration,
+            remoteConfig: localRemoteConfig,
             get projectToken() {
                 configuration.flushAt = 100
                 return 'ph_test'
