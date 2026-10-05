@@ -848,7 +848,6 @@ export class PostHog extends PostHogCore {
     try {
       const sessionStart = this.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
       const hasSessionStart = typeof sessionStart === 'number' && sessionStart > 0
-      const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
       const platformOS = getPlatformOS()
       const hasNativeReplay = !!OptionalReactNativePlugin && (platformOS === 'ios' || platformOS === 'android')
       const replayEnabled = this._isEnableSessionReplay()
@@ -892,7 +891,7 @@ export class PostHog extends PostHogCore {
             ? 'active'
             : 'disabled',
         $sdk_debug_session_start: hasSessionStart ? sessionStart : undefined,
-        $sdk_debug_pending_queue_size: Array.isArray(queue) ? queue.length : 0,
+        $sdk_debug_pending_queue_size: this._pendingQueueSize(),
         $sdk_debug_replay_capture_mode: hasNativeReplay ? 'screenshot' : undefined,
         $sdk_debug_replay_event_trigger_status: eventTriggerStatus,
         $sdk_debug_replay_linked_flag_trigger_status: linkedFlagTriggerStatus,
@@ -902,7 +901,21 @@ export class PostHog extends PostHogCore {
           typeof nativeBufferLength === 'number' ? nativeBufferLength : undefined,
       }
     } catch (e) {
-      return { ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES, $sdk_debug_error_capturing_properties: String(e) }
+      return {
+        ...EMPTY_SESSION_REPLAY_DEBUG_PROPERTIES,
+        $sdk_debug_pending_queue_size: this._pendingQueueSize(),
+        $sdk_debug_error_capturing_properties: String(e),
+      }
+    }
+  }
+
+  // Read apart from the replay keys so a failure building those still reports the queue depth.
+  private _pendingQueueSize(): number | undefined {
+    try {
+      const queue = this.getPersistedProperty<unknown[]>(PostHogPersistedProperty.Queue)
+      return Array.isArray(queue) ? queue.length : 0
+    } catch {
+      return undefined
     }
   }
 
@@ -947,7 +960,8 @@ export class PostHog extends PostHogCore {
 
   // A capture between the state change and the refresh landing must not see the stale map.
   // `provisional` stands in until the refresh lands, for a state the caller already knows
-  // (a stop that succeeded is `disabled`); without it JS-derived values fill the gap.
+  // (a stop that succeeded is `disabled`, a start mirrors `isEnabled()`); without it
+  // JS-derived values fill the gap.
   private _invalidateNativeSessionReplayDebugProperties(provisional?: { [key: string]: JsonType }): void {
     this._nativeSessionReplayDebugProperties = provisional
     this._nativeSessionReplayDebugGeneration++
@@ -2074,7 +2088,7 @@ export class PostHog extends PostHogCore {
         return true
       })
 
-      this._invalidateNativeSessionReplayDebugProperties()
+      this._invalidateNativeSessionReplayDebugProperties({ $recording_status: started ? 'active' : 'disabled' })
 
       if (!started) {
         this._logger.warn(

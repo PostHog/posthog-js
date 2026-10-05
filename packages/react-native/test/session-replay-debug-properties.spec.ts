@@ -429,8 +429,12 @@ describe('PostHog RN session replay debug properties', () => {
     for (const event of ['custom event', '$screen']) {
       const { properties } = captureOne(client, event)
       expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
-      expect(debugKeysOf(properties)).toEqual(['$sdk_debug_error_capturing_properties'])
-      for (const key of DEBUG_KEYS.filter((k) => k !== '$sdk_debug_error_capturing_properties')) {
+      expect(debugKeysOf(properties).sort()).toEqual([
+        '$sdk_debug_error_capturing_properties',
+        '$sdk_debug_pending_queue_size',
+      ])
+      const survivingKeys = ['$sdk_debug_error_capturing_properties', '$sdk_debug_pending_queue_size']
+      for (const key of DEBUG_KEYS.filter((k) => !survivingKeys.includes(k))) {
         expect(properties[key]).toBeUndefined()
       }
     }
@@ -940,6 +944,33 @@ describe('PostHog RN session replay debug properties', () => {
     release?.()
     await waitForNativeChain(client)
     expect(captureOne(client, 'settled').properties.$recording_status).toBe('disabled')
+  })
+
+  it('a manual start reports active before the native refresh lands', async () => {
+    const client = await readyClient()
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('disabled')
+
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    nativeDebugMap = { $recording_status: 'buffering', $sdk_debug_replay_flush_hold_reason: 'below_minimum_duration' }
+    pluginMock.getSessionReplayDebugProperties.mockImplementation(async () => {
+      await gate
+      return nativeDebugMap
+    })
+    pluginMock.isEnabled.mockResolvedValue(true)
+    await client.startSessionRecording()
+
+    // A manual start never sets the JS recording flag, so only the provisional map keeps this
+    // from reading `disabled` while `isSessionReplayActive()` is already true.
+    expect(captureOne(client, 'after start').properties.$recording_status).toBe('active')
+    expect(await client.isSessionReplayActive()).toBe(true)
+
+    release?.()
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'settled').properties.$recording_status).toBe('buffering')
   })
 
   it('Stopping recording clears the hold reason (native)', async () => {
