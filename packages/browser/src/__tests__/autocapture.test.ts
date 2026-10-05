@@ -1061,19 +1061,22 @@ describe('Autocapture system', () => {
                     expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
                 })
 
-                it("rapid clicks on an unlabelled sibling icon inside a cursor:pointer div read the label from the div's nested span do not capture $rageclick", () => {
-                    // the clicked icon carries no label of its own, so the walk continues past it to the div
-                    const div = document.createElement('div')
-                    div.style.cursor = 'pointer'
-                    const label = document.createElement('span')
-                    label.textContent = 'Next'
-                    const icon = document.createElement('i')
-                    icon.style.cursor = 'pointer'
-                    div.appendChild(label)
-                    div.appendChild(icon)
+                it.each(['span', 'p', 'strong'])(
+                    "rapid clicks on an unlabelled sibling icon inside a cursor:pointer div read the label from the div's nested %s do not capture $rageclick",
+                    (labelTag) => {
+                        // the clicked icon carries no label of its own, so the walk continues past it to the div
+                        const div = document.createElement('div')
+                        div.style.cursor = 'pointer'
+                        const label = document.createElement(labelTag)
+                        label.textContent = 'Next'
+                        const icon = document.createElement('i')
+                        icon.style.cursor = 'pointer'
+                        div.appendChild(label)
+                        div.appendChild(icon)
 
-                    expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
-                })
+                        expect(rageClickThreeTimes(icon, div)).not.toContain('$rageclick')
+                    }
+                )
 
                 it('rapid clicks on a button inside a cursor:pointer labelled region still capture $rageclick (tag control wins)', () => {
                     const region = document.createElement('div')
