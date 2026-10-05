@@ -59,7 +59,7 @@ export function getReactNativeVersion(): string | undefined {
   try {
     const version = (Platform as { constants?: { reactNativeVersion?: ReactNativeVersion } }).constants
       ?.reactNativeVersion
-    if (!version) {
+    if (!version || typeof version.major !== 'number') {
       return undefined
     }
     const { major, minor, patch, prerelease } = version

@@ -24,6 +24,21 @@ describe('$react_native_version', () => {
     expect(getReactNativeVersion()).toBeUndefined()
   })
 
+  it('is undefined when the version object has no numeric fields', () => {
+    platform.constants = { reactNativeVersion: {} }
+    expect(getReactNativeVersion()).toBeUndefined()
+  })
+
+  it('is undefined when reading the constants throws', () => {
+    Object.defineProperty(platform, 'constants', {
+      configurable: true,
+      get: () => {
+        throw new Error('getConstants failed')
+      },
+    })
+    expect(getReactNativeVersion()).toBeUndefined()
+  })
+
   it('is sent with every event', async () => {
     platform.constants = { reactNativeVersion: { major: 0, minor: 79, patch: 6 } }
     const posthog = new PostHog('test-token', { flushInterval: 0 })

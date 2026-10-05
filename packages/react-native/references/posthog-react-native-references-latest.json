@@ -3348,7 +3348,7 @@
           "name": "$os_version"
         },
         {
-          "description": "React Native version like \"0.79.6\". Set on events captured from JavaScript, not on events the native SDKs capture",
+          "description": "React Native version like \"0.79.6\"",
           "type": "string | null",
           "name": "$react_native_version"
         },
