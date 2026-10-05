@@ -16,7 +16,7 @@ describe('@posthog/core subpath imports', () => {
   it('each has a resolvable stub in @posthog/core', () => {
     const subpaths = new Set(
       sourceFiles(srcDir).flatMap((file) =>
-        [...readFileSync(file, 'utf8').matchAll(/['"]@posthog\/core\/([\w-]+)['"]/g)].map((match) => match[1])
+        [...readFileSync(file, 'utf8').matchAll(/['"]@posthog\/core\/([\w/-]+)['"]/g)].map((match) => match[1])
       )
     )
 
