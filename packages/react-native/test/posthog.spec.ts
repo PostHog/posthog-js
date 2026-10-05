@@ -277,7 +277,6 @@ describe('PostHog React Native', () => {
       $screen_width: expect.any(Number),
       $recording_status: 'disabled',
       $sdk_debug_session_start: expect.any(Number),
-      $sdk_debug_current_session_duration: expect.any(Number),
       $sdk_debug_pending_queue_size: expect.any(Number),
 
       $app_build: 'mock',

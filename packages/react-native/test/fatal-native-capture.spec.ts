@@ -194,6 +194,20 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(typeof enqueued[0].properties.$sdk_debug_session_start).toBe('number')
   })
 
+  it('releases the replay debug bundle claim when native takes the fatal exception', async () => {
+    posthog = await readyClient()
+    const seen: any[] = []
+    posthog.on('capture', (message: any) => seen.push(message))
+
+    handler(new Error('native-owned'), true)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mockPlugin.captureFatalException).toHaveBeenCalledTimes(1)
+    expect(seen).toHaveLength(0)
+
+    posthog.capture('$screen')
+    expect(typeof seen[0].properties.$sdk_debug_session_start).toBe('number')
+  })
+
   it('keeps the exception in the JS queue when the native payload cannot be built', async () => {
     posthog = await readyClient()
     const enqueued = observeEnqueuedExceptions(posthog)

@@ -35,25 +35,38 @@ AppState.addEventListener = vi.fn()
 
 type CapturedEvent = { event: string; properties: Record<string, any>; timestamp?: string }
 
-const DEBUG_KEYS = [
-  '$recording_status',
+const OPTIONAL_KEYS = [
   '$sdk_debug_session_start',
-  '$sdk_debug_current_session_duration',
-  '$sdk_debug_pending_queue_size',
   '$sdk_debug_replay_capture_mode',
-  '$sdk_debug_replay_throttle_delay_ms',
+  '$sdk_debug_replay_flush_hold_reason',
+  '$sdk_debug_replay_pending_trigger_conditions',
+]
+const REQUIRED_KEYS = [
+  '$recording_status',
   '$sdk_debug_replay_event_trigger_status',
   '$sdk_debug_replay_linked_flag_trigger_status',
-  '$sdk_debug_replay_pending_trigger_conditions',
-  '$sdk_debug_replay_flush_hold_reason',
   '$sdk_debug_replay_internal_buffer_length',
+]
+const REMOVED_KEYS = ['$sdk_debug_current_session_duration', '$sdk_debug_replay_throttle_delay_ms']
+const DEBUG_KEYS = [
+  ...REQUIRED_KEYS,
+  ...OPTIONAL_KEYS,
+  '$sdk_debug_pending_queue_size',
   '$sdk_debug_error_capturing_properties',
 ]
+const WINDOW_MS = 30_000
 
 const debugKeysOf = (properties: Record<string, any>): string[] =>
   Object.keys(properties).filter(
     (key) => (key === '$recording_status' || key.startsWith('$sdk_debug_')) && properties[key] !== undefined
   )
+
+const bundleKeysOf = (properties: Record<string, any>): string[] =>
+  OPTIONAL_KEYS.filter((key) => properties[key] !== undefined)
+
+const advanceClock = (ms: number): void => {
+  vi.setSystemTime(Date.now() + ms)
+}
 
 describe('PostHog RN session replay debug properties', () => {
   vi.useRealTimers()
@@ -67,6 +80,7 @@ describe('PostHog RN session replay debug properties', () => {
   let minimalFlagCalledEvents = false
 
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
     modules.plugin = pluginMock
     nativeRecording = false
     Platform.OS = 'ios'
@@ -119,6 +133,7 @@ describe('PostHog RN session replay debug properties', () => {
     await posthog?.shutdown()
     posthog = undefined
     Platform.OS = 'ios'
+    vi.useRealTimers()
   })
 
   const newPostHog = (options: Record<string, unknown> = {}): PostHog => {
@@ -178,6 +193,24 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$recording_status).toBe('disabled')
   })
 
+  it('A custom event carries the required keys and queue depth but none of the optional bundle', async () => {
+    nativeDebugMap = {
+      $recording_status: 'buffering',
+      $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
+      $sdk_debug_replay_internal_buffer_length: 2,
+    }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+
+    const { properties } = captureOne(client)
+    expect(properties.$recording_status).toBe('buffering')
+    expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_disabled')
+    expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_disabled')
+    expect(properties.$sdk_debug_replay_internal_buffer_length).toBe(2)
+    expect(properties.$sdk_debug_pending_queue_size).toBe(0)
+    expect(bundleKeysOf(properties)).toEqual([])
+  })
+
   it('Minimal feature-flag-called event strips debug properties', async () => {
     minimalFlagCalledEvents = true
     currentFlags = { 'plain-flag': true }
@@ -214,6 +247,29 @@ describe('PostHog RN session replay debug properties', () => {
     expect(flagCalled?.properties.$recording_status).toBe('disabled')
   })
 
+  it('A full-envelope feature-flag-called event carries the required keys only and does not start the window', async () => {
+    minimalFlagCalledEvents = true
+    currentFlags = { 'experiment-flag': 'test' }
+    currentFlagDetails = {
+      'experiment-flag': {
+        key: 'experiment-flag',
+        enabled: true,
+        variant: 'test',
+        metadata: { id: 2, version: 1, has_experiment: true },
+      },
+    }
+    const client = await readyClient()
+    await client.reloadFeatureFlagsAsync()
+
+    const seen = observe(client)
+    client.getFeatureFlag('experiment-flag')
+    const flagCalled = seen.find((e) => e.event === '$feature_flag_called')
+    expect(flagCalled?.properties.$recording_status).toBe('disabled')
+    expect(bundleKeysOf(flagCalled!.properties)).toEqual([])
+
+    expect(bundleKeysOf(captureOne(client, '$screen').properties)).toContain('$sdk_debug_session_start')
+  })
+
   it('Replay not configured reports disabled', async () => {
     const client = await readyClient({ enableSessionReplay: undefined })
     expect(captureOne(client).properties.$recording_status).toBe('disabled')
@@ -227,28 +283,28 @@ describe('PostHog RN session replay debug properties', () => {
   it('Session and queue keys are present when a session exists (mobile)', async () => {
     const client = await readyClient()
     client.capture('first')
-    const { properties } = captureOne(client, 'second')
+    const { properties } = captureOne(client, '$screen')
     const start = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)
 
     expect(properties.$sdk_debug_session_start).toBe(start)
     expect(Number.isInteger(properties.$sdk_debug_session_start)).toBe(true)
-    expect(typeof properties.$sdk_debug_current_session_duration).toBe('number')
-    expect(properties.$sdk_debug_current_session_duration).toBeGreaterThanOrEqual(0)
     expect(properties.$sdk_debug_pending_queue_size).toBe(1)
     expect(properties).not.toHaveProperty('$sdk_debug_retry_queue_size')
+    for (const key of REMOVED_KEYS) {
+      expect(properties).not.toHaveProperty(key)
+    }
   })
 
   it('Session keys are present without session replay (mobile)', async () => {
     const client = await readyClient({ enableSessionReplay: false })
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     expect(typeof properties.$sdk_debug_session_start).toBe('number')
-    expect(typeof properties.$sdk_debug_current_session_duration).toBe('number')
     expect(properties.$recording_status).toBe('disabled')
   })
 
   it('Session keys follow a caller-supplied session id (mobile)', async () => {
     const client = await readyClient()
-    const { properties } = captureOne(client, 'custom event', { $session_id: '0190a0a0-0000-7000-8000-000000000000' })
+    const { properties } = captureOne(client, '$screen', { $session_id: '0190a0a0-0000-7000-8000-000000000000' })
     // Core always sets $session_id last, so a JS-built event never keeps a caller id.
     expect(properties.$session_id).toBe(client.getPersistedProperty(PostHogPersistedProperty.SessionId))
     expect(properties.$sdk_debug_session_start).toBe(
@@ -263,13 +319,12 @@ describe('PostHog RN session replay debug properties', () => {
     // Push the last activity past the expiry so the capture itself rotates the session.
     client.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 3600 * 1000)
 
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     const newStart = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)!
     expect(properties.$session_id).not.toBe(previousSessionId)
     expect(properties.$session_id).toBe(client.getPersistedProperty(PostHogPersistedProperty.SessionId))
     expect(newStart).toBeGreaterThanOrEqual(previousStart)
     expect(properties.$sdk_debug_session_start).toBe(newStart)
-    expect(properties.$sdk_debug_current_session_duration).toBeLessThan(1000)
   })
 
   it('Linked-flag trigger status reflects current state on every capture', async () => {
@@ -279,7 +334,7 @@ describe('PostHog RN session replay debug properties', () => {
 
     const client = await readyClient({ enableSessionReplay: true })
     const sessionId = client.getSessionId()
-    const pending = captureOne(client).properties
+    const pending = captureOne(client, '$screen').properties
     expect(pending.$recording_status).toBe('disabled')
     expect(pending.$sdk_debug_replay_linked_flag_trigger_status).toBe('trigger_pending')
     expect(pending.$sdk_debug_replay_pending_trigger_conditions).toEqual(['linked_flag'])
@@ -301,7 +356,7 @@ describe('PostHog RN session replay debug properties', () => {
 
     const client = await readyClient({ enableSessionReplay: true })
     const sessionId = client.getSessionId()
-    const pending = captureOne(client, 'unrelated').properties
+    const pending = captureOne(client, '$screen').properties
     expect(pending.$sdk_debug_replay_event_trigger_status).toBe('trigger_pending')
     expect(pending.$sdk_debug_replay_pending_trigger_conditions).toEqual(['event_trigger'])
     expect(pending.$recording_status).toBe('disabled')
@@ -320,7 +375,7 @@ describe('PostHog RN session replay debug properties', () => {
   it('Debug values win over same-named caller or registered properties', async () => {
     const client = await readyClient()
     client.register({ $recording_status: 'registered', $sdk_debug_session_start: 'registered' })
-    const { properties } = captureOne(client, 'custom event', {
+    const { properties } = captureOne(client, '$screen', {
       $recording_status: 'caller',
       $sdk_debug_session_start: 'caller',
     })
@@ -331,28 +386,19 @@ describe('PostHog RN session replay debug properties', () => {
   })
 
   it('Capture mode is screenshot when screenshot recording is on', async () => {
-    const client = await readyClient({ sessionReplayConfig: { throttleDelayMs: 250 } })
-    const { properties } = captureOne(client)
+    const client = await readyClient()
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$sdk_debug_replay_capture_mode).toBe('screenshot')
-    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBe(250)
-    expect(properties).not.toHaveProperty('$sdk_debug_replay_capture_mode', 'wireframe')
 
+    advanceClock(WINDOW_MS)
     Platform.OS = 'macos'
-    const onMacOS = captureOne(client).properties
+    const onMacOS = captureOne(client, '$screen').properties
     expect(onMacOS.$sdk_debug_replay_capture_mode).toBeUndefined()
-    expect(onMacOS.$sdk_debug_replay_throttle_delay_ms).toBeUndefined()
   })
 
-  it('reports the default and deprecated throttle delays without native init', async () => {
-    const byDefault = await readyClient()
-    expect(captureOne(byDefault).properties.$sdk_debug_replay_throttle_delay_ms).toBe(1000)
-    await byDefault.shutdown()
-
-    const deprecated = await readyClient({
-      sessionReplayConfig: { iOSdebouncerDelayMs: 500, androidDebouncerDelayMs: 2000 },
-    })
-    expect(captureOne(deprecated).properties.$sdk_debug_replay_throttle_delay_ms).toBe(2000)
-    expect(pluginMock.start).not.toHaveBeenCalled()
+  it('Capture mode is never a required key (mobile)', async () => {
+    const client = await readyClient()
+    expect(captureOne(client).properties.$sdk_debug_replay_capture_mode).toBeUndefined()
   })
 
   it('Capture racing stop() yields a consistent status, never a torn read', async () => {
@@ -375,32 +421,34 @@ describe('PostHog RN session replay debug properties', () => {
   })
 
   it('A build failure attaches the stringified error and nothing else from the debug map', async () => {
-    const client = await readyClient()
-    vi.spyOn(client as any, '_resolveThrottleDelayMs').mockImplementation(() => {
+    const client = await readyClient({ enableSessionReplay: true })
+    vi.spyOn(client, 'getKnownFeatureFlags').mockImplementation(() => {
       throw new Error('boom')
     })
 
-    const { properties } = captureOne(client)
-    expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
-    expect(debugKeysOf(properties)).toEqual(['$sdk_debug_error_capturing_properties'])
-    for (const key of DEBUG_KEYS.filter((k) => k !== '$sdk_debug_error_capturing_properties')) {
-      expect(properties[key]).toBeUndefined()
+    for (const event of ['custom event', '$screen']) {
+      const { properties } = captureOne(client, event)
+      expect(properties.$sdk_debug_error_capturing_properties).toBe('Error: boom')
+      expect(debugKeysOf(properties)).toEqual(['$sdk_debug_error_capturing_properties'])
+      for (const key of DEBUG_KEYS.filter((k) => k !== '$sdk_debug_error_capturing_properties')) {
+        expect(properties[key]).toBeUndefined()
+      }
     }
   })
 
   it('A successful build never attaches the error key', async () => {
     const client = await readyClient()
-    const throttle = vi.spyOn(client as any, '_resolveThrottleDelayMs')
-    throttle.mockImplementationOnce(() => {
+    const replayEnabled = vi.spyOn(client, '_isEnableSessionReplay')
+    replayEnabled.mockImplementationOnce(() => {
       throw new Error('first call only')
     })
 
     // The build runs twice per capture; a failure on the first call must not leak into the event.
     const { properties } = captureOne(client)
-    expect(throttle).toHaveBeenCalledTimes(2)
+    expect(replayEnabled.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(properties.$sdk_debug_error_capturing_properties).toBeUndefined()
     expect(properties.$recording_status).toBe('disabled')
-    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBe(1000)
+    expect(properties.$sdk_debug_pending_queue_size).toBe(0)
 
     expect(captureOne(client).properties.$sdk_debug_error_capturing_properties).toBeUndefined()
   })
@@ -417,7 +465,7 @@ describe('PostHog RN session replay debug properties', () => {
         : { ...built, $sdk_debug_replay_capture_mode: undefined }
     })
 
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     expect(calls).toBe(2)
     expect(properties.$sdk_debug_replay_capture_mode).toBeUndefined()
   })
@@ -449,8 +497,7 @@ describe('PostHog RN session replay debug properties', () => {
     const client = await readyClient({ enableSessionReplay: true })
     const { properties } = captureOne(client)
     expect(properties.$recording_status).toBe('disabled')
-    expect(properties.$sdk_debug_replay_capture_mode).toBeUndefined()
-    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBeUndefined()
+    expect(bundleKeysOf(properties)).toEqual([])
     await client.shutdown()
 
     Platform.OS = 'macos'
@@ -458,8 +505,16 @@ describe('PostHog RN session replay debug properties', () => {
     const onMacOS = await readyClient({ enableSessionReplay: true })
     const macProperties = captureOne(onMacOS).properties
     expect(macProperties.$recording_status).toBe('disabled')
-    expect(macProperties.$sdk_debug_replay_capture_mode).toBeUndefined()
-    expect(macProperties.$sdk_debug_replay_throttle_delay_ms).toBeUndefined()
+    expect(bundleKeysOf(macProperties)).toEqual([])
+  })
+
+  it('No replay integration installed adds the fallback bundle to an eligible event (mobile)', async () => {
+    modules.plugin = undefined
+    const client = await readyClient({ enableSessionReplay: true })
+    const { properties } = captureOne(client, '$screen')
+    expect(properties.$recording_status).toBe('disabled')
+    expect(typeof properties.$sdk_debug_session_start).toBe('number')
+    expect(properties.$sdk_debug_replay_capture_mode).toBeUndefined()
   })
 
   it('omits the trigger keys while session replay is off', async () => {
@@ -498,7 +553,7 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client).properties.$recording_status).toBe('active')
 
     await pauseViaLinkedFlag(client)
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$recording_status).toBe('disabled')
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
@@ -509,14 +564,12 @@ describe('PostHog RN session replay debug properties', () => {
     await warmup()
     const client = await readyClient({ enableSessionReplay: true })
     await pauseViaLinkedFlag(client)
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$recording_status).toBe('disabled')
     expect(properties.$sdk_debug_replay_capture_mode).toBe('screenshot')
-    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBe(1000)
 
-    const neverEnabled = captureOne(await readyClient({ enableSessionReplay: false })).properties
+    const neverEnabled = captureOne(await readyClient({ enableSessionReplay: false }), '$screen').properties
     expect(neverEnabled.$sdk_debug_replay_capture_mode).toBe('screenshot')
-    expect(neverEnabled.$sdk_debug_replay_throttle_delay_ms).toBe(1000)
   })
 
   it('A previous-process crash carries no live debug state', async () => {
@@ -534,18 +587,27 @@ describe('PostHog RN session replay debug properties', () => {
     }
   })
 
+  it('A previous-process crash does not claim or start the window', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    const start = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)!
+    client.capture('$exception', { $exception_list: [] }, { timestamp: new Date(start - 1000) })
+
+    expect(bundleKeysOf(captureOne(client, '$screen').properties)).toContain('$sdk_debug_session_start')
+  })
+
   it('A backdated event within the current session keeps the keys', async () => {
     const client = await readyClient({ enableSessionReplay: true })
     const start = client.getPersistedProperty<number>(PostHogPersistedProperty.SessionStartTimestamp)!
     const seen = observe(client)
-    client.capture('inside session', {}, { timestamp: new Date(start + 1000) })
+    client.capture('$screen', {}, { timestamp: new Date(start + 1000) })
     client.capture('at session start', {}, { timestamp: new Date(start) })
 
     expect(seen).toHaveLength(2)
     for (const event of seen) {
       expect(event.properties.$recording_status).toBe('active')
-      expect(event.properties.$sdk_debug_session_start).toBe(start)
     }
+    expect(seen[0].properties.$sdk_debug_session_start).toBe(start)
+    expect(bundleKeysOf(seen[1].properties)).toEqual([])
   })
 
   it('Active recording status implies the boolean getter is true', async () => {
@@ -570,7 +632,7 @@ describe('PostHog RN session replay debug properties', () => {
     const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
 
-    const { properties } = captureOne(client)
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$recording_status).toBe('buffering')
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
     expect(properties.$sdk_debug_replay_internal_buffer_length).toBe(3)
@@ -593,13 +655,14 @@ describe('PostHog RN session replay debug properties', () => {
       $sdk_debug_replay_flush_hold_reason: 'awaiting_remote_config',
     }
     await reloadAndSettle(client)
-    const buffering = captureOne(client).properties
+    const buffering = captureOne(client, '$screen').properties
     expect(buffering.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
 
     nativeDebugMap = { $recording_status: 'active' }
     await reloadAndSettle(client)
 
-    const active = captureOne(client, 'after refresh').properties
+    advanceClock(WINDOW_MS)
+    const active = captureOne(client, '$screen').properties
     expect(active.$recording_status).toBe('active')
     expect(active.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
@@ -666,16 +729,14 @@ describe('PostHog RN session replay debug properties', () => {
       $sdk_debug_replay_linked_flag_trigger_status: 'trigger_disabled',
       $sdk_debug_replay_pending_trigger_conditions: ['event_trigger'],
       $sdk_debug_replay_capture_mode: 'wireframe',
-      $sdk_debug_replay_throttle_delay_ms: 42,
     }
-    const client = await readyClient({ enableSessionReplay: true, sessionReplayConfig: { throttleDelayMs: 250 } })
+    const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
 
-    const { properties } = captureOne(client, 'unrelated')
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$sdk_debug_replay_event_trigger_status).toBe('trigger_pending')
     expect(properties.$sdk_debug_replay_pending_trigger_conditions).toEqual(['event_trigger'])
     expect(properties.$sdk_debug_replay_capture_mode).toBe('screenshot')
-    expect(properties.$sdk_debug_replay_throttle_delay_ms).toBe(250)
   })
 
   it('native disabled wins over a JS active', async () => {
@@ -891,14 +952,262 @@ describe('PostHog RN session replay debug properties', () => {
     await warmup()
     const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
-    expect(captureOne(client).properties.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
+    expect(captureOne(client, '$screen').properties.$sdk_debug_replay_flush_hold_reason).toBe('awaiting_remote_config')
 
     nativeDebugMap = { $recording_status: 'disabled' }
     await pauseViaLinkedFlag(client)
     await waitForNativeChain(client)
 
-    const { properties } = captureOne(client)
+    advanceClock(WINDOW_MS)
+    const { properties } = captureOne(client, '$screen')
     expect(properties.$recording_status).toBe('disabled')
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+  })
+  describe('optional bundle window', () => {
+    const observeAll = (client: PostHog): CapturedEvent[] => {
+      const seen: CapturedEvent[] = []
+      client.on('*', (_type: string, message: any) => {
+        if (message && typeof message === 'object' && typeof message.event === 'string') {
+          seen.push(message)
+        }
+      })
+      return seen
+    }
+
+    const carriesBundle = (event: CapturedEvent | undefined): boolean => bundleKeysOf(event!.properties).length > 0
+
+    it('Only the first eligible event in a burst carries the optional bundle', async () => {
+      const client = await readyClient()
+      const seen = observe(client)
+      client.capture('$screen')
+      client.capture('$pageview')
+      client.capture('$autocapture')
+
+      expect(seen.map(carriesBundle)).toEqual([true, false, false])
+      for (const event of seen) {
+        expect(event.properties.$recording_status).toBe('disabled')
+      }
+      expect(seen[0].properties.$sdk_debug_session_start).toEqual(expect.any(Number))
+    })
+
+    it('The window reopens 30 seconds after the carrying event was accepted', async () => {
+      const client = await readyClient()
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+
+      advanceClock(WINDOW_MS - 1)
+      const early = captureOne(client, '$screen')
+      expect(early.properties.$recording_status).toBe('disabled')
+      expect(carriesBundle(early)).toBe(false)
+
+      advanceClock(1)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+    })
+
+    it('The window starts at acceptance, not at property build', async () => {
+      const client = await readyClient({
+        before_send: (event: any) => {
+          if (event.event === '$slow') {
+            advanceClock(10_000)
+          }
+          return event
+        },
+      })
+      expect(carriesBundle(captureOne(client, '$slow'))).toBe(true)
+
+      advanceClock(25_000)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(false)
+
+      advanceClock(5_000)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+    })
+
+    it('An event dropped by before_send does not start the window', async () => {
+      const client = await readyClient({ before_send: (event: any) => (event.event === '$discarded' ? null : event) })
+      const seen = observe(client)
+      client.capture('$discarded')
+      client.capture('$screen')
+
+      expect(seen.map((e) => e.event)).toEqual(['$screen'])
+      expect(carriesBundle(seen[0])).toBe(true)
+    })
+
+    it('A deduplicated $set does not start the window', async () => {
+      const client = await readyClient()
+      const seen = observeAll(client)
+      client.setPersonProperties({ plan: 'pro' })
+      expect(seen.filter((e) => e.event === '$set')).toHaveLength(1)
+      expect(carriesBundle(seen[0])).toBe(true)
+
+      advanceClock(WINDOW_MS - 1_000)
+      client.setPersonProperties({ plan: 'pro' })
+      expect(seen.filter((e) => e.event === '$set')).toHaveLength(1)
+
+      advanceClock(1_000)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+    })
+
+    it('An event without the bundle does not start or move the window, even when the interval elapses in before_send', async () => {
+      const client = await readyClient({
+        before_send: (event: any) => {
+          if (event.event === '$inside' || event.event === 'custom') {
+            advanceClock(25_000)
+          }
+          return event
+        },
+      })
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+
+      advanceClock(10_000)
+      expect(carriesBundle(captureOne(client, '$inside'))).toBe(false)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+
+      advanceClock(5_000)
+      expect(carriesBundle(captureOne(client, 'custom'))).toBe(false)
+      advanceClock(WINDOW_MS - 20_000)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+    })
+
+    it('The window follows the wall clock, not the event timestamp', async () => {
+      const client = await readyClient()
+      const seen = observe(client)
+      client.capture('$screen', {}, { timestamp: new Date(Date.now() + 3600 * 1000) })
+      advanceClock(WINDOW_MS)
+      client.capture('$screen')
+
+      expect(seen.map(carriesBundle)).toEqual([true, true])
+    })
+
+    it('A property build that is not a capture never starts the window', async () => {
+      const client = await readyClient()
+      const built = client.getCommonEventProperties()
+      expect(built.$sdk_debug_session_start).toEqual(expect.any(Number))
+      expect(built.$sdk_debug_replay_capture_mode).toBe('screenshot')
+      expect(built.$recording_status).toBe('disabled')
+
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+      expect(client.getCommonEventProperties().$sdk_debug_session_start).toEqual(expect.any(Number))
+    })
+
+    it('A capture inside before_send does not also carry the bundle', async () => {
+      const ref: { client?: PostHog } = {}
+      const client = await readyClient({
+        before_send: (event: any) => {
+          if (event.event === '$outer') {
+            ref.client?.capture('$inner')
+          }
+          return event
+        },
+      })
+      ref.client = client
+      const seen = observe(client)
+      client.capture('$outer')
+
+      expect(seen.map((e) => e.event)).toEqual(['$inner', '$outer'])
+      expect(carriesBundle(seen[0])).toBe(false)
+      expect(carriesBundle(seen[1])).toBe(true)
+    })
+
+    it('An outstanding claim does not expire while before_send runs', async () => {
+      const ref: { client?: PostHog } = {}
+      const client = await readyClient({
+        before_send: (event: any) => {
+          if (event.event === '$slow') {
+            advanceClock(WINDOW_MS + 1_000)
+            ref.client?.capture('$inner')
+          }
+          return event
+        },
+      })
+      ref.client = client
+      const seen = observe(client)
+      client.capture('$slow')
+
+      expect(seen.map((e) => e.event)).toEqual(['$inner', '$slow'])
+      expect(carriesBundle(seen[0])).toBe(false)
+      expect(carriesBundle(seen[1])).toBe(true)
+    })
+
+    it('Eligibility is decided before before_send', async () => {
+      const client = await readyClient({
+        before_send: (event: any) => {
+          if (event.event === '$renamed') {
+            event.event = 'custom name'
+          } else if (event.event === 'custom') {
+            event.event = '$custom'
+          }
+          return event
+        },
+      })
+      const seen = observe(client)
+      client.capture('$renamed')
+      expect(seen[0].event).toBe('custom name')
+      expect(carriesBundle(seen[0])).toBe(true)
+
+      advanceClock(WINDOW_MS)
+      client.capture('custom')
+      expect(seen[1].event).toBe('$custom')
+      expect(carriesBundle(seen[1])).toBe(false)
+
+      client.capture('$screen')
+      expect(carriesBundle(seen[2])).toBe(true)
+    })
+
+    it('$exception, $identify, $set, $create_alias and $groupidentify inside the window carry the required keys only', async () => {
+      const client = await readyClient()
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+
+      const seen = observeAll(client)
+      client.captureException(new Error('inside window'))
+      client.identify('user-1', { plan: 'pro' })
+      client.setPersonProperties({ seat: 2 })
+      client.alias('user-1-alias')
+      client.group('company', 'acme')
+      await wait(50)
+
+      const names = seen.map((e) => e.event)
+      for (const name of ['$exception', '$identify', '$set', '$create_alias', '$groupidentify']) {
+        expect(names).toContain(name)
+      }
+      for (const event of seen) {
+        expect(event.properties.$recording_status).toBe('disabled')
+        expect(event.properties.$sdk_debug_pending_queue_size).toEqual(expect.any(Number))
+        expect(bundleKeysOf(event.properties)).toEqual([])
+      }
+    })
+
+    it('Closing the SDK instance clears the window', async () => {
+      const client = await readyClient()
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(false)
+
+      await client.shutdown()
+      expect(carriesBundle(captureOne(client, '$screen'))).toBe(true)
+    })
+
+    it('Removed keys never appear on any event', async () => {
+      nativeDebugMap = {
+        $recording_status: 'active',
+        $sdk_debug_current_session_duration: 5,
+        $sdk_debug_replay_throttle_delay_ms: 42,
+      }
+      const client = await readyClient({ enableSessionReplay: true })
+      await reloadAndSettle(client)
+      const seen = observeAll(client)
+      client.capture('custom event')
+      client.capture('$screen')
+      client.captureException(new Error('removed keys'))
+      client.identify('user-1')
+      await wait(50)
+
+      expect(seen.length).toBeGreaterThanOrEqual(4)
+      for (const event of seen) {
+        for (const key of REMOVED_KEYS) {
+          expect(event.properties).not.toHaveProperty(key)
+        }
+      }
+      for (const key of REMOVED_KEYS) {
+        expect(client.getCommonEventProperties()).not.toHaveProperty(key)
+      }
+    })
   })
 })
