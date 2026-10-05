@@ -292,6 +292,16 @@ describe('low-level reserved analytics arguments on a fresh instance', () => {
   const STRICT_SCHEMAS: Record<string, z.ZodTypeAny> = {
     strict_schema: z.object({ value: z.string() }).strict(),
     declares_context: z.object({ context: z.string(), value: z.string() }).strict(),
+    union_context: z.union([
+      z.object({ context: z.string(), value: z.string() }).strict(),
+      z.object({ context: z.string(), other: z.string() }).strict(),
+    ]),
+    union4_context: z4.union([
+      z4.object({ context: z4.string(), value: z4.string() }).strict(),
+      z4.object({ context: z4.string(), other: z4.string() }).strict(),
+    ]) as unknown as z.ZodTypeAny,
+    intersection_context: z.intersection(z.object({ context: z.string() }), z.object({ value: z.string() })),
+    record_schema: z.record(z.string()),
   }
 
   async function callFreshInstance(
@@ -389,6 +399,33 @@ describe('low-level reserved analytics arguments on a fresh instance', () => {
     expect(response.isError).not.toBe(true)
     expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
     expect(event?.userIntent).toBeUndefined()
+  })
+
+  it.each([
+    ['a Zod 3 union', 'union_context'],
+    ['a Zod 4 union', 'union4_context'],
+    ['a Zod 3 intersection', 'intersection_context'],
+  ])('keeps a required context argument declared by %s', async (_label, toolName) => {
+    const { response, received, event } = await callFreshInstance(
+      toolName,
+      { context: 'tool context', value: 'kept' },
+      { resolveOriginalTool: (name) => ({ inputSchema: STRICT_SCHEMAS[name] }) }
+    )
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([{ context: 'tool context', value: 'kept' }])
+    expect(event?.userIntent).toBeUndefined()
+  })
+
+  it('leaves ownership unresolved when the resolved schema has no object shape', async () => {
+    const { response, received, event } = await callFreshInstance('record_schema', ANALYTICS_ARGS, {
+      resolveOriginalTool: (name) => ({ inputSchema: STRICT_SCHEMAS[name] }),
+    })
+
+    expect(response.isError).not.toBe(true)
+    expect(received).toEqual([ANALYTICS_ARGS])
+    expect(event?.userIntent).toBe('analytics context')
+    expect(event?.llmModel).toBe('model-a')
   })
 
   it.each([

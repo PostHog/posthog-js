@@ -97,7 +97,7 @@ export function isZ4Schema(schema: unknown): boolean {
   return !!(schema as ZodV4Internal)._zod
 }
 
-function isZodTypeLike(value: unknown): boolean {
+export function isZodTypeLike(value: unknown): boolean {
   return (
     !!value &&
     typeof value === 'object' &&
@@ -119,6 +119,23 @@ interface ZodWrapperDef {
   in?: unknown
   out?: unknown
   innerType?: unknown
+}
+
+const COMPOSED_V3_TYPE_NAMES = new Set(['ZodUnion', 'ZodDiscriminatedUnion', 'ZodIntersection'])
+const COMPOSED_V4_TYPES = new Set(['union', 'intersection'])
+
+/**
+ * A union or intersection. It lists as `anyOf`/`allOf`, which gains no injected
+ * parameter, and it has no single object shape to read ownership from.
+ */
+export function isComposedZodSchema(schema: unknown): boolean {
+  if (!isZodTypeLike(schema)) {
+    return false
+  }
+  const def = zodDef(schema) as { type?: unknown; typeName?: unknown } | undefined
+  return isZ4Schema(schema)
+    ? COMPOSED_V4_TYPES.has(String(def?.type))
+    : COMPOSED_V3_TYPE_NAMES.has(String(def?.typeName))
 }
 
 const MAX_UNWRAP_DEPTH = 8

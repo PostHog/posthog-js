@@ -13,11 +13,10 @@ import {
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
 } from './feedback'
-import { getAnalyticsParameterOwnership } from './analytics-parameters'
+import { getAnalyticsParameterOwnership, getResolvedAnalyticsParameterOwnership } from './analytics-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
-import { unwrapInputSchema } from './mcp-sdk-compat'
 import { getReportMissingToolDescriptor, handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -141,9 +140,7 @@ async function handleToolCallRequest(
     extra,
     execute: (downstreamRequest: MCPRequestLike) =>
       runOriginalToolHandler(originalCallToolHandler, downstreamRequest, extra),
-    parameterOwnership: originalTool
-      ? getAnalyticsParameterOwnership(unwrapInputSchema(originalTool.inputSchema))
-      : undefined,
+    parameterOwnership: originalTool ? getResolvedAnalyticsParameterOwnership(originalTool.inputSchema) : undefined,
     inputSchema: originalTool?.inputSchema,
   })
 }
