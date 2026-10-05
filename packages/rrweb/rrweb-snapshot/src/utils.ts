@@ -917,37 +917,54 @@ export function maskAttributeValue({
 }
 
 const ORIGINAL_ATTRIBUTE_NAME = '__rrweb_original__';
-type PatchedGetImageData = {
-  [ORIGINAL_ATTRIBUTE_NAME]: CanvasImageData['getImageData'];
-} & CanvasImageData['getImageData'];
+type PatchedCanvasMethod<T> = T & { [ORIGINAL_ATTRIBUTE_NAME]: T };
 
 export function is2DCanvasBlank(canvas: HTMLCanvasElement): boolean {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return true;
+  if (canvas.width === 0 || canvas.height === 0) return true;
 
   const chunkSize = 50;
+  const scratch = canvas.ownerDocument.createElement('canvas');
+  scratch.width = Math.min(chunkSize, canvas.width);
+  scratch.height = Math.min(chunkSize, canvas.height);
+  // Read our own context without changing the application's rendering settings.
+  const ctx = scratch.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
 
-  // get chunks of the canvas and check if it is blank
+  // Internal copies and reads must not become recorded canvas mutations.
+  const drawImage = ctx.drawImage as PatchedCanvasMethod<
+    CanvasRenderingContext2D['drawImage']
+  >;
+  const originalDrawImage =
+    ORIGINAL_ATTRIBUTE_NAME in drawImage
+      ? drawImage[ORIGINAL_ATTRIBUTE_NAME]
+      : drawImage;
+  const getImageData = ctx.getImageData as PatchedCanvasMethod<
+    CanvasImageData['getImageData']
+  >;
+  const originalGetImageData =
+    ORIGINAL_ATTRIBUTE_NAME in getImageData
+      ? getImageData[ORIGINAL_ATTRIBUTE_NAME]
+      : getImageData;
+
   for (let x = 0; x < canvas.width; x += chunkSize) {
     for (let y = 0; y < canvas.height; y += chunkSize) {
-      const getImageData = ctx.getImageData as PatchedGetImageData;
-      const originalGetImageData =
-        ORIGINAL_ATTRIBUTE_NAME in getImageData
-          ? getImageData[ORIGINAL_ATTRIBUTE_NAME]
-          : getImageData;
-      // by getting the canvas in chunks we avoid an expensive
-      // `getImageData` call that retrieves everything
-      // even if we can already tell from the first chunk(s) that
-      // the canvas isn't blank
+      const width = Math.min(chunkSize, canvas.width - x);
+      const height = Math.min(chunkSize, canvas.height - y);
       let imageData: ImageData;
       try {
-        imageData = originalGetImageData.call(
+        originalDrawImage.call(
           ctx,
+          canvas,
           x,
           y,
-          Math.min(chunkSize, canvas.width - x),
-          Math.min(chunkSize, canvas.height - y),
+          width,
+          height,
+          0,
+          0,
+          width,
+          height,
         );
+        imageData = originalGetImageData.call(ctx, 0, 0, width, height);
       } catch {
         // a cross-origin draw taints the canvas and the browser then refuses to
         // read it back. We cannot prove it is blank, so call it painted and

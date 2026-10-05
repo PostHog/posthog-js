@@ -722,8 +722,12 @@ describe('canvas rr_dataURL with a configured canvas mask provider', () => {
     const getImageData = vi.fn(() => ({
       data: new Uint8ClampedArray([255, 0, 0, 255]),
     }));
-    const getContext = vi.fn(() => ({ getImageData }));
-    canvas.getContext = getContext as unknown as typeof canvas.getContext;
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({
+        drawImage: vi.fn(),
+        getImageData,
+      } as unknown as CanvasRenderingContext2D);
     const toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
     canvas.toDataURL = toDataURL;
     return { canvas, getContext, toDataURL };
@@ -786,9 +790,10 @@ describe('canvas rr_dataURL with a configured canvas mask provider', () => {
     const taint = () => {
       throw new DOMException('tainted canvas', 'SecurityError');
     };
-    canvas.getContext = (() => ({
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
       getImageData: taint,
-    })) as unknown as typeof canvas.getContext;
+    } as unknown as CanvasRenderingContext2D);
     canvas.toDataURL = taint;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 

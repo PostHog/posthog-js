@@ -183,6 +183,146 @@ describe('integration tests', function (this: ISuite) {
     });
   }
 
+  it('checks blank canvases without reading or reconfiguring application contexts', async () => {
+    const page = await browser.newPage();
+    const warnings: string[] = [];
+    page.on('console', (message) => {
+      if (message.text().includes('willReadFrequently')) {
+        warnings.push(message.text());
+      }
+    });
+    try {
+      const results = (await page.evaluate(`${code};
+          [undefined, false, true].map((willReadFrequently) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', willReadFrequently === undefined
+              ? undefined : { willReadFrequently });
+            const before = ctx.getContextAttributes();
+            let reads = 0;
+            const getImageData = ctx.getImageData;
+            ctx.getImageData = function (...args) {
+              reads++;
+              return getImageData.apply(this, args);
+            };
+            const blank = rrwebSnapshot.is2DCanvasBlank(canvas);
+            return { blank, reads, before, after: ctx.getContextAttributes() };
+          });
+        `)) as {
+        blank: boolean;
+        reads: number;
+        before: object;
+        after: object;
+      }[];
+      for (const result of results) {
+        expect(result.blank).toBe(true);
+        expect(result.reads).toBe(0);
+        expect(result.after).toEqual(result.before);
+      }
+      expect(warnings).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not record internal blank-canvas copies and reads as mutations', async () => {
+    const page = await browser.newPage();
+    try {
+      const result = await page.evaluate(`${code};
+          (() => {
+            let mutations = 0;
+            for (const method of ['drawImage', 'getImageData']) {
+              const original = CanvasRenderingContext2D.prototype[method];
+              const patched = function (...args) {
+                mutations++;
+                return original.apply(this, args);
+              };
+              patched.__rrweb_original__ = original;
+              CanvasRenderingContext2D.prototype[method] = patched;
+            }
+            const blank = rrwebSnapshot.is2DCanvasBlank(document.createElement('canvas'));
+            return { blank, mutations };
+          })();
+        `);
+      expect(result).toEqual({ blank: true, mutations: 0 });
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('preserves blank and painted canvas snapshots at chunk boundaries', async () => {
+    const page = await browser.newPage();
+    try {
+      const result = (await page.evaluate(`${code};
+          (() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 153;
+            canvas.height = 103;
+            document.body.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+            canvas.__context = '2d';
+            const serialize = () => rrwebSnapshot.serializeNodeWithId(canvas, {
+              doc: document, mirror: new rrwebSnapshot.Mirror(),
+              blockClass: 'rr-block', blockSelector: null,
+              maskTextClass: 'rr-mask', maskTextSelector: null,
+              skipChild: false, inlineStylesheet: true, slimDOMOptions: {},
+              recordCanvas: true, dataURLOptions: { type: 'image/png' },
+            }).attributes.rr_dataURL;
+            const blank = serialize();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            ctx.fillRect(152, 102, 1, 1);
+            const painted = serialize();
+            const expected = canvas.toDataURL();
+            ctx.clearRect(0, 0, 153, 103);
+            const cleared = serialize();
+            canvas.width = 0;
+            const zeroWidthBlank = rrwebSnapshot.is2DCanvasBlank(canvas);
+            return { blank, painted, expected, cleared, zeroWidthBlank };
+          })();
+        `)) as {
+        blank?: string;
+        painted: string;
+        expected: string;
+        cleared?: string;
+        zeroWidthBlank: boolean;
+      };
+      expect(result.blank).toBeUndefined();
+      expect(result.painted).toBe(result.expected);
+      expect(result.cleared).toBeUndefined();
+      expect(result.zeroWidthBlank).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not mistake a tainted canvas for a blank canvas', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${serverURL}/html`);
+      const result = await page.evaluate(`${code};
+          (async () => {
+            const image = new Image();
+            image.src = '${serverURL.replace('localhost', '127.0.0.1')}/images/robot.png';
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.getContext('2d').drawImage(image, 0, 0);
+            canvas.__context = '2d';
+            const blank = rrwebSnapshot.is2DCanvasBlank(canvas);
+            const serialized = rrwebSnapshot.serializeNodeWithId(canvas, {
+              doc: document, mirror: new rrwebSnapshot.Mirror(),
+              blockClass: 'rr-block', blockSelector: null,
+              maskTextClass: 'rr-mask', maskTextSelector: null,
+              skipChild: false, inlineStylesheet: true, slimDOMOptions: {},
+              recordCanvas: true, dataURLOptions: { type: 'image/png' },
+            });
+            return { blank, pixels: serialized.attributes.rr_dataURL };
+          })();
+        `);
+      expect(result).toEqual({ blank: false });
+    } finally {
+      await page.close();
+    }
+  });
+
   it('correctly triggers backCompat mode and rendering', async () => {
     const page: puppeteer.Page = await browser.newPage();
     // console for debug
