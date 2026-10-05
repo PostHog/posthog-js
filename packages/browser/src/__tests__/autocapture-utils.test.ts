@@ -48,6 +48,16 @@ describe(`Autocapture utility functions`, () => {
             expect(getSafeText(el)).toBe(`Whyhellothere`)
         })
 
+        it.each([
+            ['', `Whyhellothere`],
+            [' ', `Why hello there`],
+        ])(`joins the element's own text nodes with the separator %j`, (separator, expected) => {
+            const el = document!.createElement(`div`)
+            el.innerHTML = `Why<p>not</p>hello<p>not</p>there`
+
+            expect(getSafeText(el, separator)).toBe(expected)
+        })
+
         it(`shouldn't collect text from element children`, () => {
             const el = document!.createElement(`div`)
             let safeText
