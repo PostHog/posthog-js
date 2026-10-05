@@ -1122,6 +1122,8 @@ describe('posthog-surveys', () => {
                     type: SurveyType.API,
                     conditions: {
                         events: { values: [{ name: 'my_event' }] },
+                        cancelEvents: null,
+                        actions: null,
                     },
                 }
                 mockPostHog.get_property.mockImplementation((key: string) =>
