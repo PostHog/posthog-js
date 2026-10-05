@@ -2770,6 +2770,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // "active" does not mean "uploading": a held epoch keeps its buffer until the user
             // interacts, and only this property tells a held session from a shipping one
             $sdk_debug_replay_flush_hold_reason: this._flushHoldReason,
+            // the unload flush that releases a fresh-start hold requires this, so a held
+            // buffer that dies on a page nobody saw reads the same as one lost to a bug
+            $sdk_debug_replay_document_was_ever_visible: this._documentWasEverVisible,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_session_start: this._sessionStartTimestamp,
