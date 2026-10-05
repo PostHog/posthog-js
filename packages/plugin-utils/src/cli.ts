@@ -58,7 +58,11 @@ export function buildSourcemapCliArgs(
     // the .js files (stripping sourcemap references), and callers pick `upload`
     // precisely because the written files must not change — e.g. Subresource
     // Integrity hashes were already computed from them.
-    if (config.sourcemaps.deleteAfterUpload && command === 'process') {
+    if (command === 'upload') {
+        // Native-debug-ID bundlers can emit runtime helpers without IDs alongside
+        // instrumented chunks. Keep direct CLI uploads strict unless a plugin opts in.
+        args.push('--skip-missing-debug-ids')
+    } else if (config.sourcemaps.deleteAfterUpload) {
         args.push('--delete-after')
     }
 
