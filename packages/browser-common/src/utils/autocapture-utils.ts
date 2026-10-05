@@ -72,16 +72,15 @@ export function makeSafeText(s: string | null | undefined): string | null {
  * element had sensitive child elements, since element.textContent includes child content.
  * Scrubs values that look like they could be sensitive (i.e. cc or ssn number).
  * @param {Element} el - element to get the text of
- * @param {string} separator - placed after each text node; `$el_text` keeps the default of none
  * @returns {string} the element's direct text content
  */
-export function getSafeText(el: Element, separator = ''): string {
+export function getSafeText(el: Element): string {
     let elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += (makeSafeText(child.textContent) ?? '') + separator
+                elText += makeSafeText(child.textContent) ?? ''
             }
         })
     }
@@ -271,15 +270,13 @@ function clickedControlText(el: Element, targetElementList: Element[]): ElementW
 }
 
 // the label is read from the control's whole subtree, so it never depends on which descendant was clicked.
-// text nodes are joined with spaces, unlike $el_text, so <button>Next <svg/> page</button> keeps "next"
-// as a whole word. a control's own aria-label wins; an icon's aria-label inside it is used only when the
-// control has no text
+// a control's own aria-label wins; an icon's aria-label inside it is used only when the control has no text
 function controlLabelText(control: Element): ElementWithText {
     let text = ''
     let firstAriaLabel = ''
     const collect = (node: Element) => {
         if (isElementNode(node) && shouldCaptureElement(node) && !isSensitiveElement(node)) {
-            text += ` ${getSafeText(node, ' ')}`
+            text += ` ${getSafeText(node)}`
             firstAriaLabel = firstAriaLabel || node.getAttribute('aria-label') || ''
             each(node.childNodes, collect)
         }
