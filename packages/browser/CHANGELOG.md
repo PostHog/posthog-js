@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.435.9
+
+### Patch Changes
+
+- [#5150](https://github.com/PostHog/posthog-js/pull/5150) [`abe2924`](https://github.com/PostHog/posthog-js/commit/abe2924c96a1ddb1d32362dc97bdd9ce121672ce) Thanks [@DeepanshuPal](https://github.com/DeepanshuPal)! - Stop a SecurityError escaping the recorder when an iframe becomes cross-origin while shadow DOM observation starts.
+  (2026-10-05)
+
 ## 1.435.8
 
 ### Patch Changes
