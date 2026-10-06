@@ -3349,7 +3349,7 @@
         },
         {
           "description": "React Native version like \"0.79.6\"",
-          "type": "string | null",
+          "type": "string | null | undefined",
           "name": "$react_native_version"
         },
         {
@@ -3830,7 +3830,7 @@
           "name": "capturePushNotificationSubscriptions"
         },
         {
-          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
+          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated. An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
         },

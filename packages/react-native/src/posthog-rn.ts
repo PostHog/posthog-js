@@ -49,7 +49,15 @@ import {
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
+import {
+  getReactNativeVersion,
+  getRemoteConfigBool,
+  getRemoteConfigNumber,
+  isHermes,
+  isMacOS,
+  isValidSampleRate,
+  isWeb,
+} from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -96,7 +104,10 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default 'file'
    */
   persistence?: 'memory' | 'file'
-  /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
+  /**
+   * Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated.
+   * An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).
+   */
   customAppProperties?:
     | PostHogCustomAppProperties
     | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
@@ -414,10 +425,18 @@ export class PostHog extends PostHogCore {
     this._requestHeaders = options?.requestHeaders ?? {}
 
     // Either build the app properties from the existing ones
-    this._appProperties =
-      typeof options?.customAppProperties === 'function'
-        ? options.customAppProperties(getAppProperties())
-        : options?.customAppProperties || getAppProperties()
+    if (typeof options?.customAppProperties === 'function') {
+      this._appProperties = options.customAppProperties(getAppProperties())
+    } else if (options?.customAppProperties) {
+      // An object replaces the defaults but keeps $react_native_version unless it sets that key itself
+      const reactNativeVersion = getReactNativeVersion()
+      this._appProperties = {
+        ...(reactNativeVersion ? { $react_native_version: reactNativeVersion } : {}),
+        ...options.customAppProperties,
+      }
+    } else {
+      this._appProperties = getAppProperties()
+    }
 
     // Resolve storage and construct the logs module BEFORE registering the
     // AppState listener — the listener body references `this._logs` and
