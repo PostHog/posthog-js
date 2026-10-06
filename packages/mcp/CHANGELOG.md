@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.22.0
+
+### Minor Changes
+
+- [#5165](https://github.com/PostHog/posthog-js/pull/5165) [`3394548`](https://github.com/PostHog/posthog-js/commit/339454849c6efa3a309f1d4905e1016abb5e4863) Thanks [@OrbitingBucket](https://github.com/OrbitingBucket)! - Strip SDK-owned analytics arguments on fresh low-level server instances through `resolveOriginalTool`.
+  (2026-10-05)
+
 ## 0.21.4
 
 ### Patch Changes

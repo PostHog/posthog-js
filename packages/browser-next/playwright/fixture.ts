@@ -19,6 +19,7 @@ interface ConsentHarness {
     optOut(): Promise<void>
     prepareTeardown(events: string[], projectToken: string): Promise<void>
     requests(): number
+    remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
     reset(): Promise<void>
     session(): Promise<SessionContext>
     sessionChanges(): readonly string[]
@@ -134,6 +135,20 @@ window.consentHarness = {
     },
     requests() {
         return requests
+    },
+    async remoteConfig() {
+        const posthog = await createPostHog({
+            projectToken: 'ph_remote_config',
+            apiHost: window.location.origin,
+            storage: false,
+            navigator: false,
+            capturePageview: false,
+            optOutByDefault: true,
+        })
+        const config = await posthog.getRemoteConfig()
+        const canCapture = posthog.canCapture
+        await posthog.dispose()
+        return { config, canCapture }
     },
     async reset() {
         ;(await client).reset()

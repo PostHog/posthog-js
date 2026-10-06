@@ -1,5 +1,25 @@
 # posthog-js
 
+## 1.436.1
+
+### Patch Changes
+
+- [#5203](https://github.com/PostHog/posthog-js/pull/5203) [`633f5b2`](https://github.com/PostHog/posthog-js/commit/633f5b2249c7e1fe73b448912c937c9857dfd789) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore batching for events carrying pending Meta `$fbc` or `$fbp` identifiers to reduce races with preceding `identify()` calls.
+  (2026-10-05)
+
+## 1.436.0
+
+### Minor Changes
+
+- [#5083](https://github.com/PostHog/posthog-js/pull/5083) [`d576bec`](https://github.com/PostHog/posthog-js/commit/d576bec7660dd6dd7ec11089fc40c5974c12cebb) Thanks [@61465](https://github.com/61465)! - Opt-in WebView bot heuristic for #2921.
+  - `posthog-js/customizations` exports a new `isLikelyWebViewBot(ua)` helper that flags the UA pattern described in #2921 (a `Chrome/...` token without the usual `AppleWebKit/*` + `Safari/*` co-markers that real Chrome always sends). Wire it into `before_send` to tag or drop the matching events — see `isLikelyWebViewBot` JSDoc for a usage example. Default SDK behaviour is unchanged; the helper is tree-shaken out unless you import it.
+  - `@posthog/core` keeps `isBlockedUA` and `DEFAULT_BLOCKED_UA_STRS` byte-for-byte compatible, and gains session-level memoisation of `isBlockedUA` results keyed on `(ua, customBlockedUserAgents)`, so repeat calls within the same session are O(1). (2026-10-05)
+
+### Patch Changes
+
+- Updated dependencies [[`d576bec`](https://github.com/PostHog/posthog-js/commit/d576bec7660dd6dd7ec11089fc40c5974c12cebb)]:
+  - @posthog/core@1.56.0
+
 ## 1.435.9
 
 ### Patch Changes
