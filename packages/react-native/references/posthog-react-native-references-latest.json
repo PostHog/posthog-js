@@ -4166,7 +4166,7 @@
           "name": "captureFatalException"
         },
         {
-          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "type": "(() => Promise<PostHogReactNativePluginMap>) & (() => Promise<{ [key: string]: any; }>)",
           "name": "getSessionReplayDebugProperties"
         },
         {
