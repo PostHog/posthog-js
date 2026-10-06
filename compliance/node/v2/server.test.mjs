@@ -50,7 +50,7 @@ async function harness(t, options = {}) {
 
 for (const mode of ['v0', 'v1'])
     for (const format of ['cjs', 'esm']) {
-        test(`public ${format}/${mode}: identify and alias deliver literal properties after flush`, async (t) => {
+        test(`public ${format}/${mode}: identify, alias and groupIdentify deliver literal properties after flush`, async (t) => {
             const traffic = []
             const mock = createServer(async (request, response) => {
                 let body = ''
@@ -72,6 +72,7 @@ for (const mode of ['v0', 'v1'])
             const negotiation = await post('negotiate', { protocol })
             assert.ok(negotiation.supported_routes.includes('/identify'))
             assert.ok(negotiation.supported_routes.includes('/alias'))
+            assert.ok(negotiation.supported_routes.includes('/group_identify'))
             await allocate()
             await invoke('/setup', {
                 project_token: 'phc_test',
@@ -93,6 +94,16 @@ for (const mode of ['v0', 'v1'])
                 $set_once: { literal: false },
                 $anon_distinct_id: 'literal',
             }
+            const groupProperties = {
+                plan: 'pro',
+                active: false,
+                score: 0,
+                note: null,
+                preferences: { theme: 'dark' },
+                tags: ['beta', 'team'],
+                $group_type: 'literal-type',
+                $group_key: 'literal-key',
+            }
             for (const [route, args, expectedEvent, distinctId] of [
                 ['/identify', { distinct_id: 'user-123', set, disable_geoip: false }, '$identify', 'user-123'],
                 [
@@ -100,6 +111,24 @@ for (const mode of ['v0', 'v1'])
                     { distinct_id: 'anon-123', alias: 'user-123', disable_geoip: false },
                     '$create_alias',
                     'anon-123',
+                ],
+                [
+                    '/group_identify',
+                    {
+                        group_type: 'company',
+                        group_key: 'company-123',
+                        properties: groupProperties,
+                        distinct_id: 'user-123',
+                        disable_geoip: false,
+                    },
+                    '$groupidentify',
+                    'user-123',
+                ],
+                [
+                    '/group_identify',
+                    { group_type: 'company', group_key: 'company-123', distinct_id: 'user-123', disable_geoip: false },
+                    '$groupidentify',
+                    'user-123',
                 ],
             ]) {
                 const count = traffic.length
@@ -115,10 +144,16 @@ for (const mode of ['v0', 'v1'])
                 assert.equal(event.distinct_id, distinctId)
                 assert.equal(event.properties.$geoip_disable, undefined)
                 if (route === '/identify') assert.deepEqual(event.properties.$set, set)
-                else assert.equal(event.properties.alias, 'user-123')
+                else if (route === '/alias') assert.equal(event.properties.alias, 'user-123')
+                else {
+                    assert.equal(event.properties.$group_type, args.group_type)
+                    assert.equal(event.properties.$group_key, args.group_key)
+                    if (Object.hasOwn(args, 'properties'))
+                        assert.deepEqual(event.properties.$group_set, args.properties)
+                }
             }
             await close()
-            assert.equal(traffic.length, 2)
+            assert.equal(traffic.length, 4)
         })
 
         test(`public ${format}/${mode}: capture, flush, local results and reload through HTTP`, async (t) => {

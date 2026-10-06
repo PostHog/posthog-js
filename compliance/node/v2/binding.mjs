@@ -7,6 +7,7 @@ export const routes = [
     '/capture_ai',
     '/identify',
     '/alias',
+    '/group_identify',
     '/flush',
     '/get_feature_flag',
     '/reload_feature_flags',
@@ -216,6 +217,20 @@ export class Binding {
                 result = this.client.alias(
                     rename(args, { distinct_id: 'distinctId', alias: 'alias', disable_geoip: 'disableGeoip' }, route)
                 )
+            } else if (route === '/group_identify') {
+                result = this.client.groupIdentify(
+                    rename(
+                        args,
+                        {
+                            group_type: 'groupType',
+                            group_key: 'groupKey',
+                            properties: 'properties',
+                            distinct_id: 'distinctId',
+                            disable_geoip: 'disableGeoip',
+                        },
+                        route
+                    )
+                )
             } else if (route === '/flush') {
                 checkKeys(args, [], route)
                 result = await this.client.flush()
@@ -245,6 +260,7 @@ export class Binding {
                     route === '/capture' ||
                         route === '/identify' ||
                         route === '/alias' ||
+                        route === '/group_identify' ||
                         route === '/flush' ||
                         route === '/reload_feature_flags'
                 ),
