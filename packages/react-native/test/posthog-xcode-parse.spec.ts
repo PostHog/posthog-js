@@ -498,6 +498,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
           GITHUB_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           HOME: homeDir,
           NODE_BINARY: process.execPath,
+          SRCROOT: iosDir,
           ...plistEnv,
           ...extraEnv,
         },
@@ -512,6 +513,15 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
   }
+
+  it('continues without git metadata in a repo-less local build', () => {
+    const { status, invocations } = runWrapper([], { GITHUB_SHA: '', VERCEL: '' })
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('hermes clone')
+    expect(invocations[1]).toContain('hermes upload')
+  })
 
   it.each([
     ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],

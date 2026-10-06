@@ -376,7 +376,7 @@ set -x -e
 # themselves, and we don't want to overwrite them with locally-derived ones.
 #
 if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
-  GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null)
+  GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null) || GIT_TOPLEVEL=""
   if [ -n "$GIT_TOPLEVEL" ]; then
     GIT_REMOTE_URL=$(git -C "$GIT_TOPLEVEL" config --get remote.origin.url 2>/dev/null)
     if [ -n "$GIT_REMOTE_URL" ]; then
