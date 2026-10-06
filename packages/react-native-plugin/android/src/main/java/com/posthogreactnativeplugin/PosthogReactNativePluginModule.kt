@@ -103,7 +103,7 @@ class PosthogReactNativePluginModule(
           PostHogSessionManager.setSessionId(uuid)
 
           val context = this.reactApplicationContext
-          val apiKey = getString(sdkOptions, "apiKey", "")
+          val projectToken = getString(sdkOptions, "projectToken", "").ifEmpty { getString(sdkOptions, "apiKey", "") }
           val host = getString(sdkOptions, "host", PostHogConfig.DEFAULT_HOST)
           val debugValue = getBoolean(sdkOptions, "debug", false)
           val distinctId = getString(sdkOptions, "distinctId", "")
@@ -123,7 +123,7 @@ class PosthogReactNativePluginModule(
               ?.mapValues { it.value as String }
 
           val config =
-            PostHogAndroidConfig(apiKey, host).apply {
+            PostHogAndroidConfig(projectToken, host).apply {
               debug = debugValue
               optOut = theOptOut
               // JS owns consent: posthog-js core keeps its own store, so the value above is the

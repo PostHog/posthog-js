@@ -192,7 +192,10 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             return
         }
 
-        let projectToken = sdkOptions["apiKey"] as? String ?? ""
+        let projectToken =
+            (sdkOptions["projectToken"] as? String)
+                ?? (sdkOptions["apiKey"] as? String)
+                ?? ""
         let host = sdkOptions["host"] as? String ?? PostHogConfig.defaultHost
         let debug = sdkOptions["debug"] as? Bool ?? false
 
