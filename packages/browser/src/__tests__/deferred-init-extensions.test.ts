@@ -58,7 +58,7 @@ describe('deferred extension initialization', () => {
     })
 
     describe('race condition handling', () => {
-        it('recovers early programmatic logs on reconnect before deferred setup', async () => {
+        it('recovers programmatic logs on reconnect after deferred setup', async () => {
             vi.useFakeTimers()
             const setup = vi.spyOn(PostHogLogs.prototype, 'setup')
             try {
@@ -69,21 +69,24 @@ describe('deferred extension initialization', () => {
                     disable_session_recording: true,
                     logs: { flushIntervalMs: 0 },
                 })
+                expect(setup).not.toHaveBeenCalled()
+                await vi.advanceTimersByTimeAsync(0)
+                expect(setup).toHaveBeenCalledTimes(1)
                 const send = vi.spyOn(posthog, '_send_request').mockImplementation((options) => {
                     options.callback?.({ statusCode: 0, error: new Error('blocked') })
                 })
-                posthog.captureLog({ body: 'early' })
+                posthog.captureLog({ body: 'ready' })
                 const core = (posthog.logs as any)._core
                 for (let i = 0; i < 3; i++) await core.flush().catch(() => {})
                 expect(send).toHaveBeenCalledTimes(3)
                 expect((posthog.logs as any)._consecutiveStatusZeroFailures).toBe(3)
-                expect(setup).not.toHaveBeenCalled()
+                expect(setup).toHaveBeenCalledTimes(1)
                 send.mockImplementation((options) => options.callback?.({ statusCode: 200 }))
                 window.dispatchEvent(new Event('online'))
                 await core.flush()
                 expect(send).toHaveBeenCalledTimes(4)
                 expect((posthog.logs as any)._queue).toHaveLength(0)
-                expect(setup).not.toHaveBeenCalled()
+                expect(setup).toHaveBeenCalledTimes(1)
                 posthog.logs!.dispose()
                 await posthog.shutdown()
             } finally {
@@ -93,52 +96,61 @@ describe('deferred extension initialization', () => {
             }
         })
 
-        it('captures programmatic logs from loaded without activating deferred console setup', async () => {
-            let captured = 0
+        it('captures programmatic logs after deferred setup without starting console capture from loaded', async () => {
+            vi.useFakeTimers()
             let loadedError: unknown
+            let logger: PostHog['logger'] | undefined
             const setup = vi.spyOn(PostHogLogs.prototype, 'setup')
             const loader = vi.spyOn(PostHogLogs.prototype as any, '_getConsoleLoader').mockReturnValue(() => {})
             const originalLog = console.log
-            const posthog = await createPosthogInstance(uuidv7(), {
-                __preview_deferred_init_extensions: true,
-                advanced_disable_flags: true,
-                capture_pageview: false,
-                disable_session_recording: true,
-                logs: { captureConsoleLogs: true },
-                loaded: (instance) => {
-                    try {
-                        const logger = instance.logger
-                        expect(setup).not.toHaveBeenCalled()
-                        expect(loader).not.toHaveBeenCalled()
-                        instance.identify('early-logs-user')
-                        instance.captureLog({ body: 'loaded callback' })
-                        logger.info('logger callback')
-                        captured = (instance.logs as any)._queue.length
-                        expect((instance.logs as any)._queue[0].record.attributes).toContainEqual({
-                            key: 'posthogDistinctId',
-                            value: { stringValue: 'early-logs-user' },
-                        })
-                        instance.opt_out_capturing()
-                        instance.captureLog({ body: 'denied' })
-                        logger.info('also denied')
-                        expect((instance.logs as any)._queue).toHaveLength(2)
-                        instance.opt_in_capturing()
-                        expect(setup).not.toHaveBeenCalled()
-                        expect(loader).not.toHaveBeenCalled()
-                        expect(console.log).toBe(originalLog)
-                    } catch (error) {
-                        loadedError = error
-                    }
-                },
-            })
-            expect(loadedError).toBeUndefined()
-            expect(captured).toBe(2)
-            await new Promise((resolve) => setTimeout(resolve, 100))
-            expect(setup).toHaveBeenCalledTimes(1)
-            expect(loader).toHaveBeenCalledTimes(1)
-            await posthog.shutdown()
-            setup.mockRestore()
-            loader.mockRestore()
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    advanced_disable_flags: true,
+                    capture_pageview: false,
+                    disable_session_recording: true,
+                    logs: { captureConsoleLogs: true, flushIntervalMs: 0 },
+                    loaded: (instance) => {
+                        try {
+                            logger = instance.logger
+                            expect(setup).not.toHaveBeenCalled()
+                            expect(loader).not.toHaveBeenCalled()
+                            instance.identify('early-logs-user')
+                            instance.captureLog({ body: 'loaded callback' })
+                            logger.info('logger callback')
+                            expect((instance.logs as any)._queue).toHaveLength(0)
+                            expect(setup).not.toHaveBeenCalled()
+                            expect(loader).not.toHaveBeenCalled()
+                            expect(console.log).toBe(originalLog)
+                        } catch (error) {
+                            loadedError = error
+                        }
+                    },
+                })
+                expect(loadedError).toBeUndefined()
+                await vi.advanceTimersByTimeAsync(0)
+                expect(setup).toHaveBeenCalledTimes(1)
+                expect(loader).toHaveBeenCalledTimes(1)
+                expect((posthog.logs as any)._queue).toHaveLength(0)
+                posthog.captureLog({ body: 'after setup' })
+                logger!.info('logger after setup')
+                expect((posthog.logs as any)._queue).toHaveLength(2)
+                expect((posthog.logs as any)._queue[0].record.attributes).toContainEqual({
+                    key: 'posthogDistinctId',
+                    value: { stringValue: 'early-logs-user' },
+                })
+                posthog.opt_out_capturing()
+                posthog.captureLog({ body: 'denied' })
+                logger!.info('also denied')
+                expect((posthog.logs as any)._queue).toHaveLength(2)
+                posthog.opt_in_capturing()
+                await posthog.shutdown()
+            } finally {
+                setup.mockRestore()
+                loader.mockRestore()
+                vi.clearAllTimers()
+                vi.useRealTimers()
+            }
         })
 
         it('should store pending remote config when it arrives before extensions initialize', async () => {
