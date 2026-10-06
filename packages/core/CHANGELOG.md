@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.56.1
+
+### Patch Changes
+
+- [#5206](https://github.com/PostHog/posthog-js/pull/5206) [`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep `$react_native_version` on minimal `$feature_flag_called` events
+  (2026-10-05)
+
 ## 1.56.0
 
 ### Minor Changes
