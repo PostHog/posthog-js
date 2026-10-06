@@ -532,6 +532,7 @@ void exact`
                 'surveys',
                 'toolbar',
                 'tracingHeaders',
+                'webMCP',
                 'webVitalsAutocapture',
             ])
         })

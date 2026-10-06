@@ -3525,6 +3525,11 @@
           "name": "capture_dead_clicks"
         },
         {
+          "description": "Captures WebMCP tool calls as `$mcp_tool_call` events.\nPostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.",
+          "type": "boolean",
+          "name": "capture_webmcp"
+        },
+        {
           "description": "Determines whether to capture exceptions.",
           "type": "boolean | ExceptionAutoCaptureConfig",
           "name": "capture_exceptions"
