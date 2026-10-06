@@ -50,6 +50,20 @@ describe('$react_native_version', () => {
     await posthog.shutdown()
   })
 
+  it.each([
+    ['keeps it when an object replaces the app properties', { $app_build: '1' }, '0.79.6'],
+    ['lets the object override it', { $react_native_version: 'custom' }, 'custom'],
+    ['lets the object remove it', { $react_native_version: undefined }, undefined],
+  ])('customAppProperties object %s', async (_, customAppProperties, expected) => {
+    platform.constants = { reactNativeVersion: { major: 0, minor: 79, patch: 6 } }
+    const posthog = new PostHog('test-token', { flushInterval: 0, customAppProperties })
+    await posthog.ready()
+
+    expect(posthog.getCommonEventProperties().$react_native_version).toBe(expected)
+
+    await posthog.shutdown()
+  })
+
   it('survives minimal $feature_flag_called events', () => {
     expect(minimizeFlagCalledEventProperties({ $react_native_version: '0.79.6', custom: 'dropped' })).toEqual({
       $react_native_version: '0.79.6',
