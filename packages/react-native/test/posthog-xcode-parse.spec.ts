@@ -498,7 +498,6 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
           GITHUB_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           HOME: homeDir,
           NODE_BINARY: process.execPath,
-          SRCROOT: iosDir,
           ...plistEnv,
           ...extraEnv,
         },
@@ -514,24 +513,20 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     }
   }
 
-  it('continues without git metadata in a repo-less local build', () => {
-    const { status, invocations } = runWrapper([], { GITHUB_SHA: '', VERCEL: '' })
-
-    expect(status).toBe(0)
-    expect(invocations).toHaveLength(2)
-    expect(invocations[0]).toContain('hermes clone')
-    expect(invocations[1]).toContain('hermes upload')
-  })
-
-  // `git config --get` exits 1 with no origin and `rev-parse HEAD` exits 128 with no commits;
-  // under `set -e` either used to abort the build phase before the empty-value guards ran.
+  // `git config --get` exits 1 with no origin; `rev-parse HEAD` exits 128 with no commits.
   it.each([
-    ['no origin remote', 'git init -q'],
-    ['an origin remote but no commits', 'git init -q && git remote add origin git@github.com:acme/app.git'],
-  ])('continues without git metadata in a repo with %s', (_label, setup) => {
+    ['no git repo', ''],
+    ['a git repo with no origin remote', 'git init -q'],
+    [
+      'a git repo with an origin remote but no commits',
+      'git init -q && git remote add origin git@github.com:acme/app.git',
+    ],
+  ])('continues without git metadata in a local build with %s', (_label, setup) => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
     try {
-      execSync(setup, { cwd: repoDir, stdio: 'pipe' })
+      if (setup) {
+        execSync(setup, { cwd: repoDir, stdio: 'pipe' })
+      }
 
       const { status, invocations } = runWrapper([], { GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir })
 
@@ -539,6 +534,31 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
       expect(invocations).toHaveLength(2)
       expect(invocations[0]).toContain('hermes clone')
       expect(invocations[1]).toContain('hermes upload')
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not advertise GitHub Actions metadata for a repo with a remote but no commits', () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
+    try {
+      execSync('git init -q && git remote add origin git@github.com:acme/app.git', { cwd: repoDir, stdio: 'pipe' })
+      const envRecordingCli = [
+        '#!/bin/sh',
+        'if [ "$1" = "--version" ]; then echo 0.99.0; exit 0; fi',
+        'echo "$1 GITHUB_ACTIONS=[$GITHUB_ACTIONS] GITHUB_SHA=[$GITHUB_SHA]" >> "$CLI_TRACE_PATH"',
+        '',
+      ].join('\n')
+
+      const { status, invocations } = runWrapper(
+        [],
+        { GITHUB_ACTIONS: '', GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir },
+        undefined,
+        envRecordingCli
+      )
+
+      expect(status).toBe(0)
+      expect(invocations).toEqual(['hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]', 'hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]'])
     } finally {
       fs.rmSync(repoDir, { recursive: true, force: true })
     }
