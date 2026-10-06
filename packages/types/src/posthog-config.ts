@@ -1238,6 +1238,17 @@ export interface BrowserMetricsConfig extends MetricsConfig {
     network?: boolean | NetworkMetricsConfig
 }
 
+/**
+ * Selects the WebMCP metadata that PostHog captures.
+ * Options are applied when a tool registers. Re-register a tool after changing these options.
+ */
+export interface WebMCPCaptureConfig {
+    /** Captures the agent's reason for the tool call. Enabled by default. */
+    intent?: boolean
+    /** Captures the model identifier that the agent reports. Enabled by default. */
+    model?: boolean
+}
+
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
@@ -2312,11 +2323,14 @@ export interface PostHogConfig {
 
     /**
      * Captures WebMCP tool calls as `$mcp_tool_call` events.
+     * Set this option to `true` to capture intent and model metadata. Use an object to disable either field.
      * PostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.
+     * Metadata options are applied when each tool registers. Changing them does not update registered schemas;
+     * re-register the tool to apply the new options.
      *
      * @default false
      */
-    capture_webmcp?: boolean
+    capture_webmcp?: boolean | WebMCPCaptureConfig
 
     /**
      * Determines whether to capture exceptions.
