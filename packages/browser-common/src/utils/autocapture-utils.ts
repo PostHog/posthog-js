@@ -171,28 +171,52 @@ export function getParentElement(curEl: Element): Element | false {
 }
 
 export const DEFAULT_AUTOCAPTURE_IGNORE_LIST = ['.ph-no-autocapture', '[data-ph-no-autocapture]']
-const DEFAULT_CONTENT_IGNORELIST = ['next', 'previous', 'prev', '>', '<']
+// pagers and carousel controls are built to be clicked repeatedly, in words or in arrow glyphs
+const DEFAULT_CONTENT_IGNORELIST = [
+    'next',
+    'previous',
+    'prev',
+    '>',
+    '<',
+    '→',
+    '←',
+    '›',
+    '‹',
+    '»',
+    '«',
+    '▶',
+    '◀',
+    '❯',
+    '❮',
+]
 // +/- steppers are built to be clicked repeatedly; enabled from the 2026-05-30 config defaults
 export const DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS = [...DEFAULT_CONTENT_IGNORELIST, '+', '-', '−', '–']
-const MAX_CONTENT_IGNORELIST_ENTRIES = 10
+// the cap guards against over-long user lists. it clears our own longest default list with room
+// to spare, so copying the defaults and adding a few keywords of your own still works
+const MAX_CONTENT_IGNORELIST_ENTRIES = DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS.length + 10
 
 interface ElementWithText {
     safeText: string
     ariaLabel: string
 }
 
+const INTERACTIVE_TAGS = ['button', 'a', 'input', 'select', 'textarea', 'label']
+const INTERACTIVE_ROLES = ['button', 'link', 'tab', 'menuitem', 'option']
+
 // symbol keywords (e.g. +, -, >) match exactly so we don't suppress "sign-up", "5 > 3", "C++", etc.
-const matchesContentKeyword = (text: string, keyword: string): boolean =>
-    /[a-z0-9]/i.test(keyword) ? text.includes(keyword) : text === keyword
-
-function shouldIgnoreByContent(
-    contentIgnorelist: boolean | string[] | undefined,
-    elementsWithText: ElementWithText[]
-): boolean {
-    if (contentIgnorelist === false || isUndefined(contentIgnorelist)) {
-        return false
+// a shipped word keyword matches whole words wherever it appears, including inside a list the user
+// built themselves, so "prev" doesn't suppress "preview"; any other word keyword the user adds keeps
+// matching as a substring
+const matchesContentKeyword = (text: string, keyword: string): boolean => {
+    if (!/[a-z0-9]/i.test(keyword)) {
+        return text === keyword
     }
+    return includes(DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, keyword)
+        ? new RegExp(`\\b${keyword}\\b`).test(text)
+        : text.includes(keyword)
+}
 
+function shouldIgnoreByContent(contentIgnorelist: true | string[], { safeText, ariaLabel }: ElementWithText): boolean {
     let keywords: string[]
     if (contentIgnorelist === true) {
         keywords = DEFAULT_CONTENT_IGNORELIST
@@ -208,11 +232,62 @@ function shouldIgnoreByContent(
         return false
     }
 
-    return elementsWithText.some(({ safeText, ariaLabel }) => {
-        return keywords.some(
-            (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
-        )
-    })
+    return keywords.some(
+        (keyword) => matchesContentKeyword(safeText, keyword) || matchesContentKeyword(ariaLabel, keyword)
+    )
+}
+
+const isInteractiveElement = (el: Element): boolean =>
+    includes(INTERACTIVE_TAGS, el.tagName.toLowerCase()) ||
+    includes(INTERACTIVE_ROLES, (el.getAttribute('role') || '').toLowerCase())
+
+// keywords describe the control that was clicked, so we read the label of the nearest interactive
+// ancestor: a region labelled "Featured carousel" must not suppress the "Buy now" button inside it
+function clickedControlText(el: Element, targetElementList: Element[]): ElementWithText {
+    for (const candidate of targetElementList) {
+        if (isInteractiveElement(candidate)) {
+            return controlLabelText(candidate)
+        }
+    }
+
+    // a non-semantic control is often a cursor:pointer wrapper, the same rule shouldCaptureDomEvent uses. cursor
+    // inherits, so we walk the contiguous pointer run from the click target up and stop at its first labelled element.
+    for (const candidate of targetElementList) {
+        try {
+            if (window?.getComputedStyle(candidate).getPropertyValue('cursor') !== 'pointer') {
+                break
+            }
+        } catch {
+            break
+        }
+        const label = controlLabelText(candidate)
+        if (label.safeText || label.ariaLabel) {
+            return label
+        }
+    }
+
+    return controlLabelText(el)
+}
+
+// the label is read from the control's whole subtree, so it never depends on which descendant was clicked.
+// a control's own aria-label wins; an icon's aria-label inside it is used only when the control has no text
+function controlLabelText(control: Element): ElementWithText {
+    let text = ''
+    let firstAriaLabel = ''
+    const collect = (node: Element) => {
+        if (isElementNode(node) && shouldCaptureElement(node) && !isSensitiveElement(node)) {
+            text += ` ${getSafeText(node)}`
+            firstAriaLabel = firstAriaLabel || node.getAttribute('aria-label') || ''
+            each(node.childNodes, collect)
+        }
+    }
+    collect(control)
+
+    text = trim(text.replace(/\s+/g, ' '))
+    const safeText = (shouldCaptureValue(text) ? text : '').toLowerCase()
+    const ariaLabel = control.getAttribute('aria-label') || (safeText ? '' : firstAriaLabel)
+
+    return { safeText, ariaLabel: trim(ariaLabel).toLowerCase() }
 }
 
 // dead click capture does not run through autocapture's ph-no-capture check,
@@ -271,7 +346,8 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     let ignoreTextSelection: boolean
     if (isBoolean(_config)) {
         selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
-        // For backward compatibility, don't enable content or text-selection filtering for rageclick: true
+        // every project below the 2025-11-30 defaults resolves to rageclick: true, so filtering stays off
+        // here to keep capturing what they always have; opt in with { content_ignorelist: true }
         contentIgnorelist = undefined
         ignoreTextSelection = false
     } else {
@@ -288,14 +364,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    // Traverse DOM once and cache element data to avoid redundant calls to getSafeText
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    const elementsWithText: ElementWithText[] = targetElementList.map((element) => ({
-        safeText: getSafeText(element).toLowerCase(),
-        ariaLabel: element.getAttribute('aria-label')?.toLowerCase().trim() || '',
-    }))
 
-    if (shouldIgnoreByContent(contentIgnorelist, elementsWithText)) {
+    if (contentIgnorelist && shouldIgnoreByContent(contentIgnorelist, clickedControlText(el, targetElementList))) {
         return false
     }
 
