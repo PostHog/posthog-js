@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.437.0
+
+### Minor Changes
+
+- [#5190](https://github.com/PostHog/posthog-js/pull/5190) [`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d) Thanks [@gesh](https://github.com/gesh)! - Add opt-in WebMCP tool call capture for MCP Analytics.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d)]:
+  - @posthog/types@1.414.0
+
 ## 1.436.1
 
 ### Patch Changes
