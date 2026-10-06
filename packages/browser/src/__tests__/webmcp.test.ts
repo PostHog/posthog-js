@@ -186,6 +186,41 @@ describe('WebMCP', () => {
         expect(posthog.capture).not.toHaveBeenCalled()
     })
 
+    it('preserves inherited fields and the receiver for class tools', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const result = { content: [] }
+
+        class ClassTool {
+            calls = 0
+
+            get name(): string {
+                return 'class_tool'
+            }
+
+            get inputSchema(): object {
+                return { type: 'object' }
+            }
+
+            execute(): unknown {
+                this.calls++
+                return result
+            }
+        }
+
+        const tool = new ClassTool()
+        register(new WebMCP(posthog), tool)
+
+        expect(registeredTool(0).name).toBe('class_tool')
+        expect((registeredTool(0) as Tool & { inputSchema: object }).inputSchema).toEqual({ type: 'object' })
+        expect(registeredTool(0).execute()).toBe(result)
+        expect(tool.calls).toBe(1)
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$mcp_tool_call',
+            expect.objectContaining({ $mcp_tool_name: 'class_tool' }),
+            expect.any(Object)
+        )
+    })
+
     it('does not let a throwing isError accessor change the tool result', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)

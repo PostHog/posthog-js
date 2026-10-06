@@ -88,35 +88,40 @@ export class WebMCP {
 
         const execute = tool.execute
         const webMCP = this
-        const wrappedTool = { ...tool }
+        const wrappedTool = Object.create(tool) as WebMCPTool
 
-        wrappedTool.execute = function (...args): unknown {
-            const startedAt = new Date()
-            let result: unknown
+        Object.defineProperty(wrappedTool, 'execute', {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: function (this: unknown, ...args: unknown[]): unknown {
+                const startedAt = new Date()
+                let result: unknown
 
-            try {
-                result = execute.apply(this, args)
-            } catch (error) {
-                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
-                throw error
-            }
+                try {
+                    result = execute.apply(this === wrappedTool ? tool : this, args)
+                } catch (error) {
+                    webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
+                    throw error
+                }
 
-            if (isPromise(result)) {
-                return Promise.resolve(result).then(
-                    (value) => {
-                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
-                        return value
-                    },
-                    (error) => {
-                        webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
-                        throw error
-                    }
-                )
-            }
+                if (isPromise(result)) {
+                    return Promise.resolve(result).then(
+                        (value) => {
+                            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(value))
+                            return value
+                        },
+                        (error) => {
+                            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true)
+                            throw error
+                        }
+                    )
+                }
 
-            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result))
-            return result
-        }
+                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result))
+                return result
+            },
+        })
         return wrappedTool
     }
 
