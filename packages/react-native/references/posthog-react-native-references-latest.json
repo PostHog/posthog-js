@@ -3349,7 +3349,7 @@
         },
         {
           "description": "React Native version like \"0.79.6\"",
-          "type": "string | null",
+          "type": "string | null | undefined",
           "name": "$react_native_version"
         },
         {
