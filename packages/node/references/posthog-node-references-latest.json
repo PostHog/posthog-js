@@ -2806,6 +2806,53 @@
       "path": "../core/src/error-tracking/types.ts"
     },
     {
+      "id": "MetricsAutocaptureAreas",
+      "name": "MetricsAutocaptureAreas",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "db"
+        },
+        {
+          "type": "boolean",
+          "name": "http"
+        },
+        {
+          "type": "boolean",
+          "name": "runtime"
+        }
+      ],
+      "path": "src/extensions/metrics-autocapture.node.ts"
+    },
+    {
+      "id": "MetricsAutocaptureConfig",
+      "name": "MetricsAutocaptureConfig",
+      "properties": [
+        {
+          "description": "`http.server.request.duration` and `http.client.request.duration` for `http`, `https` and `fetch`.",
+          "type": "boolean",
+          "name": "http"
+        },
+        {
+          "description": "`db.client.operation.duration` and connection metrics for pg, mysql, mysql2, mongodb, redis, ioredis and more.",
+          "type": "boolean",
+          "name": "db"
+        },
+        {
+          "description": "Event loop, heap and garbage collection metrics.",
+          "type": "boolean",
+          "name": "runtime"
+        }
+      ],
+      "path": "src/types.ts"
+    },
+    {
+      "id": "MetricsAutocaptureHandle",
+      "name": "MetricsAutocaptureHandle",
+      "properties": [],
+      "path": "src/client.ts"
+    },
+    {
       "id": "MiddlewareError",
       "name": "MiddlewareError",
       "properties": [
@@ -2905,6 +2952,53 @@
         }
       ],
       "path": "../core/src/types.ts"
+    },
+    {
+      "id": "NodeMetricsConfig",
+      "name": "NodeMetricsConfig",
+      "properties": [
+        {
+          "description": "The service name for metric series.\nMaps to the OTel resource attribute 'service.name'.",
+          "type": "string",
+          "name": "serviceName"
+        },
+        {
+          "description": "The deployment environment for metric series (e.g. 'production', 'staging').\nMaps to the OTel resource attribute 'deployment.environment'.",
+          "type": "string",
+          "name": "environment"
+        },
+        {
+          "description": "The service version for metric series (e.g. '1.2.3').\nMaps to the OTel resource attribute 'service.version'.",
+          "type": "string",
+          "name": "serviceVersion"
+        },
+        {
+          "description": "Additional resource attributes applied to every metrics batch.\nThese describe the service/deployment, not individual series.\nNamed fields (serviceName, environment, serviceVersion) are set first;\nresourceAttributes can override them.",
+          "type": "MetricAttributes",
+          "name": "resourceAttributes"
+        },
+        {
+          "description": "How often the aggregated window is flushed, in milliseconds. Samples\nare folded into per-series aggregates in memory between flushes — one\ndata point per series per window, no matter how many calls.",
+          "type": "number",
+          "name": "flushIntervalMs"
+        },
+        {
+          "description": "Cardinality guardrail: maximum distinct series (name + type + unit +\nattribute combination) held per flush window. Samples for series\nbeyond the cap are dropped with a single warning per window.",
+          "type": "number",
+          "name": "maxSeriesPerFlush"
+        },
+        {
+          "description": "Pre-aggregation filter for metric samples, as a single function or a\nleft-to-right chain. Each function inspects, mutates, or drops a\nsample (return `null` to drop) before it is aggregated.",
+          "type": "BeforeSendMetricFn | BeforeSendMetricFn[]",
+          "name": "beforeSend"
+        },
+        {
+          "description": "Capture HTTP, database and runtime metrics with no instrumentation code, using\nthe official OpenTelemetry instrumentations. Needs the OpenTelemetry peer\npackages (`npm install",
+          "type": "boolean | MetricsAutocaptureConfig",
+          "name": "autocapture"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "ObjectLike",
@@ -3707,7 +3801,7 @@
         },
         {
           "description": "Configuration for the `posthog.metrics` API (count, gauge, histogram).\nSet `serviceName` so series can be filtered per service in the Metrics UI.",
-          "type": "MetricsConfig",
+          "type": "NodeMetricsConfig",
           "name": "metrics"
         },
         {
