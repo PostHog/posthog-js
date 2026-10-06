@@ -1,3 +1,4 @@
+import process from 'node:process'
 /* global globalThis */
 import { createRequire } from 'node:module'
 
@@ -14,6 +15,7 @@ const guardedGlobals = [
     'setInterval',
     'setTimeout',
     'window',
+    'XMLHttpRequest',
 ]
 const descriptors = new Map()
 for (const name of guardedGlobals) {
@@ -33,6 +35,8 @@ for (const name of guardedGlobals) {
 let createPostHog
 let createCorePostHog
 let analytics
+let flags
+let commonJsFlags
 try {
     const require = createRequire(import.meta.url)
     ;({ createPostHog } = require('@posthog/browser'))
@@ -40,6 +44,8 @@ try {
     ;({ analytics } = await import('@posthog/browser/analytics'))
     await import('@posthog/browser')
     await import('@posthog/browser/core')
+    ;({ flags } = await import('@posthog/browser/flags'))
+    ;({ flags: commonJsFlags } = require('@posthog/browser/flags'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -122,3 +128,31 @@ if (
 ) {
     throw new Error('The CommonJS core entrypoint must load only remote configuration, not analytics delivery')
 }
+
+for (const createFlags of [flags, commonJsFlags]) {
+    const client = await createCorePostHog({
+        projectToken: 'ph_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [createFlags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { mixed: 'variant' } } })],
+    })
+    if (client.getExtension('featureFlags').getFeatureFlag('mixed')?.variant !== 'variant')
+        throw new Error('Mixed-module flags bootstrap failed')
+    let results
+    const subscription = client.getExtension('featureFlags').onFeatureFlags((values) => {
+        results = values
+    })
+    client.getExtension('featureFlags').updateFlags({ mixed: false })
+    if (
+        client.getExtension('featureFlags').getFeatureFlag('mixed')?.enabled !== false ||
+        results?.[0]?.enabled !== false
+    )
+        throw new Error('Mixed-module flags update failed')
+    if ((await client.getExtension('featureFlags').reloadFeatureFlags()).status !== 'skipped')
+        throw new Error('Mixed-module flags reload did not report disabled evaluation')
+    subscription.dispose()
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM flags entrypoints and mixed-module lifecycle passed\n')
