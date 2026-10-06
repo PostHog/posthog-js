@@ -1,4 +1,4 @@
-import { isArray, isFunction, isObject, isPromise, isString, isUndefined } from '@posthog/core'
+import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
@@ -46,17 +46,7 @@ const MODEL_PARAMETER_DESCRIPTION =
     'The exact model identifier you are running as, taken from your system prompt or environment. Pass "unknown" if you do not know it. Never guess.'
 const MAX_INTENT_LENGTH = 2048
 const MAX_MODEL_LENGTH = 256
-const REDACTED_VALUE = '[redacted]'
-const UNICODE_SPACE_PATTERN = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g
-const EMAIL_PATTERN = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g
-const IPV4_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b/g
-const IPV6_PATTERN =
-    /(^|[^0-9A-Fa-f:])((?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,5}|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6})))(?=$|[^0-9A-Fa-f:])/g
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
-const DIGIT_GROUP_PATTERN = /\d+/g
-const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
-const PHONE_NANP_PATTERN = /(^|[^\w+])((?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4})(?=$|[^\w])/g
-const PHONE_INTL_PATTERN = /(^|[^\w])(\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13})(?=$|[^\w])/g
+const INTENT_SANITIZATION_OPTIONS = { maxStringLength: MAX_INTENT_LENGTH, truncationSuffix: '...' }
 
 function getMetadataOptions(config: boolean | WebMCPCaptureConfig | undefined): WebMCPMetadataOptions | undefined {
     if (!config) {
@@ -93,64 +83,6 @@ function copyTool(tool: WebMCPTool, inputSchema?: WebMCPInputSchema): WebMCPTool
         })
     }
     return copiedTool
-}
-
-function passesLuhn(digits: string): boolean {
-    let sum = 0
-    let double = false
-    for (let index = digits.length - 1; index >= 0; index--) {
-        let digit = digits.charCodeAt(index) - 48
-        if (double) {
-            digit *= 2
-            if (digit > 9) {
-                digit -= 9
-            }
-        }
-        sum += digit
-        double = !double
-    }
-    return sum % 10 === 0
-}
-
-function redactCardNumbers(match: string): string {
-    const groups: { digits: string; start: number; end: number }[] = []
-    for (let result = DIGIT_GROUP_PATTERN.exec(match); result; result = DIGIT_GROUP_PATTERN.exec(match)) {
-        groups.push({ digits: result[0], start: result.index, end: result.index + result[0].length })
-    }
-
-    let output = ''
-    let cursor = 0
-    for (let first = 0; first < groups.length; first++) {
-        let digits = ''
-        let matchedLast = -1
-        for (let last = first; last < groups.length; last++) {
-            digits += groups[last].digits
-            if (digits.length > 19) {
-                break
-            }
-            if (digits.length >= 13 && passesLuhn(digits)) {
-                matchedLast = last
-            }
-        }
-        if (matchedLast >= 0) {
-            output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
-            cursor = groups[matchedLast].end
-            first = matchedLast
-        }
-    }
-    return output + match.slice(cursor)
-}
-
-function redactIntent(value: string): string {
-    return value
-        .replace(UNICODE_SPACE_PATTERN, ' ')
-        .replace(EMAIL_PATTERN, REDACTED_VALUE)
-        .replace(IPV4_PATTERN, REDACTED_VALUE)
-        .replace(IPV6_PATTERN, `$1${REDACTED_VALUE}`)
-        .replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardNumbers)
-        .replace(US_SSN_PATTERN, REDACTED_VALUE)
-        .replace(PHONE_NANP_PATTERN, `$1${REDACTED_VALUE}`)
-        .replace(PHONE_INTL_PATTERN, `$1${REDACTED_VALUE}`)
 }
 
 function injectMetadataParameters(
@@ -219,7 +151,7 @@ function normalizeMetadata(value: unknown, maxLength: number, redact = false): s
     if (!normalized) {
         return undefined
     }
-    const valueToCapture = redact ? redactIntent(normalized.slice(0, maxLength * 2)) : normalized
+    const valueToCapture = redact ? sanitizeFreeText(normalized, INTENT_SANITIZATION_OPTIONS) : normalized
     return valueToCapture.slice(0, maxLength)
 }
 

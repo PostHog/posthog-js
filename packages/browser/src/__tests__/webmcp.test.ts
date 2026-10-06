@@ -296,6 +296,26 @@ describe('WebMCP', () => {
         )
     })
 
+    it('redacts credentials from URLs in intent', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+
+        register(new WebMCP(posthog), {
+            name: 'private_url',
+            inputSchema: { type: 'object' },
+            execute: () => ({ content: [] }),
+        })
+        registeredTool(0).execute({
+            context: 'Open https://example.com/report?token=sk_live_example&view=summary.',
+            llm_model: 'gpt-5',
+        })
+
+        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
+            expect.objectContaining({
+                $mcp_intent: 'Open https://example.com/report?token=%5Bredacted%5D&view=summary.',
+            })
+        )
+    })
+
     it('preserves error results, synchronous throws, and promise rejections', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)
