@@ -3456,6 +3456,8 @@ export class PostHog extends PostHogCore {
       !this._isBackdatedBeforeSession(message)
     if (claimed) {
       this._replayDebugBundleClaimed = true
+    } else if (message.event === '$snapshot') {
+      message.properties = withoutDebugProperties(message.properties)
     } else {
       message.properties = withoutOptionalReplayDebugProperties(message.properties)
     }

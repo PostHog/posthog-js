@@ -211,6 +211,13 @@ describe('PostHog RN session replay debug properties', () => {
     expect(bundleKeysOf(properties)).toEqual([])
   })
 
+  it('Snapshot event carries none of the debug properties when nothing was dropped', async () => {
+    const client = await readyClient({ enableSessionReplay: true })
+    const { properties } = captureOne(client, '$snapshot', { $snapshot_data: [] })
+    expect(debugKeysOf(properties)).toEqual([])
+    expect(captureOne(client, '$screen').properties.$sdk_debug_session_start).toBeDefined()
+  })
+
   it('Minimal feature-flag-called event strips debug properties', async () => {
     minimalFlagCalledEvents = true
     currentFlags = { 'plain-flag': true }
