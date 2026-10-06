@@ -90,9 +90,9 @@ const NATIVE_CALL_TIMEOUT_MS = 10_000
 // retries as well as flags-driven retries. JS flags can finish loading before native config.
 const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
 
-// Native clears a replay hold on its own clock, so a `buffering` map is re-read from the
-// capture path at most this often.
-const BUFFERING_STATUS_REFRESH_INTERVAL_MS = 5_000
+// Native clears a replay hold and drains its replay queue on its own clock, so a `buffering`
+// or `active` map is re-read from the capture path at most this often.
+const NATIVE_REPLAY_STATUS_REFRESH_INTERVAL_MS = 5_000
 
 const REPLAY_DEBUG_PROPERTIES_INTERVAL_MS = 30_000
 const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
@@ -949,10 +949,11 @@ export class PostHog extends PostHogCore {
     })
   }
 
-  private _refreshStaleBufferingStatus(): void {
+  private _refreshStaleNativeStatus(): void {
+    const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
     if (
-      this._nativeSessionReplayDebugProperties?.['$recording_status'] === 'buffering' &&
-      Date.now() - this._nativeSessionReplayDebugRefreshedAt >= BUFFERING_STATUS_REFRESH_INTERVAL_MS
+      (status === 'buffering' || status === 'active') &&
+      Date.now() - this._nativeSessionReplayDebugRefreshedAt >= NATIVE_REPLAY_STATUS_REFRESH_INTERVAL_MS
     ) {
       this._refreshNativeSessionReplayDebugProperties()
     }
@@ -3433,7 +3434,7 @@ export class PostHog extends PostHogCore {
       }
       try {
         this._maybeActivateEventTrigger(processed?.['event'])
-        this._refreshStaleBufferingStatus()
+        this._refreshStaleNativeStatus()
       } catch (e) {
         this._logger.error(`Session replay event trigger check failed: ${e}.`)
       }

@@ -888,6 +888,30 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
   })
 
+  it('a capture re-reads an active map once the refresh interval has passed, so the buffer length moves both ways', async () => {
+    nativeDebugMap = { $recording_status: 'active', $sdk_debug_replay_internal_buffer_length: 2 }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$sdk_debug_replay_internal_buffer_length).toBe(2)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    nativeDebugMap = { $recording_status: 'active', $sdk_debug_replay_internal_buffer_length: 5 }
+    captureOne(client, 'inside the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).not.toHaveBeenCalled()
+
+    ;(client as any)._nativeSessionReplayDebugRefreshedAt = 0
+    captureOne(client, 'after the interval')
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'grown').properties.$sdk_debug_replay_internal_buffer_length).toBe(5)
+
+    nativeDebugMap = { $recording_status: 'active', $sdk_debug_replay_internal_buffer_length: 1 }
+    ;(client as any)._nativeSessionReplayDebugRefreshedAt = 0
+    captureOne(client, 'after another interval')
+    await waitForNativeChain(client)
+    expect(captureOne(client, 'drained').properties.$sdk_debug_replay_internal_buffer_length).toBe(1)
+  })
+
   it('a refresh that was in flight when recording stopped cannot write its stale map back', async () => {
     const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
