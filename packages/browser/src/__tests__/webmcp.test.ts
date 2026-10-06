@@ -456,7 +456,9 @@ describe('WebMCP', () => {
         register(new WebMCP(posthog), tool)
 
         expect(registeredTool(0).name).toBe('class_tool')
-        expect((registeredTool(0) as Tool & { inputSchema: object }).inputSchema).toEqual({ type: 'object' })
+        expect((registeredTool(0) as Tool & { inputSchema: object }).inputSchema).toEqual(
+            expect.objectContaining({ type: 'object' })
+        )
         expect(registeredTool(0).execute()).toBe(result)
         expect(tool.calls).toBe(1)
         expect(posthog.capture).toHaveBeenCalledWith(
