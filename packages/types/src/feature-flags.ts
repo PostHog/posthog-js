@@ -8,7 +8,8 @@ export type FeatureFlagsCallback = (
     flags: string[],
     variants: Record<string, string | boolean>,
     context?: {
-        errorsLoading?: boolean
+        /** True when the last flags request failed. The SDK always supplies this value. */
+        errorsLoading: boolean
     }
 ) => void
 
