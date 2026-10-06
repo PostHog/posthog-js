@@ -71,7 +71,6 @@ class PosthogReactNativePluginModule(
     val errorTrackingConfig = getMap(pluginConfig, "errorTracking")
 
     setupNativeSdk(
-      method = "setup",
       sessionId = sessionId,
       sdkOptions = sdkOptions,
       sessionReplayEnabled = getBoolean(sessionReplayConfig, "enabled", false),
@@ -86,7 +85,6 @@ class PosthogReactNativePluginModule(
   }
 
   private fun setupNativeSdk(
-    method: String,
     sessionId: String,
     sdkOptions: ReadableMap,
     sessionReplayEnabled: Boolean,
@@ -207,7 +205,7 @@ class PosthogReactNativePluginModule(
 
           captureColdStartPushOpenIfNeeded(config)
         } catch (e: Throwable) {
-          logError(method, e)
+          logError("setup", e)
         } finally {
           promise.resolve(null)
         }
