@@ -223,9 +223,7 @@ describe('sanitizeEvent - response content blocks', () => {
 
     const result = sanitizeEvent(event)
 
-    expect(result.response.content[0].text).toBe(
-      'https://example.test/?value=[redacted]&token=%5Bredacted%5D'
-    )
+    expect(result.response.content[0].text).toBe('https://example.test/?value=[redacted]&token=%5Bredacted%5D')
   })
 
   it('should handle null and undefined response without error', () => {

@@ -1,6 +1,6 @@
 import { RetriableRequestWithOptions } from './types'
 
-import { isPositiveNumber, isUndefined } from '@posthog/core'
+import { isArray, isPositiveNumber, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { window } from '@posthog/browser-common/utils/globals'
 import type { PostHog } from './posthog-core'
@@ -199,6 +199,8 @@ export class RetryQueue {
                 // we've had send beacon in place for at least 2 years
                 this._instance._send_request({
                     ...requestOptions,
+                    // Split beacon fallbacks cannot acknowledge delivery of the entire batch.
+                    callback: isArray(requestOptions.data) ? undefined : requestOptions.callback,
                     transport: 'sendBeacon',
                 })
             } catch (e) {

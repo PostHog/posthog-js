@@ -38,6 +38,8 @@ try {
     ;({ createPostHog } = require('@posthog/browser'))
     ;({ createPostHog: createCorePostHog } = require('@posthog/browser/core'))
     ;({ analytics } = await import('@posthog/browser/analytics'))
+    await import('@posthog/browser')
+    await import('@posthog/browser/core')
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -55,6 +57,7 @@ const posthog = await createCorePostHog({
     navigator: false,
     extensions: [analytics()],
     fetch: async (input, init) => {
+        if (init.method === 'GET') return new Response('{}')
         const body = JSON.parse(init.body)
         requests.push({ url: String(input), body })
         const uuid = body?.batch?.[0]?.uuid
@@ -85,6 +88,7 @@ const automatic = await createPostHog({
     storage: false,
     navigator: false,
     fetch: async (input, init) => {
+        if (init.method === 'GET') return new Response('{}')
         automaticRequests.push({ url: String(input), body: JSON.parse(init.body) })
         return new Response('{}', { status: 200 })
     },
@@ -111,6 +115,10 @@ const core = await createCorePostHog({
 core.capture('core_buffered_event')
 await core.flush()
 await core.dispose()
-if (coreRequests.length !== 0) {
-    throw new Error('The CommonJS core entrypoint loaded analytics delivery')
+if (
+    coreRequests.length !== 1 ||
+    String(coreRequests[0][0]) !== 'https://us-assets.i.posthog.com/array/ph_test/config?token=ph_test' ||
+    coreRequests[0][1].method !== 'GET'
+) {
+    throw new Error('The CommonJS core entrypoint must load only remote configuration, not analytics delivery')
 }

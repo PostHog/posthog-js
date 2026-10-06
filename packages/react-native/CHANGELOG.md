@@ -1,5 +1,25 @@
 # posthog-react-native
 
+## 4.79.0
+
+### Minor Changes
+
+- [#5206](https://github.com/PostHog/posthog-js/pull/5206) [`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `$react_native_version` (for example `0.79.6`) to events captured from JavaScript
+  (2026-10-05)
+
+### Patch Changes
+
+- Updated dependencies [[`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4), [`f047084`](https://github.com/PostHog/posthog-js/commit/f047084f816817a1b2a5646886d56bbe4c02b5e5)]:
+  - @posthog/core@1.56.1
+  - @posthog/react-native-plugin@2.12.5
+
+## 4.78.5
+
+### Patch Changes
+
+- [#5196](https://github.com/PostHog/posthog-js/pull/5196) [`16ee222`](https://github.com/PostHog/posthog-js/commit/16ee2227b66fa548d84b97c387a429bab862b451) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Warn when the deprecated `posthog-react-native-session-replay` package is in use; switch to `@posthog/react-native-plugin`
+  (2026-10-05)
+
 ## 4.78.4
 
 ### Patch Changes

@@ -34,6 +34,7 @@ import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-commo
 import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
+import { WebMCP } from './extensions/webmcp'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { PageViewManager } from './page-view'
 import { PostHogPersistence } from './posthog-persistence'
@@ -507,6 +508,7 @@ export class PostHog implements PostHogInterface {
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
     productTours?: PostHogProductTours
+    webMCP?: WebMCP
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -1239,6 +1241,9 @@ export class PostHog implements PostHogInterface {
         }
         if (ext.experiments) {
             this._extensions.push((this.experiments = this.experiments ?? new ext.experiments(this)))
+        }
+        if (ext.webMCP) {
+            this._extensions.push((this.webMCP = this.webMCP ?? new ext.webMCP(this)))
         }
 
         this._extensions.forEach((extension) => {
@@ -2024,12 +2029,7 @@ export class PostHog implements PostHogInterface {
 
         // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
         // options are unbatched already and `send_instantly` changes nothing for them
-        if (
-            this.config.request_batching &&
-            (!options || options?._batchKey) &&
-            !options?.send_instantly &&
-            !metaIdentifiersToConfirm.length
-        ) {
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             let transportOverride: QueuedRequestWithOptions['transport']
@@ -4267,6 +4267,7 @@ export class PostHog implements PostHogInterface {
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
             this.metrics?.onConfigChange()
+            this.webMCP?.startIfEnabled()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()

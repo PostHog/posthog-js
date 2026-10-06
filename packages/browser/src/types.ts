@@ -33,6 +33,7 @@ import type { PostHogConversations } from './extensions/conversations/posthog-co
 import type { PostHogFeatureFlags } from './posthog-featureflags'
 import type { PostHogLogs } from './posthog-logs'
 import type { PostHogMetrics } from './posthog-metrics'
+import type { WebMCP } from './extensions/webmcp'
 
 // ============================================================================
 // Re-export public types from @posthog/types
@@ -102,6 +103,7 @@ export type {
     SessionRecordingOptions,
     RequestQueueConfig,
     CapturePageviewOptions,
+    WebMCPCaptureConfig,
 } from '@posthog/types'
 
 // Segment integration types
@@ -234,6 +236,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
         logs?: ExtensionConstructor<PostHogLogs>
         metrics?: ExtensionConstructor<PostHogMetrics>
+        webMCP?: ExtensionConstructor<WebMCP>
     }
 }
 

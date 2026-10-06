@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type NewSessionInfo, type StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
@@ -137,6 +138,7 @@ describe('browser-next session state', () => {
             .mockImplementationOnce(() => response)
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage,
@@ -438,6 +440,7 @@ describe('browser-next session state', () => {
         const sibling = await createMemoryClient(local)
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             navigator: false,
