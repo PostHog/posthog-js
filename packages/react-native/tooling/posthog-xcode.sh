@@ -375,8 +375,9 @@ set -x -e
 # natively (GitHub Actions, Vercel). Those runners inject the real variables
 # themselves, and we don't want to overwrite them with locally-derived ones.
 #
+set +e # git metadata is best-effort: no repo, no remote, or no commits must not abort the build
 if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
-  GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null) || GIT_TOPLEVEL=""
+  GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$GIT_TOPLEVEL" ]; then
     GIT_REMOTE_URL=$(git -C "$GIT_TOPLEVEL" config --get remote.origin.url 2>/dev/null)
     if [ -n "$GIT_REMOTE_URL" ]; then
@@ -407,6 +408,7 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
     fi
   fi
 fi
+set -e
 
 # Execute posthog cli clone
 set +x +e
