@@ -861,7 +861,19 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"capture_webmcp\\": [
     \\"undefined\\",
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    {
+      \\"intent\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
+      \\"model\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ]
+    }
   ],
   \\"capture_exceptions\\": [
     \\"undefined\\",

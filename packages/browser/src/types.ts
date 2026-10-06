@@ -103,6 +103,7 @@ export type {
     SessionRecordingOptions,
     RequestQueueConfig,
     CapturePageviewOptions,
+    WebMCPCaptureConfig,
 } from '@posthog/types'
 
 // Segment integration types
