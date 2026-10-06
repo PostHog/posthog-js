@@ -209,7 +209,12 @@ function sanitizeUrlFields(
   const sanitized = new URLSearchParams()
   let changed = false
   let lastFieldSensitive = false
-  for (const [key, value] of new URLSearchParams(fields)) {
+  // Parsing decodes each field, which can turn an encoded PostHog token
+  // (`%70hx_...`) into a plain one, so tokens are redacted again after decoding.
+  for (const [decodedKey, decodedValue] of new URLSearchParams(fields)) {
+    const key = redactCredentials(decodedKey)
+    const value = redactCredentials(decodedValue)
+    changed ||= key !== decodedKey || value !== decodedValue
     const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
     // `changed` is compared, not inferred from the key: the PostHog-token pass
     // runs first, so a value can already read `[redacted]`, and calling that a
@@ -512,10 +517,7 @@ function redactCredentials(value: string): string {
 
 /** Replaces every URL-shaped match, credentials and all. */
 function redactUrls(value: string): string {
-  const sanitized = sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
-  // URL field parsing can decode an encoded PostHog token. Scan only rewritten
-  // strings again so that decoded credentials cannot leave this pass.
-  return sanitized === value ? value : redactCredentials(sanitized)
+  return sanitizeUrlsInString(value, { allowNestedUrls: true, stripPunctuation: true })
 }
 
 /**

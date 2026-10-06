@@ -209,21 +209,38 @@ describe('sanitizeEvent - response content blocks', () => {
     })
   })
 
-  it('should redact PostHog tokens exposed by URL field decoding', () => {
-    const event = makeEvent({
-      response: {
-        content: [
-          {
-            type: 'text',
-            text: 'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
-          },
-        ],
-      },
-    })
+  it.each([
+    [
+      'plain boundary',
+      'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
+      'https://example.test/?value=%5Bredacted%5D&token=%5Bredacted%5D',
+    ],
+    ['only field', 'https://e.test/?v=%70hx_123456789012345678901234567890', 'https://e.test/?v=%5Bredacted%5D'],
+    [
+      'after an encoded slash',
+      'https://e.test/?v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/?v=x%2F%5Bredacted%5D',
+    ],
+    [
+      'after an encoded comma',
+      'https://e.test/?v=a,%70hx_123456789012345678901234567890',
+      'https://e.test/?v=a%2C%5Bredacted%5D',
+    ],
+    [
+      'in a nested URL',
+      'https://e.test/?u=https://x.test/%70hx_123456789012345678901234567890',
+      'https://e.test/?u=https%3A%2F%2Fx.test%2F%5Bredacted%5D',
+    ],
+    ['as a key', 'https://e.test/?%70hx_123456789012345678901234567890=1', 'https://e.test/?%5Bredacted%5D=1'],
+    [
+      'in a fragment',
+      'https://e.test/#v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/#v=x%2F%5Bredacted%5D',
+    ],
+  ])('should redact PostHog tokens exposed by URL field decoding (%s)', (_, text, expected) => {
+    const event = makeEvent({ response: { content: [{ type: 'text', text }] } })
 
-    const result = sanitizeEvent(event)
-
-    expect(result.response.content[0].text).toBe('https://example.test/?value=[redacted]&token=%5Bredacted%5D')
+    expect(sanitizeEvent(event).response.content[0].text).toBe(expected)
   })
 
   it('should handle null and undefined response without error', () => {
