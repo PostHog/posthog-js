@@ -2677,7 +2677,7 @@
           "name": "requestId"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/feature-flags.d.ts"
     },
     {
       "id": "FlagVariant",

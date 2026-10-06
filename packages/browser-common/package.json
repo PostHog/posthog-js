@@ -37,6 +37,12 @@
             ],
             "utils/*": [
                 "dist/utils/*.d.ts"
+            ],
+            "feature-flags": [
+                "dist/feature-flags.d.ts"
+            ],
+            "feature-flags-config": [
+                "dist/feature-flags-config.d.ts"
             ]
         }
     },
@@ -70,6 +76,16 @@
             "types": "./dist/utils/*.d.ts",
             "require": "./dist/utils/*.js",
             "import": "./dist/utils/*.mjs"
+        },
+        "./feature-flags": {
+            "types": "./dist/feature-flags.d.ts",
+            "require": "./dist/feature-flags.js",
+            "import": "./dist/feature-flags.mjs"
+        },
+        "./feature-flags-config": {
+            "types": "./dist/feature-flags-config.d.ts",
+            "require": "./dist/feature-flags-config.js",
+            "import": "./dist/feature-flags-config.mjs"
         }
     },
     "scripts": {

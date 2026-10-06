@@ -16,7 +16,6 @@ import { SurveyManager } from '../extensions/surveys'
 import { PostHog, defaultConfig } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
-import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveyEventName, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
@@ -120,7 +119,7 @@ describe('posthog-surveys', () => {
             vi.spyOn(mockPostHog.consent, 'isOptedIn').mockReturnValue(true)
             vi.spyOn(mockPostHog.consent, 'isOptedOut').mockReturnValue(false)
             vi.spyOn(mockPostHog, 'onFeatureFlags').mockReturnValue(() => {})
-            mockPostHog.featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+            mockPostHog.featureFlags = new PostHogFeatureFlags(mockPostHog)
             vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
             vi.spyOn(mockPostHog.featureFlags, 'getFeatureFlag').mockImplementation(
                 (key) => flagsResponse.featureFlags[key]
