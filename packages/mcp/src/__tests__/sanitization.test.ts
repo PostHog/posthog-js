@@ -233,6 +233,11 @@ describe('sanitizeEvent - response content blocks', () => {
     ],
     ['as a key', 'https://e.test/?%70hx_123456789012345678901234567890=1', 'https://e.test/?%5Bredacted%5D=1'],
     [
+      'in the host',
+      'https://u:p@%70hx_123456789012345678901234567890.example.com/',
+      'https://%5Bredacted%5D@[redacted].example.com/',
+    ],
+    [
       'in a fragment',
       'https://e.test/#v=x/%70hx_123456789012345678901234567890',
       'https://e.test/#v=x%2F%5Bredacted%5D',

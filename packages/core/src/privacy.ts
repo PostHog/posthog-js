@@ -484,7 +484,8 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
   // with it; losing a comma from the surrounding prose is the accepted cost of
   // not shipping `!!!`.
   const trailingFields = hasFragment ? (sanitizedTail ?? sanitizedHead) : sanitizedQuery
-  return (changed ? url.toString() : address) + (trailingFields.lastFieldSensitive ? '' : suffix)
+  // Serializing writes the host decoded, which can expose an encoded PostHog token.
+  return (changed ? redactCredentials(url.toString()) : address) + (trailingFields.lastFieldSensitive ? '' : suffix)
 }
 
 /**
