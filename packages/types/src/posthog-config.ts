@@ -1238,7 +1238,10 @@ export interface BrowserMetricsConfig extends MetricsConfig {
     network?: boolean | NetworkMetricsConfig
 }
 
-/** Selects the WebMCP metadata that PostHog captures. */
+/**
+ * Selects the WebMCP metadata that PostHog captures.
+ * Options are applied when a tool registers. Re-register a tool after changing these options.
+ */
 export interface WebMCPCaptureConfig {
     /** Captures the agent's reason for the tool call. Enabled by default. */
     intent?: boolean
@@ -2322,6 +2325,8 @@ export interface PostHogConfig {
      * Captures WebMCP tool calls as `$mcp_tool_call` events.
      * Set this option to `true` to capture intent and model metadata. Use an object to disable either field.
      * PostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.
+     * Metadata options are applied when each tool registers. Changing them does not update registered schemas;
+     * re-register the tool to apply the new options.
      *
      * @default false
      */
