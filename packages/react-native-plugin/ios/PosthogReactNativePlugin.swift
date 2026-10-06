@@ -161,7 +161,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         let exceptionStepsConfig = errorTrackingConfig["exceptionSteps"] as? [String: Any] ?? [:]
 
         setupNativeSdk(
-            method: "setup",
             sessionId: sessionId,
             sdkOptions: sdkOptions,
             sessionReplayEnabled: sessionReplayConfig["enabled"] as? Bool ?? false,
@@ -176,7 +175,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     }
 
     private func setupNativeSdk(
-        method _: String,
         sessionId: String,
         sdkOptions: [String: Any],
         sessionReplayEnabled: Bool,
