@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/5212": {
+    "key": "PostHog/posthog-js/issue/5212",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5212",
+    "url": "https://github.com/PostHog/posthog-js/issues/5212",
+    "conclusion": "Confirmed iOS React Native build-script bug: optional local git discovery can terminate the Xcode phase when no repository metadata is present.",
+    "labels": [
+      "react-native",
+      "iOS",
+      "feature/error-tracking",
+      "team/client-libraries",
+      "bug"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5213",
+    "closed": false,
+    "updatedAt": "2026-10-06T11:23:27.655Z"
+  },
   "PostHog/posthog-js/issue/5187": {
     "key": "PostHog/posthog-js/issue/5187",
     "repo": "PostHog/posthog-js",
@@ -2903,21 +2920,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-26T09:37:23.112Z"
-  },
-  "PostHog/posthog-js/issue/2161": {
-    "key": "PostHog/posthog-js/issue/2161",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2161",
-    "url": "https://github.com/PostHog/posthog-js/issues/2161",
-    "conclusion": "Valid React Native session replay feature request; not already fixed in JS layer.",
-    "labels": [
-      "enhancement",
-      "help wanted",
-      "feature/replay",
-      "react-native",
-      "feature/mobile"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-26T09:35:48.612Z"
   }
 }
