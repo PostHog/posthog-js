@@ -519,6 +519,9 @@ describe('PostHog RN session replay debug properties', () => {
     expect(properties.$recording_status).toBe('disabled')
     expect(typeof properties.$sdk_debug_session_start).toBe('number')
     expect(properties.$sdk_debug_replay_capture_mode).toBeUndefined()
+    expect(properties.$sdk_debug_replay_event_trigger_status).toBeUndefined()
+    expect(properties.$sdk_debug_replay_linked_flag_trigger_status).toBeUndefined()
+    expect(properties.$sdk_debug_replay_pending_trigger_conditions).toBeUndefined()
   })
 
   it('omits the trigger keys while session replay is off', async () => {

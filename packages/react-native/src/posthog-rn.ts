@@ -861,7 +861,7 @@ export class PostHog extends PostHogCore {
       let eventTriggerStatus: SessionReplayTriggerStatus | undefined
       let linkedFlagTriggerStatus: SessionReplayTriggerStatus | undefined
       let pendingTriggerConditions: string[] | undefined
-      if (replayEnabled) {
+      if (replayEnabled && hasNativeReplay) {
         const sessionId = this.getPersistedProperty<string>(PostHogPersistedProperty.SessionId) ?? ''
         eventTriggerStatus =
           this._sessionReplayEventTriggers.length === 0
