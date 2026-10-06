@@ -53,7 +53,7 @@
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@modelcontextprotocol/node": "^2.0.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
