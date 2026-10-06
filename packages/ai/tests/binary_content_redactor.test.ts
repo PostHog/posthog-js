@@ -51,6 +51,12 @@ describe('redactBinaryContent', () => {
       expect((out as any).data).toBe(placeholder('image'))
     })
 
+    it.each(['image', 'audio', 'video', 'document'])('redacts short %s data without a MIME hint', (type) => {
+      expect((redactBinaryContent({ type, data: 'AAAA' }) as any).data).toBe(
+        type === 'document' ? REDACTED_FILE : placeholder(type)
+      )
+    })
+
     it('redacts when key matches a known binary key', () => {
       // 'inlineData' is a known binary key — its child string redacts at the strong threshold.
       const out = redactBinaryContent({ inlineData: { data: MEDIUM_B64 } })
@@ -88,8 +94,8 @@ describe('redactBinaryContent', () => {
       expect((out as any).data).toBe(SHORT_B64)
     })
 
-    it('keeps the strong threshold when context has no explicit MIME', () => {
-      expect((redactBinaryContent({ type: 'image', data: SHORT_B64 }) as any).data).toBe(SHORT_B64)
+    it('keeps the strong threshold for generic data without typed media or MIME', () => {
+      expect((redactBinaryContent({ type: 'text', data: SHORT_B64 }) as any).data).toBe(SHORT_B64)
     })
   })
 
