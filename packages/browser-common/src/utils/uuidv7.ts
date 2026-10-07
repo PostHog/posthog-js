@@ -222,8 +222,8 @@ declare const UUIDV7_DENY_WEAK_RNG: boolean
 
 type RandomValuesFn = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T
 
+/** Fills the buffer with `Math.random()` values unless `UUIDV7_DENY_WEAK_RNG` is set to true. */
 const weakRandomValues: RandomValuesFn = (buffer) => {
-    // fall back on Math.random() unless the flag is set to true
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
         throw new Error('no cryptographically strong RNG available')
@@ -235,7 +235,7 @@ const weakRandomValues: RandomValuesFn = (buffer) => {
     return buffer
 }
 
-/** Stores `crypto.getRandomValues()` available in the environment. */
+/** Stores `crypto.getRandomValues()` if available in the environment, else `weakRandomValues`. */
 let getRandomValues: RandomValuesFn = weakRandomValues
 
 // detect Web Crypto API
