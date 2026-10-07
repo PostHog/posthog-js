@@ -70,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -4045,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },
