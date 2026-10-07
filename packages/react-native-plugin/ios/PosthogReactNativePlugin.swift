@@ -274,10 +274,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             config.surveys = false
 
             // Always apply the session replay configuration so that recording started later
-            // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
+            // (e.g. startRecording or a linked feature flag) uses the right masking;
             // sessionReplayEnabled only controls whether recording starts at setup.
             config.sessionReplay = sessionReplayEnabled
-            config.sessionReplayConfig.screenshotMode = true
             config.sessionReplayConfig.captureTouches = sdkReplayConfig["captureTouches"] as? Bool ?? true
 
             let maskAllTextInputs = sdkReplayConfig["maskAllTextInputs"] as? Bool ?? true
