@@ -542,7 +542,45 @@ const addSentAtToBody = (
     return data.map((item) => ({ ...item, sent_at: sentAt }))
 }
 
-const _sendBeacon = (options: TransportRequestOptions) => {
+// Mirrors the retry queue: anything but a 200 or a 4xx is retried.
+const outcomeSeverity = ({ statusCode }: RequestResponse): number =>
+    statusCode === 200 ? 0 : statusCode >= 400 && statusCode < 500 ? 1 : 2
+
+// A split is still one request to the caller (the retry queue re-sends the whole original payload),
+// so report one outcome once every fallback leaf settles, keeping the most severe one.
+const splitOutcome = (callback: TransportCallback) => {
+    let pending = 0
+    let dispatched = false
+    let outcome: Parameters<TransportCallback> | undefined
+
+    const report = () => {
+        if (dispatched && pending === 0 && outcome) {
+            callback(...outcome)
+        }
+    }
+
+    return {
+        leaf: (): TransportCallback => {
+            pending++
+            return (response, retryAfterMs) => {
+                pending--
+                if (!outcome || outcomeSeverity(response) > outcomeSeverity(outcome[0])) {
+                    outcome = [response, retryAfterMs]
+                }
+                report()
+            }
+        },
+        // leaves can settle synchronously (e.g. an encoding error), so hold the report until all are sent
+        dispatched: () => {
+            dispatched = true
+            report()
+        },
+    }
+}
+
+type SplitOutcome = ReturnType<typeof splitOutcome>
+
+const _sendBeacon = (options: TransportRequestOptions, split?: SplitOutcome) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -569,7 +607,11 @@ const _sendBeacon = (options: TransportRequestOptions) => {
             const halves = batch.length > 1 ? halve(batch) : halveSnapshotEvent(batch[0])?.map((event) => [event])
 
             if (halves) {
-                each(halves, (events) => _sendBeacon({ ...options, data: splitData(events) }))
+                const outcome = split ?? (options.callback ? splitOutcome(options.callback) : undefined)
+                each(halves, (events) => _sendBeacon({ ...options, data: splitData(events) }, outcome))
+                if (!split) {
+                    outcome?.dispatched()
+                }
                 return
             }
         }
@@ -577,11 +619,12 @@ const _sendBeacon = (options: TransportRequestOptions) => {
         logger.warn(
             `Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to ${fetch ? 'fetch' : 'XHR'}`
         )
+        const fallbackOptions = split ? { ...options, callback: split.leaf() } : options
         if (fetch) {
             // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-            _fetch({ ...options, _keepaliveDisabled: true })
+            _fetch({ ...fallbackOptions, _keepaliveDisabled: true })
         } else {
-            xhr(options)
+            xhr(fallbackOptions)
         }
     } catch (error) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,

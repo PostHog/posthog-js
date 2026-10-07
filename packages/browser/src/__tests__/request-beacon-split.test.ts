@@ -48,14 +48,19 @@ describe('beacon split on unload', () => {
         vi.clearAllMocks()
     })
 
-    const send = (data: any) =>
+    const send = (data: any, callback?: (response: any) => void) =>
         request({
             url: 'https://any.posthog-instance.com/s/',
             method: 'POST',
             transport: 'sendBeacon',
             data,
             headers: {},
+            callback,
         })
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+    const ok = () => Promise.resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+    const networkError = () => Promise.reject(new TypeError('Failed to fetch'))
 
     it('splits a rejected single snapshot by its snapshot data so the halves still deliver', async () => {
         // reject anything the browser would refuse, accept the halves
@@ -91,5 +96,62 @@ describe('beacon split on unload', () => {
         send([snapshotEvent(1)])
 
         expect(mockedFetch).toHaveBeenCalledTimes(1)
+    })
+
+    describe('reports one outcome for the whole split', () => {
+        beforeEach(() => {
+            mockedSendBeacon.mockReturnValue(false)
+        })
+
+        it('reports a failure once when every fallback leaf fails', async () => {
+            mockedFetch.mockImplementation(networkError)
+            const callback = vi.fn()
+
+            send([snapshotEvent(4)], callback)
+            await settle()
+
+            expect(mockedFetch).toHaveBeenCalledTimes(4)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0].statusCode).toBe(0)
+        })
+
+        it('reports the failure once when other fallback leaves succeed', async () => {
+            mockedFetch
+                .mockImplementationOnce(ok)
+                .mockImplementationOnce(networkError)
+                .mockImplementationOnce(ok)
+                .mockImplementationOnce(ok)
+            const callback = vi.fn()
+
+            send([snapshotEvent(4)], callback)
+            await settle()
+
+            expect(mockedFetch).toHaveBeenCalledTimes(4)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0].statusCode).toBe(0)
+        })
+
+        it('reports success once when every fallback leaf succeeds', async () => {
+            mockedFetch.mockImplementation(ok)
+            const callback = vi.fn()
+
+            send([snapshotEvent(4)], callback)
+            await settle()
+
+            expect(mockedFetch).toHaveBeenCalledTimes(4)
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback.mock.calls[0][0].statusCode).toBe(200)
+        })
+
+        it('does not report when the browser accepts every half', async () => {
+            mockedSendBeacon.mockImplementation((_url, body) => (body as Blob).size < 60000)
+            const callback = vi.fn()
+
+            send([snapshotEvent(4)], callback)
+            await settle()
+
+            expect(mockedFetch).not.toHaveBeenCalled()
+            expect(callback).not.toHaveBeenCalled()
+        })
     })
 })
