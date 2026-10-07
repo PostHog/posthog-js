@@ -213,6 +213,7 @@ export default class MutationBuffer {
   private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
   private recordCanvas: observerParam['recordCanvas'];
+  private recordAnimationStyles: observerParam['recordAnimationStyles'];
   private canvasMaskingConfigured: observerParam['canvasMaskingConfigured'];
   private inlineImages: observerParam['inlineImages'];
   private slimDOMOptions: observerParam['slimDOMOptions'];
@@ -243,6 +244,7 @@ export default class MutationBuffer {
         'maskAttributeFn',
         'keepIframeSrcFn',
         'recordCanvas',
+        'recordAnimationStyles',
         'canvasMaskingConfigured',
         'inlineImages',
         'slimDOMOptions',
@@ -427,6 +429,7 @@ export default class MutationBuffer {
         slimDOMOptions: this.slimDOMOptions,
         dataURLOptions: this.dataURLOptions,
         recordCanvas: this.recordCanvas,
+        recordAnimationStyles: this.recordAnimationStyles,
         canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
         onSerialize: (currentN) => {

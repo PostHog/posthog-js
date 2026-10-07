@@ -35,6 +35,7 @@ import {
   recompressBase64Image,
   absolutifyURLs,
   SCRIPT_PLACEHOLDER,
+  getAnimatedStyles,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -562,6 +563,7 @@ function serializeNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    recordAnimationStyles: boolean;
     canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
@@ -585,6 +587,7 @@ function serializeNode(
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    recordAnimationStyles,
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
@@ -626,6 +629,7 @@ function serializeNode(
         dataURLOptions,
         inlineImages,
         recordCanvas,
+        recordAnimationStyles,
         canvasMaskingConfigured,
         keepIframeSrcFn,
         newlyAddedElement,
@@ -758,6 +762,7 @@ function serializeElementNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    recordAnimationStyles: boolean;
     canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
@@ -779,6 +784,7 @@ function serializeElementNode(
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    recordAnimationStyles,
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
@@ -800,6 +806,21 @@ function serializeElementNode(
         n,
         dataURLOptions,
       );
+    }
+  }
+  // fold styles held by script-driven animations into the inline style so the
+  // element replays the way it rendered (see getAnimatedStyles)
+  if (recordAnimationStyles && !needBlock) {
+    const animatedStyles = getAnimatedStyles(n);
+    if (animatedStyles) {
+      const existing =
+        typeof attributes.style === 'string'
+          ? attributes.style.trim().replace(/;$/, '')
+          : '';
+      const animated = Object.entries(animatedStyles)
+        .map(([property, value]) => `${property}: ${value};`)
+        .join(' ');
+      attributes.style = existing ? `${existing}; ${animated}` : animated;
     }
   }
   // remote css
@@ -1264,6 +1285,7 @@ export function serializeNodeWithId(
     keepIframeSrcFn?: KeepIframeSrcFn;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    recordAnimationStyles?: boolean;
     canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
@@ -1304,6 +1326,7 @@ export function serializeNodeWithId(
     dataURLOptions = {},
     inlineImages = false,
     recordCanvas = false,
+    recordAnimationStyles = false,
     canvasMaskingConfigured,
     onSerialize,
     onIframeLoad,
@@ -1360,6 +1383,7 @@ export function serializeNodeWithId(
     dataURLOptions,
     inlineImages,
     recordCanvas,
+    recordAnimationStyles,
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement,
@@ -1439,6 +1463,7 @@ export function serializeNodeWithId(
       dataURLOptions,
       inlineImages,
       recordCanvas,
+      recordAnimationStyles,
       canvasMaskingConfigured,
       preserveWhiteSpace,
       onSerialize,
@@ -1513,6 +1538,7 @@ export function serializeNodeWithId(
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            recordAnimationStyles,
             canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
@@ -1568,6 +1594,7 @@ export function serializeNodeWithId(
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            recordAnimationStyles,
             canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
@@ -1637,6 +1664,7 @@ function snapshot(
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    recordAnimationStyles?: boolean;
     canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
@@ -1674,6 +1702,7 @@ function snapshot(
     inlineStylesheet = true,
     inlineImages = false,
     recordCanvas = false,
+    recordAnimationStyles = false,
     canvasMaskingConfigured,
     maskAllInputs = false,
     maskTextFn,
@@ -1739,6 +1768,7 @@ function snapshot(
       dataURLOptions,
       inlineImages,
       recordCanvas,
+      recordAnimationStyles,
       canvasMaskingConfigured,
       preserveWhiteSpace,
       onSerialize,

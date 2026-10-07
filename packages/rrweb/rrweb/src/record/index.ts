@@ -373,6 +373,7 @@ function record<T = eventWithTime>(
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
+    recordAnimationStyles = false,
     recordCrossOriginIframes = false,
     recordAfter = options.recordAfter === 'DOMContentLoaded'
       ? options.recordAfter
@@ -670,6 +671,7 @@ function record<T = eventWithTime>(
       maskAllElementAttributes,
       maskAttributeFn,
       recordCanvas,
+      recordAnimationStyles,
       canvasMaskingConfigured,
       inlineImages,
       sampling,
@@ -741,6 +743,7 @@ function record<T = eventWithTime>(
           slimDOM: slimDOMOptions,
           dataURLOptions,
           recordCanvas,
+          recordAnimationStyles,
           canvasMaskingConfigured,
           inlineImages,
           onSerialize: (n) => {
@@ -991,6 +994,7 @@ function record<T = eventWithTime>(
           sampling,
           recordDOM,
           recordCanvas,
+          recordAnimationStyles,
           canvasMaskingConfigured,
           inlineImages,
           userTriggeredOnInput,

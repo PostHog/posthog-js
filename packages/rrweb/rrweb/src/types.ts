@@ -107,6 +107,7 @@ export type recordOptions<T> = {
   canvasMasking?: CanvasMasking;
   recordDOM?: boolean;
   recordCanvas?: boolean;
+  recordAnimationStyles?: boolean;
   recordCrossOriginIframes?: boolean;
   recordAfter?: 'DOMContentLoaded' | 'load';
   userTriggeredOnInput?: boolean;
@@ -149,6 +150,7 @@ export type observerParam = {
   sampling: SamplingStrategy;
   recordDOM: boolean;
   recordCanvas: boolean;
+  recordAnimationStyles: boolean;
   canvasMaskingConfigured: (() => boolean) | undefined;
   inlineImages: boolean;
   userTriggeredOnInput: boolean;
@@ -191,6 +193,7 @@ export type MutationBufferParam = Pick<
   | 'maskAttributeFn'
   | 'keepIframeSrcFn'
   | 'recordCanvas'
+  | 'recordAnimationStyles'
   | 'canvasMaskingConfigured'
   | 'inlineImages'
   | 'slimDOMOptions'

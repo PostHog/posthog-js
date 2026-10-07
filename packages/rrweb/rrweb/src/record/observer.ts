@@ -5,6 +5,8 @@ import {
   getInputType,
   stringifyStylesheet,
   toLowerCase,
+  getAnimatedProperties,
+  getAnimatedStyles,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
 import {
@@ -51,6 +53,7 @@ import type {
   SelectionRange,
   selectionCallback,
   customElementCallback,
+  styleOMValue,
 } from '@posthog/rrweb-types';
 import MutationBuffer from './mutation';
 import { callbackWrapper } from './error-handler';
@@ -1203,6 +1206,83 @@ export function initAdoptedStyleSheetObserver(
   });
 }
 
+/**
+ * The snapshot folds the styles a script-driven animation holds into the
+ * element's inline style (see getAnimatedStyles), but an animation that starts
+ * after the element was serialized changes nothing the mutation observer can
+ * see. Patch `animate` so that whenever an animation finishes or is cancelled
+ * we record what its properties now resolve to: the held end state, or the
+ * element's own inline value once the animation stops applying.
+ */
+function initAnimationObserver(
+  {
+    mutationCb,
+    mirror,
+    blockClass,
+    blockSelector,
+    ignoreCSSAttributes,
+  }: observerParam,
+  win: IWindow,
+): listenerHandler {
+  const elementPrototype = (win as Window & typeof globalThis).Element
+    ?.prototype;
+  if (!elementPrototype || typeof elementPrototype.animate !== 'function')
+    return () => {
+      //
+    };
+
+  const recordSettledAnimation = callbackWrapper((animation: Animation) => {
+    const target = (animation.effect as KeyframeEffect | null)?.target;
+    if (!target) return;
+    const id = mirror.getId(target);
+    // not serialized yet: the pending add folds the animated styles itself
+    if (id === -1 || isBlocked(target, blockClass, blockSelector, true)) return;
+    const animated = getAnimatedStyles(target) || {};
+    const inline = (target as HTMLElement).style;
+    const style: styleOMValue = {};
+    for (const property of getAnimatedProperties(animation)) {
+      if (ignoreCSSAttributes.has(property)) continue;
+      if (property in animated) {
+        style[property] = animated[property];
+      } else {
+        const value = inline?.getPropertyValue(property);
+        const priority = inline?.getPropertyPriority(property);
+        if (!value) style[property] = false;
+        else style[property] = priority ? [value, priority] : value;
+      }
+    }
+    if (!Object.keys(style).length) return;
+    mutationCb({
+      texts: [],
+      attributes: [{ id, attributes: { style } }],
+      removes: [],
+      adds: [],
+    });
+  });
+
+  return patch(
+    elementPrototype,
+    'animate',
+    function (original: (...args: unknown[]) => Animation) {
+      return function (this: Element, ...args: unknown[]) {
+        const animation = original.apply(this, args);
+        try {
+          // addEventListener rather than onfinish, which pages assign themselves
+          animation.addEventListener('finish', () =>
+            recordSettledAnimation(animation),
+          );
+          animation.addEventListener('cancel', () =>
+            recordSettledAnimation(animation),
+          );
+        } catch (e) {
+          // never get in the way of the page's animation
+        }
+        return animation;
+      };
+    },
+  );
+}
+
 function initStyleDeclarationObserver(
   {
     styleDeclarationCb,
@@ -1711,6 +1791,11 @@ export function initObservers(
       );
       if (o.collectFonts) {
         startObserver('font', () => initFontObserver(o));
+      }
+      if (o.recordAnimationStyles) {
+        startObserver('animation', () =>
+          initAnimationObserver(o, currentWindow),
+        );
       }
     }
     startObserver('selection', () => initSelectionObserver(o));
