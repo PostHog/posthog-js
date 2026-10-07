@@ -183,7 +183,6 @@ describe('WebMCP', () => {
 
     it.each([
         ['additionalProperties omitted', { type: 'object' }],
-        ['additionalProperties true', { type: 'object', additionalProperties: true }],
         ['additionalProperties false', { type: 'object', additionalProperties: false }],
         ['annotations', { type: 'object', title: 'x', default: {}, examples: [{}], $comment: 'x', 'x-vendor': 1 }],
         ['definitions', { type: 'object', $schema: 'https://json-schema.org/draft/2020-12/schema', $defs: {} }],
@@ -214,6 +213,7 @@ describe('WebMCP', () => {
         ['unevaluatedProperties', { type: 'object', unevaluatedProperties: false }],
         ['patternProperties', { type: 'object', patternProperties: { '^x-': {} } }],
         ['dependentSchemas', { type: 'object', dependentSchemas: { a: {} } }],
+        ['additionalProperties true', { type: 'object', additionalProperties: true }],
         ['a schema for additionalProperties', { type: 'object', additionalProperties: { type: 'string' } }],
         ['a non-object type', { type: 'array' }],
         ['properties that is not an object', { type: 'object', properties: [] }],

@@ -111,6 +111,7 @@ function canInjectInto(schema: WebMCPInputSchema | undefined): boolean {
     return (
         isObject(schema) &&
         Object.keys(schema).every((key) => INJECTABLE_SCHEMA_KEYS.has(key) || key.startsWith('x-')) &&
+        schema.additionalProperties !== true &&
         !isObject(schema.additionalProperties) &&
         (!schema.type || schema.type === 'object') &&
         (!schema.properties || isObject(schema.properties)) &&

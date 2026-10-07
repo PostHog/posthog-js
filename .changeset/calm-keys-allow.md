@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Inject WebMCP intent and model fields into schemas that omit `additionalProperties`, and skip schemas with constraints that the fields could break.
+Skip WebMCP intent and model injection for schemas with constraints that the extra fields could break.
