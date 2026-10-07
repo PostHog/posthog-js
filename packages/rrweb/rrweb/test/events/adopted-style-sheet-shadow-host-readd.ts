@@ -238,4 +238,138 @@ export const eventsWithClearWhileDetached: eventWithTime[] = [
   },
 ];
 
+/**
+ * A shadow host whose shadow tree stays empty because it only styles itself
+ * through `:host` (Ionic's ion-backdrop). Re-adding it brings no shadow child,
+ * so nothing but the host itself can carry the re-adoption.
+ */
+export const eventsWithEmptyShadowTree: eventWithTime[] = [
+  { type: EventType.DomContentLoaded, data: {}, timestamp: now },
+  {
+    type: EventType.Meta,
+    data: {
+      href: 'about:blank',
+      width: 1920,
+      height: 1080,
+    },
+    timestamp: now + 100,
+  },
+  {
+    type: EventType.FullSnapshot,
+    data: {
+      node: {
+        type: 0,
+        childNodes: [
+          {
+            type: 1,
+            name: 'html',
+            publicId: '',
+            systemId: '',
+            id: 2,
+          },
+          {
+            type: 2,
+            tagName: 'html',
+            attributes: {},
+            childNodes: [
+              {
+                type: 2,
+                tagName: 'head',
+                attributes: {},
+                childNodes: [],
+                id: 4,
+              },
+              {
+                type: 2,
+                tagName: 'body',
+                attributes: {},
+                childNodes: [
+                  {
+                    type: 2,
+                    tagName: 'div',
+                    attributes: { id: 'app' },
+                    childNodes: [
+                      {
+                        type: 2,
+                        tagName: 'empty-shadow-host',
+                        attributes: {},
+                        isShadowHost: true,
+                        childNodes: [],
+                        id: 7,
+                      },
+                    ],
+                    id: 6,
+                  },
+                ],
+                id: 5,
+              },
+            ],
+            id: 3,
+          },
+        ],
+        id: 1,
+      },
+      initialOffset: {
+        left: 0,
+        top: 0,
+      },
+    },
+    timestamp: now + 100,
+  },
+  {
+    type: EventType.IncrementalSnapshot,
+    data: {
+      source: IncrementalSource.AdoptedStyleSheet,
+      id: 7,
+      styleIds: [1],
+      styles: [
+        {
+          rules: [
+            {
+              rule: ':host { display: block; height: 10px; background-color: rgb(0, 0, 0); }',
+            },
+          ],
+          styleId: 1,
+        },
+      ],
+    },
+    timestamp: now + 110,
+  },
+  {
+    type: EventType.IncrementalSnapshot,
+    data: {
+      source: IncrementalSource.Mutation,
+      texts: [],
+      attributes: [],
+      removes: [{ parentId: 5, id: 6 }],
+      adds: [
+        {
+          parentId: 5,
+          nextId: null,
+          node: {
+            type: 2,
+            tagName: 'div',
+            attributes: { id: 'app' },
+            childNodes: [],
+            id: 6,
+          },
+        },
+        {
+          parentId: 6,
+          nextId: null,
+          node: {
+            type: 2,
+            tagName: 'empty-shadow-host',
+            attributes: {},
+            isShadowHost: true,
+            childNodes: [],
+            id: 7,
+          },
+        },
+      ],
+    },
+    timestamp: now + 200,
+  },
+];
+
 export default events;

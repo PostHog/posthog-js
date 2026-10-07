@@ -1966,23 +1966,7 @@ export class Replayer {
           }
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
-        // lastAdoptedStyleIds sees every event so it wins over a pending entry
-        const styleIds =
-          this.lastAdoptedStyleIds.get(mutation.parentId) ??
-          this.pendingAdoptedStyleSheets.get(mutation.parentId);
-        if (styleIds) {
-          if (this.usingVirtualDom) {
-            // the real shadow root only exists after the diff, so let the
-            // Flush handler finish the adoption
-            this.pendingAdoptedStyleSheets.set(mutation.parentId, styleIds);
-          } else {
-            this.applyAdoptedStyleSheet({
-              source: IncrementalSource.AdoptedStyleSheet,
-              id: mutation.parentId,
-              styleIds,
-            });
-          }
-        }
+        this.restoreAdoptedStyleSheets(mutation.parentId);
       }
 
       let previous: Node | RRNode | null = null;
@@ -2133,6 +2117,12 @@ export class Replayer {
        * target was added, execute plugin hooks
        */
       afterAppend(target, mutation.node.id);
+
+      // a re-added host whose shadow tree is empty (it only styles itself via
+      // :host, like Ionic's ion-backdrop) gets no isShadow child to trigger
+      // the restore above
+      if (mutation.node.type === NodeType.Element && mutation.node.isShadowHost)
+        this.restoreAdoptedStyleSheets(mutation.node.id);
 
       /**
        * https://github.com/rrweb-io/rrweb/pull/887
@@ -2597,6 +2587,29 @@ export class Replayer {
         data.index,
       ) as unknown as CSSStyleRule;
       rule?.style?.removeProperty(data.remove.property);
+    }
+  }
+
+  /**
+   * Re-adopt the last known stylesheets of a host whose shadow root was just
+   * rebuilt, since the recorder emits no new event for a host it already tracks.
+   */
+  private restoreAdoptedStyleSheets(hostId: number) {
+    // lastAdoptedStyleIds sees every event so it wins over a pending entry
+    const styleIds =
+      this.lastAdoptedStyleIds.get(hostId) ??
+      this.pendingAdoptedStyleSheets.get(hostId);
+    if (!styleIds) return;
+    if (this.usingVirtualDom) {
+      // the real shadow root only exists after the diff, so let the
+      // Flush handler finish the adoption
+      this.pendingAdoptedStyleSheets.set(hostId, styleIds);
+    } else {
+      this.applyAdoptedStyleSheet({
+        source: IncrementalSource.AdoptedStyleSheet,
+        id: hostId,
+        styleIds,
+      });
     }
   }
 
