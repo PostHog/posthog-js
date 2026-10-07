@@ -15,7 +15,8 @@ function expectNotToThrow(promise: Promise<Response>) {
 
 function setupWrappedFetch(
     downstreamFetch: typeof fetch,
-    recordBody: NetworkRecordOptions['recordBody'] = true
+    recordBody: NetworkRecordOptions['recordBody'] = true,
+    fetchOptions: { captureFetchSynchronously?: boolean } = { captureFetchSynchronously: true }
 ): { wrappedFetch: typeof fetch; cleanup: () => void } {
     class MockPerformanceObserver {
         static supportedEntryTypes = ['resource']
@@ -38,6 +39,7 @@ function setupWrappedFetch(
         recordBody,
         recordHeaders: true,
         initiatorTypes: ['fetch'],
+        ...fetchOptions,
     } as any)
 
     expect(mockWindow.fetch).not.toBe(downstreamFetch)
@@ -168,6 +170,40 @@ describe('fetch wrapper', () => {
         ])('handles %s option', async (_name, options) => {
             await expectNotToThrow(wrappedFetch('https://example.com/api', options))
         })
+    })
+
+    describe('private init option gate', () => {
+        it.each([undefined, false, true])(
+            'requires an explicit true opt-in (%s)',
+            async (captureFetchSynchronously) => {
+                const downstreamFetch = vi.fn(async () => new Response('ok'))
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch, true, {
+                    captureFetchSynchronously,
+                })
+                const originalClone = Request.prototype.clone
+                let release!: () => void
+                const gate = new Promise<string>((resolve) => {
+                    release = () => resolve('request body')
+                })
+                const cloneSpy = vi.spyOn(Request.prototype, 'clone').mockImplementation(function (this: Request) {
+                    const clone = originalClone.call(this)
+                    clone.text = () => gate
+                    return clone
+                })
+                try {
+                    const pending = wrappedFetch('https://example.com/api', { method: 'POST', body: 'request body' })
+                    expect(cloneSpy).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(captureFetchSynchronously === true ? 1 : 0)
+                    release()
+                    await expect(pending).resolves.toBeInstanceOf(Response)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                } finally {
+                    release()
+                    cloneSpy.mockRestore()
+                    cleanup()
+                }
+            }
+        )
     })
 
     describe('rejection propagation', () => {

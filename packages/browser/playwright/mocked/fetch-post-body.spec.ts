@@ -313,8 +313,12 @@ test.describe('fetch wrappers preserve every request body type', () => {
         expect(uploads.every(({ method }) => method === 'POST')).toBe(true)
 
         const wrapperInputs = await page.evaluate(() => (window as any).__requestForwardingWrapperInputs)
+        // Legacy capture awaits each body read, so these concurrent requests can delegate in a different order.
+        expect(wrapperInputs).toHaveLength(expectedBodyTypes.length)
         expect(wrapperInputs).toEqual(
-            expectedBodyTypes.map((bodyType) => ({ bodyType, receivedRequest: bodyType === 'request-input' }))
+            expect.arrayContaining(
+                expectedBodyTypes.map((bodyType) => ({ bodyType, receivedRequest: bodyType === 'request-input' }))
+            )
         )
         const forwardedBodies = await page.evaluate(async () => {
             const bodies = (window as any).__forwardedRequestBodies as Record<string, Promise<string>>

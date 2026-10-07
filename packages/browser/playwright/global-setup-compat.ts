@@ -6,6 +6,8 @@ const DIST_DIR = path.join(__dirname, '../dist')
 const NPM_ARRAY_FILE = path.join(DIST_DIR, 'array.npm-latest.js')
 const NPM_ARRAY_FULL_FILE = path.join(DIST_DIR, 'array.full.npm-latest.js')
 const LEGACY_REPLAY_VERSION = '1.360.0'
+// Published recorder from before the private synchronous-fetch init option was introduced.
+const LEGACY_RECORDER_VERSION = '1.438.2'
 const LEGACY_EXCEPTION_AUTOCAPTURE_VERSION = '1.140.1'
 const LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FILE = path.join(DIST_DIR, 'array.npm-legacy-exception-autocapture.js')
 const LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FULL_FILE = path.join(
@@ -42,6 +44,14 @@ async function downloadNpmVersion(): Promise<void> {
     )
 
     await Promise.all([
+        downloadFile(
+            `https://unpkg.com/posthog-js@${LEGACY_RECORDER_VERSION}/dist/lazy-recorder.js`,
+            path.join(DIST_DIR, 'lazy-recorder.npm-legacy.js')
+        ),
+        downloadFile(
+            `https://unpkg.com/posthog-js@${LEGACY_RECORDER_VERSION}/dist/recorder.js`,
+            path.join(DIST_DIR, 'recorder.npm-legacy.js')
+        ),
         downloadFile(`https://unpkg.com/posthog-js@${version}/dist/array.js`, NPM_ARRAY_FILE),
         downloadFile(`https://unpkg.com/posthog-js@${version}/dist/array.full.js`, NPM_ARRAY_FULL_FILE),
         downloadFile(

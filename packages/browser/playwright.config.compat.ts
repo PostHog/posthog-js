@@ -39,6 +39,8 @@ export default defineConfig({
             testMatch: [
                 '**/session-recording-fetch-real-uploads.spec.ts',
                 '**/session-recording-fetch-capture-order.spec.ts',
+                '**/session-recording-fetch-sync-config.spec.ts',
+                '**/session-recording-fetch-rejection-stack.spec.ts',
                 '**/session-recording-fetch-compat.spec.ts',
             ],
             use: {
@@ -46,6 +48,21 @@ export default defineConfig({
                 staticOverrides: {
                     'array.js': 'array.npm-legacy-replay.js',
                     'array.full.js': 'array.full.npm-legacy-replay.js',
+                },
+            },
+        },
+        {
+            name: 'chromium-legacy-replay-recorder',
+            // The inverse boundary: a newly built core must still work with a cached old recorder.
+            testMatch: [
+                '**/session-recording-fetch-real-uploads.spec.ts',
+                '**/session-recording-fetch-sync-config.spec.ts',
+            ],
+            use: {
+                ...devices['Desktop Chrome'],
+                staticOverrides: {
+                    'lazy-recorder.js': 'lazy-recorder.npm-legacy.js',
+                    'recorder.js': 'recorder.npm-legacy.js',
                 },
             },
         },

@@ -1,5 +1,6 @@
 ---
 'posthog-js': patch
+'@posthog/types': patch
 ---
 
-fix(replay): preserve application stack frames when recorded fetch requests fail
+fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
