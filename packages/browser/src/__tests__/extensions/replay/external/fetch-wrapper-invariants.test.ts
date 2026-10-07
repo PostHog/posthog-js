@@ -170,6 +170,32 @@ describe('fetch wrapper', () => {
         })
     })
 
+    describe('rejection propagation', () => {
+        it('delegates before yielding so the application call stack is still active', async () => {
+            let rejectFetch!: (error: Error) => void
+            const networkError = new TypeError('Failed to fetch')
+            const downstreamFetch = vi.fn(
+                () =>
+                    new Promise<Response>((_resolve, reject) => {
+                        rejectFetch = reject
+                    })
+            )
+            const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+
+            try {
+                const returnedPromise = wrappedFetch('https://example.com/api', {
+                    method: 'POST',
+                    body: 'request body',
+                })
+                expect(downstreamFetch).toHaveBeenCalledOnce()
+                rejectFetch(networkError)
+                await expect(returnedPromise).rejects.toBe(networkError)
+            } finally {
+                cleanup()
+            }
+        })
+    })
+
     describe('response availability', () => {
         it('caller can read response body after wrapper processes it', async () => {
             const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {

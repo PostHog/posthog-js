@@ -820,7 +820,7 @@ function initFetchObserver(
     // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
-        return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
+        return function (url: URL | RequestInfo, init?: RequestInit | undefined) {
             // Constructing the capture Request happens _before_ we delegate to the original fetch, so
             // if it throws (e.g. a URL/method the host application would have handled) we must not let
             // that exception escape and misattribute a failure to session replay. Degrade gracefully and
@@ -831,16 +831,20 @@ function initFetchObserver(
                 req = new Request(url, init)
             } catch (e) {
                 logger.error('Failed to instrument fetch for network capture', e)
-                return originalFetch(url, init)
+                try {
+                    return originalFetch(url, init)
+                } catch (fetchError) {
+                    // oxlint-disable-next-line compat/compat
+                    return new Promise((_resolve, reject) => reject(fetchError))
+                }
             }
-            let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
             let end: number | undefined
 
-            try {
-                // Recording the request headers/body must never prevent the host's fetch from running,
-                // so failures here are swallowed and we fall through to the original request below.
+            // Start body capture without awaiting it. The host fetch must be invoked in the application's
+            // synchronous call stack so a native rejection retains the application call site.
+            const requestCapture = (async () => {
                 try {
                     const requestHeaders: Headers = {}
                     req.headers.forEach((value: string, header: string | number) => {
@@ -866,15 +870,9 @@ function initFetchObserver(
                 } catch (e) {
                     logger.error('Failed to record fetch request for network capture', e)
                 }
+            })()
 
-                start = win.performance.now()
-                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
-                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
-                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
-                // pass the cloned Request because constructing `req` may consume the original Request body.
-                res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
-                end = win.performance.now()
-
+            const captureResponse = async (res: Response): Promise<void> => {
                 try {
                     const responseHeaders: Headers = {}
                     res.headers.forEach((value: string, header: string | number) => {
@@ -896,27 +894,72 @@ function initFetchObserver(
                 } catch (e) {
                     logger.error('Failed to record fetch response for network capture', e)
                 }
-
-                return res
-            } finally {
-                getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
-                    .then((entry) => {
-                        const requests = prepareRequest(win, {
-                            entry,
-                            method: req.method,
-                            status: res?.status,
-                            networkRequest,
-                            start,
-                            end,
-                            url: req.url,
-                            initiatorType: 'fetch',
-                        })
-                        cb({ requests })
-                    })
-                    .catch(() => {
-                        //
-                    })
             }
+
+            const captureTiming = (res?: Response): Promise<void> =>
+                getRequestPerformanceEntry(win, 'fetch', req.url, start, end).then((entry) => {
+                    const requests = prepareRequest(win, {
+                        entry,
+                        method: req.method,
+                        status: res?.status,
+                        networkRequest,
+                        start,
+                        end,
+                        url: req.url,
+                        initiatorType: 'fetch',
+                    })
+                    cb({ requests })
+                })
+
+            try {
+                start = win.performance.now()
+            } catch {
+                // Missing timing data must not prevent the host fetch.
+            }
+            let fetchPromise: Promise<Response>
+            try {
+                // Use `req` for recording metadata/body only. For fetch(url, init), do not pass this internally-created
+                // Request downstream: it exposes request.body as a ReadableStream, and wrappers that forward that body
+                // can trigger Safari's "ReadableStream uploading is not supported" error. For fetch(Request), we must
+                // pass the cloned Request because constructing `req` may consume the original Request body.
+                fetchPromise = isRequest(url) ? originalFetch(req) : originalFetch(url, init)
+            } catch (e) {
+                // The previous async wrapper converted synchronous downstream throws into rejected promises.
+                // oxlint-disable-next-line compat/compat
+                fetchPromise = new Promise((_resolve, reject) => reject(e))
+            }
+
+            // Attach both handlers immediately so a fast rejection is always observed while request body capture
+            // finishes. Calling the host fetch above without first yielding preserves the application's call site.
+            const fetchResult = fetchPromise.then(
+                (response) => {
+                    try {
+                        end = win.performance.now()
+                    } catch {
+                        // Missing timing data must not affect the response.
+                    }
+                    return { status: 'fulfilled' as const, response }
+                },
+                (error) => ({ status: 'rejected' as const, error })
+            )
+
+            return (async () => {
+                let response: Response | undefined
+                try {
+                    await requestCapture
+                    const result = await fetchResult
+                    if (result.status === 'rejected') {
+                        throw result.error
+                    }
+                    response = result.response
+                    await captureResponse(response)
+                    return response
+                } finally {
+                    void captureTiming(response).catch(() => {
+                        // Recording failures must never affect the host fetch or create unhandled rejections.
+                    })
+                }
+            })()
         }
     })
     return () => {
