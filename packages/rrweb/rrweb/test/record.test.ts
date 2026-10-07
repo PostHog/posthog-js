@@ -11,6 +11,7 @@ import {
   IncrementalSource,
   styleSheetRuleData,
   selectionData,
+  adoptedStyleSheetData,
 } from '@posthog/rrweb-types';
 import {
   assertSnapshot,
@@ -1449,6 +1450,70 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
     await assertSnapshot(ctx.events);
+  });
+
+  it('captures adopted stylesheets added in place rather than assigned', async () => {
+    await ctx.page.evaluate(() => {
+      const { rrweb, emit } = window as unknown as IWindow;
+      rrweb.record({
+        emit,
+      });
+
+      // a component mounted mid-session that mutates the adoptedStyleSheets
+      // array instead of assigning a new one, as Stencil (used by Ionic) does
+      // wherever the array is mutable
+      const shadowHost = document.createElement('div');
+      shadowHost.id = 'shadow-host';
+      document.body.appendChild(shadowHost);
+      const shadow = shadowHost.attachShadow({ mode: 'open' });
+
+      setTimeout(() => {
+        const shadowSheet = new CSSStyleSheet();
+        shadowSheet.replaceSync!('h1 { color: blue; }');
+        shadow.adoptedStyleSheets.push(shadowSheet);
+
+        const shadowSheet2 = new CSSStyleSheet();
+        shadowSheet2.replaceSync!('h2 { color: green; }');
+        shadow.adoptedStyleSheets.unshift(shadowSheet2);
+
+        const documentSheet = new CSSStyleSheet();
+        documentSheet.replaceSync!('h3 { color: red; }');
+        document.adoptedStyleSheets.push(documentSheet);
+
+        shadow.adoptedStyleSheets.splice(1, 1);
+      }, 50);
+    });
+    await ctx.page.waitForTimeout(100);
+
+    const adoptedEvents = ctx.events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.AdoptedStyleSheet,
+      )
+      .map((e) => e.data as adoptedStyleSheetData);
+    const rulesByStyleId = new Map<number, string>();
+    adoptedEvents.forEach((e) =>
+      e.styles?.forEach((s) =>
+        rulesByStyleId.set(s.styleId, s.rules.map((r) => r.rule).join(' ')),
+      ),
+    );
+    const adopted = adoptedEvents.map((e) => ({
+      id: e.id,
+      rules: e.styleIds.map((styleId) => rulesByStyleId.get(styleId)),
+    }));
+    const shadowHostId = adopted[0]?.id;
+
+    expect(adopted).toEqual([
+      { id: shadowHostId, rules: ['h1 { color: blue; }'] },
+      {
+        id: shadowHostId,
+        rules: ['h2 { color: green; }', 'h1 { color: blue; }'],
+      },
+      { id: 1, rules: ['h3 { color: red; }'] },
+      { id: shadowHostId, rules: ['h2 { color: green; }'] },
+    ]);
+    expect(shadowHostId).not.toBe(1);
   });
 
   it('captures stylesheets in iframes with `blob:` url', async () => {

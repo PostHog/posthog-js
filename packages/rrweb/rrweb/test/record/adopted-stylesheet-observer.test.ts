@@ -11,6 +11,7 @@ describe('initAdoptedStyleSheetObserver()', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
   let nativeSet: ReturnType<typeof vi.fn>;
   let adoptStyleSheets: ReturnType<typeof vi.fn>;
+  let liveSheets: CSSStyleSheet[];
   let cleanup: (() => void) | undefined;
 
   beforeEach(() => {
@@ -22,11 +23,12 @@ describe('initAdoptedStyleSheetObserver()', () => {
       'adoptedStyleSheets',
     );
     nativeSet = vi.fn();
+    liveSheets = [];
     Object.defineProperty(Document.prototype, 'adoptedStyleSheets', {
       configurable: true,
       enumerable: true,
       get() {
-        return [];
+        return liveSheets;
       },
       set(sheets: CSSStyleSheet[]) {
         nativeSet(sheets);
@@ -121,5 +123,61 @@ describe('initAdoptedStyleSheetObserver()', () => {
     }).toThrow(TypeError);
 
     expect(adoptStyleSheets).not.toHaveBeenCalled();
+  });
+
+  it('records stylesheets added to the live array in place', () => {
+    observe();
+    const first = {} as CSSStyleSheet;
+    const second = {} as CSSStyleSheet;
+
+    document.adoptedStyleSheets.push(first);
+    expect(adoptStyleSheets).toHaveBeenLastCalledWith([first], HOST_ID);
+
+    document.adoptedStyleSheets.unshift(second);
+    expect(adoptStyleSheets).toHaveBeenLastCalledWith([second, first], HOST_ID);
+
+    document.adoptedStyleSheets.splice(0, 1);
+    expect(adoptStyleSheets).toHaveBeenLastCalledWith([first], HOST_ID);
+
+    expect(adoptStyleSheets).toHaveBeenCalledTimes(3);
+    expect(nativeSet).not.toHaveBeenCalled();
+  });
+
+  it('contains NotAllowedError from adding a sheet from another document in place', () => {
+    Object.defineProperty(liveSheets, 'push', {
+      configurable: true,
+      writable: true,
+      value() {
+        throw new DOMException(
+          'Sharing constructed stylesheets in multiple documents is not allowed',
+          'NotAllowedError',
+        );
+      },
+    });
+    observe();
+
+    expect(() => {
+      document.adoptedStyleSheets.push({} as CSSStyleSheet);
+    }).not.toThrow();
+    expect(adoptStyleSheets).not.toHaveBeenCalled();
+  });
+
+  it('restores the array methods when the observer is removed', () => {
+    observe();
+    expect(Object.getOwnPropertyNames(liveSheets)).toContain('push');
+
+    cleanup?.();
+    cleanup = undefined;
+
+    expect(Object.getOwnPropertyNames(liveSheets)).not.toContain('push');
+    document.adoptedStyleSheets.push({} as CSSStyleSheet);
+    expect(adoptStyleSheets).not.toHaveBeenCalled();
+  });
+
+  it('leaves a frozen array (older browsers) untouched', () => {
+    liveSheets = Object.freeze([]) as unknown as CSSStyleSheet[];
+
+    expect(() => observe()).not.toThrow();
+    expect(Object.getOwnPropertyNames(liveSheets)).not.toContain('push');
   });
 });
