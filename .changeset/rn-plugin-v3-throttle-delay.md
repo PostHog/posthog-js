@@ -2,4 +2,4 @@
 '@posthog/react-native-plugin': major
 ---
 
-**Breaking:** stop reading the `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` session replay options — pass `throttleDelayMs` instead
+**Breaking:** ignore `iOSdebouncerDelayMs` and `androidDebouncerDelayMs` when calling `setup()` directly — pass `throttleDelayMs` instead (posthog-react-native still maps them)
