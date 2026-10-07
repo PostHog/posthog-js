@@ -31,7 +31,7 @@ let package = Package(
     dependencies: reactNativeDependencies + [
         .package(
             url: "https://github.com/PostHog/posthog-ios.git",
-            .upToNextMinor(from: "3.88.2")
+            .upToNextMinor(from: "4.0.0")
         ),
     ],
     targets: [
