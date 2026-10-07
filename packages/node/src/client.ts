@@ -30,7 +30,14 @@ import {
   SyncSpanContextManager,
   uuidv7,
 } from '@posthog/core'
-import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
+import type {
+  Metrics,
+  Span,
+  SpanContextManager,
+  StartSpanOptions,
+  TraceSdkContext,
+  UnresolvedFlagReason,
+} from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -2264,7 +2271,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent; the snapshot's `unresolvedFlags` lists them with a reason.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -2450,12 +2457,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       }
     }
 
+    // A flag a remote fallback or override resolved has a value, so it is not unresolved.
+    const unresolvedFlags: Record<string, UnresolvedFlagReason> = {}
+    for (const [key, reason] of Object.entries(localResult?.unresolved ?? {})) {
+      if (!Object.prototype.hasOwnProperty.call(records, key)) {
+        unresolvedFlags[key] = reason
+      }
+    }
+
     return new FeatureFlagEvaluations({
       host: this._getFeatureFlagEvaluationsHost(),
       distinctId: resolvedDistinctId,
       groups,
       disableGeoip,
       flags: records,
+      unresolvedFlags,
       requestId,
       evaluatedAt,
       flagDefinitionsLoadedAt: this.featureFlagsPoller?.getFlagDefinitionsLoadedAt(),

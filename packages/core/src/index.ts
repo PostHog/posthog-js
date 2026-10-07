@@ -26,6 +26,7 @@ export type {
   FeatureFlagVariant,
   FeatureFlagVariantLookupEntry,
   MatchFeatureFlagPropertyOptions,
+  UnresolvedFlagReason,
 } from './featureFlagLocalEvaluation'
 export {
   gzipCompress,
