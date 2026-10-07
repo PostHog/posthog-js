@@ -171,6 +171,48 @@ describe('fetch wrapper', () => {
     })
 
     describe('rejection propagation', () => {
+        it.each([
+            { requestConstructionFails: false, throwsSynchronously: false },
+            { requestConstructionFails: false, throwsSynchronously: true },
+            { requestConstructionFails: true, throwsSynchronously: false },
+            { requestConstructionFails: true, throwsSynchronously: true },
+        ])(
+            'preserves rejection identity and original arguments: %j',
+            async ({ requestConstructionFails, throwsSynchronously }) => {
+                const error = new TypeError('downstream failure')
+                const downstreamFetch = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => {
+                    if (throwsSynchronously) throw error
+                    return Promise.reject(error)
+                })
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+                const url = new URL('https://example.com/api')
+                const init: RequestInit = { method: 'POST', body: 'request body', signal: new AbortController().signal }
+                if (requestConstructionFails) {
+                    vi.stubGlobal(
+                        'Request',
+                        class {
+                            constructor() {
+                                throw new Error('Request construction failed')
+                            }
+                        }
+                    )
+                }
+                try {
+                    let result!: Promise<Response>
+                    expect(() => {
+                        result = wrappedFetch(url, init)
+                    }).not.toThrow()
+                    expect(result).toBeInstanceOf(Promise)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch.mock.calls[0][0]).toBe(url)
+                    expect(downstreamFetch.mock.calls[0][1]).toBe(init)
+                    await expect(result).rejects.toBe(error)
+                } finally {
+                    cleanup()
+                }
+            }
+        )
+
         it('delegates before yielding so the application call stack is still active', async () => {
             let rejectFetch!: (error: Error) => void
             const networkError = new TypeError('Failed to fetch')
