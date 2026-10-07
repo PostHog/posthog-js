@@ -463,6 +463,7 @@
         "_lastActivityTimestamp",
         "_lastByteRefill",
         "_lastCheckedUrl",
+        "_lastCheckedUrlActivated",
         "_lastCookieSyncTimestamp",
         "_lastFocusChange",
         "_lastFullSnapshotSessionId",

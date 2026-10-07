@@ -223,6 +223,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     private _compiledBlocklistRegexes: Map<string, RegExp> = new Map()
 
     private _lastCheckedUrl: string = ''
+    private _lastCheckedUrlActivated: boolean = false
     private _groupId?: string // Optional group ID for V2 per-group persistence
 
     urlBlocked: boolean = false
@@ -375,6 +376,12 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         // Performance optimization: Skip if URL hasn't changed since last check
         // This prevents redundant checks on every rrweb event
         if (url === this._lastCheckedUrl) {
+            // a session rotation can clear the activation after this URL was checked,
+            // and without a re-activation the new session waits for a navigation
+            if (this._lastCheckedUrlActivated && this._urlTriggerStatus(sessionId) !== TRIGGER_ACTIVATED) {
+                onActivate('url', url)
+                this._lastCheckedUrlActivated = this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
+            }
             return
         }
         this._lastCheckedUrl = url
@@ -397,10 +404,12 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         if (!isActivated && urlMatches) {
             onActivate('url', url)
         }
+        this._lastCheckedUrlActivated = urlMatches && this._urlTriggerStatus(sessionId) === TRIGGER_ACTIVATED
     }
 
     stop(): void {
         this._lastCheckedUrl = ''
+        this._lastCheckedUrlActivated = false
     }
 }
 
