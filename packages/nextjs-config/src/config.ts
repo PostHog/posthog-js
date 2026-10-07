@@ -160,12 +160,7 @@ function withCompilerConfig(
     newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
       console.debug('Processing source maps from compilation hook...')
-      await utils.processSourceMaps(
-        posthogConfig,
-        config.distDir,
-        nativeDebugIdsEnabled ? 'upload' : 'process',
-        nativeDebugIdsEnabled
-      )
+      await utils.processSourceMaps(posthogConfig, config.distDir, nativeDebugIdsEnabled ? 'upload' : 'process')
       if (posthogConfig.sourcemaps.deleteAfterUpload) {
         if (nativeDebugIdsEnabled) {
           await deleteSourceMapFiles(config.distDir)

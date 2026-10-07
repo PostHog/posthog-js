@@ -40,18 +40,12 @@ describe('buildSourcemapCliArgs', () => {
         expect(args).toContain('--delete-after')
     })
 
-    it('keeps regular uploads non-mutating and strict', () => {
+    it('keeps uploads non-mutating without mode flags', () => {
         const args = buildSourcemapCliArgs(config, { stdin: true }, 'upload')
 
         expect(args.slice(0, 3)).toEqual(['sourcemap', 'upload', '--stdin'])
         expect(args).not.toContain('--delete-after')
         expect(args).not.toContain('--native-debug-ids')
-    })
-
-    it('enables native debug IDs only when the caller asserts runtime support', () => {
-        const args = buildSourcemapCliArgs(config, { directory: 'dist' }, 'upload', true)
-
-        expect(args).toContain('--native-debug-ids')
     })
 
     it.each([
