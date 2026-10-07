@@ -36,7 +36,8 @@ function buildReleaseArgs(config: ResolvedPluginConfig): string[] {
 export function buildSourcemapCliArgs(
     config: ResolvedPluginConfig,
     mode: { stdin: true } | { directory: string },
-    command: SourcemapCliCommand = 'process'
+    command: SourcemapCliCommand = 'process',
+    nativeDebugIds = false
 ): string[] {
     const args = ['sourcemap', command]
 
@@ -58,7 +59,12 @@ export function buildSourcemapCliArgs(
     // the .js files (stripping sourcemap references), and callers pick `upload`
     // precisely because the written files must not change — e.g. Subresource
     // Integrity hashes were already computed from them.
-    if (command === 'process' && config.sourcemaps.deleteAfterUpload) {
+    if (command === 'upload' && nativeDebugIds) {
+        // The caller must know that its framework exposes the bundler IDs at runtime. A static
+        // debugId comment alone is insufficient: webpack, Rollup, and Vite can emit one without
+        // populating the runtime `_debugIds` map used by the SDK.
+        args.push('--native-debug-ids')
+    } else if (command === 'process' && config.sourcemaps.deleteAfterUpload) {
         args.push('--delete-after')
     }
 
@@ -91,10 +97,13 @@ export function buildCliEnv(config: ResolvedPluginConfig): NodeJS.ProcessEnv {
  */
 export async function runSourcemapCli(
     config: ResolvedPluginConfig,
-    options: ({ filePaths: string[] } | { directory: string }) & { command?: SourcemapCliCommand }
+    options: ({ filePaths: string[] } | { directory: string }) & {
+        command?: SourcemapCliCommand
+        nativeDebugIds?: boolean
+    }
 ): Promise<void> {
     const mode = 'filePaths' in options ? { stdin: true as const } : { directory: options.directory }
-    const args = buildSourcemapCliArgs(config, mode, options.command ?? 'process')
+    const args = buildSourcemapCliArgs(config, mode, options.command ?? 'process', options.nativeDebugIds ?? false)
     const env = buildCliEnv(config)
 
     const spawnOptions: Parameters<typeof spawnLocal>[2] = {
