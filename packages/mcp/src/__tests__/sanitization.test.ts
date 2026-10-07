@@ -119,10 +119,14 @@ describe('sanitizeEvent - response content blocks', () => {
     expect(result.response.content[0]).toEqual(textResource)
   })
 
-  it('should redact unknown content types with type name in message', () => {
+  it.each([
+    ['video', 'video'],
+    ['phc_123456789012345678901234567890', '[redacted]'],
+    [makeLargeBase64(), '[binary data redacted - not supported by PostHog MCP analytics]'],
+  ])('should redact unknown content types with type name in message (case %#)', (type, shownType) => {
     const event = makeEvent({
       response: {
-        content: [{ type: 'video', data: 'somestuff', mimeType: 'video/mp4' }],
+        content: [{ type, data: 'somestuff', mimeType: 'video/mp4' }],
       },
     })
 
@@ -130,7 +134,7 @@ describe('sanitizeEvent - response content blocks', () => {
 
     expect(result.response.content[0]).toEqual({
       type: 'text',
-      text: '[unsupported content type "video" redacted - not supported by PostHog MCP analytics]',
+      text: `[unsupported content type "${shownType}" redacted - not supported by PostHog MCP analytics]`,
     })
   })
 
@@ -203,6 +207,45 @@ describe('sanitizeEvent - response content blocks', () => {
       project: 'Default project',
       api_token: '[redacted]',
     })
+  })
+
+  it.each([
+    [
+      'plain boundary',
+      'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
+      'https://example.test/?value=%5Bredacted%5D&token=%5Bredacted%5D',
+    ],
+    ['only field', 'https://e.test/?v=%70hx_123456789012345678901234567890', 'https://e.test/?v=%5Bredacted%5D'],
+    [
+      'after an encoded slash',
+      'https://e.test/?v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/?v=x%2F%5Bredacted%5D',
+    ],
+    [
+      'after an encoded comma',
+      'https://e.test/?v=a,%70hx_123456789012345678901234567890',
+      'https://e.test/?v=a%2C%5Bredacted%5D',
+    ],
+    [
+      'in a nested URL',
+      'https://e.test/?u=https://x.test/%70hx_123456789012345678901234567890',
+      'https://e.test/?u=https%3A%2F%2Fx.test%2F%5Bredacted%5D',
+    ],
+    ['as a key', 'https://e.test/?%70hx_123456789012345678901234567890=1', 'https://e.test/?%5Bredacted%5D=1'],
+    [
+      'in the host',
+      'https://u:p@%70hx_123456789012345678901234567890.example.com/',
+      'https://%5Bredacted%5D@[redacted].example.com/',
+    ],
+    [
+      'in a fragment',
+      'https://e.test/#v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/#v=x%2F%5Bredacted%5D',
+    ],
+  ])('should redact PostHog tokens exposed by URL field decoding (%s)', (_, text, expected) => {
+    const event = makeEvent({ response: { content: [{ type: 'text', text }] } })
+
+    expect(sanitizeEvent(event).response.content[0].text).toBe(expected)
   })
 
   it('should handle null and undefined response without error', () => {
