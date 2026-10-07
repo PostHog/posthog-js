@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.57.1
+
+### Patch Changes
+
+- [#5209](https://github.com/PostHog/posthog-js/pull/5209) [`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `Unable to resolve module @posthog/core/surveys` when bundling posthog-react-native on React Native 0.71–0.78 without Metro package exports. posthog-react-native 4.47.0 and later also pick up the fix by updating `@posthog/core`.
+  (2026-10-07)
+
 ## 1.57.0
 
 ### Minor Changes

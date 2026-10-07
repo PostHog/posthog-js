@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.438.2
+
+### Patch Changes
+
+- [#4988](https://github.com/PostHog/posthog-js/pull/4988) [`22dfa4a`](https://github.com/PostHog/posthog-js/commit/22dfa4a4d8c678053c466c5e96f5b46f5743f35c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share feature flag functionality across browser SDKs while preserving existing behavior.
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
 ## 1.438.1
 
 ### Patch Changes
