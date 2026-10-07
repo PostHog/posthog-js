@@ -20,18 +20,19 @@ export const repository = resolve(directory, '../../../..')
 export const digest = (path) => 'sha256-' + createHash('sha256').update(readFileSync(path)).digest('hex')
 export const execute = (command, args, cwd = repository) =>
     execFileSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-export function inventoryTree(root, label, output = {}, visited = new Set()) {
+export function inventoryTree(root, label, output = {}, visited = new Set(), excludedFiles = new Set()) {
     const physical = realpathSync(root)
     if (visited.has(physical)) return output
     visited.add(physical)
     for (const entry of readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
         const path = join(root, entry.name),
             key = `${label}/${entry.name}`
-        if (entry.isDirectory()) inventoryTree(path, key, output, visited)
+        if (excludedFiles.has(key) && !entry.isDirectory()) continue
+        if (entry.isDirectory()) inventoryTree(path, key, output, visited, excludedFiles)
         else if (entry.isFile()) output[key] = digest(path)
         else if (entry.isSymbolicLink()) {
             const target = realpathSync(path)
-            if (statSync(target).isDirectory()) inventoryTree(target, key, output, visited)
+            if (statSync(target).isDirectory()) inventoryTree(target, key, output, visited, excludedFiles)
             else output[key] = digest(target)
         }
     }
@@ -85,8 +86,16 @@ export function inputInventory(manifest) {
     const coreRequire = createRequire(testRequire.resolve('playwright/package.json'))
     const coreRoot = dirname(coreRequire.resolve('playwright-core/package.json'))
     const { registry } = require(join(coreRoot, 'lib/server/registry/index.js'))
+    // Firefox creates this runtime lock inside its installation tree, not as a tooling input.
+    const browserRuntimeFiles = new Set(['browser/firefox/firefox/.parentlock'])
     for (const engine of ['chromium', 'chromium-headless-shell', 'firefox', 'webkit', 'ffmpeg'])
-        inventoryTree(registry.findExecutable(engine).directory, `browser/${engine}`, browserTooling)
+        inventoryTree(
+            registry.findExecutable(engine).directory,
+            `browser/${engine}`,
+            browserTooling,
+            new Set(),
+            browserRuntimeFiles
+        )
     const esbuildRequire = createRequire(require.resolve('esbuild/package.json'))
     inventoryTree(
         dirname(esbuildRequire.resolve(`@esbuild/${process.platform}-${process.arch}/package.json`)),
