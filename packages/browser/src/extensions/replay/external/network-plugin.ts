@@ -832,7 +832,8 @@ function initFetchObserver(
             } catch (e) {
                 logger.error('Failed to instrument fetch for network capture', e)
                 try {
-                    return originalFetch(url, init)
+                    // oxlint-disable-next-line compat/compat
+                    return Promise.resolve(originalFetch(url, init))
                 } catch (fetchError) {
                     // oxlint-disable-next-line compat/compat
                     return new Promise((_resolve, reject) => reject(fetchError))
@@ -844,6 +845,8 @@ function initFetchObserver(
 
             // Start body capture without awaiting it. The host fetch must be invoked in the application's
             // synchronous call stack so a native rejection retains the application call site.
+            // Body capture must reach req.clone() before its first yield: downstream fetch can consume req
+            // immediately for Request inputs, making any later clone fail.
             const requestCapture = (async () => {
                 try {
                     const requestHeaders: Headers = {}
@@ -931,7 +934,8 @@ function initFetchObserver(
 
             // Attach both handlers immediately so a fast rejection is always observed while request body capture
             // finishes. Calling the host fetch above without first yielding preserves the application's call site.
-            const fetchResult = fetchPromise.then(
+            // oxlint-disable-next-line compat/compat
+            const fetchResult = Promise.resolve(fetchPromise).then(
                 (response) => {
                     try {
                         end = win.performance.now()

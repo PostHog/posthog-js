@@ -197,6 +197,36 @@ describe('fetch wrapper', () => {
     })
 
     describe('response availability', () => {
+        it.each([false, true])(
+            'normalizes a non-thenable returned by a downstream stub (Request construction fails: %s)',
+            async (requestConstructionFails) => {
+                const response = new Response('stubbed response')
+                const downstreamFetch = vi.fn(() => response as unknown as Promise<Response>)
+                const { wrappedFetch, cleanup } = setupWrappedFetch(downstreamFetch)
+
+                if (requestConstructionFails) {
+                    vi.stubGlobal(
+                        'Request',
+                        class {
+                            constructor() {
+                                throw new Error('Request construction failed')
+                            }
+                        }
+                    )
+                }
+
+                try {
+                    const result = wrappedFetch('https://example.com/api')
+                    expect(result).toBeInstanceOf(Promise)
+                    await expect(result).resolves.toBe(response)
+                    expect(downstreamFetch).toHaveBeenCalledTimes(1)
+                    expect(downstreamFetch).toHaveBeenCalledWith('https://example.com/api', undefined)
+                } finally {
+                    cleanup()
+                }
+            }
+        )
+
         it('caller can read response body after wrapper processes it', async () => {
             const { wrappedFetch, cleanup } = setupWrappedFetch(async () => {
                 return new Response(JSON.stringify({ data: 'test' }), {

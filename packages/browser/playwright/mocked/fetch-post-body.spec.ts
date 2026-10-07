@@ -280,12 +280,23 @@ test.describe('fetch wrappers preserve every request body type', () => {
                 })
             }
 
-            return Promise.all(
+            const responses = await Promise.all(
                 requests.map(async ({ bodyType, init }) => {
                     const response = await fetch(`${bodyMatrixUrl}/${bodyType}`, init)
                     return { bodyType, status: response.status, body: await response.text() }
                 })
             )
+            const requestInput = new Request(`${window.location.origin}${bodyMatrixUrl}/request-input`, {
+                method: 'POST',
+                body: 'request input body',
+            })
+            const requestInputResponse = await fetch(requestInput)
+            responses.push({
+                bodyType: 'request-input',
+                status: requestInputResponse.status,
+                body: await requestInputResponse.text(),
+            })
+            return responses
         }, BODY_MATRIX_URL)
 
         const expectedBodyTypes = [
@@ -295,13 +306,16 @@ test.describe('fetch wrappers preserve every request body type', () => {
             'array-buffer',
             'url-search-params',
             ...(browserName === 'webkit' ? [] : ['readable-stream']),
+            'request-input',
         ]
         expect(responses).toEqual(expectedBodyTypes.map((bodyType) => ({ bodyType, status: 200, body: 'ok' })))
         expect(uploads.map(({ bodyType }) => bodyType).sort()).toEqual([...expectedBodyTypes].sort())
         expect(uploads.every(({ method }) => method === 'POST')).toBe(true)
 
         const wrapperInputs = await page.evaluate(() => (window as any).__requestForwardingWrapperInputs)
-        expect(wrapperInputs).toEqual(expectedBodyTypes.map((bodyType) => ({ bodyType, receivedRequest: false })))
+        expect(wrapperInputs).toEqual(
+            expectedBodyTypes.map((bodyType) => ({ bodyType, receivedRequest: bodyType === 'request-input' }))
+        )
         const forwardedBodies = await page.evaluate(async () => {
             const bodies = (window as any).__forwardedRequestBodies as Record<string, Promise<string>>
             return Object.fromEntries(
@@ -313,6 +327,7 @@ test.describe('fetch wrappers preserve every request body type', () => {
             blob: 'blob body',
             'array-buffer': 'array buffer',
             'url-search-params': 'field=url+params',
+            'request-input': 'request input body',
             ...(browserName === 'webkit'
                 ? {}
                 : { 'readable-stream': browserName === 'firefox' ? '[object ReadableStream]' : 'stream body' }),
@@ -323,6 +338,7 @@ test.describe('fetch wrappers preserve every request body type', () => {
             blob: 'blob body',
             'array-buffer': 'array buffer',
             'url-search-params': 'field=url+params',
+            'request-input': 'request input body',
         }
         for (const upload of uploads) {
             // Playwright protocol metadata omits streamed upload bytes and WebKit Blob bytes. The cloned
@@ -342,6 +358,23 @@ test.describe('fetch wrappers preserve every request body type', () => {
             headers: { 'content-type': formDataUpload.contentType },
         }).formData()
         expect(Array.from(decodedFormData.entries())).toEqual([['field', 'form body']])
+
+        let flushAttempt = 0
+        await expect
+            .poll(
+                async () => {
+                    await page.locator('[data-cy-input]').fill(`activity-${flushAttempt++}`)
+                    const snapshots = (await page.capturedEvents()).filter((event) => event.event === '$snapshot')
+                    const recordedRequests = snapshots
+                        .flatMap((event) => event.properties.$snapshot_data)
+                        .filter((event) => event.type === 6 && event.data.plugin === 'rrweb/network@1')
+                        .flatMap((event) => event.data.payload.requests)
+                    return recordedRequests.find((request) => request.name.endsWith(`${BODY_MATRIX_URL}/request-input`))
+                        ?.requestBody
+                },
+                { timeout: 15_000, intervals: [250, 500, 1_000] }
+            )
+            .toBe('request input body')
     })
 })
 

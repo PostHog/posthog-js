@@ -46,16 +46,13 @@ test('preserves the application call site when a recorded fetch rejects', async 
     }, failedUrl)
 
     expect(await page.evaluate(() => (window as any).applicationFetchWrapperCalls)).toBe(1)
-    // Failed requests do not produce Resource Timing entries, so allow the recorder's timing lookup
-    // to exhaust before generating activity that flushes the resulting network event.
-    await page.waitForTimeout(3000)
-    await page.waitingForNetworkCausedBy({
-        urlPatternsToWaitFor: ['**/ses/*'],
-        action: () => page.locator('[data-cy-input]').fill('activity'),
-    })
+    let flushAttempt = 0
     await expect
         .poll(
             async () => {
+                // Failed requests do not produce Resource Timing entries. Keep generating activity so the
+                // network event is flushed as soon as the recorder's timing lookup finishes.
+                await page.locator('[data-cy-input]').fill(`activity-${flushAttempt++}`)
                 const snapshots = (await page.capturedEvents()).filter((event) => event.event === '$snapshot')
                 const requests = snapshots
                     .flatMap((event) => event.properties.$snapshot_data)
@@ -63,7 +60,7 @@ test('preserves the application call site when a recorded fetch rejects', async 
                     .flatMap((event) => event.data.payload.requests)
                 return requests.find((request) => request.name === failedUrl)?.requestBody
             },
-            { timeout: 10_000 }
+            { timeout: 10_000, intervals: [250, 500, 1_000] }
         )
         .toBe('order=123')
     // Firefox and WebKit expose an empty stack for the same rejected native fetch without Replay installed.
