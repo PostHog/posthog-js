@@ -142,6 +142,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           build: false
+      - name: Trust checked-out workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build shared browser mock
         run: pnpm turbo run build --filter=@posthog-tooling/sdk-mock-server
       - name: Compatibility components
