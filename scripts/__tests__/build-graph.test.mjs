@@ -287,8 +287,10 @@ test('rrweb dev bootstraps dependency builds before starting its single watcher'
 test('every SDK and rrweb package participates in the root semantic check contract', () => {
     const sdkPackages = globSync('packages/*/package.json', { cwd: root }).map(readJson)
     const tasks = rootScriptGraph('check-types')
-    const checks = executable(tasks).filter((task) => task.task === 'check-types')
     const packages = [...sdkPackages, ...rrwebPackages]
+    const checks = executable(tasks).filter(
+        (task) => task.task === 'check-types' && packages.some((pkg) => task.package === pkg.name)
+    )
     assert.equal(checks.length, packages.length)
     for (const pkg of packages) {
         const id = `${pkg.name}#check-types`
