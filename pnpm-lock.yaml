@@ -739,6 +739,9 @@ importers:
       '@posthog/webpack-plugin':
         specifier: workspace:^
         version: link:../webpack-plugin
+      posthog-js:
+        specifier: workspace:^
+        version: link:../browser
       semver:
         specifier: ^7.8.5
         version: 7.8.5
