@@ -220,8 +220,9 @@ class V7Generator {
 /** A global flag to force use of cryptographically strong RNG. */
 declare const UUIDV7_DENY_WEAK_RNG: boolean
 
-/** Stores `crypto.getRandomValues()` available in the environment. */
-let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T = (buffer) => {
+type RandomValuesFn = <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(buffer: T) => T
+
+const weakRandomValues: RandomValuesFn = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
     // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
@@ -234,9 +235,20 @@ let getRandomValues: <T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffe
     return buffer
 }
 
+/** Stores `crypto.getRandomValues()` available in the environment. */
+let getRandomValues: RandomValuesFn = weakRandomValues
+
 // detect Web Crypto API
 if (window && !isUndefined(window.crypto) && crypto.getRandomValues) {
-    getRandomValues = (buffer) => crypto.getRandomValues(buffer)
+    // Firefox throws an `OperationError` when its random source fails. A UUID is generated for
+    // every captured event, so fall back instead of letting the throw escape into the host page.
+    getRandomValues = (buffer) => {
+        try {
+            return crypto.getRandomValues(buffer)
+        } catch {
+            return weakRandomValues(buffer)
+        }
+    }
 }
 
 /**
