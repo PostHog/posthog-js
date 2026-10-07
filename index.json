@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5223": {
+    "key": "PostHog/posthog-js/issue/5223",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5223",
+    "url": "https://github.com/PostHog/posthog-js/issues/5223",
+    "conclusion": "Confirmed release-packaging bug: posthog-js@1.438.2 declares types that require browser-common feature-flag exports absent from its declared published dependency.",
+    "labels": [
+      "web",
+      "feature/feature-flags",
+      "team/client-libraries",
+      "release",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-07T12:13:49.897Z"
+  },
   "PostHog/posthog-js/issue/5212": {
     "key": "PostHog/posthog-js/issue/5212",
     "repo": "PostHog/posthog-js",
@@ -2905,20 +2921,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-26T09:39:13.324Z"
-  },
-  "PostHog/posthog-js/issue/2165": {
-    "key": "PostHog/posthog-js/issue/2165",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2165",
-    "url": "https://github.com/PostHog/posthog-js/issues/2165",
-    "conclusion": "Valid feature/enhancement request for RN session replay New Architecture performance; not a straightforward small fix.",
-    "labels": [
-      "enhancement",
-      "react-native",
-      "feature/mobile",
-      "feature/replay"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-26T09:37:23.112Z"
   }
 }
