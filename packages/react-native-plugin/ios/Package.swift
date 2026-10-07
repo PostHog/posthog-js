@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -29,11 +29,9 @@ let package = Package(
         ),
     ],
     dependencies: reactNativeDependencies + [
-        // Native surveys are disabled (surveys are rendered in JS), so leave out the `Surveys` trait.
         .package(
             url: "https://github.com/PostHog/posthog-ios.git",
-            .upToNextMinor(from: "4.0.0"),
-            traits: ["SessionReplay", "CrashReporting"]
+            .upToNextMinor(from: "3.88.2")
         ),
     ],
     targets: [
