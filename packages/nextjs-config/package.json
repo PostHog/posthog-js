@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "next": ">12.1.0",
-    "posthog-js": "workspace:^"
+    "posthog-js": ">=1.435.10"
   },
   "files": [
     "dist/"
