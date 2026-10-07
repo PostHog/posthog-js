@@ -34,6 +34,7 @@ import adoptedStyleSheetShadowHostReadd, {
   eventsWithClearWhileDetached,
   eventsWithEmptyShadowTree,
 } from './events/adopted-style-sheet-shadow-host-readd';
+import adoptedStyleSheetSharedAfterHostRemoved from './events/adopted-style-sheet-shared-after-host-removed';
 import adoptedStyleSheetStaleRetry from './events/adopted-style-sheet-stale-retry';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
@@ -1353,6 +1354,39 @@ describe('replayer', function () {
     await waitForRAF(page);
     await page.evaluate('replayer.pause(600);');
     await checkCorrectness();
+  });
+
+  it('keeps a shared stylesheet whose first host was removed before a fast-forward flushed it', async () => {
+    const checkHostB = async () => {
+      const state = await page.evaluate(() => {
+        const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+        const host = iframe.contentDocument!.querySelector(
+          '#host-b',
+        ) as HTMLElement;
+        return {
+          adoptedSheetCount: host.shadowRoot!.adoptedStyleSheets.length,
+          backgroundColor:
+            iframe.contentWindow!.getComputedStyle(host).backgroundColor,
+        };
+      });
+      expect(state.adoptedSheetCount).toBe(1);
+      expect(state.backgroundColor).toBe('rgb(0, 0, 0)');
+    };
+
+    // seeking straight past both hosts fast-forwards every event in one batch
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetSharedAfterHostRemoved)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(450);
+    `);
+    await waitForRAF(page);
+    await checkHostB();
+
+    // fast-forward past host A's removal, then play host B's adoption live
+    await page.evaluate('replayer.play(200);');
+    await page.waitForTimeout(600);
+    await checkHostB();
   });
 
   it('does not re-adopt sheets that were cleared while the host was detached', async () => {

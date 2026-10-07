@@ -2617,25 +2617,25 @@ export class Replayer {
     // tracked even when the host is currently detached
     this.lastAdoptedStyleIds.set(data.id, data.styleIds);
     const targetHost = this.mirror.getNode(data.id);
-    if (!targetHost) return;
-    // supersede retries still pending from an older event for this host
-    const token = {};
-    this.adoptedStyleSheetTokens.set(data.id, token);
+    /**
+     * Constructed StyleSheet can't share across multiple documents.
+     * The replayer has to get the correct host window to recreate a StyleSheetObject.
+     */
+    let hostWindow: IWindow | null = null;
+    if (!targetHost)
+      // rules are only sent once, so build the sheets even when the host is
+      // already gone (a seek applies queued events after removals): later
+      // hosts adopt them by styleId
+      hostWindow = this.iframe.contentWindow as IWindow | null;
+    else if (targetHost.nodeName === '#document')
+      hostWindow = (targetHost as Document).defaultView;
+    else
+      // don't require the host's shadow root to exist yet: the mutation
+      // attaching it may arrive after this event, and rules are only sent once
+      hostWindow = targetHost.ownerDocument?.defaultView || null;
     // Create StyleSheet objects which will be adopted after.
     data.styles?.forEach((style) => {
       let newStyleSheet: CSSStyleSheet | null = null;
-      /**
-       * Constructed StyleSheet can't share across multiple documents.
-       * The replayer has to get the correct host window to recreate a StyleSheetObject.
-       */
-      let hostWindow: IWindow | null = null;
-      if (targetHost.nodeName === '#document')
-        hostWindow = (targetHost as Document).defaultView;
-      else
-        // don't require the host's shadow root to exist yet: the mutation
-        // attaching it may arrive after this event, and rules are only sent once
-        hostWindow = targetHost.ownerDocument?.defaultView || null;
-
       if (!hostWindow) return;
       try {
         newStyleSheet = new hostWindow.CSSStyleSheet();
@@ -2652,6 +2652,10 @@ export class Replayer {
         // In case some browsers don't support constructing StyleSheet.
       }
     });
+    if (!targetHost) return;
+    // supersede retries still pending from an older event for this host
+    const token = {};
+    this.adoptedStyleSheetTokens.set(data.id, token);
 
     const MAX_RETRY_TIME = 10;
     let count = 0;
