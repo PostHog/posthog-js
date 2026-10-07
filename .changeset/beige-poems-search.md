@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix: split an oversized session replay snapshot on page unload so the browser no longer drops it
+fix: on page unload, split a session replay batch that is over the beacon limit by its rrweb entries so the entries that fit still send; a single entry over the limit can still be lost
