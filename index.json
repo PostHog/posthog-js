@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/5227": {
+    "key": "PostHog/posthog-js/issue/5227",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5227",
+    "url": "https://github.com/PostHog/posthog-js/issues/5227",
+    "conclusion": "Confirmed session-replay performance defect in rrweb's deferred-add draining path; a fix is warranted but must preserve incremental replay ordering.",
+    "labels": [
+      "feature/replay",
+      "performance",
+      "web",
+      "team/client-libraries",
+      "needs-to-be-contributed-back",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-07T14:22:59.638Z"
+  },
   "PostHog/posthog-js/issue/5223": {
     "key": "PostHog/posthog-js/issue/5223",
     "repo": "PostHog/posthog-js",
@@ -2905,21 +2922,5 @@
     "prUrl": "https://github.com/PostHog/posthog-js/pull/3989",
     "closed": false,
     "updatedAt": "2026-06-26T12:21:56.044Z"
-  },
-  "PostHog/posthog-js/issue/2167": {
-    "key": "PostHog/posthog-js/issue/2167",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2167",
-    "url": "https://github.com/PostHog/posthog-js/issues/2167",
-    "conclusion": "Keep open as an Expo Router touch-autocapture feature request",
-    "labels": [
-      "enhancement",
-      "react-native",
-      "feature/mobile",
-      "feature/autocapture",
-      "help wanted"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-26T09:39:13.324Z"
   }
 }
