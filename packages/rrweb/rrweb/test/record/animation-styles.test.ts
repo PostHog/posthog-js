@@ -262,6 +262,48 @@ describe('record animation styles', () => {
     ]);
   });
 
+  it('keeps animated values when the page rewrites the style attribute', async () => {
+    await startRecording({ recordAnimationStyles: true });
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'el';
+      el.className = 'held';
+      el.style.pointerEvents = 'none';
+      document.body.appendChild(el);
+    });
+    await waitForRAF(page);
+    await page.evaluate(
+      (keyframes) =>
+        document
+          .getElementById('el')!
+          .animate(keyframes, { duration: 1, fill: 'both' }).finished,
+      KEYFRAMES,
+    );
+    await waitForRAF(page);
+    // the page clears its temporary inline style once the animation is done,
+    // as Ionic does with an overlay's backdrop
+    await page.evaluate(() =>
+      document.getElementById('el')!.setAttribute('style', ''),
+    );
+    await waitForRAF(page);
+    await page.evaluate(() =>
+      document.getElementById('el')!.removeAttribute('style'),
+    );
+    await waitForRAF(page);
+
+    const id = idsByElementId(events).el;
+    const [finished, rewritten, removed] = styleMutations(events, id);
+    expect(finished).toEqual({
+      opacity: '1',
+      transform: 'matrix(1, 0, 0, 1, 0, 0)',
+    });
+    for (const style of [rewritten, removed]) {
+      expect(typeof style).toBe('string');
+      expect(style).toContain('opacity: 1;');
+      expect(style).toContain('transform: matrix(1, 0, 0, 1, 0, 0);');
+    }
+  });
+
   it('does not record animations on blocked elements', async () => {
     await startRecording({
       recordAnimationStyles: true,

@@ -14,6 +14,8 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  getAnimatedStyles,
+  appendAnimatedStyles,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -597,6 +599,22 @@ export default class MutationBuffer {
         .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
         .map((attribute) => {
           const { attributes } = attribute;
+          // rewriting the style attribute would drop the animated values the
+          // snapshot folded into it (see getAnimatedStyles), so carry them over
+          if (
+            this.recordAnimationStyles &&
+            'style' in attributes &&
+            (typeof attributes.style === 'string' || attributes.style === null)
+          ) {
+            const animated = getAnimatedStyles(attribute.node as Element);
+            if (animated) {
+              attributes.style = appendAnimatedStyles(
+                attributes.style,
+                animated,
+              );
+              Object.assign(attribute.styleDiff, animated);
+            }
+          }
           if (
             !this.maskAllElementAttributes &&
             !this.maskAttributeFn &&
