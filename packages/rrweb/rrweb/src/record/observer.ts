@@ -7,6 +7,8 @@ import {
   toLowerCase,
   getAnimatedProperties,
   getAnimatedStyles,
+  appendAnimatedStyles,
+  maskAttributeValue,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
 import {
@@ -1221,6 +1223,8 @@ function initAnimationObserver(
     blockClass,
     blockSelector,
     ignoreCSSAttributes,
+    maskAllElementAttributes,
+    maskAttributeFn,
   }: observerParam,
   win: IWindow,
 ): listenerHandler {
@@ -1252,9 +1256,21 @@ function initAnimationObserver(
       }
     }
     if (!Object.keys(style).length) return;
+    // attribute masking only works on strings, so like the mutation buffer send
+    // the whole inline style through it instead of the per-property object
+    const value =
+      maskAllElementAttributes || maskAttributeFn
+        ? maskAttributeValue({
+            element: target,
+            name: 'style',
+            value: appendAnimatedStyles(target.getAttribute('style'), animated),
+            maskAllElementAttributes,
+            maskAttributeFn,
+          })
+        : style;
     mutationCb({
       texts: [],
-      attributes: [{ id, attributes: { style } }],
+      attributes: [{ id, attributes: { style: value } }],
       removes: [],
       adds: [],
     });

@@ -1267,3 +1267,18 @@ export function getAnimatedStyles(el: Element): Record<string, string> | null {
   });
   return Object.keys(styles).length ? styles : null;
 }
+
+/**
+ * An inline style with animated values appended, so they win over the
+ * element's own declarations of the same properties.
+ */
+export function appendAnimatedStyles(
+  style: string | null | undefined,
+  animated: Record<string, string>,
+): string {
+  const existing = (style || '').trim().replace(/;$/, '');
+  const appended = Object.entries(animated)
+    .map(([property, value]) => `${property}: ${value};`)
+    .join(' ');
+  return [existing, appended].filter(Boolean).join('; ');
+}

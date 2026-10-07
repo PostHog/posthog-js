@@ -36,6 +36,7 @@ import {
   absolutifyURLs,
   SCRIPT_PLACEHOLDER,
   getAnimatedStyles,
+  appendAnimatedStyles,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -812,16 +813,11 @@ function serializeElementNode(
   // element replays the way it rendered (see getAnimatedStyles)
   if (recordAnimationStyles && !needBlock) {
     const animatedStyles = getAnimatedStyles(n);
-    if (animatedStyles) {
-      const existing =
-        typeof attributes.style === 'string'
-          ? attributes.style.trim().replace(/;$/, '')
-          : '';
-      const animated = Object.entries(animatedStyles)
-        .map(([property, value]) => `${property}: ${value};`)
-        .join(' ');
-      attributes.style = existing ? `${existing}; ${animated}` : animated;
-    }
+    if (animatedStyles)
+      attributes.style = appendAnimatedStyles(
+        typeof attributes.style === 'string' ? attributes.style : '',
+        animatedStyles,
+      );
   }
   // remote css
   // a blocked link is serialized as a dimensions-only placeholder, so reading its

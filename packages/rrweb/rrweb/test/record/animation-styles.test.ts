@@ -287,4 +287,82 @@ describe('record animation styles', () => {
     expect(id).toBeDefined();
     expect(styleMutations(events, id)).toEqual([]);
   });
+
+  it('masks animated styles when every attribute is masked', async () => {
+    await page.evaluate((keyframes) => {
+      const before = document.createElement('div');
+      before.className = 'held';
+      document.body.appendChild(before);
+      before.animate(keyframes, { duration: 1, fill: 'both' }).finish();
+    }, KEYFRAMES);
+    await startRecording({
+      recordAnimationStyles: true,
+      maskAllElementAttributes: true,
+    });
+    await page.evaluate(() => {
+      const overlay = document.createElement('div');
+      overlay.id = 'overlay';
+      overlay.className = 'held';
+      document.body.appendChild(overlay);
+    });
+    await waitForRAF(page);
+    await page.evaluate(
+      (keyframes) =>
+        document
+          .getElementById('overlay')!
+          .animate(keyframes, { duration: 1, fill: 'both' }).finished,
+      KEYFRAMES,
+    );
+    await waitForRAF(page);
+
+    // ids are masked too, so check every recorded style instead
+    const snapshotStyles = Object.values(fullSnapshotStyles(events));
+    const mutationStyles = events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          e.data.source === IncrementalSource.Mutation,
+      )
+      .flatMap((e) => (e.data as mutationData).attributes)
+      .map((a) => a.attributes.style)
+      .filter((style) => style !== undefined);
+    expect(mutationStyles).toHaveLength(1);
+    for (const style of [
+      ...snapshotStyles.filter((s) => s !== undefined),
+      ...mutationStyles,
+    ]) {
+      expect(style).toMatch(/^\*+$/);
+    }
+  });
+
+  it('runs animated styles through maskAttributeFn', async () => {
+    await page.evaluate(() => {
+      const { rrweb, emit } = window as unknown as IWindow;
+      rrweb.record({
+        emit,
+        recordAnimationStyles: true,
+        maskAttributeFn: (name, value) =>
+          name === 'style' ? `masked(${value})` : value,
+      });
+      const overlay = document.createElement('div');
+      overlay.id = 'overlay';
+      overlay.className = 'held';
+      overlay.style.color = 'red';
+      document.body.appendChild(overlay);
+    });
+    await waitForRAF(page);
+    await page.evaluate(
+      (keyframes) =>
+        document
+          .getElementById('overlay')!
+          .animate(keyframes, { duration: 1, fill: 'both' }).finished,
+      KEYFRAMES,
+    );
+    await waitForRAF(page);
+
+    const id = idsByElementId(events).overlay;
+    expect(styleMutations(events, id)).toEqual([
+      expect.stringMatching(/^masked\(color: red; .*opacity: 1;.*\)$/),
+    ]);
+  });
 });
