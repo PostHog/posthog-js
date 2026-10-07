@@ -53,7 +53,8 @@
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
         "check-types": "node node_modules/typescript-legacy/bin/tsc --noEmit --project tsconfig.json",
         "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
-        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+        "test:fixture-server": "node --test scripts/serve-browser-tests.test.mjs"
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
@@ -61,6 +62,7 @@
     },
     "devDependencies": {
         "@playwright/test": "1.52.0",
+        "@posthog-tooling/sdk-mock-server": "workspace:*",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "esbuild": "^0.25.0",

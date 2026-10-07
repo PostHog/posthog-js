@@ -516,6 +516,9 @@ importers:
         specifier: workspace:^
         version: link:../types
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@playwright/test':
         specifier: 1.52.0
         version: 1.52.0
