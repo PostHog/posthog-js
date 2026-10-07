@@ -2,4 +2,4 @@
 '@posthog/react-native-plugin': patch
 ---
 
-Stop setting posthog-ios's deprecated `screenshotMode` option, so iOS builds no longer show its deprecation warning. Session replay still records screenshots.
+Remove the `screenshotMode` deprecation warning that posthog-ios 4.0 shows in iOS builds
