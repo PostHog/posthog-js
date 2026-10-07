@@ -319,6 +319,9 @@ importers:
         specifier: npm:web-vitals@6.2.1
         version: web-vitals@6.2.1
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@babel/core':
         specifier: 'catalog:'
         version: 7.28.5
@@ -409,6 +412,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.10
       expect:
         specifier: ^29.7.0
         version: 29.7.0
