@@ -2524,7 +2524,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
     if (!this._featureFlagEvaluationsHost) {
       this._featureFlagEvaluationsHost = {
-        captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        captureFlagCalledEventIfNeeded: (params) => {
+          // Snapshot accessors take no per-call option, so the client option decides,
+          // matching the default the single-flag getters fall back to.
+          if (this.options.sendFeatureFlagEvent ?? true) {
+            this._captureFlagCalledEventIfNeeded(params)
+          }
+        },
         logWarning: (message) => {
           if (this.options.featureFlagsLogWarnings !== false) {
             // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and

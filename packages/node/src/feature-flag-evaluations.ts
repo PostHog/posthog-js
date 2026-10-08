@@ -117,7 +117,7 @@ export class FeatureFlagEvaluations {
   /**
    * Check whether a feature flag is enabled. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
-   * existing cache.
+   * existing cache, unless the client was created with `sendFeatureFlagEvent: false`.
    *
    * Flags that were not returned from the underlying evaluation resolve to
    * `options.defaultValue` (`false` unless overridden). A flag that has a value —
@@ -132,7 +132,8 @@ export class FeatureFlagEvaluations {
 
   /**
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
-   * on the first access per (distinctId, flag, value) tuple.
+   * on the first access per (distinctId, flag, value) tuple, unless the client was
+   * created with `sendFeatureFlagEvent: false`.
    *
    * Returns the variant string for multivariate flags, `true` for boolean flags that
    * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`

@@ -380,6 +380,84 @@ describe('evaluateFlags', () => {
     })
   })
 
+  describe('sendFeatureFlagEvent client option', () => {
+    beforeEach(() => {
+      mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
+    })
+
+    it('does not fire $feature_flag_called events from snapshot reads when the option is false', async () => {
+      setup({ sendFeatureFlagEvent: false })
+      const flags = await posthog.evaluateFlags('user-1')
+
+      expect(flags.isEnabled('boolean-flag')).toBe(true)
+      expect(flags.isEnabled('disabled-flag')).toBe(false)
+      expect(flags.getFlag('variant-flag')).toBe('variant-value')
+      expect(flags.getFlag('missing-flag')).toBeUndefined()
+      expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
+
+      await waitForPromises()
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+    })
+
+    it('still tracks accessed flags for onlyAccessed() when the option is false', async () => {
+      setup({ sendFeatureFlagEvent: false })
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+      flags.getFlag('variant-flag')
+
+      const accessed = flags.onlyAccessed()
+      expect(accessed.keys.sort()).toEqual(['boolean-flag', 'variant-flag'])
+
+      posthog.capture({ distinctId: 'user-1', event: 'page_viewed', flags: accessed })
+      await waitForPromises()
+
+      const pageViewed = captures.find((m) => m.event === 'page_viewed')
+      expect(pageViewed.properties).toMatchObject({
+        '$feature/boolean-flag': true,
+        '$feature/variant-flag': 'variant-value',
+        $active_feature_flags: ['boolean-flag', 'variant-flag'],
+      })
+      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+    })
+
+    it.each([
+      ['unset', {}],
+      ['true', { sendFeatureFlagEvent: true }],
+    ])('fires one $feature_flag_called event per flag read when the option is %s', async (_, overrides) => {
+      setup(overrides)
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+      flags.getFlag('boolean-flag')
+      flags.isEnabled('disabled-flag')
+      flags.getFlag('variant-flag')
+      flags.getFlag('missing-flag')
+      flags.getFlagPayload('variant-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.map((m) => m.properties.$feature_flag).sort()).toEqual([
+        'boolean-flag',
+        'disabled-flag',
+        'missing-flag',
+        'variant-flag',
+      ])
+    })
+
+    it('keeps the per-call sendFeatureFlagEvents override on the legacy getters', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+      setup({ sendFeatureFlagEvent: false })
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+      await posthog.getFeatureFlag('variant-flag', 'user-1', { sendFeatureFlagEvents: true })
+
+      await waitForPromises()
+      const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.map((m) => m.properties.$feature_flag)).toEqual(['variant-flag'])
+      warnSpy.mockRestore()
+    })
+  })
+
   describe('capture integration', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
