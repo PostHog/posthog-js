@@ -5,6 +5,13 @@ import { getReactNativeVersion } from '../src/utils'
 const platform = Platform as typeof Platform & { constants?: unknown }
 
 describe('$react_native_version', () => {
+  beforeEach(() => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => ({
+      status: 200,
+      json: () => Promise.resolve(url.includes('flags') ? { featureFlags: {} } : { status: 'ok' }),
+    }))
+  })
+
   afterEach(() => {
     delete platform.constants
   })
