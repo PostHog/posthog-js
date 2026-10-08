@@ -446,11 +446,23 @@ export default class MutationBuffer {
 
         // Walk up to the top of this contiguous added subtree so a parent is
         // never serialized before its own ancestor in this.addedSet.
+        //
+        // Shadow DOM: when the DOM parent is a ShadowRoot we switch to the
+        // shadow host for the ancestor check. Serializer-side `pushAdd`
+        // translates ShadowRoot → host via `isShadowRoot(parent) ? getId(host)
+        // : getId(parent)`, so if the host is also in addedSet we must
+        // serialize the host first — otherwise its shadow children land here
+        // with an un-mirrored parent and get dropped (fixes the
+        // "should record moved shadow DOM 2" regression caught by Tue in #5244).
         // eslint-disable-next-line no-constant-condition
         while (true) {
           const parentNode = dom.parentNode(n);
-          if (this.addedSet.has(parentNode as Node)) {
-            n = parentNode as Node;
+          const logicalParent =
+            parentNode && parentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+              ? (dom.host(parentNode as ShadowRoot) as Node | null)
+              : (parentNode as Node | null);
+          if (logicalParent && this.addedSet.has(logicalParent)) {
+            n = logicalParent;
             continue;
           }
           break;
@@ -478,9 +490,15 @@ export default class MutationBuffer {
 
       // A missing parent propagates: once we fail to resolve a parent for
       // emission, every descendant we encounter in this drain gets the same
-      // treatment without re-asking the mirror.
+      // treatment without re-asking the mirror. For shadow children the
+      // "logical parent" for propagation is the shadow host, matching how
+      // pushAdd resolves parentId.
       const parentNode = dom.parentNode(n);
-      if (parentNode && missingParents.has(parentNode)) {
+      const logicalParent =
+        parentNode && parentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+          ? (dom.host(parentNode as ShadowRoot) as Node | null)
+          : (parentNode as Node | null);
+      if (logicalParent && missingParents.has(logicalParent)) {
         missingParents.add(n);
         continue;
       }
@@ -492,6 +510,14 @@ export default class MutationBuffer {
       // node was actually serialized vs needing to be deferred by the caller.
       const handled = pushAdd(n);
       if (!handled) {
+        // Match upstream rrweb: surface the drop so operators can tell when
+        // a node is deferred past this emission. Silent drops here historically
+        // masked a shadow-DOM regression (@TueHaulund in #5244) — keeping the
+        // warning around means future regressions announce themselves.
+        console.warn(
+          "Couldn't record new node. Couldn't find mirror id for parent or nextSibling of:",
+          n,
+        );
         missingParents.add(n);
       }
     }
