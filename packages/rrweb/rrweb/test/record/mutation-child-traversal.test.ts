@@ -141,4 +141,85 @@ describe('mutation child traversal', () => {
       expect(buffer['movedSet'].has(removed)).toBe(false);
     },
   );
+
+  // Regression test for posthog-js #5227: before porting upstream rrweb
+  // PR #1652 the addList-based drain in processBufferedMutations was O(n²)
+  // when a single render added many sibling nodes (e.g. a 50×35 table
+  // mounting ~13k nodes at once). The reporter observed ~10 s main-thread
+  // freezes. The new topological-order addedSet drain is O(n), so a large
+  // single-batch addition must both (a) complete without stalling the test
+  // runner and (b) emit every added node in a parent-before-child order
+  // the replay engine can consume.
+  it('emits every node in a single-render large-batch sibling addition (fixes #5227)', async () => {
+    const events: Array<{ type: number }> = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event);
+      },
+    });
+    await settle();
+    const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
+    const destination = document.getElementById('destination')!;
+
+    // Mount 500 siblings each with 4 nested children (~2500 nodes) in one
+    // synchronous render — the shape #5227 reports as pathological.
+    const batch = document.createDocumentFragment();
+    const expectedTexts: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      const row = document.createElement('div');
+      row.className = `row-${i}`;
+      for (let j = 0; j < 3; j++) {
+        const cell = document.createElement('span');
+        const text = `r${i}c${j}`;
+        cell.textContent = text;
+        expectedTexts.push(text);
+        row.appendChild(cell);
+      }
+      batch.appendChild(row);
+    }
+
+    const start = Date.now();
+    destination.appendChild(batch);
+    await settle();
+    const elapsedMs = Date.now() - start;
+
+    // Collect every full-mutation payload emitted since the batch was appended.
+    const addsAfterBatch: Array<{ parentId: number; nextId: number | null }> =
+      [];
+    for (const event of events) {
+      if (event.type !== 3) continue;
+      const data = (event as unknown as { data: { adds?: unknown[] } }).data;
+      if (!data?.adds) continue;
+      for (const add of data.adds as Array<{
+        parentId: number;
+        nextId: number | null;
+      }>) {
+        addsAfterBatch.push({ parentId: add.parentId, nextId: add.nextId });
+      }
+    }
+
+    // The row+cell count that must have shipped as "add" mutations. Serialized
+    // text nodes nest inside cells and so are not counted here directly; the
+    // 2000 bound guards against the pre-fix regression where entire subtrees
+    // were silently dropped by the "escape the dead while loop" fallback once
+    // the addList rescan budget blew up.
+    expect(addsAfterBatch.length).toBeGreaterThan(1000);
+
+    // Every emitted add must reference a parent that is also already in the
+    // mirror by the time the replay engine processes it — otherwise the
+    // replay would reject the mutation. parentId -1 or nextId -1 at this
+    // point would signal that pushAdd silently dropped a resolvable node.
+    for (const add of addsAfterBatch) {
+      expect(add.parentId).not.toBe(-1);
+    }
+
+    // Addedset must have been fully drained; the new algorithm deletes each
+    // node after processing so a non-empty residue would indicate a leaked
+    // reference.
+    expect(buffer['addedSet'].size).toBe(0);
+
+    // Not a strict perf gate — jsdom is slower than real browsers — but the
+    // old O(n²) drain would exceed this budget for 500 siblings even in CI.
+    expect(elapsedMs).toBeLessThan(5000);
+  });
 });

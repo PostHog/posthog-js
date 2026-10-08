@@ -19,7 +19,15 @@ type BasePrototypeCache = {
 };
 
 const testableAccessors = {
-  Node: ['childNodes', 'parentNode', 'parentElement', 'textContent'] as const,
+  Node: [
+    'childNodes',
+    'parentNode',
+    'parentElement',
+    'textContent',
+    'previousSibling',
+    'nextSibling',
+    'lastChild',
+  ] as const,
   ShadowRoot: ['host', 'styleSheets'] as const,
   Element: ['shadowRoot'] as const,
   MutationObserver: [] as const,
@@ -235,6 +243,32 @@ export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
 }
 
+/**
+ * Returns `node.previousSibling` through an untainted-prototype accessor so
+ * Angular Zone or any third-party monkey-patch of `Node.prototype` cannot
+ * silently redirect the mutation ordering. Added for the O(n) drain ported
+ * from upstream rrweb PR #1652 (fixes posthog-js #5227).
+ */
+export function previousSibling(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'previousSibling');
+}
+
+/**
+ * Returns `node.nextSibling` through an untainted-prototype accessor. See
+ * {@link previousSibling} for the rationale.
+ */
+export function nextSibling(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'nextSibling');
+}
+
+/**
+ * Returns `node.lastChild` through an untainted-prototype accessor. See
+ * {@link previousSibling} for the rationale.
+ */
+export function lastChild(n: Node): ChildNode | null {
+  return getUntaintedAccessor('Node', n, 'lastChild');
+}
+
 let isConnectedGetter: PropertyDescriptor['get'] | null | undefined;
 
 export function isConnected(n: Node): boolean | undefined {
@@ -405,6 +439,9 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  previousSibling,
+  nextSibling,
+  lastChild,
   isConnected,
   contains,
   getRootNode,
@@ -420,6 +457,9 @@ export default {
   parentNode: typeof parentNode;
   parentElement: typeof parentElement;
   textContent: typeof textContent;
+  previousSibling: typeof previousSibling;
+  nextSibling: typeof nextSibling;
+  lastChild: typeof lastChild;
   isConnected: typeof isConnected;
   contains: typeof contains;
   getRootNode: typeof getRootNode;
