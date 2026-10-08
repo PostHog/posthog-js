@@ -102,8 +102,10 @@ jobs:
                       '+refs/tags/*:refs/tags/*'
 
                   tag_sha=''
-                  if tag_sha=$(git rev-parse "refs/tags/$tag^{commit}" 2>/dev/null); then
+                  if tag_sha=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}"); then
                       echo "✓ found $tag at $tag_sha"
+                  else
+                      tag_sha=''
                   fi
 
                   source_sha="$INPUT_SOURCE_SHA"
