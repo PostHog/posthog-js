@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/5241": {
+    "key": "PostHog/posthog-js/issue/5241",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5241",
+    "url": "https://github.com/PostHog/posthog-js/issues/5241",
+    "conclusion": "Valid session-replay enhancement request with a clear Ionic/Web Animations use case; it should be evaluated alongside the linked rrweb implementation PR.",
+    "labels": [
+      "feature",
+      "enhancement",
+      "feature/replay",
+      "javascript",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-08T00:13:27.903Z"
+  },
   "PostHog/posthog-js/issue/5227": {
     "key": "PostHog/posthog-js/issue/5227",
     "repo": "PostHog/posthog-js",
@@ -2907,20 +2924,5 @@
     "prUrl": "https://github.com/PostHog/posthog-js/pull/3997",
     "closed": false,
     "updatedAt": "2026-06-27T09:18:59.792Z"
-  },
-  "PostHog/posthog-js/issue/3988": {
-    "key": "PostHog/posthog-js/issue/3988",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3988",
-    "url": "https://github.com/PostHog/posthog-js/issues/3988",
-    "conclusion": "Valid packaging bug in @posthog/webpack-plugin 1.5.25; published JS entrypoints require config files that are reportedly absent from the tarball.",
-    "labels": [
-      "frameworks/next-js",
-      "web",
-      "release"
-    ],
-    "prUrl": "https://github.com/PostHog/posthog-js/pull/3989",
-    "closed": false,
-    "updatedAt": "2026-06-26T12:21:56.044Z"
   }
 }
