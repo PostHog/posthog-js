@@ -174,8 +174,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _distinctIdHasSentFlagCalls: Map<string, Set<string>>
 
   /**
-   * The `$feature_flag_called` dedupe state, keyed by distinct id. Exposed as a plain object for
-   * backwards compatibility; reading it materializes a snapshot of the underlying LRU.
+   * Snapshot of the `$feature_flag_called` dedupe state, keyed by distinct id.
+   * Adding or deleting keys on the returned object does not affect deduplication;
+   * assigning a whole object replaces the tracker.
+   * @internal
+   * @deprecated Not part of the public API; kept for backwards compatibility.
    */
   get distinctIdHasSentFlagCalls(): Record<string, Set<string>> {
     return Object.fromEntries(this._distinctIdHasSentFlagCalls)
