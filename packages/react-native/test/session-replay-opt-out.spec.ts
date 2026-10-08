@@ -1,4 +1,5 @@
 import { PostHog, PostHogCustomStorage } from '../src'
+import { PostHogPersistedProperty } from '@posthog/core'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { Linking, AppState } from 'react-native'
 import { waitForExpect } from './test-utils'
@@ -107,6 +108,16 @@ describe('PostHog RN session replay follows consent', () => {
     errorSpy.mockRestore()
   })
 
+  // posthog-ios optIn() reinstalls its integrations, which restarts the recorder by itself.
+  const mockNativeOptInRestartsRecorder = (): void => {
+    replay.setOptOut.mockImplementation(async (optOut: boolean) => {
+      nativeOptedOut = optOut
+      if (!optOut) {
+        nativeRecording = true
+      }
+    })
+  }
+
   const newPostHog = (options: { enableSessionReplay: boolean; defaultOptIn?: boolean }): PostHog => {
     const client = new PostHog('test-token', {
       customStorage: mockStorage,
@@ -115,6 +126,17 @@ describe('PostHog RN session replay follows consent', () => {
     })
     client.debug(true)
     return client
+  }
+
+  // Warms the persisted cache with the current replay config and flags, so bootstrap evaluates them.
+  const warmCache = async (): Promise<void> => {
+    const warmup = newPostHog({ enableSessionReplay: true })
+    await warmup.ready()
+    await warmup.reloadFeatureFlagsAsync()
+    await warmup.shutdown()
+    replay.start.mockClear()
+    replay.startRecording.mockClear()
+    nativeRecording = false
   }
 
   it('stops a recording that replay started when the user opts out', async () => {
@@ -160,18 +182,28 @@ describe('PostHog RN session replay follows consent', () => {
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('refused to start session recording'))
   })
 
+  it('has the new session in place once optIn() resolves', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    const sessionBeforeOptOut = posthog.getSessionId()
+    await posthog.optOut()
+
+    await posthog.optIn()
+    const session = posthog.getSessionId()
+    posthog.capture('after opt-in')
+
+    expect(session).not.toBe(sessionBeforeOptOut)
+    const queue = posthog.getPersistedProperty(PostHogPersistedProperty.Queue) as any[]
+    expect(queue.at(-1).message).toMatchObject({ event: 'after opt-in', properties: { $session_id: session } })
+  })
+
   it('leaves a recording the app stopped stopped when the user opts back in', async () => {
     posthog = newPostHog({ enableSessionReplay: true })
     await posthog.ready()
     await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
     await posthog.stopSessionRecording()
-    // posthog-ios optIn() reinstalls its integrations, which restarts the recorder by itself.
-    replay.setOptOut.mockImplementation(async (optOut: boolean) => {
-      nativeOptedOut = optOut
-      if (!optOut) {
-        nativeRecording = true
-      }
-    })
+    mockNativeOptInRestartsRecorder()
 
     await posthog.optOut()
     await posthog.optIn()
@@ -259,24 +291,56 @@ describe('PostHog RN session replay follows consent', () => {
     expect(replay.startRecording).toHaveBeenCalledWith(true)
   })
 
-  it('keeps a recording the app stopped stopped after opt-in when replay is disabled', async () => {
+  it('starts recording when a trigger fires right after optIn() resolves', async () => {
+    currentSessionRecording = { eventTriggers: ['$pageview'], endpoint: '/s/' }
+    await warmCache()
+
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    posthog.capture('$pageview')
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    await posthog.optOut()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(false))
+
+    await posthog.optIn()
+    posthog.capture('$pageview')
+
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+  })
+
+  it('ends a manual recording on opt-in when replay is disabled, until the app starts it again', async () => {
     posthog = newPostHog({ enableSessionReplay: false })
     await posthog.ready()
     await posthog.startSessionRecording()
-    await posthog.stopSessionRecording()
-    // posthog-ios optIn() reinstalls its integrations, which restarts the recorder by itself.
-    replay.setOptOut.mockImplementation(async (optOut: boolean) => {
-      nativeOptedOut = optOut
-      if (!optOut) {
-        nativeRecording = true
-      }
-    })
+    mockNativeOptInRestartsRecorder()
 
     await posthog.optOut()
     replay.stopRecording.mockClear()
     await posthog.optIn()
 
-    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalled())
+    expect(replay.stopRecording).toHaveBeenCalled()
+    expect(nativeRecording).toBe(false)
+
+    await posthog.startSessionRecording()
+    expect(nativeRecording).toBe(true)
+  })
+
+  it('ends a manual recording on opt-in when a linked flag blocks replay', async () => {
+    currentSessionRecording = { linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    await warmCache()
+
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    expect(nativeRecording).toBe(true)
+    mockNativeOptInRestartsRecorder()
+
+    await posthog.optOut()
+    replay.stopRecording.mockClear()
+    await posthog.optIn()
+
+    expect(replay.stopRecording).toHaveBeenCalled()
     expect(nativeRecording).toBe(false)
   })
 

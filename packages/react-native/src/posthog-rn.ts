@@ -1090,6 +1090,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
+   * When opting in after an opt-out, the promise resolves once session replay has been re-evaluated, under a new session if it restarts.
    *
    * {@label Privacy}
    *
@@ -1113,9 +1114,10 @@ export class PostHog extends PostHogCore {
     // there is nothing to restart, because startup evaluates replay against the saved consent.
     // Waits for native opt-in, because posthog-ios ignores a start while it is opted out.
     if (this._isInitialized && wasOptedOut) {
-      void Promise.all([result, nativeOptIn])
+      const replay = Promise.all([result, nativeOptIn])
         .then(() => this._evaluateAndStartSessionReplay(undefined, true))
         .catch(() => {})
+      return Promise.all([result, replay]).then(() => undefined)
     }
     return result
   }
@@ -3100,11 +3102,8 @@ export class PostHog extends PostHogCore {
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
       // Opt-out ends any recording, including one the app started by hand. posthog-ios optIn()
-      // reinstalls its integrations, which restarts a recorder the app stopped.
-      if (
-        this._sessionReplayNativeInitialized &&
-        (this.optedOut || (freshSession && this._sessionReplayStoppedByApp))
-      ) {
+      // reinstalls its integrations, which restarts the recorder, so opt-in stops it again.
+      if (this._sessionReplayNativeInitialized && (this.optedOut || freshSession)) {
         await this._stopSessionRecording()
       }
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
@@ -3235,6 +3234,10 @@ export class PostHog extends PostHogCore {
         // set if the native stop fails, so the next reload retries instead of giving up.
         this._sessionReplayRecordingActive = !(await this._stopSessionRecording())
       } else {
+        // posthog-ios optIn() restarts the recorder, so opt-in ends any recording it doesn't start.
+        if (freshSession && this._sessionReplayNativeInitialized) {
+          await this._stopSessionRecording()
+        }
         this._sessionReplayRecordingActive = false
       }
 
