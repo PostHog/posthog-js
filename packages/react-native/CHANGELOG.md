@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.80.0
+
+### Minor Changes
+
+- [#5254](https://github.com/PostHog/posthog-js/pull/5254) [`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Send `$react_native_version` only on `Application Installed` and `Application Updated` instead of every event
+  (2026-10-08)
+
+### Patch Changes
+
+- Updated dependencies [[`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604)]:
+  - @posthog/core@1.57.3
+
 ## 4.79.2
 
 ### Patch Changes
