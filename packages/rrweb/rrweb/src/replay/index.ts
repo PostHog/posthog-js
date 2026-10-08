@@ -2402,7 +2402,7 @@ export class Replayer {
 
   /**
    * Apply the scroll data on real elements.
-   * If the replayer is in sync mode, smooth scroll behavior should be disabled.
+   * If the replayer is in sync mode, or the target snaps on scroll, smooth scroll behavior is disabled.
    * @param d - the scroll data
    * @param isSync - whether the replayer is in sync mode(fast-forward)
    */
@@ -2416,21 +2416,27 @@ export class Replayer {
       this.iframe.contentWindow?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'instant' : 'smooth',
+        behavior: this.scrollBehaviorFor(
+          (target as Document).scrollingElement,
+          isSync,
+        ),
       });
     } else if (sn?.type === NodeType.Document) {
       // nest iframe content document
       (target as Document).defaultView?.scrollTo({
         top: d.y,
         left: d.x,
-        behavior: isSync ? 'instant' : 'smooth',
+        behavior: this.scrollBehaviorFor(
+          (target as Document).scrollingElement,
+          isSync,
+        ),
       });
     } else {
       try {
         (target as Element).scrollTo({
           top: d.y,
           left: d.x,
-          behavior: isSync ? 'instant' : 'smooth',
+          behavior: this.scrollBehaviorFor(target as Element, isSync),
         });
       } catch (error) {
         /**
@@ -2439,6 +2445,22 @@ export class Replayer {
          */
       }
     }
+  }
+
+  private scrollBehaviorFor(
+    scroller: Element | null,
+    isSync: boolean,
+  ): ScrollBehavior {
+    if (isSync) {
+      return 'instant';
+    }
+    const view = scroller?.ownerDocument.defaultView;
+    if (!scroller || !view) {
+      return 'smooth';
+    }
+    return view.getComputedStyle(scroller).scrollSnapType === 'none'
+      ? 'smooth'
+      : 'instant';
   }
 
   private applyInput(d: inputData) {

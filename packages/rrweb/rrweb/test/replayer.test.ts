@@ -19,6 +19,7 @@ import scrollModalRevealedOnSeekEvents from './events/scroll-modal-revealed-on-s
 import scrollDocumentInitialOffsetEvents from './events/scroll-document-initial-offset';
 import silkSheetRevealBrokenEvents from './events/silk-sheet-reveal-broken';
 import silkSheetRevealFixedEvents from './events/silk-sheet-reveal-fixed';
+import scrollSnapContainerRealtimeEvents from './events/scroll-snap-container-realtime';
 import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
@@ -683,6 +684,23 @@ describe('replayer', function () {
         (element: Element) => element.scrollTop,
       ),
     ).toEqual(787);
+  });
+
+  it('lands a real-time scroll instantly on a scroll-snap container and keeps it smooth elsewhere', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(scrollSnapContainerRealtimeEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play(0);
+    `);
+    await page.waitForFunction('replayer.getCurrentTime() >= 1000');
+    await waitForRAF(page);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    const scrollTop = (selector: string) =>
+      contentDocument!.$eval(selector, (element: Element) => element.scrollTop);
+    expect(await scrollTop('#snap')).toEqual(1320);
+    expect(await scrollTop('#plain')).toBeLessThan(1320);
   });
 
   it('can fast forward input events', async () => {
