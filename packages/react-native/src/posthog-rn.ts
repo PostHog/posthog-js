@@ -306,8 +306,8 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
-  // Set by stopSessionRecording() and cleared by startSessionRecording(), so opt-in doesn't
-  // restart a recording the app stopped.
+  // Set by stopSessionRecording() and cleared when a manual start is attempted with consent,
+  // so opt-in doesn't restart a recording the app stopped.
   private _sessionReplayStoppedByApp: boolean = false
   // Set when a manual start is attempted with consent, cleared by stopSessionRecording() and
   // optOut(), so the opt-in evaluation leaves a recording the app started alone.
@@ -1738,7 +1738,6 @@ export class PostHog extends PostHogCore {
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
     this._cancelManualRecordingStart()
-    this._sessionReplayStoppedByApp = false
     const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
     this._manualRecordingStartRequest = request
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
@@ -1768,6 +1767,7 @@ export class PostHog extends PostHogCore {
       this._cancelManualRecordingStart()
       return false
     }
+    this._sessionReplayStoppedByApp = false
     this._sessionReplayStartedByApp = true
 
     const started = await this._startSessionRecording(resumeCurrent)
@@ -3089,8 +3089,8 @@ export class PostHog extends PostHogCore {
 
   private async _evaluateAndStartSessionReplayInternal(
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
-    // Set when recording restarts after the user opted back in: replay starts a new session
-    // instead of resuming the one that was stopped at opt-out.
+    // Set for the evaluation after the user opts back in: rotates the session, and stops a
+    // recorder that posthog-ios optIn() restarted unless the app started one since.
     freshSession: boolean = false
   ): Promise<void> {
     const options = this._sessionReplayOptions
@@ -3211,8 +3211,8 @@ export class PostHog extends PostHogCore {
       if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording()
       }
-      // A recording the app stopped keeps its flag, so a flags reload after opt-in treats it as
-      // running and leaves it stopped, as it does without an opt-out.
+      // A recording the app stopped leaves _sessionReplayRecordingActive true, so a flags reload
+      // after opt-in treats it as running and leaves it stopped, as it does without an opt-out.
       if (!this._sessionReplayStoppedByApp) {
         this._sessionReplayRecordingActive = false
       }
