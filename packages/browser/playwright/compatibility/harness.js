@@ -121,7 +121,8 @@
         enable_recording_console_log: false,
         opt_out_useragent_filter: true,
         request_batching: lab.scenario === 'unload',
-        strict_script_versioning: lab.scenario === 'version-fallback' ? 'fallback' : false,
+        strict_script_versioning:
+            lab.scenario === 'version-fallback' && lab.comparison === 'current' ? 'fallback' : false,
         session_recording: {
             maskAllInputs: true,
             maskTextSelector: '.ph-mask',

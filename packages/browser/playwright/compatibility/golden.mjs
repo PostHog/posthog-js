@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
 export const MATRIX = Object.freeze({
-    coreFamilies: Object.freeze(['current', 'historical-1.354.0']),
+    coreFamilies: Object.freeze(['current', 'historical']),
     entrypoints: Object.freeze(['snippet', 'npm', 'slim']),
     browsers: Object.freeze(['chromium', 'firefox', 'webkit']),
     scenarios: Object.freeze([
@@ -27,14 +27,32 @@ export const MATRIX = Object.freeze({
     ]),
 })
 
-export const HISTORICAL_INTEGRITY =
-    'sha512-qrpToz7mN1PmEfo+Ob4Z8euX4z2p17LA0EAtFeyod3IVnlwnu+Ybea/oxVsPiq5YAPo+p5z73FcjF2yEJ7oZnA=='
-const INITIALIZATION_ERROR = 'this.instance._shouldDisableFlags is not a function'
-const HISTORICAL_OUTCOME = 'known-historical-slim-initialization-failure'
+export const HISTORICAL_PACKAGES = Object.freeze({
+    historical: Object.freeze({
+        version: '1.354.0',
+        integrity: 'sha512-qrpToz7mN1PmEfo+Ob4Z8euX4z2p17LA0EAtFeyod3IVnlwnu+Ybea/oxVsPiq5YAPo+p5z73FcjF2yEJ7oZnA==',
+    }),
+    'historical-slim': Object.freeze({
+        version: '1.407.6',
+        integrity: 'sha512-oXoDlFf1HdwvjmorcMrqeRlYHNY3WdwYvyYg4/L1dXTewltkDC9UQkbxZgSqGEsUcsniocfUpu3JxVICTseKqg==',
+    }),
+})
+
+export function historicalSource(entrypoint) {
+    return entrypoint === 'slim' ? 'historical-slim' : 'historical'
+}
+
+export function deploymentFilename(coreFamily, entrypoint) {
+    const family =
+        coreFamily === 'historical'
+            ? `historical-${HISTORICAL_PACKAGES[historicalSource(entrypoint)].version}`
+            : coreFamily
+    return `${family}-${entrypoint}.json`
+}
 const dimensions = Object.keys(MATRIX)
 const tupleFields = ['coreFamily', 'entrypoint', 'browser', 'scenario']
 const filenames = MATRIX.coreFamilies.flatMap((coreFamily) =>
-    MATRIX.entrypoints.map((entrypoint) => `${coreFamily}-${entrypoint}.json`)
+    MATRIX.entrypoints.map((entrypoint) => deploymentFilename(coreFamily, entrypoint))
 )
 
 function requireCondition(condition, message) {
@@ -170,68 +188,47 @@ function tupleKey(tuple) {
     return tupleFields.map((field) => tuple[field]).join('/')
 }
 
-function historicalSlim(tuple) {
-    return tuple.coreFamily === 'historical-1.354.0' && tuple.entrypoint === 'slim'
-}
-
-function knownInitializationError(error) {
-    return (
-        isObject(error) &&
-        error.name === 'TypeError' &&
-        typeof error.message === 'string' &&
-        error.message.startsWith(INITIALIZATION_ERROR)
-    )
-}
-
-function validateCell(cell, tuple, label) {
+function validateCell(cell, label) {
     requireCondition(isObject(cell.observations), `${label}: observations must be an object`)
     canonicalize(cell.observations)
     for (const [path, errors] of [
         ['unexpectedNetwork', cell.observations.unexpectedNetwork],
         ['api.unhandled', cell.observations.api?.unhandled],
         ['network.errors', cell.observations.network?.errors],
-        ...(!historicalSlim(tuple) ? [['pageErrors', cell.observations.pageErrors]] : []),
+        ['pageErrors', cell.observations.pageErrors],
     ]) {
         requireCondition(
             errors === undefined || (Array.isArray(errors) && errors.length === 0),
             `${label}: unexpected runtime evidence at ${path}`
         )
     }
-    if (historicalSlim(tuple)) {
-        requireCondition(
-            cell.functionalCoverage === 'initialization-failure-only' && cell.terminalOutcome === HISTORICAL_OUTCOME,
-            `${label}: historical slim must have initialization-failure-only coverage and its known terminal outcome`
-        )
-        requireCondition(
-            cell.observations.terminalOutcome === HISTORICAL_OUTCOME &&
-                Array.isArray(cell.observations.pageErrors) &&
-                cell.observations.pageErrors.length > 0 &&
-                cell.observations.pageErrors.every(knownInitializationError),
-            `${label}: missing or unexpected normalized historical initialization error`
-        )
-    } else {
-        requireCondition(
-            cell.functionalCoverage === 'fully-ready' && cell.terminalOutcome === 'fully-ready',
-            `${label}: expected fully-ready coverage and terminal outcome`
-        )
-        requireCondition(
-            !Object.hasOwn(cell.observations, 'terminalOutcome') || cell.observations.terminalOutcome === 'fully-ready',
-            `${label}: conflicting observation terminal outcome`
-        )
-    }
+    requireCondition(
+        cell.functionalCoverage === 'fully-ready' && cell.terminalOutcome === 'fully-ready',
+        `${label}: expected fully-ready coverage and terminal outcome`
+    )
+    requireCondition(
+        !Object.hasOwn(cell.observations, 'terminalOutcome') || cell.observations.terminalOutcome === 'fully-ready',
+        `${label}: conflicting observation terminal outcome`
+    )
 }
 
 function validateIntegrity(proof) {
-    const groups = ['source', 'artifacts', 'runtime', 'browserTooling', 'historicalPackage']
+    const groups = ['source', 'artifacts', 'runtime', 'browserTooling', 'historicalPackages']
     sameKeys(proof, ['expected', 'before', 'after'], 'inputIntegrity')
     for (const phase of ['expected', 'before', 'after']) {
         const inventory = proof[phase]
         sameKeys(inventory, groups, `inputIntegrity.${phase}`)
-        requireCondition(
-            inventory.historicalPackage === HISTORICAL_INTEGRITY,
-            `${phase}: historical integrity mismatch`
+        sameKeys(
+            inventory.historicalPackages,
+            Object.keys(HISTORICAL_PACKAGES),
+            `inputIntegrity.${phase}.historicalPackages`
         )
-        for (const group of groups.filter((key) => key !== 'historicalPackage')) {
+        for (const [role, pinned] of Object.entries(HISTORICAL_PACKAGES))
+            requireCondition(
+                inventory.historicalPackages[role] === pinned.integrity,
+                `${phase}: ${role} integrity mismatch`
+            )
+        for (const group of groups.filter((key) => key !== 'historicalPackages')) {
             requireCondition(
                 isObject(inventory[group]) &&
                     Object.keys(inventory[group]).length > 0 &&
@@ -252,14 +249,13 @@ function validateIntegrity(proof) {
  * Runner input: { repeats, selection?, inputIntegrity, runs }.
  * Each run has { coreFamily, entrypoint, browser, scenario, repeat (zero-based),
  * status: 'passed', assertionsPassed: true, runtimeErrors: [], functionalCoverage,
- * terminalOutcome, observations, initializationError? }. observations are already
- * normalized, JSON-safe values; explicit sentinels retain undefined/error semantics.
- * Historical slim requires a separately verified initializationError (TypeError with
- * the published prefix), the known terminal marker and normalized pageErrors.
+ * terminalOutcome, observations }. observations are already normalized, JSON-safe
+ * values; explicit sentinels retain undefined/error semantics.
  *
  * inputIntegrity = { expected, before, after }; each inventory has nonempty maps of
  * identifier -> 'sha256-<64 lowercase hex>' under source, artifacts, runtime and
- * browserTooling, plus historicalPackage = HISTORICAL_INTEGRITY. The runner must
+ * browserTooling, plus historicalPackages mapping both source roles to their pinned
+ * SHA-512 integrity values. The runner must
  * hash/verify ALL source (including dirty changes), prepared bytes, harness/fixture/
  * normalizer inputs and pinned browser/tooling inputs, not just manifest labels.
  * Inventory membership and fingerprints must match in all three phases. Proof and
@@ -269,8 +265,7 @@ function validateIntegrity(proof) {
  * repeats runs (at least two), successful independent assertions and equal results.
  * Returns { coverage: 'full'|'partial', cellCount, functionalCoverage, repeats, files };
  * files maps stable deployment filenames to readable JSON strings. Full means tuple
- * completeness, not product readiness: functionalCoverage counts fully-ready versus
- * initialization-failure-only cells. A partial set cannot be updated.
+ * completeness with fully-ready functional coverage. A partial set cannot be updated.
  */
 export function buildGoldens(input) {
     requireCondition(isObject(input), 'Run input must be an object')
@@ -303,15 +298,8 @@ export function buildGoldens(input) {
             Array.isArray(run.runtimeErrors) && run.runtimeErrors.length === 0,
             `${runKey}: unexpected runtime errors`
         )
-        if (historicalSlim(run)) {
-            requireCondition(
-                knownInitializationError(run.initializationError),
-                `${runKey}: unexpected historical initialization error`
-            )
-        } else {
-            requireCondition(!Object.hasOwn(run, 'initializationError'), `${runKey}: unexpected initialization error`)
-        }
-        validateCell(run, run, runKey)
+        requireCondition(!Object.hasOwn(run, 'initializationError'), `${runKey}: unexpected initialization error`)
+        validateCell(run, runKey)
         const cell = {
             functionalCoverage: run.functionalCoverage,
             terminalOutcome: run.terminalOutcome,
@@ -331,7 +319,7 @@ export function buildGoldens(input) {
                 const changes = differences(JSON.parse(first), JSON.parse(observed))
                 const error = new Error(`${key}: repetitions differ (0 vs ${repeat}) at ${changes[0].path}`)
                 error.differences = changes.map((change) => ({
-                    deployment: `${tuple.coreFamily}-${tuple.entrypoint}.json`,
+                    deployment: deploymentFilename(tuple.coreFamily, tuple.entrypoint),
                     browser: tuple.browser,
                     scenario: tuple.scenario,
                     ...change,
@@ -339,10 +327,13 @@ export function buildGoldens(input) {
                 throw error
             }
         }
-        const filename = `${tuple.coreFamily}-${tuple.entrypoint}.json`
+        const filename = deploymentFilename(tuple.coreFamily, tuple.entrypoint)
         deployments[filename] ??= {
             schema: 1,
             coreFamily: tuple.coreFamily,
+            ...(tuple.coreFamily === 'historical'
+                ? { coreVersion: HISTORICAL_PACKAGES[historicalSource(tuple.entrypoint)].version }
+                : {}),
             entrypoint: tuple.entrypoint,
             browsers: {},
         }
@@ -353,10 +344,7 @@ export function buildGoldens(input) {
     return {
         coverage: dimensions.every((key) => selection[key].length === MATRIX[key].length) ? 'full' : 'partial',
         cellCount: tuples.length,
-        functionalCoverage: {
-            'fully-ready': tuples.filter((tuple) => !historicalSlim(tuple)).length,
-            'initialization-failure-only': tuples.filter(historicalSlim).length,
-        },
+        functionalCoverage: { 'fully-ready': tuples.length },
         repeats: input.repeats,
         files: Object.fromEntries(
             Object.entries(deployments).map(([filename, deployment]) => [filename, serialize(deployment)])
@@ -365,9 +353,17 @@ export function buildGoldens(input) {
 }
 
 function validateEnvelope(deployment, coreFamily, entrypoint, filename) {
-    sameKeys(deployment, ['schema', 'coreFamily', 'entrypoint', 'browsers'], filename)
+    sameKeys(
+        deployment,
+        ['schema', 'coreFamily', 'entrypoint', 'browsers', ...(coreFamily === 'historical' ? ['coreVersion'] : [])],
+        filename
+    )
     requireCondition(
-        deployment.schema === 1 && deployment.coreFamily === coreFamily && deployment.entrypoint === entrypoint,
+        deployment.schema === 1 &&
+            deployment.coreFamily === coreFamily &&
+            deployment.entrypoint === entrypoint &&
+            (coreFamily !== 'historical' ||
+                deployment.coreVersion === HISTORICAL_PACKAGES[historicalSource(entrypoint)].version),
         `${filename}: invalid schema or deployment attribution`
     )
     requireCondition(isObject(deployment.browsers), `${filename}: browsers must be an object`)
@@ -382,7 +378,7 @@ function validateFullDeployment(deployment, coreFamily, entrypoint, filename) {
             const cell = deployment.browsers[browser][scenario]
             const label = `${filename}/${browser}/${scenario}`
             sameKeys(cell, ['functionalCoverage', 'terminalOutcome', 'observations'], label)
-            validateCell(cell, { coreFamily, entrypoint }, label)
+            validateCell(cell, label)
         }
     }
 }

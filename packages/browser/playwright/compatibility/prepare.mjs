@@ -13,7 +13,11 @@ import {
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { HISTORICAL_INTEGRITY } from './golden.mjs'
+import { HISTORICAL_PACKAGES, historicalSource } from './golden.mjs'
+
+export function coreSource(manifest, comparison, entrypoint) {
+    return manifest.sources[comparison === 'historical' ? historicalSource(entrypoint) : 'candidate']
+}
 
 export const directory = dirname(fileURLToPath(import.meta.url))
 export const repository = resolve(directory, '../../../..')
@@ -65,7 +69,8 @@ export function inputInventory(manifest) {
         inventoryTree(join(source.consumer, 'node_modules'), `${role}/consumer-dependencies`, artifacts)
     }
     artifacts.player = digest(manifest.player.path)
-    artifacts.historicalTarball = digest(manifest.historicalTarball)
+    for (const [role, tarball] of Object.entries(manifest.historicalTarballs))
+        artifacts[`${role}/tarball`] = digest(tarball)
     const runtime = inventoryTree(directory, 'compatibility')
     for (const name of Object.keys(runtime)) if (name.startsWith('compatibility/goldens/')) delete runtime[name]
     inventoryTree(join(repository, 'tooling/sdk-mock-server/dist'), 'sdk-mock-server/dist', runtime)
@@ -103,7 +108,15 @@ export function inputInventory(manifest) {
         browserTooling
     )
     browserTooling.node = digest(process.execPath)
-    return { source: sourceInventory(), artifacts, runtime, browserTooling, historicalPackage: HISTORICAL_INTEGRITY }
+    return {
+        source: sourceInventory(),
+        artifacts,
+        runtime,
+        browserTooling,
+        historicalPackages: Object.fromEntries(
+            Object.entries(HISTORICAL_PACKAGES).map(([role, pinned]) => [role, pinned.integrity])
+        ),
+    }
 }
 
 export function verifyInputs(manifest) {
@@ -114,8 +127,11 @@ export function verifyInputs(manifest) {
             if (actual[category][key] !== expected[key]) throw new Error(`Input changed: ${category}/${key}`)
         }
     }
-    const integrity = 'sha512-' + createHash('sha512').update(readFileSync(manifest.historicalTarball)).digest('base64')
-    if (integrity !== HISTORICAL_INTEGRITY) throw new Error('Historical package integrity changed')
+    for (const [role, pinned] of Object.entries(HISTORICAL_PACKAGES)) {
+        const integrity =
+            'sha512-' + createHash('sha512').update(readFileSync(manifest.historicalTarballs[role])).digest('base64')
+        if (integrity !== pinned.integrity) throw new Error(`${role} package integrity changed`)
+    }
     return actual
 }
 
@@ -139,19 +155,26 @@ export async function prepare(data) {
         readFileSync(dompurifyRequire.resolve('@types/trusted-types/package.json'))
     ).version
     const sources = {}
-    const metadata = await (
-        await fetch('https://registry.npmjs.org/posthog-js/1.354.0', { signal: AbortSignal.timeout(30000) })
-    ).json()
-    if (metadata.version !== '1.354.0' || metadata.dist.integrity !== HISTORICAL_INTEGRITY)
-        throw new Error('Historical registry manifest changed')
-    const bytes = Buffer.from(
-        await (await fetch(metadata.dist.tarball, { signal: AbortSignal.timeout(30000) })).arrayBuffer()
-    )
-    if ('sha512-' + createHash('sha512').update(bytes).digest('base64') !== HISTORICAL_INTEGRITY)
-        throw new Error('Historical tarball integrity mismatch')
-    const historicalTarball = join(data, 'historical.tgz')
-    writeFileSync(historicalTarball, bytes)
-    for (const role of ['candidate', 'historical']) {
+    const historicalMetadata = {},
+        historicalTarballs = {}
+    for (const [role, pinned] of Object.entries(HISTORICAL_PACKAGES)) {
+        const metadata = await (
+            await fetch(`https://registry.npmjs.org/posthog-js/${pinned.version}`, {
+                signal: AbortSignal.timeout(30000),
+            })
+        ).json()
+        if (metadata.version !== pinned.version || metadata.dist.integrity !== pinned.integrity)
+            throw new Error(`${role} registry manifest changed`)
+        const bytes = Buffer.from(
+            await (await fetch(metadata.dist.tarball, { signal: AbortSignal.timeout(30000) })).arrayBuffer()
+        )
+        if ('sha512-' + createHash('sha512').update(bytes).digest('base64') !== pinned.integrity)
+            throw new Error(`${role} tarball integrity mismatch`)
+        historicalMetadata[role] = metadata
+        historicalTarballs[role] = join(data, `${role}.tgz`)
+        writeFileSync(historicalTarballs[role], bytes)
+    }
+    for (const role of ['candidate', ...Object.keys(HISTORICAL_PACKAGES)]) {
         const root = join(data, role),
             consumer = join(root, 'consumer')
         mkdirSync(consumer, { recursive: true })
@@ -170,7 +193,7 @@ export async function prepare(data) {
                       '@posthog/types': `file:${packs.types}`,
                       '@posthog/browser-common': `file:${packs['browser-common']}`,
                   }
-                : { 'posthog-js': 'file:../../historical.tgz' }
+                : { 'posthog-js': `file:../../${role}.tgz` }
         writeFileSync(
             join(consumer, 'package.json'),
             JSON.stringify(
@@ -194,7 +217,7 @@ export async function prepare(data) {
                       ),
                   }
                 : Object.fromEntries(
-                      Object.entries(metadata.dependencies).map(([name, version]) => [
+                      Object.entries(historicalMetadata[role].dependencies).map(([name, version]) => [
                           name,
                           version.replace(/^[~^]/, ''),
                       ])
@@ -205,18 +228,18 @@ export async function prepare(data) {
                 .map(([key, version]) => `  '${key}': '${version}'`)
                 .join('\n')}\n`
         )
-        if (role === 'historical')
-            copyFileSync(join(directory, 'fixtures/historical-pnpm-lock.yaml'), join(consumer, 'pnpm-lock.yaml'))
+        if (role !== 'candidate')
+            copyFileSync(join(directory, `fixtures/${role}-pnpm-lock.yaml`), join(consumer, 'pnpm-lock.yaml'))
         execute(
             'pnpm',
-            ['install', '--ignore-scripts', ...(role === 'historical' ? ['--frozen-lockfile'] : [])],
+            ['install', '--ignore-scripts', ...(role !== 'candidate' ? ['--frozen-lockfile'] : [])],
             consumer
         )
         if (execute('pnpm', ['config', 'get', 'minimumReleaseAge'], consumer).trim() !== '10080')
             throw new Error('Consumer dependency cooldown changed')
         const sdk = realpathSync(join(consumer, 'node_modules/posthog-js')),
             manifest = JSON.parse(readFileSync(join(sdk, 'package.json')))
-        if (manifest.version !== (role === 'candidate' ? sdkManifest.version : '1.354.0'))
+        if (manifest.version !== (role === 'candidate' ? sdkManifest.version : HISTORICAL_PACKAGES[role].version))
             throw new Error('Installed core version changed')
         const dist = join(sdk, 'dist')
         const files = Object.fromEntries(
@@ -232,7 +255,8 @@ export async function prepare(data) {
             ? 'posthog-js/extensions'
             : 'posthog-js/dist/extension-bundles.js'
         const fixtures = {}
-        for (const mode of ['npm', 'slim']) {
+        const modes = role === 'candidate' ? ['npm', 'slim'] : role === 'historical-slim' ? ['slim'] : ['npm']
+        for (const mode of modes) {
             const outfile = join(data, `${role}-${mode}.js`)
             buildSync({
                 stdin: {
@@ -283,7 +307,7 @@ export async function prepare(data) {
         sources,
         player,
         snippet: { path: join(directory, 'snippet.js') },
-        historicalTarball,
+        historicalTarballs,
         provenance: {
             head: execute('git', ['rev-parse', 'HEAD']).trim(),
             workingTree: execute('git', ['status', '--short']).trim(),

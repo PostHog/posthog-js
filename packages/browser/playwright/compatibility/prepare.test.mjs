@@ -3,7 +3,24 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync, symlinkSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { inventoryTree } from './prepare.mjs'
+import { inventoryTree, coreSource } from './prepare.mjs'
+import { HISTORICAL_PACKAGES } from './golden.mjs'
+
+test('historical slim selects its pinned package while snippet and npm retain the older core', () => {
+    const manifest = {
+        sources: {
+            candidate: { version: 'current' },
+            historical: { version: HISTORICAL_PACKAGES.historical.version },
+            'historical-slim': { version: HISTORICAL_PACKAGES['historical-slim'].version },
+        },
+    }
+    for (const entrypoint of ['snippet', 'npm', 'slim']) {
+        assert.equal(coreSource(manifest, 'current', entrypoint), manifest.sources.candidate)
+        const source = coreSource(manifest, 'historical', entrypoint)
+        assert.equal(source, manifest.sources[entrypoint === 'slim' ? 'historical-slim' : 'historical'])
+        assert.equal(source.version, entrypoint === 'slim' ? '1.407.6' : '1.354.0')
+    }
+})
 
 const runtimeFiles = new Set(['browser/firefox/firefox/.parentlock'])
 

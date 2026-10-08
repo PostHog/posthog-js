@@ -241,6 +241,22 @@ test('browser API harness records return values, throws, callbacks and settled p
     assert.deepEqual(JSON.parse(JSON.stringify(lab.callbacks[0].values)), [{ $kind: 'undefined' }, null, false])
 })
 
+test('loader options use supported historical configuration and current fallback mode', () => {
+    const sandbox = { window: {}, location: { origin: 'http://fixture.test' }, addEventListener() {}, Error, Date }
+    vm.runInNewContext(readFileSync(new URL('./harness.js', import.meta.url), 'utf8'), sandbox)
+    const lab = sandbox.window.__compat
+    for (const mode of ['snippet', 'npm', 'slim']) {
+        lab.mode = mode
+        for (const comparison of ['current', 'historical']) {
+            lab.comparison = comparison
+            lab.scenario = 'version-fallback'
+            assert.equal(lab.options().strict_script_versioning, comparison === 'current' ? 'fallback' : false)
+            lab.scenario = 'core'
+            assert.equal(lab.options().strict_script_versioning, false)
+        }
+    }
+})
+
 test('identity classification uses runtime digests rather than source labels or inventory order', () => {
     const main = { version: '1.436.1', sourceSha: 'one', files: { 'array.js': 'a', 'surveys.js': 'b' } }
     const same = { ...main, sourceSha: 'two', files: { 'surveys.js': 'b', 'array.js': 'a' } }

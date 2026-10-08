@@ -3,13 +3,20 @@ import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { buildGoldens, compareGoldens, updateGoldens, MATRIX, HISTORICAL_INTEGRITY } from './golden.mjs'
+import {
+    buildGoldens,
+    compareGoldens,
+    updateGoldens,
+    MATRIX,
+    HISTORICAL_PACKAGES,
+    historicalSource,
+    deploymentFilename,
+} from './golden.mjs'
 
 const errorMessage = 'this.instance._shouldDisableFlags is not a function'
-const historicalOutcome = 'known-historical-slim-initialization-failure'
 const digest = `sha256-${'a'.repeat(64)}`
 const filenames = MATRIX.coreFamilies.flatMap((family) =>
-    MATRIX.entrypoints.map((entrypoint) => `${family}-${entrypoint}.json`)
+    MATRIX.entrypoints.map((entrypoint) => deploymentFilename(family, entrypoint))
 )
 const singleSelection = { coreFamilies: ['current'], entrypoints: ['npm'], browsers: ['chromium'], scenarios: ['core'] }
 
@@ -19,7 +26,9 @@ function fixture({ selection = {}, repeats = 2, value = 'blue' } = {}) {
         artifacts: { 'packed-core-and-extensions': digest },
         runtime: { 'harness-fixtures-normalizer': digest },
         browserTooling: { 'pinned-playwright-and-browsers': digest },
-        historicalPackage: HISTORICAL_INTEGRITY,
+        historicalPackages: Object.fromEntries(
+            Object.entries(HISTORICAL_PACKAGES).map(([role, pinned]) => [role, pinned.integrity])
+        ),
     }
     const runs = []
     for (const coreFamily of selection.coreFamilies ?? MATRIX.coreFamilies) {
@@ -27,7 +36,6 @@ function fixture({ selection = {}, repeats = 2, value = 'blue' } = {}) {
             for (const browser of selection.browsers ?? MATRIX.browsers) {
                 for (const scenario of selection.scenarios ?? MATRIX.scenarios) {
                     for (let repeat = 0; repeat < repeats; repeat++) {
-                        const historicalSlim = coreFamily === 'historical-1.354.0' && entrypoint === 'slim'
                         runs.push({
                             coreFamily,
                             entrypoint,
@@ -37,16 +45,8 @@ function fixture({ selection = {}, repeats = 2, value = 'blue' } = {}) {
                             status: 'passed',
                             assertionsPassed: true,
                             runtimeErrors: [],
-                            functionalCoverage: historicalSlim ? 'initialization-failure-only' : 'fully-ready',
-                            terminalOutcome: historicalSlim ? historicalOutcome : 'fully-ready',
-                            ...(historicalSlim
-                                ? {
-                                      initializationError: {
-                                          name: 'TypeError',
-                                          message: `${errorMessage} (published core)`,
-                                      },
-                                  }
-                                : {}),
+                            functionalCoverage: 'fully-ready',
+                            terminalOutcome: 'fully-ready',
                             observations: {
                                 api: {
                                     result: value,
@@ -68,9 +68,8 @@ function fixture({ selection = {}, repeats = 2, value = 'blue' } = {}) {
                                     ],
                                     errors: [],
                                 },
-                                pageErrors: historicalSlim ? [{ name: 'TypeError', message: errorMessage }] : [],
+                                pageErrors: [],
                                 unexpectedNetwork: [],
-                                ...(historicalSlim ? { terminalOutcome: historicalOutcome } : {}),
                             },
                             // These are diagnostic metadata, not golden content.
                             folder: '/tmp/run-1',
@@ -135,30 +134,28 @@ test('buildGoldens routes every required tuple to six stable deployment files', 
     const result = buildGoldens(input)
     assert.equal(result.coverage, 'full')
     assert.equal(result.cellCount, 306)
-    assert.deepEqual(result.functionalCoverage, { 'fully-ready': 255, 'initialization-failure-only': 51 })
+    assert.deepEqual(result.functionalCoverage, { 'fully-ready': 306 })
     assert.equal(result.repeats, 2)
     assert.deepEqual(Object.keys(result.files), filenames)
     let cells = 0
     for (const coreFamily of MATRIX.coreFamilies) {
         for (const entrypoint of MATRIX.entrypoints) {
-            const filename = `${coreFamily}-${entrypoint}.json`
+            const filename = deploymentFilename(coreFamily, entrypoint)
             const text = result.files[filename]
             const deployment = JSON.parse(text)
             assert.equal(deployment.schema, 1)
             assert.equal(deployment.coreFamily, coreFamily)
             assert.equal(deployment.entrypoint, entrypoint)
+            if (coreFamily === 'historical')
+                assert.equal(deployment.coreVersion, HISTORICAL_PACKAGES[historicalSource(entrypoint)].version)
             assert.deepEqual(Object.keys(deployment.browsers), [...MATRIX.browsers].sort())
             for (const browser of MATRIX.browsers) {
                 assert.deepEqual(Object.keys(deployment.browsers[browser]), [...MATRIX.scenarios].sort())
                 for (const scenario of MATRIX.scenarios) {
                     cells++
                     const cell = deployment.browsers[browser][scenario]
-                    const historicalSlim = coreFamily === 'historical-1.354.0' && entrypoint === 'slim'
-                    assert.equal(
-                        cell.functionalCoverage,
-                        historicalSlim ? 'initialization-failure-only' : 'fully-ready'
-                    )
-                    assert.equal(cell.terminalOutcome, historicalSlim ? historicalOutcome : 'fully-ready')
+                    assert.equal(cell.functionalCoverage, 'fully-ready')
+                    assert.equal(cell.terminalOutcome, 'fully-ready')
                     const run = input.runs.find(
                         (run) =>
                             run.coreFamily === coreFamily &&
@@ -239,7 +236,7 @@ test('buildGoldens requires exact membership, unique runs and all declared repet
         [
             'wrong attribution',
             (input) => {
-                input.runs[0].coreFamily = 'historical'
+                input.runs[0].coreFamily = 'unknown'
             },
             /Unexpected tuple/,
         ],
@@ -421,74 +418,45 @@ test('buildGoldens requires independent successful assertions and error-free run
     }
 })
 
-test('buildGoldens accepts only the published historical-slim initialization exception and coverage', async (t) => {
+test('buildGoldens requires full readiness and error-free historical slim execution', async (t) => {
     const selection = {
-        coreFamilies: ['historical-1.354.0'],
+        coreFamilies: ['historical'],
         entrypoints: ['slim'],
         browsers: ['webkit'],
-        scenarios: ['logs'],
+        scenarios: ['replay'],
     }
-    const cases = [
+    for (const [name, mutate] of [
         [
-            'ready coverage',
+            'incomplete readiness',
             (run) => {
-                run.functionalCoverage = 'fully-ready'
+                run.functionalCoverage = 'initialization-failure-only'
             },
         ],
         [
-            'ready terminal',
+            'failed terminal outcome',
             (run) => {
-                run.terminalOutcome = 'fully-ready'
+                run.terminalOutcome = 'initialization-failure'
             },
         ],
         [
-            'wrong error class',
+            'initialization error',
             (run) => {
-                run.initializationError.name = 'Error'
+                run.initializationError = { name: 'TypeError', message: errorMessage }
             },
         ],
         [
-            'wrong error prefix',
+            'page error',
             (run) => {
-                run.initializationError.message = 'some other TypeError'
+                run.observations.pageErrors.push({ name: 'TypeError', message: errorMessage })
             },
         ],
-        [
-            'missing independent error',
-            (run) => {
-                delete run.initializationError
-            },
-        ],
-        [
-            'missing observation marker',
-            (run) => {
-                delete run.observations.terminalOutcome
-            },
-        ],
-        [
-            'missing observed error',
-            (run) => {
-                run.observations.pageErrors = []
-            },
-        ],
-        [
-            'another page error',
-            (run) => {
-                run.observations.pageErrors.push({ name: 'TypeError', message: 'another error' })
-            },
-        ],
-    ]
-    for (const [name, mutate] of cases) {
+    ]) {
         await t.test(name, () => {
             const input = fixture({ selection })
             mutate(input.runs[0])
-            assert.throws(() => buildGoldens(input), /historical|initialization/)
+            assert.throws(() => buildGoldens(input), /fully-ready|initialization|runtime/)
         })
     }
-    const current = fixture({ selection: singleSelection })
-    current.runs[0].functionalCoverage = 'initialization-failure-only'
-    current.runs[0].terminalOutcome = historicalOutcome
-    assert.throws(() => buildGoldens(current), /fully-ready/)
 })
 
 test('buildGoldens requires complete matching pinned input inventories before and after execution', async (t) => {
@@ -526,7 +494,19 @@ test('buildGoldens requires complete matching pinned input inventories before an
         [
             'unpinned historical bytes',
             (input) => {
-                input.inputIntegrity.before.historicalPackage = 'sha512-other'
+                input.inputIntegrity.before.historicalPackages.historical = 'sha512-other'
+            },
+        ],
+        [
+            'unpinned slim bytes',
+            (input) => {
+                input.inputIntegrity.before.historicalPackages['historical-slim'] = 'sha512-other'
+            },
+        ],
+        [
+            'missing slim pin',
+            (input) => {
+                delete input.inputIntegrity.before.historicalPackages['historical-slim']
             },
         ],
         [
@@ -622,7 +602,7 @@ test('compareGoldens reports a small semantic API change at its deployment/brows
     assert.deepEqual(await compareGoldens(space.directory, fixture()), {
         coverage: 'full',
         cellCount: 306,
-        functionalCoverage: { 'fully-ready': 255, 'initialization-failure-only': 51 },
+        functionalCoverage: { 'fully-ready': 306 },
         repeats: 2,
         matched: true,
         differenceCount: 0,
@@ -693,11 +673,11 @@ test('buildGoldens retains normalized core/extension version roles and applicati
     })
 })
 
-test('compareGoldens reports historical-slim failure-only cells without readiness credit', async (t) => {
+test('compareGoldens reports historical slim with full readiness coverage', async (t) => {
     const space = await seed(t)
     const input = fixture({
         selection: {
-            coreFamilies: ['historical-1.354.0'],
+            coreFamilies: ['historical'],
             entrypoints: ['slim'],
             browsers: ['webkit'],
             scenarios: ['logs'],
@@ -706,7 +686,12 @@ test('compareGoldens reports historical-slim failure-only cells without readines
     const report = await compareGoldens(space.directory, input)
     assert.equal(report.coverage, 'partial')
     assert.equal(report.matched, true)
-    assert.deepEqual(report.functionalCoverage, { 'fully-ready': 0, 'initialization-failure-only': 1 })
+    assert.deepEqual(report.functionalCoverage, { 'fully-ready': 1 })
+    const filename = 'historical-1.407.6-slim.json'
+    const deployment = JSON.parse(await fs.readFile(join(space.directory, filename), 'utf8'))
+    deployment.coreVersion = '1.354.0'
+    await fs.writeFile(join(space.directory, filename), JSON.stringify(deployment))
+    await assert.rejects(compareGoldens(space.directory, input), /attribution/)
 })
 
 test('compareGoldens detects nested request-batch and callback reordering', async (t) => {
@@ -778,7 +763,7 @@ test('compareGoldens labels focused checks partial and compares only the selecte
     const report = await compareGoldens(space.directory, fixture({ selection: singleSelection }))
     assert.equal(report.coverage, 'partial')
     assert.equal(report.cellCount, 1)
-    assert.deepEqual(report.functionalCoverage, { 'fully-ready': 1, 'initialization-failure-only': 0 })
+    assert.deepEqual(report.functionalCoverage, { 'fully-ready': 1 })
     assert.equal(report.matched, true)
     assert.equal(report.differenceCount, 0)
     await assert.rejects(compareGoldens(space.directory, fixture()), /browsers must contain exactly/)
@@ -796,7 +781,7 @@ test('compareGoldens reports missing selected cells or files and rejects misattr
     await fs.writeFile(join(directory, 'current-npm.json'), JSON.stringify(deployment))
     report = await compareGoldens(directory, input)
     assert.equal(report.differences[0].scenario, 'core')
-    deployment.coreFamily = 'historical-1.354.0'
+    deployment.coreFamily = 'historical'
     await fs.writeFile(join(directory, 'current-npm.json'), JSON.stringify(deployment))
     await assert.rejects(compareGoldens(directory, input), /attribution/)
     await fs.writeFile(join(directory, 'current-npm.json'), '{invalid')
@@ -810,7 +795,7 @@ test('updateGoldens explicitly bootstraps and replaces the whole six-file set', 
     assert.deepEqual(first, {
         coverage: 'full',
         cellCount: 306,
-        functionalCoverage: { 'fully-ready': 255, 'initialization-failure-only': 51 },
+        functionalCoverage: { 'fully-ready': 306 },
         repeats: 2,
         updated: true,
     })

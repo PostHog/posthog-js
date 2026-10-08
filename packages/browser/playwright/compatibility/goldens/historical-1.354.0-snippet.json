@@ -113080,7 +113080,8 @@
             }
         }
     },
-    "coreFamily": "historical-1.354.0",
+    "coreFamily": "historical",
+    "coreVersion": "1.354.0",
     "entrypoint": "snippet",
     "schema": 1
 }

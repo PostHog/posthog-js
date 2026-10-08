@@ -8,7 +8,7 @@ import { assertLoaderProof } from './loader-proof.mjs'
 import { interactionScenarios, exerciseInteractions } from './interaction-cases.mjs'
 import { compatibilityServer } from './server.mjs'
 import { createCompatibilityContext } from './network.mjs'
-import { directory as lab, repository, verifyInputs, digest } from './prepare.mjs'
+import { directory as lab, repository, verifyInputs, digest, coreSource } from './prepare.mjs'
 import { MATRIX, buildGoldens, compareGoldens, updateGoldens } from './golden.mjs'
 
 const args = parseOptions(process.argv.slice(2), [
@@ -67,7 +67,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const label = `${engine}-${mode}-${comparison}-${scenario}-${repeat}`
     const folder = join(output, label)
     mkdirSync(folder, { recursive: true })
-    const core = manifest.sources[comparison === 'historical' ? 'historical' : 'candidate']
+    const core = coreSource(manifest, comparison, mode)
     const extensions = manifest.sources.candidate
     const settings = {
         mode,
@@ -100,9 +100,6 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
     const unexpectedNetwork = []
     const consoleErrors = []
     page.on('pageerror', (error) => pageErrors.push({ name: error.name, message: error.message }))
-    const historicalSlim = comparison === 'historical' && mode === 'slim'
-    const knownSlimError = (error) =>
-        error.name === 'TypeError' && error.message.startsWith('this.instance._shouldDisableFlags is not a function')
     page.on('console', (message) => {
         if (message.type() === 'error') consoleErrors.push(message.text())
     })
@@ -145,11 +142,12 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         await page.goto(server.origin, { waitUntil: 'domcontentloaded' })
         if (mode !== 'snippet') await waitFor(() => window.__compat?.installed)
         await page.evaluate(
-            ({ scenario, mode }) => {
+            ({ scenario, mode, comparison }) => {
                 window.__compat.mode = mode
+                window.__compat.comparison = comparison
                 window.__compat.initialize(scenario)
             },
-            { scenario, mode }
+            { scenario, mode, comparison }
         )
         await release('core')
         await waitFor(() => window.__compat?.loaded)
@@ -161,57 +159,6 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
         assert(!(await remote('/__compat/barriers')).config, 'Config gate released too early')
         assert(!(await remote('/__compat/barriers')).flags, 'Flags gate released too early')
         await release('config', 'flags')
-        if (historicalSlim) {
-            await expect.poll(() => pageErrors.some(knownSlimError), { timeout: 15000 }).toBe(true)
-            assert(pageErrors.every(knownSlimError), `Unexpected historical slim errors: ${JSON.stringify(pageErrors)}`)
-            await expect
-                .poll(async () => (await received()).events.filter((event) => event.event === 'compat-pending').length)
-                .toBe(1)
-            assert(unexpectedNetwork.length === 0, `Unexpected network: ${unexpectedNetwork}`)
-            api = await page.evaluate(() => window.__compat.finish())
-            const network = await received()
-            assert(api.unhandled.length === 0, `Unhandled rejections: ${JSON.stringify(api.unhandled)}`)
-            assert(network.errors.length === 0, `Mock errors: ${JSON.stringify(network.errors)}`)
-            const raw = {
-                wire: server.inspect(),
-                userAgent,
-                api,
-                network,
-                ui,
-                replay,
-                pageErrors,
-                unexpectedNetwork,
-                consoleErrors,
-            }
-            write(join(folder, 'raw.json'), raw)
-            const normalized = normalize(
-                {
-                    api,
-                    network,
-                    ui,
-                    replay,
-                    pageErrors: pageErrors.map((error) => ({
-                        name: error.name,
-                        message: 'this.instance._shouldDisableFlags is not a function',
-                    })),
-                    unexpectedNetwork,
-                    terminalOutcome: 'known-historical-slim-initialization-failure',
-                },
-                { origin: server.origin, version: core.version, extensionVersion: extensions.version }
-            )
-            write(join(folder, 'snapshot.json'), normalized)
-            return {
-                status: 'passed',
-                assertionsPassed: true,
-                runtimeErrors: [],
-                functionalCoverage: 'initialization-failure-only',
-                terminalOutcome: 'known-historical-slim-initialization-failure',
-                initializationError: pageErrors[0],
-                label,
-                folder,
-                observations: normalized,
-            }
-        }
         if (interactionCase) {
             await expect
                 .poll(async () =>
@@ -540,7 +487,7 @@ for (const engine of selectedEngines) {
                     const cell = {
                         browser: engine,
                         entrypoint: mode,
-                        coreFamily: comparison === 'historical' ? 'historical-1.354.0' : 'current',
+                        coreFamily: comparison,
                         scenario,
                     }
                     const result = { ...cell, status: 'passed', runs: [], differences: [] }
@@ -580,7 +527,7 @@ try {
         selection: {
             browsers: selectedEngines,
             entrypoints: selectedModes,
-            coreFamilies: selectedComparisons.map((value) => (value === 'historical' ? 'historical-1.354.0' : value)),
+            coreFamilies: selectedComparisons,
             scenarios: selectedScenarios,
         },
         inputIntegrity: { expected: expectedIntegrity, before, after },
