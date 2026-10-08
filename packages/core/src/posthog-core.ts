@@ -10,6 +10,7 @@ import type {
   FeatureFlagValue,
   FeatureFlagResult,
   FeatureFlagResultOptions,
+  IsFeatureEnabledOptions,
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
@@ -34,7 +35,12 @@ import {
   updateFlagValue,
 } from './featureFlagUtils'
 import { Compression, FeatureFlagError, PostHogPersistedProperty } from './types'
-import { maybeAdd, PostHogCoreStateless, QuotaLimitedFeature } from './posthog-core-stateless'
+import {
+  applyCallerFeatureFlagOverrides,
+  maybeAdd,
+  PostHogCoreStateless,
+  QuotaLimitedFeature,
+} from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
 import { EventHint } from './error-tracking'
@@ -47,8 +53,11 @@ interface FlagsAsyncOptions {
 }
 
 interface PendingFlagsRequest extends FlagsAsyncOptions {
-  resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
-  reject: (reason?: unknown) => void
+  // every caller displaced from this slot, so none is settled against a request it did not make
+  waiters: {
+    resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
+    reject: (reason?: unknown) => void
+  }[]
 }
 
 export abstract class PostHogCore extends PostHogCoreStateless {
@@ -154,9 +163,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Resets the user's ID and clears all persisted properties.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
-   * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless
-   * of what is passed in `propertiesToKeep`, to ensure in-flight data
+   * Note: The event queues (`PostHogPersistedProperty.Queue` and the isolated
+   * `PostHogPersistedProperty.AiQueue` and `PostHogPersistedProperty.AiCaptureQueue`)
+   * and the logs queue (`PostHogPersistedProperty.LogsQueue`) are always preserved
+   * regardless of what is passed in `propertiesToKeep`, to ensure in-flight data
    * is not lost when identity changes.
    *
    * @param propertiesToKeep - Optional array of persisted properties to preserve during reset.
@@ -165,6 +175,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.wrap(() => {
       const allPropertiesToKeep = [
         PostHogPersistedProperty.Queue,
+        PostHogPersistedProperty.AiQueue,
+        PostHogPersistedProperty.AiCaptureQueue,
         PostHogPersistedProperty.LogsQueue,
         ...(propertiesToKeep || []),
       ]
@@ -175,7 +187,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // clear cached person properties
       this._cachedPersonProperties = null
 
-      for (const key of <(keyof typeof PostHogPersistedProperty)[]>Object.keys(PostHogPersistedProperty)) {
+      for (const key of Object.keys(PostHogPersistedProperty) as (keyof typeof PostHogPersistedProperty)[]) {
         if (!allPropertiesToKeep.includes(PostHogPersistedProperty[key])) {
           this.setPersistedProperty((PostHogPersistedProperty as any)[key], null)
         }
@@ -220,13 +232,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
-    return {
+    const userProperties = properties || {}
+    const enriched: PostHogEventProperties = {
       ...this.props, // Persisted properties first
       ...this.sessionProps, // Followed by session properties
-      ...(properties || {}), // Followed by user specified properties
+      ...userProperties, // Followed by user specified properties
       ...this.getCommonEventProperties(), // Followed by FF props
       $session_id: this.getSessionId(),
     }
+    applyCallerFeatureFlagOverrides(enriched, userProperties)
+    return enriched
   }
 
   /**
@@ -338,6 +353,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       const previousDistinctId = this.getDistinctId()
+      // Whether the caller passed an id at all — a bare identify() must not upgrade an anonymous
+      // user to identified (browser rejects it in _validateIdentifyId; core has no such guard and
+      // would otherwise fall into the matching-id transition below).
+      const idWasSupplied = !!distinctId
       distinctId = distinctId || previousDistinctId
 
       if (properties?.$groups) {
@@ -361,7 +380,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const userPropsObj = isObject(userProps) ? (userProps as { [key: string]: JsonType }) : undefined
       const userPropsOnceObj = isObject(userPropsOnce) ? (userPropsOnce as { [key: string]: JsonType }) : undefined
 
-      if (distinctId !== previousDistinctId) {
+      const identityChanged = distinctId !== previousDistinctId
+      const shouldTransitionToIdentified = idWasSupplied && !identityChanged && !this._isIdentified()
+
+      if (identityChanged) {
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
@@ -373,6 +395,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         // Update the cached person properties hash
         this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+      } else if (shouldTransitionToIdentified) {
+        // Matching id while still anonymous (e.g. a non-identified bootstrap seeded the same id):
+        // upgrade to identified and emit one person-processed $set. There is no anonymous id to
+        // merge, so no $identify. Mirrors posthog-js (browser).
+        this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
+
+        const setProps = userPropsObj || {}
+        const setOnceProps = userPropsOnceObj || {}
+        this.setPersonPropertiesForFlags({ $set: setProps, $set_once: setOnceProps }, false)
+        this.capture('$set', { $set: setProps, $set_once: setOnceProps })
+
+        // The transition event must fire even when an identical property call was cached earlier;
+        // cache only after capture so deduplication cannot suppress it.
+        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+
+        // The identified state itself is not part of the flags request; reload only when the
+        // caller supplied properties that can affect flag evaluation.
+        if (userPropsObj || userPropsOnceObj) {
+          this.reloadFeatureFlags()
+        }
       } else if (userPropsObj || userPropsOnceObj) {
         // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
         // and if so, send a $set event
@@ -612,16 +654,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       return undefined
     }
     if (this._flagsResponsePromise) {
-      // Queue the reload request instead of dropping it
-      // This ensures that requests with $anon_distinct_id (from identify()) are not lost
+      // Queue rather than drop, so an identity-changing reload still reaches the server. Displaced
+      // callers are carried over rather than settled against the in-flight request: that request
+      // was issued before their context changed, so it cannot reflect it. Options are merged so
+      // the single queued request satisfies every caller behind it — one caller asking for the
+      // remote config or for $anon_distinct_id is enough for the re-issued request to carry it.
       this._logger.info('Feature flags are being loaded already, queuing reload.')
-      // Resolve any existing pending promise with the in-flight request's result to avoid hanging promises
-      if (this._pendingFlagsRequest) {
-        this._flagsResponsePromise.then(this._pendingFlagsRequest.resolve).catch(this._pendingFlagsRequest.reject)
-      }
-      // Return a promise that resolves when the pending request completes
+      const pending = this._pendingFlagsRequest
       return new Promise((resolve, reject) => {
-        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig, resolve, reject }
+        this._pendingFlagsRequest = {
+          sendAnonDistinctId: sendAnonDistinctId || !!pending?.sendAnonDistinctId,
+          fetchConfig: fetchConfig || !!pending?.fetchConfig,
+          triggerOnRemoteConfig: triggerOnRemoteConfig || !!pending?.triggerOnRemoteConfig,
+          waiters: [...(pending?.waiters ?? []), { resolve, reject }],
+        }
       })
     }
     return this._flagsAsync({ sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig })
@@ -636,7 +682,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * @param _response The remote config or flags response containing config fields
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected onRemoteConfig(_response: PostHogRemoteConfig): void {
     // Override in subclasses
   }
@@ -787,9 +832,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         if (!result.success) {
           if (!this.disableRemoteFeatureFlags) {
+            // Keep the persisted gate alongside the kept flags — a failed request is not a
+            // signal that the server turned minimal flag-called events off.
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           return undefined
@@ -802,6 +850,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           this._logger.warn(
@@ -845,6 +894,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
             quotaLimited: res.quotaLimited,
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: res.minimalFlagCalledEvents === true,
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
@@ -867,8 +918,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             fetchConfig: pendingRequest.fetchConfig,
             triggerOnRemoteConfig: pendingRequest.triggerOnRemoteConfig,
           })
-            .then(pendingRequest.resolve)
-            .catch(pendingRequest.reject)
+            .then((res) => pendingRequest.waiters.forEach((w) => w.resolve(res)))
+            .catch((e) => pendingRequest.waiters.forEach((w) => w.reject(e)))
         }
       })
     return this._flagsResponsePromise
@@ -911,6 +962,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
   }
 
+  protected isMinimalFlagCalledEventsEnabled(): boolean {
+    return this.getStoredFlagDetails()?.minimalFlagCalledEvents === true
+  }
+
   protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
     const featureFlagDetails = this.getKnownFeatureFlagDetails()
     if (!featureFlagDetails) {
@@ -949,6 +1004,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return getPayloadsFromFlags(details.flags)
   }
 
+  /**
+   * Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive
+   * off result; `undefined` means no evaluation is available for the key.
+   */
   getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
     return this._getFeatureFlagResult(key, options)
   }
@@ -1031,6 +1090,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...maybeAdd('$feature_flag_request_id', details?.requestId),
         ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
         ...maybeAdd('$feature_flag_error', featureFlagError),
+        ...maybeAdd('$feature_flag_has_experiment', featureFlag?.metadata?.has_experiment),
       }
 
       this.capture('$feature_flag_called', properties)
@@ -1060,8 +1120,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  getFeatureFlag(key: string): FeatureFlagValue | undefined {
-    const result = this._getFeatureFlagResult(key, { missingFlagBehavior: 'getFeatureFlag' })
+  /**
+   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
+   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
+   * code must distinguish a conclusive off result from an unavailable key.
+   */
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, {
+      missingFlagBehavior: 'getFeatureFlag',
+      sendEvent: options?.sendEvent,
+    })
     return result?.variant ?? result?.enabled
   }
 
@@ -1129,12 +1197,21 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  isFeatureEnabled(key: string): boolean | undefined {
-    const response = this.getFeatureFlag(key)
-    if (response === undefined) {
-      return undefined
+  /**
+   * Returns whether the current feature flag value is enabled. When no evaluation is available,
+   * `defaultValue` is returned if provided; without one, the legacy missing-key behavior of
+   * `getFeatureFlag()` applies.
+   */
+  isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+    if (options?.defaultValue === undefined) {
+      const response = this.getFeatureFlag(key, options)
+      return response === undefined ? undefined : !!response
     }
-    return !!response
+    const result = this._getFeatureFlagResult(key, { sendEvent: options.sendEvent })
+    const value = result?.variant ?? result?.enabled
+    return value === undefined ? options.defaultValue : !!value
   }
 
   // Used when we want to trigger the reload but we don't care about the result
@@ -1231,7 +1308,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const finalFlags = { ...existingFlags, ...flags }
       const finalPayloads = { ...existingPayloads, ...(payloads ?? {}) }
 
-      // Built by hand, not via createFlagsResponseFromFlagsAndPayloads, which drops false flags.
       const flagDetails: Record<string, FeatureFlagDetail> = {}
       for (const [key, value] of Object.entries(finalFlags)) {
         const payload = finalPayloads[key]
@@ -1638,7 +1714,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     // Apply modifications from CaptureEvent back to internal message
     // Put $set/$set_once back into properties where they belong
-    const resultProps = { ...(result.properties ?? props) } as PostHogEventProperties
+    const resultProps: PostHogEventProperties = { ...(result.properties ?? props) }
     if (result.$set !== undefined) {
       resultProps.$set = result.$set as JsonType
     } else {
@@ -1683,6 +1759,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       } catch (e) {
         this._logger.error(`Error in before_send function for event '${captureEvent.event}':`, e)
+        return null
       }
     }
 

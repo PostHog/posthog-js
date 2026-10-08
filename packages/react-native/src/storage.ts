@@ -31,7 +31,10 @@ export class PostHogRNStorage {
   storage: PostHogCustomStorage
   preloadPromise: Promise<void> | undefined
   private _storageKey: string
-  private _pendingPromises: Set<Promise<void>> = new Set()
+  // Each pending persist resolves to a boolean: true if the underlying setItem
+  // resolved, false if it rejected. waitForPersistSuccess() uses this to surface
+  // async failures instead of silently swallowing them.
+  private _pendingPromises: Set<Promise<boolean>> = new Set()
   // Single in-flight debounce timer. Its presence doubles as the "a write is
   // scheduled" flag — one source of truth. Armed on the first mutation in a
   // window and deliberately not reset by later mutations, so write latency is
@@ -52,9 +55,16 @@ export class PostHogRNStorage {
         this.populateMemoryCache(res)
       })
 
-      this.preloadPromise?.finally(() => {
-        this.preloadPromise = undefined
-      })
+      // Observe both outcomes without creating the unhandled rejected promise that
+      // `void preloadPromise.finally(...)` would leave behind.
+      void this.preloadPromise.then(
+        () => {
+          this.preloadPromise = undefined
+        },
+        () => {
+          this.preloadPromise = undefined
+        }
+      )
     } else {
       this.populateMemoryCache(preloadResult)
     }
@@ -77,19 +87,53 @@ export class PostHogRNStorage {
     }
   }
 
+  /**
+   * Same as {@link waitForPersist}, but resolves to `true` only when every
+   * in-flight (and any freshly-drained scheduled) write landed successfully.
+   * Returns `false` if any tracked write rejected — the caller is responsible
+   * for treating that as "data not durable" and not e.g. removing a recovery
+   * entry from a backup store.
+   */
+  async waitForPersistSuccess(): Promise<boolean> {
+    this._drainScheduledPersist()
+    if (this._pendingPromises.size === 0) {
+      return true
+    }
+    const results = await Promise.all(this._pendingPromises)
+    return results.every((r) => r === true)
+  }
+
   persist(): void {
     const payload = {
       version: POSTHOG_STORAGE_VERSION,
       content: this.memoryCache,
     }
 
-    const result = this.storage.setItem(this._storageKey, JSON.stringify(payload))
+    // Wrap the setItem call in a try/catch so a synchronous throw (customStorage
+    // rejecting inline) is still surfaced via waitForPersistSuccess() — without
+    // this, a sync-throwing storage pretends to succeed and callers that gate on
+    // durability act as though the data landed.
+    let result: void | Promise<void>
+    try {
+      result = this.storage.setItem(this._storageKey, JSON.stringify(payload))
+    } catch (err) {
+      console.warn('PostHog storage persist failed:', err)
+      const promise: Promise<boolean> = Promise.resolve(false)
+      this._pendingPromises.add(promise)
+      void promise.finally(() => {
+        this._pendingPromises.delete(promise)
+      })
+      return
+    }
 
-    // Track async persist operations so we can wait for them if needed
+    // Track async persist operations so we can wait for them if needed. The
+    // resolved boolean is the source of truth for waitForPersistSuccess().
     if (isPromise(result)) {
-      const promise = result
+      const promise: Promise<boolean> = result
+        .then(() => true)
         .catch((err) => {
           console.warn('PostHog storage persist failed:', err)
+          return false
         })
         .finally(() => {
           this._pendingPromises.delete(promise)

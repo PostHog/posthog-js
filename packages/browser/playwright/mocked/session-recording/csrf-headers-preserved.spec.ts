@@ -170,7 +170,7 @@ async function captureRequestHeaders(
         // falling through to a fetch polyfill.
         const axiosIsBeingUsed = await page.evaluate(() => {
             const a = (window as any).axios
-            // eslint-disable-next-line posthog-js/no-direct-function-check
+            // oxlint-disable-next-line posthog-js/no-direct-function-check
             return typeof a === 'function' && typeof a.post === 'function' && !!a.defaults?.adapter
         })
         expect(axiosIsBeingUsed).toBe(true)

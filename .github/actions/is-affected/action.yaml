@@ -1,14 +1,26 @@
 name: "Check affected packages"
-description: "Checks which packages are affected by a change"
+description: "Checks whether a package is affected by a change"
 
 inputs:
   branch:
-    description: "The branch to compare against"
+    description: "The branch to compare against when base-ref is not provided"
     required: false
     default: "main"
   package-name:
     description: "The name of the package to check"
     required: true
+  base-ref:
+    description: "The base Git ref or SHA to compare"
+    required: false
+    default: ""
+  head-ref:
+    description: "The head Git ref or SHA to compare"
+    required: false
+    default: "HEAD"
+  additional-paths:
+    description: "Newline-separated paths that should always mark the package as affected"
+    required: false
+    default: ""
 
 outputs:
   is-affected:
@@ -23,13 +35,48 @@ runs:
       shell: bash
       env:
         PACKAGE_NAME: ${{ inputs.package-name }}
-        BRANCH_NAME: ${{inputs.branch}}
+        BRANCH_NAME: ${{ inputs.branch }}
+        BASE_REF: ${{ inputs.base-ref }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        ADDITIONAL_PATHS: ${{ inputs.additional-paths }}
       run: |
-        AFFECTED=$(pnpm exec turbo run build "--filter=$PACKAGE_NAME...[origin/$BRANCH_NAME...HEAD]" --dry=json)
+        set -euo pipefail
+
+        BASE_REF="${BASE_REF:-origin/$BRANCH_NAME}"
+        HEAD_REF="${HEAD_REF:-HEAD}"
+
+        # A missing push base (for example, a newly created branch) must fail
+        # open so that CI runs rather than incorrectly skipping validation.
+        if [[ "$BASE_REF" =~ ^0+$ ]] || ! git rev-parse --verify "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+          echo "Base ref $BASE_REF is unavailable; treating $PACKAGE_NAME as affected"
+          echo "is-affected=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        EXTRA_PATHS=()
+        while IFS= read -r path; do
+          if [[ -n "$path" ]]; then
+            EXTRA_PATHS+=("$path")
+          fi
+        done <<< "$ADDITIONAL_PATHS"
+        if (( ${#EXTRA_PATHS[@]} > 0 )) && ! git diff --quiet "$BASE_REF" "$HEAD_REF" -- "${EXTRA_PATHS[@]}"; then
+          echo "Additional CI paths affecting $PACKAGE_NAME changed"
+          echo "is-affected=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ -x node_modules/.bin/turbo ]]; then
+          TURBO=(pnpm exec turbo)
+        else
+          TURBO_VERSION=$(node -e "const spec = require('./package.json').devDependencies.turbo; const version = spec.match(/[0-9]+\\.[0-9]+\\.[0-9]+/); if (!version) process.exit(1); process.stdout.write(version[0])")
+          TURBO=(pnpm dlx "turbo@$TURBO_VERSION")
+        fi
+
+        AFFECTED=$("${TURBO[@]}" run build "--filter=$PACKAGE_NAME...[$BASE_REF...$HEAD_REF]" --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
-        if [ "$IS_AFFECTED" = "true" ]; then
+        if [[ "$IS_AFFECTED" == "true" ]]; then
           echo "The package $PACKAGE_NAME is affected by changes"
         else
           echo "The package $PACKAGE_NAME is not affected by changes"
         fi
-        echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
+        echo "is-affected=$IS_AFFECTED" >> "$GITHUB_OUTPUT"

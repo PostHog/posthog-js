@@ -1,7 +1,8 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { createPosthogInstance as createPosthogInstanceBase } from './helpers/posthog-instance'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
 
@@ -21,6 +22,7 @@ const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_li_fat_id: null,
     $initial_mc_cid: null,
     $initial_msclkid: null,
+    $initial_oppref: null,
     $initial_pathname: null,
     $initial_qclid: null,
     $initial_rdt_cid: null,
@@ -52,6 +54,7 @@ const CAMPAIGN_PARAMS_NULL = {
     li_fat_id: null,
     mc_cid: null,
     msclkid: null,
+    oppref: null,
     qclid: null,
     rdt_cid: null,
     sccid: null,
@@ -65,10 +68,10 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     let mockedCookieVal = ''
     return {
         ...orig,
@@ -76,10 +79,14 @@ jest.mock('../utils/globals', () => {
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
-            // eslint-disable-next-line posthog-js/no-add-event-listener
-            addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
-            removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
+            addEventListener: (...args: Parameters<typeof orig.document.addEventListener>) => {
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                return orig.document.addEventListener(...args)
+            },
+            removeEventListener: (...args: Parameters<typeof orig.document.removeEventListener>) =>
+                orig.document.removeEventListener(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()
@@ -104,16 +111,27 @@ jest.mock('../utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter, document } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = mockedGlobals as any
+
+const activeInstances = new Set<Awaited<ReturnType<typeof createPosthogInstanceBase>>>()
+const createPosthogInstance = async (...args: Parameters<typeof createPosthogInstanceBase>) => {
+    const instance = await createPosthogInstanceBase(...args)
+    activeInstances.add(instance)
+    return instance
+}
 
 describe('person processing', () => {
     const distinctId = '123'
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
         document.cookie = ''
+    })
+
+    afterEach(() => {
+        activeInstances.forEach((instance) => instance.featureFlags.dispose())
+        activeInstances.clear()
     })
 
     const setup = async (
@@ -122,7 +140,7 @@ describe('person processing', () => {
         persistence_name?: string
     ) => {
         token = token || uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles,
@@ -262,6 +280,46 @@ describe('person processing', () => {
                 $referrer: 'https://referrer.com',
                 $referring_domain: 'referrer.com',
                 utm_source: 'foo',
+            })
+        })
+
+        it('should carry a later gclid landing from an anonymous pageview onto identify without changing direct first-touch attribution', async () => {
+            // arrange: persist a direct first touch, then simulate a later browser session and SDK instance
+            const persistenceName = uuidv7()
+            const directUrl = 'https://example.com/landing'
+            mockReferrerGetter.mockReturnValue('')
+            mockURLGetter.mockReturnValue(directUrl)
+            const { posthog: firstVisitPosthog } = await setup('identified_only', undefined, persistenceName)
+            firstVisitPosthog.capture('direct first visit')
+            firstVisitPosthog.sessionManager!.resetSessionId()
+            firstVisitPosthog.sessionPersistence!.clear()
+            window.sessionStorage.clear()
+
+            const gclid = 'google-click-id'
+            mockURLGetter.mockReturnValue(`https://example.com/landing?gclid=${gclid}`)
+            const { posthog, beforeSendMock } = await setup('identified_only', undefined, persistenceName)
+
+            // act
+            posthog.capture('$pageview')
+            posthog.identify(distinctId)
+
+            // assert
+            const anonymousPageview = beforeSendMock.mock.calls[0][0]
+            expect(anonymousPageview.event).toBe('$pageview')
+            expect(anonymousPageview.properties.gclid).toBe(gclid)
+            expect(anonymousPageview.properties.$process_person_profile).toBe(false)
+            expect(anonymousPageview.$set_once).toBeUndefined()
+
+            const identifyCall = beforeSendMock.mock.calls[1][0]
+            expect(identifyCall.event).toBe('$identify')
+            expect(identifyCall.properties.gclid).toBe(gclid)
+            expect(identifyCall.properties.$process_person_profile).toBe(true)
+            expect(identifyCall.$set_once).toMatchObject({
+                $initial_current_url: directUrl,
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+                $initial_gclid: null,
+                gclid,
             })
         })
 
@@ -566,8 +624,7 @@ describe('person processing', () => {
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should send the $groupidentify event even if person_processing is set to never', async () => {
-            // Groups are separate from person processing - $groupidentify should always be sent
+        it('should retain the group association without sending $groupidentify if person_processing is never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -577,21 +634,19 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            // setGroupPropertiesForFlags still has a person processing check
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
 
-            // $groupidentify is sent (groups are independent of person processing)
-            expect(beforeSendMock).toBeCalledTimes(3)
+            // no $groupidentify is sent, only the two custom events
+            expect(beforeSendMock).toBeCalledTimes(2)
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
-            const groupIdentify = beforeSendMock.mock.calls[1]
-            expect(groupIdentify[0].event).toEqual('$groupidentify')
-            // $groupidentify doesn't set $process_person_profile since it doesn't process persons
-            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            const eventAfterGroup = beforeSendMock.mock.calls[1]
+            expect(eventAfterGroup[0].event).toEqual('custom event after group')
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
+            expect(eventAfterGroup[0].properties.$groups).toEqual({ groupType: 'groupKey' })
         })
     })
 
@@ -804,7 +859,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             posthog.capture('custom event')
 
             // assert
@@ -819,7 +874,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             posthog.capture('custom event')
 
             // assert
@@ -877,7 +932,7 @@ describe('person processing', () => {
 
         it('should log a message when deduping properties', async () => {
             const { posthog } = await setup('always')
-            mockLogger.info = jest.fn()
+            mockLogger.info = vi.fn()
 
             posthog.setPersonProperties({ email: 'john@example.com' })
             posthog.setPersonProperties({ email: 'john@example.com' })
@@ -976,6 +1031,30 @@ describe('person processing', () => {
             const calls = beforeSendMock.mock.calls
             expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
             expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+        })
+
+        it('should not deduplicate a call that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            // the first $set never leaves the SDK, so the retry must not look like a duplicate
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$set', '$set'])
+            expect(calls[1][0].properties.$set).toEqual({ name: 'Max Hedgehog' })
+        })
+
+        it('should not deduplicate an identify that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.identify('new-id', { name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$identify', '$set'])
         })
 
         it('should not deduplicate a call after an identity change', async () => {

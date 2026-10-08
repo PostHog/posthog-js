@@ -107,7 +107,7 @@ function App() {
                 <h2>3. Feature flags via sidecar (local eval)</h2>
                 <p className="hint">
                     The <code>requestFlagEval</code> reducer signals the sidecar, which evaluates flags{' '}
-                    <strong>locally</strong> with the personal API key and writes them to the <code>feature_flag</code>{' '}
+                    <strong>locally</strong> with the secret key and writes them to the <code>feature_flag</code>{' '}
                     table this view subscribes to. Your distinct id: <code>{myDistinctId.slice(0, 16)}…</code>
                 </p>
                 <button onClick={() => connected && requestFlagEval()} disabled={!connected}>
@@ -137,7 +137,7 @@ function App() {
                 <p className="hint">
                     The <code>evaluateFlags</code> procedure POSTs to PostHog's <code>/flags</code> endpoint over{' '}
                     <code>ctx.http</code> and returns the result <strong>directly</strong> to this caller — no sidecar,
-                    no personal key, no table.
+                    no secret key, no table.
                 </p>
                 <button onClick={handleProcedureFlags} disabled={!connected}>
                     Evaluate my flags

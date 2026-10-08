@@ -1,0 +1,14 @@
+diff --git a/lib/util/message.js b/lib/util/message.js
+index 377d41d5c8393c8f686a8a4af4c8c241094943f9..efea8d103f3d22ff3c524b08cd0323241618a28c 100644
+--- a/lib/util/message.js
++++ b/lib/util/message.js
+@@ -1,8 +1,5 @@
+ 'use strict';
+ 
+-const semver = require('semver');
+-const eslintPkg = require('eslint/package.json');
+-
+ module.exports = function getMessageData(messageId, message) {
+-  return messageId && semver.satisfies(eslintPkg.version, '>= 4.15') ? { messageId } : { message };
++  return messageId ? { messageId } : { message };
+ };

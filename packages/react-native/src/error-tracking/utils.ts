@@ -1,6 +1,10 @@
+import { isPromise, safeSetTimeout } from '@posthog/core'
 import { GLOBAL_OBJ, isHermes, isWeb } from '../utils'
 
 type ExceptionHook = (error: unknown, isFatal: boolean, syntheticException?: Error) => void
+type UncaughtExceptionHook = (error: unknown, isFatal: boolean) => void | Promise<void>
+
+const FATAL_PERSISTENCE_TIMEOUT_MS = 2000
 
 export function trackUnhandledRejections(tracker: ExceptionHook): void {
   if (
@@ -20,15 +24,76 @@ export function trackUnhandledRejections(tracker: ExceptionHook): void {
   }
 }
 
-export function trackUncaughtExceptions(tracker: ExceptionHook): void {
-  if (GLOBAL_OBJ?.ErrorUtils && GLOBAL_OBJ.ErrorUtils?.setGlobalHandler && GLOBAL_OBJ.ErrorUtils?.getGlobalHandler) {
-    const globalHandler = ErrorUtils.getGlobalHandler()
-    ErrorUtils.setGlobalHandler((error, isFatal) => {
-      tracker(error as Error, isFatal ?? false)
-      globalHandler?.(error, isFatal)
-    })
-  } else {
+const uncaughtExceptionSubscriptions = new WeakMap<
+  NonNullable<typeof GLOBAL_OBJ.ErrorUtils>,
+  { trackers: Set<UncaughtExceptionHook>; restore: () => void }
+>()
+
+export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => void {
+  const errorUtils = GLOBAL_OBJ?.ErrorUtils
+  if (!errorUtils?.setGlobalHandler || !errorUtils.getGlobalHandler) {
     throw new Error('ErrorUtils globalHandlers are not defined')
+  }
+
+  let subscription = uncaughtExceptionSubscriptions.get(errorUtils)
+  if (!subscription) {
+    const previousHandler = errorUtils.getGlobalHandler()
+    const trackers = new Set<UncaughtExceptionHook>()
+    const handler = (error: Error, isFatal: boolean): void => {
+      const pending: Promise<void>[] = []
+      try {
+        for (const callback of Array.from(trackers)) {
+          try {
+            const result = callback(error, isFatal ?? false)
+            if (isPromise(result)) {
+              pending.push(Promise.resolve(result).catch(() => {}))
+            }
+          } catch {
+            // One reporter must not prevent other reporters or React Native from handling the error.
+          }
+        }
+      } finally {
+        if (isFatal && pending.length > 0) {
+          let forwarded = false
+          const forward = () => {
+            if (!forwarded) {
+              forwarded = true
+              previousHandler?.(error, isFatal)
+            }
+          }
+          const deadline = safeSetTimeout(forward, FATAL_PERSISTENCE_TIMEOUT_MS)
+          void Promise.all(pending).then(() => {
+            if (!forwarded) {
+              clearTimeout(deadline)
+              // Keep errors thrown by the previous handler outside Promise rejection handling.
+              safeSetTimeout(forward, 0)
+            }
+          })
+        } else {
+          previousHandler?.(error, isFatal)
+        }
+      }
+    }
+    subscription = {
+      trackers,
+      restore: () => {
+        // Leave another SDK's chain intact, but retire this empty subscription in case it is later detached.
+        if (errorUtils.getGlobalHandler?.() === handler) {
+          errorUtils.setGlobalHandler?.(previousHandler)
+        }
+        uncaughtExceptionSubscriptions.delete(errorUtils)
+      },
+    }
+    errorUtils.setGlobalHandler(handler)
+    uncaughtExceptionSubscriptions.set(errorUtils, subscription)
+  }
+
+  const { trackers, restore } = subscription
+  trackers.add(tracker)
+  return () => {
+    if (trackers.delete(tracker) && trackers.size === 0) {
+      restore()
+    }
   }
 }
 

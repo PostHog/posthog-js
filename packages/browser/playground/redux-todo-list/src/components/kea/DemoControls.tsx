@@ -18,14 +18,14 @@ export default function DemoControls() {
         setLoading(true)
         // Simulate a slow action to test performance monitoring
         setTimeout(() => {
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const start = performance.now()
             // Intentionally slow operation
             let sum = 0
             for (let i = 0; i < 10000000; i++) {
                 sum += Math.random()
             }
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const end = performance.now()
             console.log(`Slow operation took ${end - start}ms, result: ${sum}`)
             setLoading(false)

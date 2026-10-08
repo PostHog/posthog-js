@@ -1,30 +1,33 @@
-import { PostHog } from '../../posthog-core'
+import type { PostHog } from '../../posthog-core'
 import { ActionStepType, PropertyFilters, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
-import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { CaptureResult, PropertyMatchType } from '../../types'
 import { isArray, isUndefined } from '@posthog/core'
-import { matchPropertyFilters } from '../../utils/property-utils'
-import { extractTexts, extractHref, matchString, matchTexts } from '../../utils/elements-chain-utils'
+import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
+import { extractTexts, extractHref, matchString, matchTexts } from '@posthog/browser-common/utils/elements-chain-utils'
 
 export class ActionMatcher {
-    private readonly _actionRegistry?: Set<SurveyActionType>
-    private readonly _instance?: PostHog
-    private readonly _actionEvents: Set<string>
+    private readonly _actionRegistry = new Set<SurveyActionType>()
+    private readonly _actionEvents = new Set<string>()
     private _debugEventEmitter = new SimpleEventEmitter()
+    private _captureHookUnsubscribe?: () => void
 
-    constructor(instance?: PostHog) {
-        this._instance = instance
-        this._actionEvents = new Set<string>()
-        this._actionRegistry = new Set<SurveyActionType>()
-    }
+    constructor(private readonly _instance?: PostHog) {}
 
     init() {
         if (!isUndefined(this._instance?._addCaptureHook)) {
             const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this._instance?._addCaptureHook(matchEventToAction)
+            this._captureHookUnsubscribe = this._instance?._addCaptureHook(matchEventToAction)
         }
+    }
+
+    dispose(): void {
+        this._captureHookUnsubscribe?.()
+        this._captureHookUnsubscribe = undefined
+        this._instance?.autocapture?.setElementSelectors(new Set(), this)
+        this._debugEventEmitter = new SimpleEventEmitter()
     }
 
     register(actions: SurveyActionType[]): void {
@@ -33,23 +36,29 @@ export class ActionMatcher {
         }
 
         actions.forEach((action) => {
-            this._actionRegistry?.add(action)
+            this._actionRegistry.add(action)
             action.steps?.forEach((step) => {
-                this._actionEvents?.add(step?.event || '')
+                this._actionEvents.add(step?.event || '')
             })
         })
 
         if (this._instance?.autocapture) {
-            const selectorsToWatch: Set<string> = new Set<string>()
-            actions.forEach((action) => {
+            const selectorsToWatch = new Set<string>()
+            this._actionRegistry.forEach((action) => {
                 action.steps?.forEach((step) => {
                     if (step?.selector) {
-                        selectorsToWatch.add(step?.selector)
+                        selectorsToWatch.add(step.selector)
                     }
                 })
             })
-            this._instance?.autocapture.setElementSelectors(selectorsToWatch)
+            this._instance.autocapture.setElementSelectors(selectorsToWatch, this)
         }
+    }
+
+    replace(actions: SurveyActionType[]): void {
+        this._actionRegistry.clear()
+        this._actionEvents.clear()
+        this.register(actions)
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
@@ -57,17 +66,15 @@ export class ActionMatcher {
             return
         }
 
-        if (!this._actionEvents.has(eventName) && !this._actionEvents.has(<string>eventPayload?.event)) {
+        if (!this._actionEvents.has(eventName) && !this._actionEvents.has(eventPayload.event)) {
             return
         }
 
-        if (this._actionRegistry && this._actionRegistry?.size > 0) {
-            this._actionRegistry.forEach((action) => {
-                if (this._checkAction(eventPayload, action)) {
-                    this._debugEventEmitter.emit('actionCaptured', action.name)
-                }
-            })
-        }
+        this._actionRegistry.forEach((action) => {
+            if (this._checkAction(eventPayload, action)) {
+                this._debugEventEmitter.emit('actionCaptured', action.name)
+            }
+        })
     }
 
     _addActionHook(callback: (actionName: string, eventPayload?: any) => void): void {

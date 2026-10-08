@@ -1,6 +1,6 @@
-import { window } from './utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { PostHog } from './posthog-core'
-import { addEventListener } from './utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { isArray } from '@posthog/core'
 
 export interface ScrollContext {
@@ -32,6 +32,7 @@ export class ScrollManager {
 
     resetContext(): ScrollContext | undefined {
         const ctx = this._context
+        this._context = undefined
 
         // update the scroll properties for the new page, but wait until the next tick
         // of the event loop
@@ -74,14 +75,14 @@ export class ScrollManager {
         if (this._scrollRoot) {
             const selectors = isArray(this._scrollRoot) ? this._scrollRoot : [this._scrollRoot]
             for (const selector of selectors) {
-                const element = window?.document.querySelector(selector)
+                const element = window?.document?.querySelector(selector)
                 if (element) {
                     return element
                 }
             }
             return undefined
         } else {
-            return window?.document.documentElement
+            return window?.document?.documentElement
         }
     }
 
@@ -96,8 +97,8 @@ export class ScrollManager {
             return 0
         }
         return axis === 'y'
-            ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0
-            : window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0
+            ? window.scrollY || window.pageYOffset || window.document?.documentElement?.scrollTop || 0
+            : window.scrollX || window.pageXOffset || window.document?.documentElement?.scrollLeft || 0
     }
 
     public scrollY(): number {

@@ -1,14 +1,16 @@
+import type { Mock as VitestMock } from 'vitest'
+import { mockLogger } from './helpers/mock-logger'
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
-import { USER_STATE } from '../constants'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { COOKIELESS_SENTINEL_VALUE, USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: VitestMock
 
     beforeEach(async () => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
@@ -44,8 +46,28 @@ describe('reset()', () => {
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
+    it('warns through the real console path when reset opts out with debug disabled', async () => {
+        instance = await createPosthogInstance(uuidv7(), {
+            api_host: 'https://test.com',
+            token: 'testtoken',
+            before_send: beforeSendMock,
+            debug: false,
+            opt_out_capturing_by_default: true,
+        })
+        instance.opt_in_capturing({ captureEventName: false })
+        console.warn = vi.fn()
+
+        instance.reset()
+
+        expect(instance.config.debug).toBe(false)
+        expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            expect.stringContaining('reset() cleared the stored consent')
+        )
+    })
+
     it('resets the logs extension so buffered logs are dropped', () => {
-        const logsReset = jest.spyOn(instance.logs, 'reset')
+        const logsReset = vi.spyOn(instance.logs, 'reset')
 
         instance.reset()
 
@@ -99,29 +121,27 @@ describe('reset()', () => {
         expect(instance.featureFlags.hasLoadedFlags).toBe(false)
         expect(instance.featureFlags.getFlags()).toEqual([])
 
-        const mockCallback = jest.fn()
+        const mockCallback = vi.fn()
         instance.featureFlags.onFeatureFlags(mockCallback)
 
         expect(mockCallback).not.toHaveBeenCalled()
     })
 
     it('reloads feature flags for the new anonymous user', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
         instance.reloadFeatureFlags()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     describe('when calling reset(true)', () => {
@@ -132,6 +152,209 @@ describe('reset()', () => {
 
             const nextDeviceId = instance.get_property('$device_id')
             expect(initialDeviceId).not.toEqual(nextDeviceId)
+        })
+    })
+
+    describe('when calling reset with options', () => {
+        it('resets the device id when resetDeviceID is true', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ resetDeviceID: true })
+
+            expect(instance.get_property('$device_id')).not.toEqual(initialDeviceId)
+        })
+
+        it('preserves the device id when resetDeviceID is false', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ resetDeviceID: false })
+
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
+        })
+
+        it.each([null, undefined, ''])('generates an anonymous identity when distinctID is %j', (distinctID) => {
+            const initialDistinctId = instance.get_distinct_id()
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ bootstrap: { distinctID, isIdentifiedID: true } })
+
+            expect(instance.get_distinct_id()).toEqual(expect.any(String))
+            expect(instance.get_distinct_id()).not.toBe(initialDistinctId)
+            expect(instance.get_property('$device_id')).toBe(initialDeviceId)
+            expect(instance.persistence!.get_property(USER_STATE)).toBe('anonymous')
+        })
+
+        it('applies a custom anonymous distinct ID and preserves the device ID', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id', isIdentifiedID: false } })
+
+            expect(instance.get_distinct_id()).toEqual('custom-anon-id')
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
+            expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
+        })
+
+        it('applies a custom identified distinct ID and preserves the device ID', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ bootstrap: { distinctID: 'user@example.com', isIdentifiedID: true } })
+
+            expect(instance.get_distinct_id()).toEqual('user@example.com')
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
+            expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
+        })
+
+        it('resets the device ID when combined with bootstrap options', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({
+                resetDeviceID: true,
+                bootstrap: { distinctID: 'custom-anon-id', isIdentifiedID: false },
+            })
+
+            expect(instance.get_distinct_id()).toEqual('custom-anon-id')
+            expect(instance.get_property('$device_id')).not.toEqual(initialDeviceId)
+            expect(instance.get_property('$device_id')).not.toEqual('custom-anon-id')
+        })
+
+        it('applies bootstrapped feature flags and payloads', () => {
+            // Keep the asynchronous flags reload from racing this synchronous bootstrap assertion on slower CI workers.
+            vi.spyOn(instance, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            instance.reset({
+                bootstrap: {
+                    featureFlags: {
+                        'active-flag': true,
+                        'variant-flag': 'control',
+                        'false-payload-flag': true,
+                        'zero-payload-flag': true,
+                        'empty-payload-flag': true,
+                        'inactive-flag': false,
+                    },
+                    featureFlagPayloads: {
+                        'active-flag': { key: 'value' },
+                        'false-payload-flag': false,
+                        'zero-payload-flag': 0,
+                        'empty-payload-flag': '',
+                        'inactive-flag': { should: 'not appear' },
+                    },
+                },
+            })
+
+            expect(instance.featureFlags.getFlags()).toEqual([
+                'active-flag',
+                'variant-flag',
+                'false-payload-flag',
+                'zero-payload-flag',
+                'empty-payload-flag',
+                'inactive-flag',
+            ])
+            expect(instance.featureFlags.getFlagVariants()).toEqual({
+                'active-flag': true,
+                'variant-flag': 'control',
+                'false-payload-flag': true,
+                'zero-payload-flag': true,
+                'empty-payload-flag': true,
+                'inactive-flag': false,
+            })
+            expect(instance.featureFlags.getFeatureFlagPayload('active-flag')).toEqual({ key: 'value' })
+            expect(instance.featureFlags.getFeatureFlagPayload('false-payload-flag')).toBe(false)
+            expect(instance.featureFlags.getFeatureFlagPayload('zero-payload-flag')).toBe(0)
+            expect(instance.featureFlags.getFeatureFlagPayload('empty-payload-flag')).toBe('')
+            expect(instance.featureFlags.getFeatureFlagPayload('inactive-flag')).toEqual(undefined)
+        })
+
+        it('restores init bootstrap metadata on a later plain reset', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                bootstrap: { featureFlags: { 'init-flag': true } },
+            })
+            instance.reset({ bootstrap: { featureFlags: { 'reset-flag': true } } })
+
+            instance.reset()
+
+            expect(instance.config.bootstrap).toEqual({ featureFlags: { 'init-flag': true } })
+            expect(instance.featureFlags.getFlags()).toEqual([])
+        })
+
+        it.each([null, undefined])('ignores an absent bootstrap session ID: %j', (sessionID) => {
+            const setBootstrapSessionId = vi.spyOn(instance.sessionManager!, 'setBootstrapSessionId')
+
+            instance.reset({ bootstrap: { sessionID } })
+
+            expect(setBootstrapSessionId).not.toHaveBeenCalled()
+        })
+
+        it('logs an invalid bootstrap session ID but still resets', () => {
+            const initialDistinctId = instance.get_distinct_id()
+
+            mockLogger.error.mockClear()
+            expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).not.toThrow()
+            expect(mockLogger.error).toHaveBeenCalledWith('Invalid sessionID in bootstrap', expect.any(Error))
+
+            expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
+            expect(instance.config.bootstrap).toEqual({})
+        })
+
+        it('logs a future bootstrap session ID but still resets', () => {
+            const initialDistinctId = instance.get_distinct_id()
+            const futureTimestampHex = (Date.now() + 23 * 60 * 60 * 1000).toString(16).padStart(12, '0')
+            const futureSessionID = `${futureTimestampHex.slice(0, 8)}-${futureTimestampHex.slice(
+                8
+            )}-7000-8000-000000000000`
+
+            mockLogger.error.mockClear()
+            expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).not.toThrow()
+            expect(mockLogger.error).toHaveBeenCalledWith('Bootstrap sessionID cannot be in the future')
+
+            expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
+            expect(instance.config.bootstrap).toEqual({})
+        })
+
+        it('applies a bootstrapped session ID and rotates the window', () => {
+            const initialIds = instance.sessionManager!.checkAndGetSessionAndWindowId()
+            const onSessionId = vi.fn()
+            instance.onSessionId(onSessionId)
+            onSessionId.mockClear()
+            const sessionID = uuidv7()
+
+            instance.reset({ bootstrap: { sessionID } })
+
+            const nextIds = instance.sessionManager!.checkAndGetSessionAndWindowId()
+            expect(nextIds.sessionId).toEqual(sessionID)
+            expect(nextIds.windowId).not.toEqual(initialIds.windowId)
+            expect(onSessionId).toHaveBeenCalledWith(sessionID, nextIds.windowId, {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+        })
+
+        it('does not apply a bootstrapped distinct ID in on-reject cookieless mode', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                cookieless_mode: 'on_reject',
+                opt_out_capturing_by_default: true,
+            })
+
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id' } })
+
+            expect(instance.get_distinct_id()).not.toEqual('custom-anon-id')
+        })
+
+        it('does not replace the cookieless sentinel with a bootstrapped distinct ID', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                cookieless_mode: 'always',
+            })
+
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id' } })
+
+            expect(instance.get_distinct_id()).toEqual(COOKIELESS_SENTINEL_VALUE)
         })
     })
 })

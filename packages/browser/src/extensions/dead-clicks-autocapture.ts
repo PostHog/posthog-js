@@ -1,9 +1,10 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '@posthog/core'
-import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
-import { createLogger } from '../utils/logger'
-import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { DeadClicksAutoCaptureConfig, RemoteConfigResult } from '../types'
 import type { Extension } from './types'
 
 const logger = createLogger('[Dead Clicks]')
@@ -38,7 +39,13 @@ export class DeadClicksAutocapture implements Extension {
         this.startIfEnabledOrStop()
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a captureDeadClicks key.
+            return
+        }
+
+        const response = result.config
         if (!('captureDeadClicks' in response)) {
             return
         }
@@ -90,10 +97,16 @@ export class DeadClicksAutocapture implements Extension {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
-            const config = isObject(this.instance.config.capture_dead_clicks)
-                ? this.instance.config.capture_dead_clicks
+            // copied so the writes below can't leak into the user's config object, which is
+            // shared between the autocapture and heatmaps instances of this extension
+            const config: DeadClicksAutoCaptureConfig = isObject(this.instance.config.capture_dead_clicks)
+                ? { ...this.instance.config.capture_dead_clicks }
                 : {}
             config.__onCapture = this.onCapture
+            if (this.onCapture) {
+                // an external consumer (heatmaps) only plots click points, so it never observes swipes
+                config.capture_dead_swipes = false
+            }
 
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
                 this.instance,

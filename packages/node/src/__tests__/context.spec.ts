@@ -2,18 +2,21 @@ import { PostHog } from '@/entrypoints/index.node'
 import { apiImplementation } from './utils'
 import { waitForPromises } from './utils'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const waitForFlush = async (): Promise<void> => {
   await waitForPromises()
-  jest.runOnlyPendingTimers()
+  vi.runOnlyPendingTimers()
   await waitForPromises()
 }
 
 const getLastBatchEvents = (): any[] | undefined => {
-  const call = mockedFetch.mock.calls.reverse().find((x) => (x[0] as string).includes('/batch/'))
+  const call = mockedFetch.mock.calls
+    .slice()
+    .reverse()
+    .find((x) => (x[0] as string).includes('/batch/'))
   if (!call) return undefined
   return JSON.parse((call[1] as any).body as any).batch
 }
@@ -21,10 +24,10 @@ const getLastBatchEvents = (): any[] | undefined => {
 describe('PostHog Context', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       flushAt: 1,
@@ -130,7 +133,7 @@ describe('PostHog Context', () => {
     })
 
     await waitForPromises()
-    jest.runOnlyPendingTimers()
+    vi.runOnlyPendingTimers()
     await waitForPromises()
 
     const events = getLastBatchEvents()
@@ -174,14 +177,13 @@ describe('PostHog Context', () => {
     })
   })
 
-  it('should isolate contexts across 50 concurrent async operations with random delays', async () => {
-    jest.useRealTimers()
-
+  it('should preserve user-to-context pairing across concurrent async operations', async () => {
+    const releases: (() => void)[] = []
     const operations = Array.from({ length: 50 }, (_, index) => {
       return posthog.withContext({ properties: { index, operation: `op-${index}` } }, async () => {
-        const delay = Math.floor(Math.random() * 200)
-
-        await new Promise((r) => setTimeout(r, delay))
+        await new Promise<void>((resolve) => {
+          releases[index] = resolve
+        })
 
         posthog.capture({
           distinctId: `user-${index}`,
@@ -191,9 +193,10 @@ describe('PostHog Context', () => {
       })
     })
 
-    jest.useFakeTimers()
-
-    await Promise.all(operations)
+    for (let index = operations.length - 1; index >= 0; index--) {
+      releases[index]()
+      await operations[index]
+    }
 
     await waitForFlush()
 
@@ -207,10 +210,21 @@ describe('PostHog Context', () => {
 
     expect(allEvents).toHaveLength(50)
 
-    const capturedIndices = allEvents.map((event) => event.properties.index).sort((a, b) => a - b)
-    const expectedIndices = Array.from({ length: 50 }, (_, i) => i)
-
-    expect(capturedIndices).toEqual(expectedIndices)
+    expect(allEvents).toEqual(
+      expect.arrayContaining(
+        Array.from({ length: operations.length }, (_, index) =>
+          expect.objectContaining({
+            distinct_id: `user-${index}`,
+            event: 'concurrent_test',
+            properties: expect.objectContaining({
+              index,
+              operation: `op-${index}`,
+              step: 'after_delay',
+            }),
+          })
+        )
+      )
+    )
   })
 
   it('should properly inherit and restore context through nested enter/exit operations', async () => {

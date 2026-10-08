@@ -6,8 +6,8 @@ import { Cancel } from './QuestionHeader'
 
 import { useContext, useEffect } from 'preact/hooks'
 import { SurveyContext } from '../surveys-extension-utils'
-import { addEventListener } from '../../../utils'
-import { window as _window } from '../../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { window as _window } from '@posthog/browser-common/utils/globals'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window

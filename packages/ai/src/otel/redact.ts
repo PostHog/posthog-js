@@ -3,6 +3,7 @@ import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
 
 import { BinaryContentRedactor } from '../sanitization/binary_content_redactor'
 
+// Deliberately always redacts here — the OTLP export path has no per-client passthrough gate.
 const redactor = new BinaryContentRedactor()
 
 export function redactSpan(span: ReadableSpan): ReadableSpan {

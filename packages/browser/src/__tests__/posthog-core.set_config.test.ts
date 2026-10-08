@@ -1,17 +1,17 @@
 import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import Config from '../config'
 
 describe('posthog.set_config', () => {
-    const mockURL = jest.fn()
-    const mockReferrer = jest.fn()
+    const mockURL = vi.fn()
+    const mockReferrer = vi.fn()
     const originalWindowLocation = window.location
 
     beforeEach(() => {
         mockReferrer.mockReturnValue('https://referrer.com')
         mockURL.mockReturnValue('https://example.com')
-        console.error = jest.fn()
-        console.log = jest.fn()
+        console.error = vi.fn()
+        console.log = vi.fn()
 
         // Mock getters using Object.defineProperty
         Object.defineProperty(document, 'URL', {
@@ -27,7 +27,6 @@ describe('posthog.set_config', () => {
             configurable: true,
             enumerable: true,
             writable: true,
-            // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
 
@@ -118,7 +117,7 @@ describe('posthog.set_config', () => {
             expect(localStorage.getItem('ph_debug')).toBe('true')
         })
 
-        it('should not modify debug if not a boolean', () => {
+        it('preserves debug when set_config omits debug', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, { debug: false }, token)!
             const initialDebug = posthog.config.debug
@@ -183,10 +182,20 @@ describe('posthog.set_config', () => {
             expect(posthog.config.debug).toBe(originalConfig.debug)
             expect(posthog.config.api_host).toBe(originalConfig.api_host)
         })
+
+        it('should apply capture_pageview updates to history autocapture', () => {
+            const token = uuidv7()
+            const posthog = defaultPostHog().init(token, { capture_pageview: false }, token)!
+            const startIfEnabledOrStop = vi.spyOn(posthog.historyAutocapture!, 'startIfEnabledOrStop')
+
+            posthog.set_config({ capture_pageview: { hash: true } })
+
+            expect(startIfEnabledOrStop).toHaveBeenCalledTimes(1)
+        })
     })
 
     describe('persistence configuration', () => {
-        it('should update session persistence when persistence type changes', () => {
+        it('should retain session persistence when switching between persistent backends', () => {
             const token = uuidv7()
             const posthog = defaultPostHog().init(token, { persistence: 'localStorage' }, token)!
 
@@ -196,15 +205,218 @@ describe('posthog.set_config', () => {
 
             posthog.set_config({ persistence: 'cookie' })
 
-            // After changing to cookie, sessionPersistence should be recreated
-            expect(posthog.sessionPersistence).not.toBe(originalSessionPersistence)
+            expect(posthog.sessionPersistence).toBe(originalSessionPersistence)
+        })
+
+        describe('debounced session persistence', () => {
+            beforeEach(() => vi.useFakeTimers())
+            afterEach(() => {
+                vi.clearAllTimers()
+                vi.useRealTimers()
+            })
+
+            it('preserves pending session properties when updating configuration', () => {
+                const token = uuidv7()
+                const posthog = defaultPostHog().init(
+                    token,
+                    {
+                        persistence: 'localStorage',
+                        persistence_save_debounce_ms: 250,
+                        capture_pageview: false,
+                        before_send: () => null,
+                    },
+                    token
+                )!
+                vi.advanceTimersByTime(250)
+                const sessionPersistence = posthog.sessionPersistence
+                posthog.register_for_session({ signup_flow: 'campaign' })
+
+                posthog.set_config({ capture_pageview: false })
+
+                expect(posthog.sessionPersistence).toBe(sessionPersistence)
+                expect(posthog.sessionPersistence?.props.signup_flow).toBe('campaign')
+                vi.advanceTimersByTime(250)
+                expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).toMatchObject({
+                    signup_flow: 'campaign',
+                })
+            })
+
+            it.each([0, 250])(
+                'does not restore unregistered properties after leaving memory (debounce: %s)',
+                (debounce) => {
+                    const token = uuidv7()
+                    const beforeSend = vi.fn(() => null)
+                    const posthog = defaultPostHog().init(
+                        token,
+                        {
+                            persistence: 'localStorage',
+                            persistence_save_debounce_ms: debounce,
+                            capture_pageview: false,
+                            bootstrap: { distinctID: token },
+                            before_send: beforeSend,
+                        },
+                        token
+                    )!
+                    posthog.register_for_session({ flow: 'signup' })
+                    posthog.set_config({ persistence: 'memory' })
+                    posthog.unregister_for_session('flow')
+                    vi.advanceTimersByTime(250)
+                    expect.soft(sessionStorage.getItem(`ph_${token}_posthog`)).toBeNull()
+
+                    posthog.set_config({ persistence: 'localStorage' })
+                    posthog.capture('returned from memory')
+                    expect(beforeSend).toHaveBeenLastCalledWith(
+                        expect.objectContaining({ properties: expect.not.objectContaining({ flow: 'signup' }) })
+                    )
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).not.toHaveProperty('flow')
+                }
+            )
+
+            it.each(['sessionStorage', 'memory'] as const)(
+                'switches to and from the shared %s backend without stale pending writes',
+                (persistence) => {
+                    const token = uuidv7()
+                    const posthog = defaultPostHog().init(
+                        token,
+                        {
+                            persistence: 'localStorage',
+                            persistence_save_debounce_ms: 250,
+                            capture_pageview: false,
+                            bootstrap: { distinctID: token },
+                        },
+                        token
+                    )!
+                    const primaryPersistence = posthog.persistence
+                    posthog.register_for_session({ flow: 'old' })
+
+                    posthog.set_config({ persistence })
+                    expect(posthog.sessionPersistence).toBe(primaryPersistence)
+                    posthog.register_for_session({ flow: 'new' })
+                    vi.advanceTimersByTime(250)
+                    expect(posthog.sessionPersistence?.props.flow).toBe('new')
+                    if (persistence === 'sessionStorage') {
+                        expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).toMatchObject({
+                            flow: 'new',
+                        })
+                    }
+
+                    posthog.set_config({ persistence: 'localStorage' })
+                    expect(posthog.persistence).toBe(primaryPersistence)
+                    expect(posthog.sessionPersistence).not.toBe(primaryPersistence)
+                    const sessionPersistence = posthog.sessionPersistence
+                    posthog.register_for_session({ flow: 'returned' })
+                    posthog.set_config({ capture_pageview: false })
+                    expect(posthog.sessionPersistence).toBe(sessionPersistence)
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).toMatchObject({
+                        flow: 'returned',
+                    })
+                }
+            )
+
+            it.each([false, true])(
+                'expires session properties after persistence is re-enabled (reload: %s)',
+                (reload) => {
+                    const token = uuidv7()
+                    const beforeSend = vi.fn(() => null)
+                    const init = (name: string) =>
+                        defaultPostHog().init(
+                            token,
+                            {
+                                persistence: 'localStorage',
+                                persistence_save_debounce_ms: 250,
+                                capture_pageview: false,
+                                before_send: beforeSend,
+                            },
+                            name
+                        )!
+                    let posthog = init(token)
+                    posthog.capture('landing')
+                    const sessionId = posthog.get_session_id()
+                    posthog.register_for_session({ signup_flow: 'campaign' })
+                    vi.advanceTimersByTime(250)
+                    const trackingKey = `ph_${token}_session_registered_properties`
+                    expect(JSON.parse(sessionStorage.getItem(trackingKey)!)).toContain('signup_flow')
+
+                    posthog.set_config({ disable_persistence: true })
+                    posthog.capture('persistence disabled')
+                    expect(beforeSend).toHaveBeenLastCalledWith(
+                        expect.objectContaining({ properties: expect.objectContaining({ signup_flow: 'campaign' }) })
+                    )
+                    expect(posthog.get_session_id()).toBe(sessionId)
+                    expect(sessionStorage.getItem(trackingKey)).toBeNull()
+
+                    posthog.set_config({ disable_persistence: false })
+                    posthog.capture('persistence re-enabled')
+                    expect(JSON.parse(sessionStorage.getItem(trackingKey)!)).toContain('signup_flow')
+                    expect(beforeSend).toHaveBeenLastCalledWith(
+                        expect.objectContaining({ properties: expect.objectContaining({ signup_flow: 'campaign' }) })
+                    )
+                    expect(posthog.get_session_id()).toBe(sessionId)
+
+                    vi.advanceTimersByTime(250)
+                    if (reload) {
+                        posthog = init(`${token}-reloaded`)
+                        posthog.capture('reloaded')
+                        expect(beforeSend).toHaveBeenLastCalledWith(
+                            expect.objectContaining({
+                                properties: expect.objectContaining({ signup_flow: 'campaign' }),
+                            })
+                        )
+                        expect(posthog.get_session_id()).toBe(sessionId)
+                    }
+
+                    vi.setSystemTime(Date.now() + 31 * 60 * 1000)
+                    posthog.capture('returned after timeout')
+                    expect(posthog.get_session_id()).not.toBe(sessionId)
+                    expect(beforeSend).toHaveBeenLastCalledWith(
+                        expect.objectContaining({
+                            properties: expect.not.objectContaining({ signup_flow: 'campaign' }),
+                        })
+                    )
+                    vi.advanceTimersByTime(250)
+                    expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).not.toHaveProperty('signup_flow')
+                }
+            )
+
+            it('applies configuration changes to the existing session store', () => {
+                const token = uuidv7()
+                const posthog = defaultPostHog().init(
+                    token,
+                    { persistence: 'localStorage', persistence_save_debounce_ms: 250, capture_pageview: false },
+                    token
+                )!
+                const sessionPersistence = posthog.sessionPersistence
+                posthog.register_for_session({ signup_flow: 'campaign' })
+
+                posthog.set_config({ persistence_save_debounce_ms: 0 })
+
+                expect(posthog.sessionPersistence).toBe(sessionPersistence)
+                expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).toMatchObject({
+                    signup_flow: 'campaign',
+                })
+                posthog.set_config({ disable_persistence: true })
+                vi.advanceTimersByTime(250)
+                expect(sessionStorage.getItem(`ph_${token}_posthog`)).toBeNull()
+                posthog.set_config({ disable_persistence: false })
+                expect(JSON.parse(sessionStorage.getItem(`ph_${token}_posthog`)!)).toMatchObject({
+                    signup_flow: 'campaign',
+                })
+            })
         })
 
         it.each([{ persistenceType: 'sessionStorage' }, { persistenceType: 'memory' }] as const)(
             'should keep session persistence same as persistence for $persistenceType',
             ({ persistenceType }) => {
                 const token = uuidv7()
-                const posthog = defaultPostHog().init(token, { persistence: 'cookie' }, token)!
+                // A stable bootstrap.distinctID suppresses the volatile-persistence warning that switching to
+                // sessionStorage/memory now emits, keeping this test focused on the sessionPersistence identity.
+                const posthog = defaultPostHog().init(
+                    token,
+                    { persistence: 'cookie', bootstrap: { distinctID: token } },
+                    token
+                )!
 
                 posthog.set_config({ persistence: persistenceType })
 

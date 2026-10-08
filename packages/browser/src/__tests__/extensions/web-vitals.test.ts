@@ -1,9 +1,16 @@
+import type { Mock as VitestMock } from 'vitest'
 import '../helpers/mock-logger'
 
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
-import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
+import {
+    FlagsResponse,
+    PerformanceCaptureConfig,
+    PostHogConfig,
+    RemoteConfig,
+    SupportedWebVitalsMetrics,
+} from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 import {
@@ -12,18 +19,18 @@ import {
     COOKIELESS_MODE_FLAG_PROPERTY,
 } from '../../constants'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
-// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
-// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
-// was in package.json#browserslist. `jest.hoisted()` would be the modern
-// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
-// eslint-disable-next-line no-var
-var mockLocation: jest.Mock
+// `var` so the hoisted vi.mock factory below can assign to it without TDZ.
+// Previously masked by babel-vi transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `vi.hoisted()` would be the modern
+// fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
+// oxlint-disable-next-line no-var
+var mockLocation: VitestMock
 
-jest.mock('../../utils/globals', () => {
-    const original = jest.requireActual('../../utils/globals')
-    mockLocation = jest.fn().mockReturnValue({
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    mockLocation = vi.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
         pathname: '/',
@@ -40,10 +47,6 @@ jest.mock('../../utils/globals', () => {
 
     return {
         ...original,
-        assignableWindow: {
-            ...original.assignableWindow,
-            __PosthogExtensions__: {},
-        },
         get location() {
             return mockLocation()
         },
@@ -52,13 +55,32 @@ jest.mock('../../utils/globals', () => {
 })
 
 describe('web vitals', () => {
+    const resetLocation = () =>
+        mockLocation.mockReturnValue({
+            protocol: 'http:',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: 'http://localhost/',
+        })
+    beforeEach(() => {
+        resetLocation()
+        assignableWindow.__PosthogExtensions__ = {}
+        onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
+    })
+    afterEach(() => {
+        resetLocation()
+        vi.clearAllTimers()
+    })
+
     let posthog: PostHog
-    let beforeSendMock = jest.fn().mockImplementation((e) => e)
+    let beforeSendMock = vi.fn().mockImplementation((e) => e)
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
-    const loadScriptMock = jest.fn()
+    const loadScriptMock = vi.fn()
 
     const emitAllMetrics = () => {
         onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
@@ -146,21 +168,23 @@ describe('web vitals', () => {
                     capture_pageview: false,
                 })
 
-                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                loadScriptMock.mockImplementation((_ph, kind, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                        onLCP: (cb: any) => {
-                            onLCPCallback = cb
-                        },
-                        onCLS: (cb: any) => {
-                            onCLSCallback = cb
-                        },
-                        onFCP: (cb: any) => {
-                            onFCPCallback = cb
-                        },
-                        onINP: (cb: any) => {
-                            onINPCallback = cb
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                        [kind]: {
+                            onLCP: (cb: any) => {
+                                onLCPCallback = cb
+                            },
+                            onCLS: (cb: any) => {
+                                onCLSCallback = cb
+                            },
+                            onFCP: (cb: any) => {
+                                onFCPCallback = cb
+                            },
+                            onINP: (cb: any) => {
+                                onINPCallback = cb
+                            },
                         },
                     }
                     callback()
@@ -171,8 +195,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
 
                 expect(posthog.webVitalsAutocapture.allowedMetrics).toEqual(expectedAllowedMetrics)
             })
@@ -194,8 +221,10 @@ describe('web vitals', () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
-
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(4999)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(0)
+                vi.advanceTimersByTime(1)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
@@ -214,8 +243,10 @@ describe('web vitals', () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
-
-                jest.advanceTimersByTime(1000 + 1)
+                vi.advanceTimersByTime(999)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(0)
+                vi.advanceTimersByTime(1)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(1)
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
@@ -233,7 +264,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock.mock.calls).toEqual([])
             })
@@ -244,7 +275,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock).toBeCalledTimes(1)
             })
@@ -276,20 +307,22 @@ describe('web vitals', () => {
 
             expect(posthog.sessionManager).toBeUndefined()
 
-            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+            loadScriptMock.mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
-                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
-                    },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                    [kind]: {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
                     },
                 }
                 callback()
@@ -299,8 +332,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -325,7 +361,7 @@ describe('web vitals', () => {
         it('emits on delayed flush without nested session ids when only one metric is captured', async () => {
             onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
-            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
             expect(beforeSendMock).toBeCalledTimes(1)
             const payload = beforeSendMock.mock.calls[0][0]
@@ -364,20 +400,22 @@ describe('web vitals', () => {
 
             expect(posthog.sessionManager).toBeUndefined()
 
-            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+            loadScriptMock.mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
-                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
-                    },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                    [kind]: {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
                     },
                 }
                 callback()
@@ -387,8 +425,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -414,9 +455,11 @@ describe('web vitals', () => {
 
     describe('web_vitals_attribution config', () => {
         it.each([
-            [undefined, false],
+            [undefined, true],
             [true, true],
             [false, false],
+            [[] as SupportedWebVitalsMetrics[], false],
+            [['INP'] as SupportedWebVitalsMetrics[], true],
         ])(
             'when web_vitals_attribution is %p, useAttribution should be %p',
             async (attributionConfig, expectedUseAttribution) => {
@@ -430,17 +473,17 @@ describe('web vitals', () => {
         )
 
         it.each([
-            [undefined, 'web-vitals'],
+            [undefined, 'web-vitals-with-attribution'],
             [false, 'web-vitals'],
             [true, 'web-vitals-with-attribution'],
         ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
-            const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, _kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
                 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: jest.fn(),
-                    onCLS: jest.fn(),
-                    onFCP: jest.fn(),
-                    onINP: jest.fn(),
+                    onLCP: vi.fn(),
+                    onCLS: vi.fn(),
+                    onFCP: vi.fn(),
+                    onINP: vi.fn(),
                 }
                 callback()
             })
@@ -454,16 +497,470 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as RemoteConfig,
+            })
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+        })
+
+        it('uses unattributed observers for metrics excluded from the default attribution list', async () => {
+            const attributed = {
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const withoutAttribution = {
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: { ...attributed, withoutAttribution },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(attributed.onLCP).toHaveBeenCalled()
+            expect(attributed.onINP).toHaveBeenCalled()
+            expect(attributed.onCLS).not.toHaveBeenCalled()
+            expect(attributed.onFCP).not.toHaveBeenCalled()
+            expect(withoutAttribution.onCLS).toHaveBeenCalled()
+            expect(withoutAttribution.onFCP).toHaveBeenCalled()
+            expect(withoutAttribution.onLCP).not.toHaveBeenCalled()
+            expect(withoutAttribution.onINP).not.toHaveBeenCalled()
+        })
+
+        it('opts out of processedEventEntries on the attributed onINP only', async () => {
+            const attributed = {
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const withoutAttribution = {
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: { ...attributed, withoutAttribution },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(attributed.onINP).toHaveBeenCalledWith(expect.any(Function), {
+                reportSoftNavs: false,
+                includeProcessedEventEntries: false,
+            })
+            // the other observers, attributed or not, only ever see the shared opts
+            for (const observer of [attributed.onLCP, withoutAttribution.onCLS, withoutAttribution.onFCP]) {
+                expect(observer).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+            }
+        })
+
+        it('does not pass attribution-only opts to the default bundle', async () => {
+            const callbacks = {
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: { [kind]: callbacks },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_attribution: false },
+                capture_pageview: false,
+            })
+
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'web-vitals', expect.any(Function))
+            expect(callbacks.onINP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+        })
+    })
+
+    describe('captured metric payload', () => {
+        const setupAndEmit = async (
+            config: Partial<PerformanceCaptureConfig>,
+            emit: () => void,
+            posthogConfig: Partial<PostHogConfig> = {}
+        ): Promise<Record<string, any>> => {
+            beforeSendMock = vi.fn().mockImplementation((e) => e)
+            onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
+
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: {
+                            onLCP: (cb: any) => (onLCPCallback = cb),
+                            onCLS: (cb: any) => (onCLSCallback = cb),
+                            onFCP: (cb: any) => (onFCPCallback = cb),
+                            onINP: (cb: any) => (onINPCallback = cb),
+                        },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                ...posthogConfig,
+                before_send: beforeSendMock,
+                capture_performance: { web_vitals: true, ...config },
+                capture_pageview: false,
+            })
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                ok: true,
+                config: { capturePerformance: { web_vitals: true } } as RemoteConfig,
+            })
+
+            emit()
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            const call = beforeSendMock.mock.calls.find((c: any[]) => c[0].event === '$web_vitals')
+            return call![0].properties
+        }
+
+        it('drops the useless entries array from the captured metric', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onINPCallback?.({ name: 'INP', value: 100, entries: [{}] })
+            })
+
+            expect(properties.$web_vitals_INP_event).not.toHaveProperty('entries')
+        })
+
+        it('keeps only whitelisted attribution fields for an attributed metric', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onINPCallback?.({
+                    name: 'INP',
+                    value: 100,
+                    attribution: {
+                        interactionTarget: 'button#pay',
+                        inputDelay: 10,
+                        processingDuration: 20,
+                        presentationDelay: 30,
+                        interactionTargetElement: { huge: 'node' },
+                        longAnimationFrameEntries: [{ scripts: [{ duration: 1 }] }],
+                    },
+                })
+            })
+
+            expect(properties.$web_vitals_INP_event.attribution).toEqual({
+                interactionTarget: 'button#pay',
+                inputDelay: 10,
+                processingDuration: 20,
+                presentationDelay: 30,
+            })
+        })
+
+        it('keeps the LCP target in attribution', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onLCPCallback?.({
+                    name: 'LCP',
+                    value: 100,
+                    attribution: { target: 'img#hero', elementRenderDelay: 20 },
+                })
+            })
+
+            expect(properties.$web_vitals_LCP_event.attribution).toEqual({
+                target: 'img#hero',
+                elementRenderDelay: 20,
+            })
+        })
+
+        it('masks personal data and removes hashes from LCP resource URLs', async () => {
+            const properties = await setupAndEmit(
+                {},
+                () => {
+                    onLCPCallback?.({
+                        name: 'LCP',
+                        value: 100,
+                        attribution: {
+                            url: 'https://cdn.example.com/hero.jpg?token=secret&size=large#private',
+                        },
+                    })
+                },
+                {
+                    mask_personal_data_properties: true,
+                    custom_personal_data_properties: ['token'],
+                    disable_capture_url_hashes: true,
+                }
+            )
+
+            expect(properties.$web_vitals_LCP_event.attribution.url).toBe(
+                'https://cdn.example.com/hero.jpg?token=<masked>&size=large'
+            )
+        })
+
+        it('drops attribution for CLS by default', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onCLSCallback?.({
+                    name: 'CLS',
+                    value: 0.1,
+                    attribution: { largestShiftTarget: 'div#banner', largestShiftValue: 0.1 },
+                })
+            })
+
+            expect(properties.$web_vitals_CLS_event).not.toHaveProperty('attribution')
+        })
+    })
+
+    describe('__preview_web_vitals_soft_navs config', () => {
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p, useSoftNavs should be %p',
+            async (softNavsConfig, expectedUseSoftNavs) => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
+
+                expect(posthog.webVitalsAutocapture!.useSoftNavs).toBe(expectedUseSoftNavs)
+            }
+        )
+
+        it.each([
+            // [soft_navs, attribution, expected bundle]
+            [undefined, undefined, 'web-vitals-with-attribution'],
+            [false, false, 'web-vitals'],
+            [true, undefined, 'web-vitals-with-attribution-soft-navs'],
+            [true, false, 'web-vitals-soft-navs'],
+            [true, true, 'web-vitals-with-attribution-soft-navs'],
+            [false, true, 'web-vitals-with-attribution'],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
+            async (softNavsConfig, attributionConfig, expectedBundle) => {
+                const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: {
+                                onLCP: vi.fn(),
+                                onCLS: vi.fn(),
+                                onFCP: vi.fn(),
+                                onINP: vi.fn(),
+                            },
+                        },
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: {
+                        web_vitals: true,
+                        __preview_web_vitals_soft_navs: softNavsConfig,
+                        web_vitals_attribution: attributionConfig,
+                    },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+            }
+        )
+
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
+            async (softNavsConfig, expectedReportSoftNavs) => {
+                const onLCP = vi.fn()
+                const onCLS = vi.fn()
+                const onFCP = vi.fn()
+                const onINP = vi.fn()
+
+                const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: { onLCP, onCLS, onFCP, onINP },
+                        },
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                for (const observer of [onLCP, onCLS, onFCP, onINP]) {
+                    expect(observer).toHaveBeenCalledWith(expect.any(Function), {
+                        reportSoftNavs: expectedReportSoftNavs,
+                    })
+                }
+            }
+        )
+
+        it('loads soft-nav callbacks when stable callbacks were preloaded by another instance', async () => {
+            const stableOnLCP = vi.fn()
+            const softOnLCP = vi.fn()
+            const softCallbacks = {
+                onLCP: softOnLCP,
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const loadExternalDependency = vi.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = softCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: stableCallbacks,
+                postHogWebVitalsCallbacksByFlavor: { 'web-vitals': stableCallbacks },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: {
+                    web_vitals: true,
+                    __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
+                },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(
+                expect.anything(),
+                'web-vitals-soft-navs',
+                expect.any(Function)
+            )
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
+        })
+
+        it('loads default callbacks when a non-default flavor overwrote the legacy callback slot', async () => {
+            const softAttributionOnLCP = vi.fn()
+            const stableOnLCP = vi.fn()
+            const softAttributionCallbacks = {
+                onLCP: softAttributionOnLCP,
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
+            }
+            const loadExternalDependency = vi.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = stableCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: softAttributionCallbacks,
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-with-attribution-soft-navs': softAttributionCallbacks,
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_attribution: false },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(expect.anything(), 'web-vitals', expect.any(Function))
+            expect(stableOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+            expect(softAttributionOnLCP).not.toHaveBeenCalled()
+        })
+
+        it('uses the requested preloaded callback flavor without loading another bundle', async () => {
+            const stableOnLCP = vi.fn()
+            const softOnLCP = vi.fn()
+            const loadExternalDependency = vi.fn()
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals': {
+                        onLCP: stableOnLCP,
+                        onCLS: vi.fn(),
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
+                    },
+                    'web-vitals-soft-navs': {
+                        onLCP: softOnLCP,
+                        onCLS: vi.fn(),
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
+                    },
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: {
+                    web_vitals: true,
+                    __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
+                },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).not.toHaveBeenCalled()
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
         })
     })
 
     describe('onRemoteConfig empty config handling', () => {
         beforeEach(async () => {
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })
@@ -476,8 +973,8 @@ describe('web vitals', () => {
                 [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
             })
 
-            // Call with empty config (simulating config fetch failure)
-            posthog.webVitalsAutocapture!.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            posthog.webVitalsAutocapture!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -491,8 +988,11 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
+                } as RemoteConfig,
+            })
 
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(false)
             expect(posthog.persistence!.props[WEB_VITALS_ALLOWED_METRICS]).toEqual(['CLS'])
@@ -518,7 +1018,7 @@ describe('web vitals', () => {
                 },
             }
 
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })
@@ -550,8 +1050,11 @@ describe('web vitals', () => {
             (clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.capture_performance = { web_vitals: clientSideOptIn }
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: serverSideOptIn },
-                } as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: serverSideOptIn },
+                    } as FlagsResponse,
+                })
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
@@ -573,10 +1076,13 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: {
-                web_vitals: true,
-            },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: {
+                    web_vitals: true,
+                },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -597,8 +1103,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -651,8 +1160,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -673,10 +1185,120 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as FlagsResponse)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as FlagsResponse,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
+    })
+
+    describe('soft-navigation metric attribution', () => {
+        const initializeWebVitals = async () => {
+            beforeSendMock = vi.fn().mockImplementation((event) => event)
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-soft-navs': {
+                        onLCP: (callback) => {
+                            onLCPCallback = callback
+                        },
+                        onCLS: (callback) => {
+                            onCLSCallback = callback
+                        },
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
+                    },
+                },
+            }
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: {
+                    web_vitals: true,
+                    web_vitals_allowed_metrics: ['LCP', 'CLS'],
+                    __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
+                },
+                capture_pageview: false,
+                mask_personal_data_properties: true,
+            })
+        }
+
+        it('attributes a delayed metric to its masked navigation URL after the live URL changes', async () => {
+            mockLocation.mockReturnValue({
+                protocol: 'http:',
+                host: 'localhost',
+                pathname: '/new',
+                search: '',
+                hash: '',
+                href: 'http://localhost/new',
+            })
+            await initializeWebVitals()
+
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 123.45,
+                navigationId: 1,
+                navigationURL: 'http://localhost/old?gclid=secret',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 2,
+                navigationURL: 'http://localhost/new?gclid=secret',
+            })
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/old?gclid=<masked>',
+                    $web_vitals_LCP_event: {
+                        $current_url: 'http://localhost/old?gclid=<masked>',
+                        navigationURL: 'http://localhost/old?gclid=<masked>',
+                        navigationId: 1,
+                    },
+                },
+            })
+            expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/new?gclid=<masked>',
+                    $web_vitals_CLS_event: {
+                        $current_url: 'http://localhost/new?gclid=<masked>',
+                        navigationURL: 'http://localhost/new?gclid=<masked>',
+                        navigationId: 2,
+                    },
+                },
+            })
+        })
+
+        it('separates buffers by navigation identity even when the navigation URL is unchanged', async () => {
+            await initializeWebVitals()
+
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 100,
+                navigationId: 'soft-navigation-10',
+                navigationURL: 'http://localhost/route',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 'soft-navigation-11',
+                navigationURL: 'http://localhost/route',
+            })
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(
+                'soft-navigation-10'
+            )
+            expect(beforeSendMock.mock.calls[1][0].properties.$web_vitals_CLS_event.navigationId).toBe(
+                'soft-navigation-11'
+            )
+        })
     })
 
     describe.each([
@@ -710,21 +1332,23 @@ describe('web vitals', () => {
                     custom_personal_data_properties: customPersonalDataProperties,
                 })
 
-                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                loadScriptMock.mockImplementation((_ph, kind, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                        onLCP: (cb: any) => {
-                            onLCPCallback = cb
-                        },
-                        onCLS: (cb: any) => {
-                            onCLSCallback = cb
-                        },
-                        onFCP: (cb: any) => {
-                            onFCPCallback = cb
-                        },
-                        onINP: (cb: any) => {
-                            onINPCallback = cb
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                        [kind]: {
+                            onLCP: (cb: any) => {
+                                onLCPCallback = cb
+                            },
+                            onCLS: (cb: any) => {
+                                onCLSCallback = cb
+                            },
+                            onFCP: (cb: any) => {
+                                onFCPCallback = cb
+                            },
+                            onINP: (cb: any) => {
+                                onINPCallback = cb
+                            },
                         },
                     }
                     callback()
@@ -735,8 +1359,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
             })
 
             it('masks properties accordingly', async () => {

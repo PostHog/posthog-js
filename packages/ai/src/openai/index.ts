@@ -1,24 +1,39 @@
 import { OpenAI as OpenAIOrignal, ClientOptions } from 'openai'
 import { PostHog } from 'posthog-node'
-import {
-  formatResponseOpenAI,
-  MonitoringParams,
-  extractAvailableToolCalls,
-  withPrivacyMode,
-  AIEvent,
-  formatOpenAIResponsesInput,
-  calculateWebSearchCount,
-  getModelParams,
-} from '../utils'
-import { captureAiGeneration } from '../captureAiGeneration'
+import { extractAvailableToolCalls, formatResponseOpenAI, MonitoringParams, getModelParams } from '../utils'
+import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
-import type { Stream } from 'openai/streaming'
-import type { ParsedResponse } from 'openai/resources/responses/responses'
+import { Stream } from 'openai/streaming'
+import type {
+  ParsedResponse,
+  ResponseRetrieveParamsBase,
+  ResponseRetrieveParamsNonStreaming,
+  ResponseRetrieveParamsStreaming,
+} from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
-import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
-import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
+import { sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { extractRequestId, isTerminalResponse } from './utils'
+import type { MonitoringEventPropertiesWithDefaults } from '../utils'
+import {
+  BackgroundResponseTracker,
+  isPendingBackgroundResponse,
+  wrapBackgroundResponseStream,
+} from './background-responses'
+import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
+import { monitoredStreamTee } from '../stream'
+import { OpenAIChatStreamAccumulator, OpenAIResponsesStreamAccumulator } from './stream-accumulators'
+import {
+  buildBackgroundResponseOptions,
+  buildChatErrorOptions,
+  buildChatSuccessOptions,
+  buildChatUsage,
+  buildEmbeddingErrorOptions,
+  buildEmbeddingSuccessOptions,
+  buildResponsesErrorOptions,
+  buildResponsesSuccessOptions,
+  captureAiGenerationAfterSuccess,
+} from './telemetry'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -38,6 +53,11 @@ type ResponsesCreateParamsStreaming = OpenAIOrignal.Responses.ResponseCreatePara
 type CreateEmbeddingResponse = OpenAIOrignal.CreateEmbeddingResponse
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 
+interface BackgroundResponseState {
+  openAIParams: ResponsesCreateParamsBase
+  posthogParams: MonitoringEventPropertiesWithDefaults
+}
+
 interface MonitoringOpenAIConfig extends ClientOptions {
   apiKey: string
   posthog: PostHog
@@ -45,55 +65,6 @@ interface MonitoringOpenAIConfig extends ClientOptions {
 }
 
 type RequestOptions = Record<string, unknown>
-type APIPromiseWithResponse<T> = Awaited<ReturnType<APIPromise<T>['withResponse']>>
-
-function captureAiGenerationInBackground(...args: Parameters<typeof captureAiGeneration>): void {
-  void captureAiGeneration(...args).catch(() => undefined)
-}
-
-async function captureAiGenerationAfterSuccess(...args: Parameters<typeof captureAiGeneration>): Promise<void> {
-  const [, options] = args
-
-  if (options.captureImmediate) {
-    await captureAiGeneration(...args)
-  } else {
-    captureAiGenerationInBackground(...args)
-  }
-}
-
-function preserveAPIPromiseHelpers<Input, Output>(
-  parentPromise: APIPromise<Input>,
-  wrappedPromise: Promise<Output>
-): APIPromise<Output> {
-  const apiPromise = wrappedPromise as APIPromise<Output>
-
-  if (typeof parentPromise.asResponse === 'function') {
-    apiPromise.asResponse = () => parentPromise.asResponse()
-  }
-
-  if (typeof parentPromise.withResponse === 'function') {
-    apiPromise.withResponse = async () => {
-      const [response, data] = await Promise.all([parentPromise.withResponse(), wrappedPromise])
-      return { ...response, data } as APIPromiseWithResponse<Output>
-    }
-  }
-
-  return apiPromise
-}
-
-const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
-
-function isPendingBackgroundResponse(
-  params: { background?: boolean | null },
-  response: { status?: string | null; usage?: unknown | null }
-): boolean {
-  return (
-    params.background === true &&
-    !response.usage &&
-    !!response.status &&
-    !TERMINAL_RESPONSE_STATUSES.has(response.status)
-  )
-}
 
 export class PostHogOpenAI extends OpenAIOrignal {
   private readonly phClient: PostHog
@@ -162,206 +133,67 @@ export class WrappedCompletions extends Completions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<ChatCompletionChunk, Stream<ChatCompletionChunk>>(
+            value as Stream<ChatCompletionChunk>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
-            // Hoisted so the catch block can surface whatever was accumulated
-            // from the streamed chunks before the failure.
-            let completionIdFromResponse: string | undefined
-            let systemFingerprintFromResponse: string | undefined
+            const accumulator = new OpenAIChatStreamAccumulator()
             try {
-              const contentBlocks: FormattedContent = []
-              let accumulatedContent = ''
-              let modelFromResponse: string | undefined
-              let firstTokenTime: number | undefined
-              let stopReason: string | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                reasoningTokens?: number
-                cacheReadInputTokens?: number
-                webSearchCount?: number
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-                webSearchCount: 0,
-              }
-
-              // Map to track in-progress tool calls
-              const toolCallsInProgress = new Map<
-                number,
-                {
-                  id: string
-                  name: string
-                  arguments: string
-                }
-              >()
-              let rawUsageData: unknown
-
               for await (const chunk of stream1) {
-                // Extract model and completion metadata from chunk (Chat Completions chunks carry these fields)
-                if (!modelFromResponse && chunk.model) {
-                  modelFromResponse = chunk.model
-                }
-                if (!completionIdFromResponse && chunk.id) {
-                  completionIdFromResponse = chunk.id
-                }
-                if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
-                  systemFingerprintFromResponse = chunk.system_fingerprint
-                }
-
-                const choice = chunk?.choices?.[0]
-
-                if (choice?.finish_reason) {
-                  stopReason = choice.finish_reason
-                }
-
-                const chunkWebSearchCount = calculateWebSearchCount(chunk)
-                if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
-                  usage.webSearchCount = chunkWebSearchCount
-                }
-
-                // Handle text content
-                const deltaContent = choice?.delta?.content
-                if (deltaContent) {
-                  if (firstTokenTime === undefined) {
-                    firstTokenTime = Date.now()
-                  }
-                  accumulatedContent += deltaContent
-                }
-
-                // Handle tool calls
-                const deltaToolCalls = choice?.delta?.tool_calls
-                if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
-                  if (firstTokenTime === undefined) {
-                    firstTokenTime = Date.now()
-                  }
-                  for (const toolCall of deltaToolCalls) {
-                    const index = toolCall.index
-
-                    if (index !== undefined) {
-                      if (!toolCallsInProgress.has(index)) {
-                        // New tool call
-                        toolCallsInProgress.set(index, {
-                          id: toolCall.id || '',
-                          name: toolCall.function?.name || '',
-                          arguments: '',
-                        })
-                      }
-
-                      const inProgressCall = toolCallsInProgress.get(index)
-                      if (inProgressCall) {
-                        // Update tool call data
-                        if (toolCall.id) {
-                          inProgressCall.id = toolCall.id
-                        }
-                        if (toolCall.function?.name) {
-                          inProgressCall.name = toolCall.function.name
-                        }
-                        if (toolCall.function?.arguments) {
-                          inProgressCall.arguments += toolCall.function.arguments
-                        }
-                      }
-                    }
-                  }
-                }
-
-                // Handle usage information
-                if (chunk.usage) {
-                  rawUsageData = chunk.usage
-                  usage = {
-                    ...usage,
-                    inputTokens: chunk.usage.prompt_tokens ?? 0,
-                    outputTokens: chunk.usage.completion_tokens ?? 0,
-                    reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
-                  }
-                }
+                accumulator.consume(chunk)
               }
-
-              // Build final content blocks
-              if (accumulatedContent) {
-                contentBlocks.push({ type: 'text', text: accumulatedContent })
-              }
-
-              // Add completed tool calls to content blocks
-              for (const toolCall of toolCallsInProgress.values()) {
-                if (toolCall.name) {
-                  contentBlocks.push({
-                    type: 'function',
-                    id: toolCall.id,
-                    function: {
-                      name: toolCall.name,
-                      arguments: toolCall.arguments,
-                    },
-                  } as FormattedFunctionCall)
-                }
-              }
-
-              // Format output to match non-streaming version
-              const formattedOutput: FormattedMessage[] =
-                contentBlocks.length > 0
-                  ? [
-                      {
-                        role: 'assistant',
-                        content: contentBlocks,
-                      },
-                    ]
-                  : [
-                      {
-                        role: 'assistant',
-                        content: [{ type: 'text', text: '' }],
-                      },
-                    ]
-
-              const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              const availableTools = extractAvailableToolCalls('openai', openAIParams)
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse,
-                provider: 'openai',
-                input: sanitizeOpenAI(openAIParams.messages),
-                output: formattedOutput,
-                latency,
-                timeToFirstToken,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                httpStatus: 200,
-                usage: {
-                  inputTokens: usage.inputTokens,
-                  outputTokens: usage.outputTokens,
-                  reasoningTokens: usage.reasoningTokens,
-                  cacheReadInputTokens: usage.cacheReadInputTokens,
-                  webSearchCount: usage.webSearchCount,
-                  rawUsage: rawUsageData,
-                },
-                stopReason,
-                tools: availableTools,
-                completionId: completionIdFromResponse,
-                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
-              })
+              const accumulated = accumulator.result()
+              await captureAiGeneration(
+                this.phClient,
+                buildChatSuccessOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'openai',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  {
+                    ...accumulated,
+                    latency: (Date.now() - startTime) / 1000,
+                    timeToFirstToken:
+                      accumulated.firstTokenTime === undefined
+                        ? undefined
+                        : (accumulated.firstTokenTime - startTime) / 1000,
+                  }
+                )
+              )
             } catch (error: unknown) {
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model,
-                provider: 'openai',
-                input: sanitizeOpenAI(openAIParams.messages),
-                output: [],
-                latency: 0,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
-                // If the stream fails mid-flight, surface whatever completion
-                // metadata the consumed chunks already provided so the error
-                // event can still be correlated to OpenAI's Logs dashboard.
-                completionId: completionIdFromResponse,
-                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
-                error,
-              })
+              const accumulated = accumulator.result()
+              await captureAiGeneration(
+                this.phClient,
+                buildChatErrorOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'openai',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  error,
+                  {
+                    completionId: accumulated.completionId,
+                    systemFingerprint: accumulated.systemFingerprint,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
+                  }
+                )
+              )
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           // Return the other stream to the user
           return stream2
@@ -369,70 +201,59 @@ export class WrappedCompletions extends Completions {
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('choices' in result) {
-            const latency = (Date.now() - startTime) / 1000
-            const availableTools = extractAvailableToolCalls('openai', openAIParams)
-            const formattedOutput = formatResponseOpenAI(result)
-            await captureAiGenerationAfterSuccess(this.phClient, {
-              ...posthogParams,
-              model: openAIParams.model ?? result.model,
-              provider: 'openai',
-              input: sanitizeOpenAI(openAIParams.messages),
-              output: formattedOutput,
-              latency,
-              baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
-              httpStatus: 200,
-              usage: {
-                inputTokens: result.usage?.prompt_tokens ?? 0,
-                outputTokens: result.usage?.completion_tokens ?? 0,
-                reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
-                cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
-                webSearchCount: calculateWebSearchCount(result),
-                rawUsage: result.usage,
-              },
-              stopReason: result.choices[0]?.finish_reason ?? undefined,
-              tools: availableTools,
-              completionId: result.id,
-              providerMetadata: buildProviderMetadata({
-                systemFingerprint: result.system_fingerprint,
-                requestId: extractRequestId(result),
-              }),
-            })
+            await captureAiGenerationAfterSuccess(
+              this.phClient,
+              buildChatSuccessOptions(
+                {
+                  client: this.phClient,
+                  provider: 'openai',
+                  baseURL: this.baseURL,
+                  params: openAIParams,
+                  monitoring: posthogParams,
+                  modelParametersSource: body,
+                },
+                {
+                  output: formatResponseOpenAI(result),
+                  model: result.model,
+                  serviceTier: result.service_tier ?? undefined,
+                  latency: (Date.now() - startTime) / 1000,
+                  usage: buildChatUsage(result.usage, result),
+                  stopReason: result.choices[0]?.finish_reason ?? undefined,
+                  completionId: result.id,
+                  systemFingerprint: result.system_fingerprint,
+                  requestId: extractRequestId(result),
+                }
+              )
+            )
           }
           return result
         },
         async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'openai',
-            input: sanitizeOpenAI(openAIParams.messages),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
+          await captureAiGeneration(
+            this.phClient,
+            buildChatErrorOptions(
+              {
+                client: this.phClient,
+                provider: 'openai',
+                baseURL: this.baseURL,
+                params: openAIParams,
+                monitoring: posthogParams,
+                modelParametersSource: body,
+              },
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
+            )
+          )
           throw error
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 }
@@ -440,11 +261,33 @@ export class WrappedCompletions extends Completions {
 export class WrappedResponses extends Responses {
   private readonly phClient: PostHog
   private readonly baseURL: string
+  private readonly backgroundResponses = new BackgroundResponseTracker<BackgroundResponseState>()
 
   constructor(client: OpenAIOrignal, phClient: PostHog) {
     super(client)
     this.phClient = phClient
     this.baseURL = client.baseURL
+  }
+
+  private async captureBackgroundResponse(
+    result: OpenAIOrignal.Responses.Response,
+    context: BackgroundResponseState
+  ): Promise<void> {
+    const { openAIParams, posthogParams } = context
+    await captureAiGenerationAfterSuccess(
+      this.phClient,
+      buildBackgroundResponseOptions(
+        {
+          client: this.phClient,
+          provider: 'openai',
+          baseURL: this.baseURL,
+          params: openAIParams,
+          monitoring: posthogParams,
+          modelParametersSource: openAIParams,
+        },
+        result
+      )
+    )
   }
 
   // --- Overload #1: Non-streaming
@@ -477,197 +320,245 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof value.tee === 'function') {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Responses.ResponseStreamEvent,
+            Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Responses.ResponseStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
-            // Hoisted so the catch block can surface the completion ID that
-            // was accumulated from the streamed chunks before the failure.
-            let completionIdFromResponse: string | undefined
+            const accumulator = new OpenAIResponsesStreamAccumulator()
             try {
-              let finalContent: unknown[] = []
-              let modelFromResponse: string | undefined
-              let firstTokenTime: number | undefined
-              let stopReason: string | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                reasoningTokens?: number
-                cacheReadInputTokens?: number
-                webSearchCount?: number
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-                webSearchCount: 0,
-              }
-              let rawUsageData: unknown
-
               for await (const chunk of stream1) {
-                // Track first token time on content delta events
-                if (firstTokenTime === undefined && isResponseTokenChunk(chunk)) {
-                  firstTokenTime = Date.now()
-                }
-
-                if ('response' in chunk && chunk.response) {
-                  // Extract model and completion ID from the response object in the chunk (for stored prompts)
-                  if (!modelFromResponse && chunk.response.model) {
-                    modelFromResponse = chunk.response.model
-                  }
-                  if (!completionIdFromResponse && chunk.response.id) {
-                    completionIdFromResponse = chunk.response.id
-                  }
-
-                  const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
-                  if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
-                    usage.webSearchCount = chunkWebSearchCount
-                  }
-                }
-
+                accumulator.consume(chunk)
                 if (
-                  chunk.type === 'response.completed' &&
+                  openAIParams.background === true &&
                   'response' in chunk &&
-                  chunk.response?.output &&
-                  chunk.response.output.length > 0
+                  chunk.response &&
+                  !this.backgroundResponses.get(chunk.response.id)
                 ) {
-                  finalContent = chunk.response.output
-                  if (chunk.response.status) {
-                    stopReason = chunk.response.status
-                  }
-                }
-                if ('response' in chunk && chunk.response?.usage) {
-                  rawUsageData = chunk.response.usage
-                  usage = {
-                    ...usage,
-                    inputTokens: chunk.response.usage.input_tokens ?? 0,
-                    outputTokens: chunk.response.usage.output_tokens ?? 0,
-                    reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
-                  }
+                  this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
                 }
               }
 
-              const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              const availableTools = extractAvailableToolCalls('openai', openAIParams)
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse,
-                provider: 'openai',
-                input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
-                  openAIParams.instructions
-                ),
-                output: finalContent,
-                latency,
-                timeToFirstToken,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                httpStatus: 200,
-                usage: {
-                  inputTokens: usage.inputTokens,
-                  outputTokens: usage.outputTokens,
-                  reasoningTokens: usage.reasoningTokens,
-                  cacheReadInputTokens: usage.cacheReadInputTokens,
-                  webSearchCount: usage.webSearchCount,
-                  rawUsage: rawUsageData,
-                },
-                stopReason,
-                tools: availableTools,
-                completionId: completionIdFromResponse,
-              })
+              const accumulated = accumulator.result()
+              if (openAIParams.background === true) {
+                if (accumulated.terminalResponse) {
+                  const context = this.backgroundResponses.take(accumulated.terminalResponse.id)
+                  if (context) {
+                    await this.captureBackgroundResponse(accumulated.terminalResponse, context).catch(() => undefined)
+                  }
+                }
+                return
+              }
+
+              const response: Parameters<typeof buildResponsesSuccessOptions>[1]['response'] =
+                accumulated.terminalResponse ?? {
+                  id: accumulated.completionId ?? '',
+                  model: accumulated.model ?? openAIParams.model,
+                  service_tier: accumulated.serviceTier,
+                }
+              await captureAiGeneration(
+                this.phClient,
+                buildResponsesSuccessOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'openai',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  {
+                    response,
+                    output: accumulated.output,
+                    latency: (Date.now() - startTime) / 1000,
+                    timeToFirstToken:
+                      accumulated.firstTokenTime === undefined
+                        ? undefined
+                        : (accumulated.firstTokenTime - startTime) / 1000,
+                    usage: accumulated.usage,
+                    includeTools: true,
+                  }
+                )
+              )
             } catch (error: unknown) {
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model,
-                provider: 'openai',
-                input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
-                  openAIParams.instructions
-                ),
-                output: [],
-                latency: 0,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
-                // Surface the completion ID from any chunks consumed before
-                // the stream failed so the error event remains correlatable.
-                completionId: completionIdFromResponse,
-                error,
-              })
+              const accumulated = accumulator.result()
+              if (
+                openAIParams.background === true &&
+                accumulated.completionId &&
+                this.backgroundResponses.get(accumulated.completionId)
+              ) {
+                throw error
+              }
+
+              await captureAiGeneration(
+                this.phClient,
+                buildResponsesErrorOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'openai',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  error,
+                  {
+                    completionId: accumulated.completionId,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
+                  }
+                )
+              )
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           return stream2
         }
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('output' in result) {
             if (isPendingBackgroundResponse(openAIParams, result)) {
+              this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
               return result
             }
 
-            const latency = (Date.now() - startTime) / 1000
-            const availableTools = extractAvailableToolCalls('openai', openAIParams)
-            const formattedOutput = formatResponseOpenAI({ output: result.output })
-            await captureAiGenerationAfterSuccess(this.phClient, {
-              ...posthogParams,
-              model: openAIParams.model ?? result.model,
-              provider: 'openai',
-              input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-              output: formattedOutput,
-              latency,
-              baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
-              httpStatus: 200,
-              usage: {
-                inputTokens: result.usage?.input_tokens ?? 0,
-                outputTokens: result.usage?.output_tokens ?? 0,
-                reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-                cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-                webSearchCount: calculateWebSearchCount(result),
-                rawUsage: result.usage,
-              },
-              stopReason: result.status ?? undefined,
-              tools: availableTools,
-              completionId: result.id,
-              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
-            })
+            await captureAiGenerationAfterSuccess(
+              this.phClient,
+              buildResponsesSuccessOptions(
+                {
+                  client: this.phClient,
+                  provider: 'openai',
+                  baseURL: this.baseURL,
+                  params: openAIParams,
+                  monitoring: posthogParams,
+                  modelParametersSource: body,
+                },
+                {
+                  response: result,
+                  output: formatResponseOpenAI({ output: result.output }),
+                  latency: (Date.now() - startTime) / 1000,
+                  includeTools: true,
+                  includeRequestId: true,
+                }
+              )
+            )
           }
           return result
         },
         async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
+          await captureAiGeneration(
+            this.phClient,
+            buildResponsesErrorOptions(
+              {
+                client: this.phClient,
+                provider: 'openai',
+                baseURL: this.baseURL,
+                params: openAIParams,
+                monitoring: posthogParams,
+                modelParametersSource: body,
+              },
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
+            )
+          )
           throw error
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
+  }
+
+  public retrieve(
+    responseID: string,
+    query?: ResponseRetrieveParamsNonStreaming,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response>
+
+  public retrieve(
+    responseID: string,
+    query: ResponseRetrieveParamsStreaming,
+    options?: RequestOptions
+  ): APIPromise<Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+
+  public retrieve(
+    responseID: string,
+    query?: ResponseRetrieveParamsBase,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+
+  public retrieve(
+    responseID: string,
+    query: ResponseRetrieveParamsBase = {},
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
+    const parentPromise = super.retrieve(responseID, query, options)
+
+    // Preserve the upstream promise and stream unchanged for responses that
+    // were not created through this client.
+    if (!this.backgroundResponses.get(responseID)) {
+      return parentPromise
+    }
+
+    if (query.stream) {
+      return parentPromise._thenUnwrap((result) => {
+        if ('controller' in result) {
+          return wrapBackgroundResponseStream(result, responseID, this.backgroundResponses, (response, context) =>
+            this.captureBackgroundResponse(response, context)
+          )
+        }
+        return result
+      })
+    }
+
+    return parentPromise._thenUnwrap(async (result) => {
+      if (!('output' in result) || !isTerminalResponse(result)) {
+        return result
+      }
+
+      // Removing the context before capture makes concurrent or repeated
+      // terminal polls idempotent.
+      const context = this.backgroundResponses.take(responseID)
+      if (context) {
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
+      }
+      return result
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
+  }
+
+  public cancel(responseID: string, options?: RequestOptions): APIPromise<OpenAIOrignal.Responses.Response> {
+    const parentPromise = super.cancel(responseID, options)
+
+    // Avoid wrapping calls that do not belong to a background response created
+    // through this client, preserving the upstream APIPromise unchanged.
+    if (!this.backgroundResponses.get(responseID)) {
+      return parentPromise
+    }
+
+    return parentPromise._thenUnwrap(async (result) => {
+      if (!isTerminalResponse(result)) {
+        return result
+      }
+
+      const context = this.backgroundResponses.take(responseID)
+      if (context) {
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
+      }
+      return result
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
   }
 
   public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
@@ -677,69 +568,59 @@ export class WrappedResponses extends Responses {
     const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const originalCreate = super.create.bind(this)
-    const originalSelfRecord = this as Record<string, unknown>
-    const tempCreate = originalSelfRecord['create']
-    originalSelfRecord['create'] = originalCreate
+    const parentPromise = callWithOriginalCreate(this, super.create.bind(this), () =>
+      super.parse<Params, ParsedT>(openAIParams, options)
+    )
 
-    try {
-      const parentPromise = super.parse(openAIParams, options)
-
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          if (isPendingBackgroundResponse(openAIParams, result)) {
-            return result
-          }
-
-          const latency = (Date.now() - startTime) / 1000
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model ?? result.model,
-            provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-            output: result.output,
-            latency,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus: 200,
-            usage: {
-              inputTokens: result.usage?.input_tokens ?? 0,
-              outputTokens: result.usage?.output_tokens ?? 0,
-              reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-              cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-              rawUsage: result.usage,
-            },
-            stopReason: result.status ?? undefined,
-            completionId: result.id,
-            providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
-          })
+    const wrappedPromise = parentPromise.then(
+      async (result) => {
+        if (isPendingBackgroundResponse(openAIParams, result)) {
+          this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
           return result
-        },
-        async (error: Error) => {
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
+        }
+
+        await captureAiGeneration(
+          this.phClient,
+          buildResponsesSuccessOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            {
+              response: result,
+              output: result.output,
+              latency: (Date.now() - startTime) / 1000,
+              includeRequestId: true,
+            }
+          )
+        )
+        return result
+      },
+      async (error: Error) => {
+        await captureAiGeneration(
+          this.phClient,
+          buildResponsesErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
             },
             error,
-          })
-          throw error
-        }
-      )
+            { latency: (Date.now() - startTime) / 1000 }
+          )
+        )
+        throw error
+      }
+    )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise) as APIPromise<ParsedResponse<ParsedT>>
-    } finally {
-      // Restore our wrapped create method
-      originalSelfRecord['create'] = tempCreate
-    }
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -764,50 +645,44 @@ export class WrappedEmbeddings extends Embeddings {
 
     const wrappedPromise = parentPromise.then(
       async (result) => {
-        const latency = (Date.now() - startTime) / 1000
-        await captureAiGeneration(this.phClient, {
-          ...posthogParams,
-          eventType: AIEvent.Embedding,
-          model: openAIParams.model,
-          provider: 'openai',
-          input: withPrivacyMode(this.phClient, posthogParams.privacyMode, openAIParams.input),
-          output: null, // Embeddings don't have output content
-          latency,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
-          httpStatus: 200,
-          usage: {
-            inputTokens: result.usage?.prompt_tokens ?? 0,
-            rawUsage: result.usage,
-          },
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildEmbeddingSuccessOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            result.usage,
+            (Date.now() - startTime) / 1000
+          )
+        )
         return result
       },
       async (error: unknown) => {
-        const httpStatus =
-          error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
-
-        await captureAiGeneration(this.phClient, {
-          eventType: AIEvent.Embedding,
-          ...posthogParams,
-          model: openAIParams.model,
-          provider: 'openai',
-          input: withPrivacyMode(this.phClient, posthogParams.privacyMode, openAIParams.input),
-          output: null, // Embeddings don't have output content
-          latency: 0,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
-          httpStatus,
-          usage: {
-            inputTokens: 0,
-          },
-          error,
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildEmbeddingErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'openai',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            error,
+            (Date.now() - startTime) / 1000
+          )
+        )
         throw error
       }
     )
 
-    return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -901,20 +776,23 @@ export class WrappedTranscriptions extends Transcriptions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent,
+            Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
+            let usage: {
+              inputTokens?: number
+              outputTokens?: number
+              rawUsage?: unknown
+            } = {}
             try {
               let finalContent: string = ''
               let firstTokenTime: number | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                rawUsage?: unknown
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-              }
 
               const doneEvent: OpenAIOrignal.Audio.Transcriptions.TranscriptionTextDoneEvent['type'] =
                 'transcript.text.done'
@@ -944,7 +822,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: openAIParams.prompt,
-                output: finalContent,
+                output: sanitizeOpenAIResponse(finalContent, this.phClient),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -960,22 +838,25 @@ export class WrappedTranscriptions extends Transcriptions {
                 provider: 'openai',
                 input: openAIParams.prompt,
                 output: [],
-                latency: 0,
+                latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
+                usage,
                 error,
               })
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           return stream2
         }
         return value
       })
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>,
         wrappedPromise
       )
@@ -989,7 +870,7 @@ export class WrappedTranscriptions extends Transcriptions {
               model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.prompt,
-              output: result.text,
+              output: sanitizeOpenAIResponse(result.text, this.phClient),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body),
@@ -1010,20 +891,17 @@ export class WrappedTranscriptions extends Transcriptions {
             provider: 'openai',
             input: openAIParams.prompt,
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            usage: {},
             error,
           })
           throw error
         }
       )
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>,
         wrappedPromise
       )

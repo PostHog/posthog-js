@@ -10,6 +10,7 @@ import {
     estimateSize,
     estimateCompressedEventSize,
     circularReferenceReplacer,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import type { eventWithTime } from '../../../extensions/replay/types/rrweb-types'
@@ -127,6 +128,15 @@ describe(`SessionRecording utility functions`, () => {
                 size: 86,
             })
         })
+
+        it(`should report UTF-8 bytes for non-ASCII payloads`, () => {
+            const data = { text: '€' } as unknown as eventWithTime
+
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: data,
+                size: 14,
+            })
+        })
     })
 
     describe(`truncateLargeConsoleLogs`, () => {
@@ -242,6 +252,29 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 },
             })
+        })
+    })
+
+    describe('estimateSize', () => {
+        it('should return the UTF-8 byte length of serialized data', () => {
+            const data = { text: '€' }
+            const serialized = JSON.stringify(data)
+
+            expect(serialized).toBe('{"text":"€"}')
+            expect(serialized.length).toBe(12)
+            expect(estimateSize(data)).toBe(14)
+        })
+
+        it('reports a failure instead of throwing when the data is too large to stringify', () => {
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
+                throw new RangeError('Invalid string length')
+            })
+
+            try {
+                expect(estimateSize({ text: 'hello' })).toBe(UNSTRINGIFIABLE_EVENT_SIZE)
+            } finally {
+                stringifySpy.mockRestore()
+            }
         })
     })
 
@@ -399,6 +432,27 @@ describe(`SessionRecording utility functions`, () => {
             b.a = a
             const result = JSON.stringify(a, circularReferenceReplacer())
             expect(result).toEqual('{"b":{"a":"[Circular]"}}')
+        })
+
+        it('should handle circular references that pass through an array', () => {
+            // shape seen in production: root -> queue -> plugins (array) -> element -> instance -> root
+            const root: any = {}
+            root.queue = { plugins: [{ instance: root }] }
+            const result = JSON.stringify(root, circularReferenceReplacer())
+            expect(result).toEqual('{"queue":{"plugins":[{"instance":"[Circular]"}]}}')
+        })
+
+        it('should handle a self-referencing array', () => {
+            const arr: any[] = []
+            arr.push(arr)
+            const result = JSON.stringify({ arr }, circularReferenceReplacer())
+            expect(result).toEqual('{"arr":["[Circular]"]}')
+        })
+
+        it('should preserve shared but acyclic references', () => {
+            const shared = { id: 1 }
+            const result = JSON.stringify({ a: shared, b: [shared] }, circularReferenceReplacer())
+            expect(result).toEqual('{"a":{"id":1},"b":[{"id":1}]}')
         })
     })
 })

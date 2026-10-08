@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
@@ -20,24 +19,24 @@ describe('Conversations Identity Verification', () => {
 
     beforeEach(() => {
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
 
         mockManager = {
-            show: jest.fn(),
-            hide: jest.fn(),
-            reset: jest.fn(),
-            isVisible: jest.fn().mockReturnValue(true),
-            sendMessage: jest.fn(),
-            getMessages: jest.fn(),
-            markAsRead: jest.fn(),
-            getTickets: jest.fn(),
-            requestRestoreLink: jest.fn(),
-            restoreFromToken: jest.fn(),
-            restoreFromUrlToken: jest.fn(),
-            getCurrentTicketId: jest.fn(),
-            getWidgetSessionId: jest.fn(),
-            setIdentity: jest.fn(),
-            clearIdentity: jest.fn(),
+            show: vi.fn(),
+            hide: vi.fn(),
+            reset: vi.fn(),
+            isVisible: vi.fn().mockReturnValue(true),
+            sendMessage: vi.fn(),
+            getMessages: vi.fn(),
+            markAsRead: vi.fn(),
+            getTickets: vi.fn(),
+            requestRestoreLink: vi.fn(),
+            restoreFromToken: vi.fn(),
+            restoreFromUrlToken: vi.fn(),
+            getCurrentTicketId: vi.fn(),
+            getWidgetSessionId: vi.fn(),
+            setIdentity: vi.fn(),
+            clearIdentity: vi.fn(),
         } as unknown as ConversationsManager
 
         const config = createMockConfig({
@@ -52,29 +51,22 @@ describe('Conversations Identity Verification', () => {
                 props: {},
             }),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                endpointFor: vi.fn().mockReturnValue('https://test.posthog.com/api/test'),
             } as any,
             consent: {
-                isOptedOut: jest.fn().mockReturnValue(false),
+                isOptedOut: vi.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            on: jest.fn().mockReturnValue(jest.fn()),
-            setIdentity: jest.fn((distinctId: string, hash: string) => {
-                mockPostHog.config.identity_distinct_id = distinctId
-                mockPostHog.config.identity_hash = hash
-                ;(mockPostHog as any).conversations?._onIdentityChanged()
-            }),
-            clearIdentity: jest.fn(() => {
-                delete mockPostHog.config.identity_distinct_id
-                delete mockPostHog.config.identity_hash
-                ;(mockPostHog as any).conversations?._onIdentityCleared()
-            }),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            on: vi.fn().mockReturnValue(vi.fn()),
+            setIdentity: PostHog.prototype.setIdentity,
+            clearIdentity: PostHog.prototype.clearIdentity,
+            alias: vi.fn(),
         })
 
         assignableWindow.__PosthogExtensions__ = {
             initConversations: undefined,
-            loadExternalDependency: jest.fn((_instance, _path, callback) => {
-                assignableWindow.__PosthogExtensions__!.initConversations = jest.fn().mockReturnValue(mockManager)
+            loadExternalDependency: vi.fn((_instance, _path, callback) => {
+                assignableWindow.__PosthogExtensions__!.initConversations = vi.fn().mockReturnValue(mockManager)
                 callback(null)
             }),
         }
@@ -84,7 +76,7 @@ describe('Conversations Identity Verification', () => {
     })
 
     function loadConversations() {
-        conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+        conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
     }
 
     describe('posthog.setIdentity', () => {
@@ -117,7 +109,13 @@ describe('Conversations Identity Verification', () => {
 
             loadConversations()
 
-            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalledWith(
+                remoteConfig.conversations,
+                mockPostHog
+            )
+            const passedInstance = vi.mocked(assignableWindow.__PosthogExtensions__!.initConversations).mock.calls[0][1]
+            expect(passedInstance.config.identity_distinct_id).toBe('user_123')
+            expect(passedInstance.config.identity_hash).toBe('a1b2c3d4')
         })
     })
 
@@ -159,7 +157,13 @@ describe('Conversations Identity Verification', () => {
 
             loadConversations()
 
-            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__!.initConversations).toHaveBeenCalledWith(
+                remoteConfig.conversations,
+                mockPostHog
+            )
+            const passedInstance = vi.mocked(assignableWindow.__PosthogExtensions__!.initConversations).mock.calls[0][1]
+            expect(passedInstance.config.identity_distinct_id).toBe('user_123')
+            expect(passedInstance.config.identity_hash).toBe('a1b2c3d4')
             expect(mockPostHog.config.identity_distinct_id).toBe('user_123')
         })
 

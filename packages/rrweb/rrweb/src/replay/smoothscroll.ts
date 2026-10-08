@@ -3,9 +3,9 @@
  * Add support of customize target window and document
  */
 
-/* eslint-disable */
+/* oxlint-disable */
 // @ts-nocheck
-export function polyfill(w: Window = window, d = document) {
+export function polyfill(w: Window = window, d: Document = document): void {
   // return if scroll behavior is supported and polyfill is not forced
   if (
     'scrollBehavior' in d.documentElement.style &&

@@ -1,7 +1,5 @@
 /// <reference lib="dom" />
 
-import sinon from 'sinon'
-
 import {
     getSafeText,
     shouldCaptureDomEvent,
@@ -14,14 +12,16 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '../autocapture-utils'
-import { document } from '../utils/globals'
-import { makeMouseEvent } from './autocapture.test'
-import { AutocaptureConfig } from '../types'
+} from '@posthog/browser-common/utils/autocapture-utils'
+import { document } from '@posthog/browser-common/utils/globals'
+import { makeMouseEvent } from './helpers/mouse-event'
+import { createMockPostHog } from './helpers/posthog-instance'
+import { AutocaptureConfig, PostHogConfig } from '../types'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
         document!.getElementsByTagName('html')[0].innerHTML = ''
+        vi.restoreAllMocks()
     })
 
     describe(`getSafeText`, () => {
@@ -154,20 +154,24 @@ describe(`Autocapture utility functions`, () => {
                 `""`, // Empty quotes
             ]
 
-            // Test each string
-            testStrings.forEach((str) => {
-                const result = makeSafeText(str)
-                expect(result).not.toBeNull()
-
-                // For non-empty strings, we should get a result
-                if (str.trim().length > 0) {
-                    // If the original had quotes, the result should have them too
-                    if (str.includes('"') || str.includes("'")) {
-                        // The result should include some form of quotation mark
-                        const hasQuotes = result?.includes('"') || result?.includes("'")
-                        expect(hasQuotes).toBeTruthy()
-                    }
-                }
+            const expectedStrings = [
+                `Click "OK" to continue`,
+                `Select the "My Account" option`,
+                `Click "Order History"`,
+                `"Double quoted text" with some text after`,
+                `Text before "double quoted text"`,
+                `A string with "multiple" "quoted" sections`,
+                `A string with 'single' 'quoted' sections`,
+                `A "mixed quote' string that might cause problems`,
+                `A 'mixed quote" string that might cause problems`,
+                `"nested "quotes" within" might be an issue`,
+                `Line breaks with "quotes" might cause issues`,
+                `Quotes "at the end"`,
+                `"Quotes at the start" of text`,
+                `""`,
+            ]
+            testStrings.forEach((str, index) => {
+                expect(makeSafeText(str)).toBe(expectedStrings[index])
             })
         })
     })
@@ -210,12 +214,69 @@ describe(`Autocapture utility functions`, () => {
             expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
+        it(`does not throw when getComputedStyle throws for a cross-realm element`, () => {
+            vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+                throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
+            })
+
+            const el = document!.createElement(`div`)
+            const parent = document!.createElement(`div`)
+            parent.appendChild(el)
+
+            expect(() => shouldCaptureDomEvent(el, makeMouseEvent({}))).not.toThrow()
+        })
+
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
 
         it.each([`html`, 'body'])(`should NOT capture "click" events on <%s> elements`, (tagName) => {
             expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
+        })
+
+        describe('get_current_url override for url_allowlist/url_ignorelist', () => {
+            const setWindowLocation = (href: string) => {
+                Object.defineProperty(window, 'location', { value: { href }, writable: true, configurable: true })
+            }
+            const posthogWith = (getCurrentUrl?: (defaultUrl: string) => string) =>
+                createMockPostHog({ config: { get_current_url: getCurrentUrl } as PostHogConfig })
+
+            it('matches url_allowlist against the overridden URL', () => {
+                // raw browser URL is not in the allow list
+                setWindowLocation('https://generated-host.skin/x')
+                const config = { url_allowlist: [/app\.example\.com/] } as AutocaptureConfig
+                const link = document!.createElement('a')
+
+                expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(false)
+                expect(
+                    shouldCaptureDomEvent(
+                        link,
+                        makeMouseEvent({}),
+                        config,
+                        undefined,
+                        undefined,
+                        posthogWith(() => 'https://app.example.com/page')
+                    )
+                ).toBe(true)
+            })
+
+            it('matches url_ignorelist against the overridden URL', () => {
+                setWindowLocation('https://app.example.com/page')
+                const config = { url_ignorelist: [/internal-admin/] } as AutocaptureConfig
+                const link = document!.createElement('a')
+
+                expect(shouldCaptureDomEvent(link, makeMouseEvent({}), config)).toBe(true)
+                expect(
+                    shouldCaptureDomEvent(
+                        link,
+                        makeMouseEvent({}),
+                        config,
+                        undefined,
+                        undefined,
+                        posthogWith(() => 'https://app.example.com/internal-admin')
+                    )
+                ).toBe(false)
+            })
         })
 
         describe('css selector allowlist', () => {
@@ -366,6 +427,9 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`should include sensitive elements with class "ph-include"`, () => {
+            el.id = 'credit-card-number'
+            expect(shouldCaptureElement(el)).toBe(false)
+
             el.className = `test1 ph-include test2`
             expect(shouldCaptureElement(el)).toBe(true)
         })
@@ -430,28 +494,48 @@ describe(`Autocapture utility functions`, () => {
         // See https://github.com/posthog/posthog-js/issues/165
         // Under specific circumstances a bug caused .replace to be called on a DOM element
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-        it(`shouldn't inadvertently replace DOM nodes`, () => {
-            // setup
-            ;(el as any).replace = sinon.spy()
+        it.each(['name', 'id', 'type'])(`shouldn't inadvertently replace DOM nodes through %s`, (property) => {
+            const form = document.createElement('form')
+            const control = document.createElement('input')
+            control.name = property
+            form.appendChild(control)
+            document.body.appendChild(form)
+            // jsdom does not consistently implement named access on forms.
+            Object.defineProperty(form, property, { configurable: true, value: control })
+            const replace = vi.fn()
+            Object.defineProperty(control, 'replace', { configurable: true, value: replace })
+            try {
+                expect((form as any)[property]).toBe(control)
+                expect(shouldCaptureElement(form)).toBe(true)
+                expect(replace).not.toHaveBeenCalled()
+                expect(control.parentNode).toBe(form)
+            } finally {
+                form.remove()
+            }
+        })
 
-            // test
-            input.name = el as any
-            shouldCaptureElement(parent1) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            input.name = ''
+        it(`should terminate and fail closed on a cyclic ancestor chain`, () => {
+            // a parentNode cycle is only possible when the page patches parentNode
+            const a = document!.createElement('div')
+            const b = document!.createElement('div')
+            Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
+            Object.defineProperty(b, 'parentNode', { value: a, configurable: true })
 
-            parent1.id = el as any
-            shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            parent1.id = ''
+            expect(shouldCaptureElement(a)).toBe(false)
+        })
 
-            input.type = el as any
-            shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect((el as any).replace.called).toBe(false)
-            input.type = ''
+        it(`should fail closed when an ancestor chain exceeds the depth cap`, () => {
+            // ph-no-capture sits beyond the depth cap, so the walk cannot verify safety
+            const root = document!.createElement('div')
+            root.className = 'ph-no-capture'
+            let cur: HTMLElement = root
+            for (let i = 0; i < 1100; i++) {
+                const child = document!.createElement('div')
+                cur.appendChild(child)
+                cur = child
+            }
 
-            // cleanup
-            ;(el as any).replace = undefined
+            expect(shouldCaptureElement(cur)).toBe(false)
         })
     })
 
@@ -707,6 +791,42 @@ describe(`Autocapture utility functions`, () => {
                 // The elements chain should contain the ESCAPED text
                 expect(elementsChain).toContain(`text="${escapedText}"`)
             })
+        })
+
+        it('should return an empty string for non-array input', () => {
+            expect(getElementsChainString(undefined as any)).toEqual('')
+            expect(getElementsChainString(null as any)).toEqual('')
+            expect(getElementsChainString('not an array' as any)).toEqual('')
+            expect(getElementsChainString({ tag_name: 'div' } as any)).toEqual('')
+        })
+
+        it('should not throw when localeCompare throws (faulty ICU data)', () => {
+            // Some browsers with incomplete ICU data throw a RangeError from localeCompare.
+            const originalLocaleCompare = String.prototype.localeCompare
+            String.prototype.localeCompare = function () {
+                throw new RangeError('Internal error. Icu error.')
+            }
+
+            try {
+                let elementChain = ''
+                expect(() => {
+                    elementChain = getElementsChainString([
+                        {
+                            tag_name: 'button',
+                            $el_text: 'text',
+                            nth_child: 1,
+                            nth_of_type: 2,
+                            'attr__data-b': 'b',
+                            'attr__data-a': 'a',
+                        },
+                    ])
+                }).not.toThrow()
+
+                // attributes still sort lexically without localeCompare
+                expect(elementChain.indexOf('attr__data-a')).toBeLessThan(elementChain.indexOf('attr__data-b'))
+            } finally {
+                String.prototype.localeCompare = originalLocaleCompare
+            }
         })
     })
 

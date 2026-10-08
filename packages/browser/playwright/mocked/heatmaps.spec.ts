@@ -55,6 +55,18 @@ test.describe('Heatmaps', () => {
         expect(typeof firstEvent.y).toBe('number')
         expect(typeof firstEvent.target_fixed).toBe('boolean')
         expect(['click', 'mousemove', 'rageclick', 'deadclick']).toContain(firstEvent.type)
+        await expect
+            .poll(async () =>
+                (await page.capturedEvents())
+                    .filter((event) => event.event === '$$heatmap')
+                    .flatMap((event) => event.properties.$heatmap_data[page.url()] || [])
+            )
+            .toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ type: 'click' }),
+                    expect.objectContaining({ type: 'mousemove', x: 100, y: 100 }),
+                ])
+            )
     })
 
     test('captures rageclick events', async ({ page, context }) => {
@@ -94,6 +106,41 @@ test.describe('Heatmaps', () => {
         expect(rageclickEvents.length).toBeGreaterThan(0)
     })
 
+    test('does not crash when getComputedStyle throws for the event target', async ({ page, context }) => {
+        await start(startOptions, page, context)
+
+        await page.resetCapturedEvents()
+
+        const pageErrors: string[] = []
+        page.on('pageerror', (error) => pageErrors.push(error.message))
+
+        await page.evaluate(() => {
+            const el = document.createElement('div')
+            el.id = 'cross-realm-target'
+            document.body.appendChild(el)
+
+            const original = window.getComputedStyle.bind(window)
+            window.getComputedStyle = ((element: Element, pseudoElt?: string | null) => {
+                if (element === el) {
+                    throw new TypeError(
+                        "Argument 1 ('element') to Window.getComputedStyle must be an instance of Element"
+                    )
+                }
+                return original(element, pseudoElt)
+            }) as typeof window.getComputedStyle
+
+            el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 5, clientY: 5 }))
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 5, clientY: 5 }))
+        })
+
+        await pollUntilEventCaptured(page, '$$heatmap')
+
+        expect(pageErrors).toEqual([])
+
+        const heatmapEvents = (await page.capturedEvents()).filter((event) => event.event === '$$heatmap')
+        expect(heatmapEvents.length).toBeGreaterThanOrEqual(1)
+    })
+
     test('does not capture events when heatmaps are disabled', async ({ page, context }) => {
         await start(
             {
@@ -114,8 +161,8 @@ test.describe('Heatmaps', () => {
         // Perform a mousemove
         await page.mouse.move(100, 100)
 
-        // Wait a bit
-        await page.waitForTimeout(2000)
+        // Exceed the default 5000ms flush used if the disabled option is ignored.
+        await page.waitForTimeout(6000)
 
         // Should not have captured any heatmap events
         const heatmapEvents = (await page.capturedEvents()).filter((event) => event.event === '$$heatmap')

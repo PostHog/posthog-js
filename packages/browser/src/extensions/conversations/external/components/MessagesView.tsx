@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// oxlint-disable-next-line typescript/no-unused-vars
 import { h, Fragment } from 'preact'
 import { Message } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'
@@ -49,6 +49,7 @@ function MessageBubble({
                 <RichContent
                     richContent={message.rich_content}
                     content={message.content}
+                    isGreeting={message.id === 'greeting'}
                     isCustomer={isCustomer}
                     primaryColor={primaryColor}
                 />

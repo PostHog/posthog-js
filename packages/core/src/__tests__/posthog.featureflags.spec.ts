@@ -1,4 +1,4 @@
-import { PostHogPersistedProperty, PostHogV2FlagsResponse } from '@/types'
+import { PostHogPersistedProperty, PostHogRemoteConfig, PostHogV2FlagsResponse } from '@/types'
 import { normalizeFlagsResponse } from '@/featureFlagUtils'
 import {
   parseBody,
@@ -12,8 +12,8 @@ describe('PostHog Feature Flags v4', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   const createMockFeatureFlags = (): Partial<PostHogV2FlagsResponse['flags']> => ({
     'feature-1': {
@@ -149,6 +149,11 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.isFeatureEnabled('feature-1')).toEqual(undefined)
     })
 
+    it('isFeatureEnabled should return defaultValue if not loaded', () => {
+      expect(posthog.isFeatureEnabled('my-flag', { defaultValue: true })).toEqual(true)
+      expect(posthog.isFeatureEnabled('my-flag', { defaultValue: false })).toEqual(false)
+    })
+
     it('should load persisted feature flags', () => {
       const flagsResponse = { flags: createMockFeatureFlags() } as PostHogV2FlagsResponse
       const normalizedFeatureFlags = normalizeFlagsResponse(flagsResponse)
@@ -269,9 +274,10 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         // The core doesn't reload flags by default (this is handled differently by web and RN)
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should return the value of a flag', async () => {
@@ -289,7 +295,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when errored out', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch.mockImplementation((url) => {
               if (url.includes('/flags/')) {
@@ -308,6 +314,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return undefined', async () => {
@@ -343,7 +350,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return partial results', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -413,6 +420,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return combined results', async () => {
@@ -477,11 +485,16 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(true)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(false)
           expect(posthog.isFeatureEnabled('x-flag')).toEqual(true)
+
+          expect(posthog.isFeatureEnabled('feature-1', { defaultValue: true })).toEqual(false)
+          expect(posthog.isFeatureEnabled('feature-variant', { defaultValue: false })).toEqual(true)
+          expect(posthog.isFeatureEnabled('feature-missing', { defaultValue: true })).toEqual(true)
+          expect(posthog.isFeatureEnabled('feature-missing', { defaultValue: false })).toEqual(false)
         })
       })
 
       describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -553,6 +566,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should filter out failed flags and preserve their cached values', async () => {
@@ -583,7 +597,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return results without errors', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -655,6 +669,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return only latest results', async () => {
@@ -807,6 +822,246 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
+      describe('$feature_flag_has_experiment', () => {
+        const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {
+          mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () =>
+                  Promise.resolve({
+                    flags: {
+                      'feature-1': {
+                        key: 'feature-1',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata,
+                      },
+                    },
+                  }),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+
+        const getFlagCalledProperties = async (): Promise<Record<string, any>> => {
+          await posthog.reloadFeatureFlagsAsync()
+          posthog.getFeatureFlag('feature-1')
+          await waitForPromises()
+          const event = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          return event.properties
+        }
+
+        it('should send $feature_flag_has_experiment true when the server reports has_experiment true', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined, has_experiment: true })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: true })
+        })
+
+        it('should send $feature_flag_has_experiment false when the server reports has_experiment false', async () => {
+          mockFlagsWithMetadata({
+            id: 1,
+            version: 1,
+            description: undefined,
+            payload: undefined,
+            has_experiment: false,
+          })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
+        })
+
+        it('should omit $feature_flag_has_experiment when the server omits has_experiment', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined })
+
+          expect(await getFlagCalledProperties()).not.toHaveProperty('$feature_flag_has_experiment')
+        })
+      })
+
+      describe('minimal $feature_flag_called events', () => {
+        const flagsResponseJson = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean }): any => ({
+          flags: {
+            'feature-1': {
+              key: 'feature-1',
+              enabled: true,
+              variant: undefined,
+              reason: undefined,
+              metadata: {
+                id: 1,
+                version: 2,
+                description: undefined,
+                payload: undefined,
+                ...(options.hasExperiment === undefined ? {} : { has_experiment: options.hasExperiment }),
+              },
+            },
+          },
+          requestId: 'minimal-request-id',
+          evaluatedAt: 1640995200000,
+          ...(options.minimalFlagCalledEvents === undefined
+            ? {}
+            : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
+        })
+
+        const mockFlagsEndpoint = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean }): void => {
+          mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve(flagsResponseJson(options)),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+
+        const getFlagCalledProperties = async (): Promise<Record<string, any>> => {
+          // Register a super property to prove it gets stripped from minimal events
+          posthog.register({ super_prop: 'super_value' })
+          await posthog.reloadFeatureFlagsAsync()
+          posthog.getFeatureFlag('feature-1')
+          await waitForPromises()
+          const event = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          return event.properties
+        }
+
+        it('should send exactly the allowlisted properties when gated and the flag has no experiment', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: false })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(Object.keys(properties).sort()).toEqual(
+            [
+              '$feature_flag',
+              '$feature_flag_response',
+              '$feature_flag_has_experiment',
+              '$feature_flag_id',
+              '$feature_flag_version',
+              '$feature_flag_request_id',
+              '$feature_flag_evaluated_at',
+              '$session_id',
+              '$lib',
+              '$lib_version',
+              '$process_person_profile',
+            ].sort()
+          )
+          expect(properties).toMatchObject({
+            $feature_flag: 'feature-1',
+            $feature_flag_response: true,
+            $feature_flag_has_experiment: false,
+          })
+        })
+
+        it('should send the full event when gated but the flag has an experiment', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: true })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            $feature_flag_has_experiment: true,
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+            $active_feature_flags: ['feature-1'],
+          })
+        })
+
+        it.each([
+          ['the gate field is absent', {}],
+          ['the gate field is false', { minimalFlagCalledEvents: false }],
+          ['has_experiment is absent', { minimalFlagCalledEvents: true, hasExperiment: undefined }],
+        ])('should send the full event when %s', async (_, options) => {
+          mockFlagsEndpoint({ hasExperiment: false, ...options })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+          })
+        })
+
+        it('should flip the gate off when a later flags response omits the field', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: false })
+          await posthog.reloadFeatureFlagsAsync()
+
+          mockFlagsEndpoint({ hasExperiment: false })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+          })
+        })
+
+        it('should keep sending minimal events after a simulated restart on the same storage', async () => {
+          const storageCache: Record<string, any> = {}
+          const setupFetch = (_mocks: PostHogCoreTestClientMocks): void => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/?v=2')) {
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve(flagsResponseJson({ minimalFlagCalledEvents: true, hasExperiment: false })),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+
+          const [firstClient] = createTestClient('TEST_API_KEY', { flushAt: 1 }, setupFetch, storageCache)
+          await firstClient.reloadFeatureFlagsAsync()
+
+          // New client on the same persisted storage; flags are never reloaded remotely.
+          const [restartedClient, restartedMocks] = createTestClient(
+            'TEST_API_KEY',
+            { flushAt: 1, preloadFeatureFlags: false },
+            (_mocks) => {
+              _mocks.fetch.mockImplementation(() =>
+                Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () => Promise.resolve({ status: 'ok' }),
+                })
+              )
+            },
+            storageCache
+          )
+
+          expect(restartedClient.getFeatureFlag('feature-1')).toEqual(true)
+          await waitForPromises()
+
+          const event = restartedMocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          expect(event.properties.$feature_flag_has_experiment).toBe(false)
+          expect(event.properties).not.toHaveProperty('$feature/feature-1')
+          expect(event.properties).not.toHaveProperty('$active_feature_flags')
+          expect(event.properties).not.toHaveProperty('$used_bootstrap_value')
+        })
+      })
+
       it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()
@@ -875,6 +1130,7 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
           errorsWhileComputingFlags: undefined,
           quotaLimited: undefined,
+          minimalFlagCalledEvents: false,
         })
       })
 
@@ -894,6 +1150,32 @@ describe('PostHog Feature Flags v4', () => {
                 '$feature/feature-2': true,
                 '$feature/json-payload': true,
                 '$feature/feature-variant': 'variant',
+              },
+            },
+          ],
+        })
+      })
+
+      it.each([
+        ['a string variant', 'server-value'],
+        ['boolean false (client-side disable)', false],
+        ['null', null],
+      ])('lets a caller-supplied $feature/* value (%s) override the cached value', async (_case, overrideValue) => {
+        posthog.capture('test-event', {
+          '$feature/feature-1': overrideValue,
+          $active_feature_flags: ['server-flag'],
+        })
+
+        await waitForPromises()
+
+        expect(parseBody(mocks.fetch.mock.calls[1])).toMatchObject({
+          batch: [
+            {
+              event: 'test-event',
+              properties: {
+                '$feature/feature-1': overrideValue,
+                $active_feature_flags: ['server-flag'],
+                '$feature/feature-2': true,
               },
             },
           ],
@@ -1064,6 +1346,16 @@ describe('PostHog Feature Flags v4', () => {
           expect(mocks.fetch).toHaveBeenCalledTimes(1)
         })
 
+        it.each([
+          ['getFeatureFlag', () => posthog.getFeatureFlag('feature-1', { sendEvent: false })],
+          ['isFeatureEnabled', () => posthog.isFeatureEnabled('feature-1', { sendEvent: false })],
+        ] as const)('should NOT send event from %s when sendEvent: false', async (_, callFn) => {
+          expect(callFn()).toEqual(true)
+          await waitForPromises()
+          // Only the flags fetch call, no event capture
+          expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        })
+
         it('should NOT send duplicate events for the same flag key', async () => {
           posthog.getFeatureFlagResult('feature-1')
           await waitForPromises()
@@ -1134,7 +1426,7 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when quota limited', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
@@ -1153,6 +1445,7 @@ describe('PostHog Feature Flags v4', () => {
         })
 
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should unset all flags when feature_flags is quota limited', async () => {
@@ -1182,7 +1475,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should emit featureflags event with quotaLimited when quota limited', async () => {
-        const featureFlagsHandler = jest.fn()
+        const featureFlagsHandler = vi.fn()
         posthog.on('featureflags', featureFlagsHandler)
 
         await posthog.reloadFeatureFlagsAsync()
@@ -1218,6 +1511,263 @@ describe('PostHog Feature Flags v4', () => {
         const error = body.batch[0].properties.$feature_flag_error
         expect(error).toEqual('quota_limited')
         expect(error).not.toContain('flag_missing')
+      })
+    })
+
+    describe('getFlags retry behavior', () => {
+      it.each([408, 429, 500, 503])('should not retry HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 3, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        await expect(posthog.getFlags('distinct-id')).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it.each([502, 504])('should retry HTTP %i responses and return the successful flags response', async (status) => {
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.resolve({
+                    status,
+                    text: () => Promise.resolve('error'),
+                    json: () => Promise.resolve({ error: 'error' }),
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await vi.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        if (result.success) {
+          expect(result.response.featureFlags).toEqual(expectedFeatureFlagResponses)
+        }
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      })
+
+      it('should retry when an injected flags response body ignores abort and stalls', async () => {
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          {
+            flushAt: 1,
+            fetchRetryDelay: 1,
+            featureFlagsRequestMaxRetries: 1,
+            featureFlagsRequestTimeoutMs: 1000,
+          },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount === 1) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () => new Promise(() => {}),
+                    body: { cancel } as any,
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'body-timeout-retry-success',
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await vi.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+        expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it.each([502, 504])('should return api_error after exhausting retries for HTTP %i responses', async (status) => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 2 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.resolve({
+                  status,
+                  text: () => Promise.resolve('error'),
+                  json: () => Promise.resolve({ error: 'error' }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await vi.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1)
+
+        await expect(resultPromise).resolves.toEqual({
+          success: false,
+          error: { type: 'api_error', statusCode: status },
+        })
+        expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      })
+
+      it('should not retry when featureFlagsRequestMaxRetries is 0', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('should not retry connection refused failures when the error code is available', async () => {
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(Object.assign(new TypeError('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const result = await posthog.getFlags('distinct-id')
+
+        expect(result.success).toBe(false)
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('should retry network failures and return the successful flags response', async () => {
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 2, fetchRetryDelay: 1 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount < 2) {
+                  return Promise.reject(new TypeError('Failed to fetch'))
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'retry-success',
+                      evaluatedAt: 1640995200000,
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await vi.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
     })
 
@@ -1265,20 +1815,24 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include TIMEOUT error when request timed out', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              const abortError = new Error('The operation was aborted')
-              abortError.name = 'AbortError'
-              return Promise.reject(abortError)
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                const abortError = new Error('The operation was aborted')
+                abortError.name = 'AbortError'
+                return Promise.reject(abortError)
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 
@@ -1335,18 +1889,22 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should include CONNECTION_ERROR for network failures', async () => {
-        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
-          _mocks.fetch.mockImplementation((url) => {
-            if (url.includes('/flags/')) {
-              return Promise.reject(new TypeError('Failed to fetch'))
-            }
-            return Promise.resolve({
-              status: 200,
-              text: () => Promise.resolve('ok'),
-              json: () => Promise.resolve({ status: 'ok' }),
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          { flushAt: 1, fetchRetryCount: 0, featureFlagsRequestMaxRetries: 0 },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                return Promise.reject(new TypeError('Failed to fetch'))
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
             })
-          })
-        })
+          }
+        )
         posthog.reloadFeatureFlags()
         await waitForPromises()
 
@@ -1419,6 +1977,7 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlags()).toEqual({
         'bootstrap-1': 'variant-1',
         enabled: true,
+        disabled: false,
         'feature-1': 'feature-1-bootstrap-value',
         'not-in-featureFlags': true,
       })
@@ -1478,7 +2037,7 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
           {
@@ -1528,6 +2087,7 @@ describe('PostHog Feature Flags v4', () => {
         )
 
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should load new feature flags', async () => {
@@ -2129,6 +2689,156 @@ describe('PostHog Feature Flags v4', () => {
         expect(receivedFlags).toEqual([])
         expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
       })
+    })
+  })
+
+  describe('queued reloads', () => {
+    it('resolves a displaced caller against a request that carried its properties', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const sent: string[] = []
+
+      const [client] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (_url: string, options: any) => {
+          const tier = JSON.parse(options.body ?? '{}').person_properties?.tier ?? 'missing'
+          sent.push(tier)
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'tier-flag': tier }, featureFlagPayloads: {} }),
+          }
+        })
+      })
+
+      // a reload goes out before the app sets its overrides, and stays in flight
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      expect(sent).toEqual(['missing'])
+
+      client.setPersonPropertiesForFlags({ tier: 'premium' }, false)
+
+      // queues behind the in-flight request
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // displaces it from the pending slot
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // neither queued caller issued its own request, so both really are behind the in-flight one
+      expect(sent).toEqual(['missing'])
+
+      releaseFirst()
+
+      // both must see a response to a request that actually carried the override
+      expect((await displaced)?.['tier-flag']).toEqual('premium')
+      expect((await displacing)?.['tier-flag']).toEqual('premium')
+      // and exactly one re-issued request served them both
+      expect(sent).toEqual(['missing', 'premium'])
+    })
+
+    it('settles every displaced caller when the re-issued request fails, keeping cached flags', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let n = 0
+
+      const [client] = createTestClient('TEST_API_KEY', {}, (m) => {
+        m.fetch.mockImplementation(async () => {
+          n += 1
+          if (n === 1) {
+            await firstGate
+            return {
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, featureFlagPayloads: {} }),
+            }
+          }
+          return { status: 503, text: () => Promise.resolve('nope'), json: () => Promise.resolve({}) }
+        })
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      releaseFirst()
+
+      // a failed re-issue settles every waiter rather than leaving any pending
+      expect(await displaced).toBeUndefined()
+      expect(await displacing).toBeUndefined()
+      // and the flags loaded before it are kept
+      expect(client.getFeatureFlags()).toEqual({ 'beta-ui': true })
+    })
+
+    it('keeps the config fetch when a plain reload displaces a queued config request', async () => {
+      // Exposes the protected flagsAsync to drive the config-piggyback request, and records
+      // onRemoteConfig so we can see whether the re-issued request still notifies
+      class TestClientTrackingRemoteConfig extends PostHogCoreTestClient {
+        public onRemoteConfigCalls: PostHogRemoteConfig[] = []
+
+        public configReload(): Promise<unknown> {
+          return this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
+        }
+
+        protected onRemoteConfig(response: PostHogRemoteConfig): void {
+          this.onRemoteConfigCalls.push(response)
+        }
+      }
+
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const flagsUrls: string[] = []
+
+      const [, clientMocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (url: string) => {
+          if (url.includes('/flags/')) {
+            flagsUrls.push(url)
+          }
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, sessionRecording: { endpoint: '/s/' } }),
+          }
+        })
+      })
+      const client = new TestClientTrackingRemoteConfig(clientMocks, 'TEST_API_KEY', {
+        disableCompression: true,
+        flushAt: 1,
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // queues behind the in-flight request, then a plain reload displaces it
+      const queuedConfig = client.configReload()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      releaseFirst()
+      await queuedConfig
+      await displacing
+      await waitForPromises()
+
+      // the single re-issued request has to carry the displaced caller's config fetch too
+      expect(flagsUrls).toHaveLength(2)
+      expect(flagsUrls[0]).not.toContain('config=true')
+      expect(flagsUrls[1]).toContain('config=true')
+      expect(client.onRemoteConfigCalls).toHaveLength(1)
+
+      await client.shutdown()
     })
   })
 })

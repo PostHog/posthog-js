@@ -1,19 +1,20 @@
 /// <reference types="vite/client" />
-import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initConvexTest } from './setup.test.js'
 import { api, components } from './_generated/api.js'
 
 // Keep a guard above Jest's 5s default; scheduled functions are driven deterministically below.
-jest.setTimeout(15000)
+vi.setConfig({ testTimeout: 15000 })
 
 // Collect all fetch calls for assertion
 let fetchCalls: Array<{ url: string; body: unknown }> = []
 const originalFetch = global.fetch
 
-function mockFetch(responseByUrl?: Record<string, unknown>) {
+function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record<string, number>) {
     fetchCalls = []
-    return jest.fn(async (url: string | URL, init?: RequestInit) => {
+    return vi.fn(async (url: string | URL, init?: RequestInit) => {
         const urlStr = url.toString()
+        const status = Object.entries(statusByUrl ?? {}).find(([pattern]) => urlStr.includes(pattern))?.[1] ?? 200
         let body: unknown
         if (init?.body) {
             let rawText: string
@@ -40,7 +41,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>) {
             for (const [pattern, response] of Object.entries(responseByUrl)) {
                 if (urlStr.includes(pattern)) {
                     return new Response(JSON.stringify(response), {
-                        status: 200,
+                        status,
                         headers: { 'Content-Type': 'application/json' },
                     })
                 }
@@ -48,7 +49,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>) {
         }
 
         return new Response(JSON.stringify({ status: 1 }), {
-            status: 200,
+            status,
             headers: { 'Content-Type': 'application/json' },
         })
     }) as unknown as typeof fetch
@@ -69,12 +70,18 @@ function firstBatchEvent(): Record<string, unknown> {
     return batch?.batch?.[0] ?? {}
 }
 
+function allBatchEvents(): Record<string, unknown>[] {
+    return batchCalls().flatMap(
+        (call) => (call.body as { batch: Record<string, unknown>[] }).batch
+    )
+}
+
 async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
     // Let convex-test advance scheduler timers and wait for each scheduled function to finish.
     // A single timer pass can race with the scheduled action starting, which makes assertions
     // observe no PostHog batch call or leaves scheduled writes running during the next test.
     await t.finishAllScheduledFunctions(() => {
-        jest.runOnlyPendingTimers()
+        vi.runOnlyPendingTimers()
     })
 }
 
@@ -843,7 +850,7 @@ describe('refreshFlagDefinitions cron action', () => {
     // fire and the action hangs. Switch to real timers for this block and cut the backoff down
     // to 1ms via the env override so the retry-heavy tests stay snappy.
     beforeEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
         process.env.POSTHOG_PROJECT_TOKEN = 'phc_test_key'
         process.env.POSTHOG_PERSONAL_API_KEY = 'phx_test_personal_key'
         process.env.POSTHOG_HOST = 'https://test.posthog.com'
@@ -857,7 +864,7 @@ describe('refreshFlagDefinitions cron action', () => {
         delete process.env.POSTHOG_HOST
         delete process.env.POSTHOG_FLAGS_RETRY_DELAY_MS_OVERRIDE
         fetchCalls = []
-        jest.useFakeTimers()
+        vi.useFakeTimers()
     })
 
     // No credentials are passed to the action — they're env-driven (POSTHOG_PROJECT_TOKEN,
@@ -872,7 +879,7 @@ describe('refreshFlagDefinitions cron action', () => {
         let i = 0
         // Statuses where the spec forbids a body (Response constructor throws on non-null body).
         const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
-        return jest.fn(async (url: string | URL) => {
+        return vi.fn(async (url: string | URL) => {
             fetchCalls.push({ url: url.toString(), body: undefined })
             const r = responses[Math.min(i, responses.length - 1)]
             i++
@@ -972,14 +979,14 @@ describe('refreshFlagDefinitions cron action', () => {
     test('503 cold-cache with a stale (>5min) prior cache replaces with empty', async () => {
         // Fake `Date.now` only — leave `setTimeout`/`setImmediate` real so the retry loop's
         // `await new Promise(r => setTimeout(r, …))` still resolves.
-        jest.useFakeTimers({ doNotFake: ['setTimeout', 'setImmediate', 'queueMicrotask'] })
+        vi.useFakeTimers({ toFake: ['Date'] })
         try {
             const t = initConvexTest()
             global.fetch = mockFetch(definitionsResponse([flagDef('seed')]))
             await t.action(components.posthog.lib.refreshFlagDefinitions, noArgs)
 
             // Jump 6 minutes forward; the cached defs now count as stale.
-            jest.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
+            vi.setSystemTime(new Date(Date.now() + 6 * 60 * 1000))
 
             global.fetch = sequencedFetch([
                 { status: 503, body: 'Required data not found in cache.' },
@@ -992,7 +999,7 @@ describe('refreshFlagDefinitions cron action', () => {
             const row = await t.query(components.posthog.lib.getFlagDefinitions, {})
             expect(JSON.parse(row!.data).flags).toHaveLength(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -1089,6 +1096,20 @@ describe('evaluateFlag (remote)', () => {
         expect(value).toBe('variant-a')
         const flagsCalls = fetchCalls.filter((c) => c.url.includes('/flags'))
         expect(flagsCalls.length).toBeGreaterThanOrEqual(1)
+        expect(allBatchEvents()).toHaveLength(1)
+        expect(allBatchEvents()[0].event).toBe('$feature_flag_called')
+    })
+
+    test('returns the flag value when telemetry fails', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': 'variant-a' }), { '/batch': 400 })
+        const t = initConvexTest()
+
+        const value = await t.action(components.posthog.lib.evaluateFlag, {
+            key: 'test-flag',
+            distinctId: 'user-123',
+        })
+
+        expect(value).toBe('variant-a')
     })
 
     test('returns null for missing flags', async () => {
@@ -1194,5 +1215,18 @@ describe('evaluateAllFlags (remote)', () => {
             'flag-c': false,
         })
         expect(result.featureFlagPayloads).toEqual({ 'flag-a': { config: 'value' } })
+        expect(allBatchEvents()).toHaveLength(3)
+        expect(allBatchEvents().every((event) => event.event === '$feature_flag_called')).toBe(true)
+    })
+
+    test('returns all flags when telemetry fails', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'flag-a': true }), { '/batch': 400 })
+        const t = initConvexTest()
+
+        const result = await t.action(components.posthog.lib.evaluateAllFlags, {
+            distinctId: 'user-123',
+        })
+
+        expect(result.featureFlags).toEqual({ 'flag-a': true })
     })
 })

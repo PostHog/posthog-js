@@ -14,7 +14,9 @@ test.describe('ErrorTracking autocapture', () => {
     }
 
     async function checkNoException(page: BasePage, events: EventsPage) {
-        await page.close()
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+        await page.evaluate(() => window.posthog.capture('exception-negative-control'))
+        await events.waitForEvent('exception-negative-control')
         const exceptionCount = events.countByName('$exception')
         expect(exceptionCount).toEqual(0)
     }
@@ -59,7 +61,9 @@ test.describe('ErrorTracking autocapture', () => {
             })
             await posthog.init()
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.click('[data-cy-button-throws-error]')
+            expect((await nativeError).message).toBeTruthy()
             await checkNoException(page, events)
         })
 
@@ -68,7 +72,9 @@ test.describe('ErrorTracking autocapture', () => {
                 capture_exceptions: false,
             })
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.click('[data-cy-button-throws-error]')
+            expect((await nativeError).message).toBeTruthy()
             await checkNoException(page, events)
         })
 
@@ -82,9 +88,11 @@ test.describe('ErrorTracking autocapture', () => {
                 capture_exceptions: false,
             })
             await network.waitForFlags()
+            const nativeError = page.waitForEvent('pageerror')
             await page.evaluate(() => {
                 Promise.reject(new Error('An unknown error occured'))
             })
+            expect((await nativeError).message).toContain('An unknown error occured')
             await checkNoException(page, events)
         })
     })
@@ -134,9 +142,93 @@ test.describe('ErrorTracking autocapture', () => {
             const stacktrace = exception.properties.$exception_list[0].stacktrace
             expect(stacktrace).toBeUndefined()
         })
+
+        test('should preserve a cross-realm rejection origin', async ({ posthog, page, network, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                const iframe = document.createElement('iframe')
+                document.body.appendChild(iframe)
+                const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm rejection')
+                crossRealmError.stack =
+                    'TypeError: cross-realm rejection\n    at rejectionOrigin (https://example.com/rejection-origin.js:51:7)'
+                Promise.reject(crossRealmError)
+                iframe.remove()
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/rejection-origin.js',
+                    function: 'rejectionOrigin',
+                    lineno: 51,
+                    colno: 7,
+                }),
+            ])
+        })
     })
 
     test.describe('unhandled errors', () => {
+        test('should preserve a cross-realm onerror origin', async ({ posthog, network, page, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                const iframe = document.createElement('iframe')
+                document.body.appendChild(iframe)
+                const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm onerror')
+                crossRealmError.stack =
+                    'TypeError: cross-realm onerror\n    at crossRealmOrigin (https://example.com/cross-realm-origin.js:42:13)'
+                window.onerror?.(
+                    'cross-realm onerror',
+                    'https://example.com/positional-should-not-win.js',
+                    1,
+                    2,
+                    crossRealmError
+                )
+                iframe.remove()
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/cross-realm-origin.js',
+                    function: 'crossRealmOrigin',
+                    lineno: 42,
+                    colno: 13,
+                }),
+            ])
+        })
+
+        test('should use only the positional onerror location when there is no Error object', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            const message = 'error without object\n    at https://example.com/injected.js:1:2'
+            await page.evaluate((message) => {
+                window.onerror?.(message, 'https://example.com/positional-fallback.js', 73, 9)
+            }, message)
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].value).toBe(message)
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/positional-fallback.js',
+                    lineno: 73,
+                    colno: 9,
+                }),
+            ])
+        })
+
         test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
@@ -196,6 +288,169 @@ test.describe('ErrorTracking autocapture', () => {
             }
         })
 
+        test('preserves console provenance on a persisted cold start before remote config arrives', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            const config = {
+                capture_exceptions: { capture_console_errors: true },
+                strict_script_versioning: false as const,
+            }
+            await network.mockFlags({ autocaptureExceptions: true })
+            await posthog.init(config)
+            await network.waitForFlags()
+            expect(await posthog.evaluate((ph) => ph.get_property('$exception_capture_enabled_server_side'))).toBe(true)
+            await page.reloadIdle()
+            events.clear()
+
+            let releaseConfig!: () => void
+            const configReady = new Promise<void>((resolve) => {
+                releaseConfig = resolve
+            })
+            let pendingConfigRequests = 0
+            await page.route(/\/(?:array\/[^/]+\/config|flags\/|decide\/)/, async (route) => {
+                pendingConfigRequests++
+                await configReady
+                await route.fallback()
+            })
+            const consoleErrors: string[] = []
+            page.on('console', (message) => {
+                if (message.type() === 'error') {
+                    consoleErrors.push(message.text())
+                }
+            })
+            const initialized = posthog.init(config)
+            try {
+                // oxlint-disable-next-line no-console
+                await page.waitForFunction(() => (console.error as any).__POSTHOG_INSTRUMENTED__)
+                await expect.poll(() => pendingConfigRequests).toBeGreaterThan(0)
+                await posthog.evaluate((ph) => {
+                    try {
+                        throw new Error('caught cold-start error')
+                    } catch (error) {
+                        // oxlint-disable-next-line no-console
+                        console.error('customer context', error)
+                    }
+                    ph.captureException(new Error('manual cold-start error'))
+                })
+                await expect.poll(() => events.countByName('$exception')).toBe(2)
+                const exceptions = events.filterByName('$exception').map((event) => event.properties.$exception_list[0])
+                expect(exceptions).toMatchObject([
+                    {
+                        value: 'caught cold-start error',
+                        mechanism: { handled: true, type: 'onconsole', synthetic: false },
+                    },
+                    { value: 'manual cold-start error', mechanism: { handled: true, type: 'generic' } },
+                ])
+                expect(consoleErrors.filter((message) => message.includes('customer context'))).toHaveLength(1)
+            } finally {
+                releaseConfig()
+                await initialized
+            }
+        })
+
+        test('should exclude SDK console diagnostics without losing customer exceptions', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            const consoleErrors: string[] = []
+            page.on('console', (message) => {
+                if (message.type() === 'error') {
+                    consoleErrors.push(message.text())
+                }
+            })
+            await posthog.init({
+                debug: true,
+                capture_exceptions: { capture_console_errors: true },
+                error_tracking: { __capturePostHogExceptions: true },
+            })
+            await network.waitForFlags()
+            // oxlint-disable-next-line no-console
+            await page.waitForFunction(() => (console.error as any).__POSTHOG_INSTRUMENTED__)
+
+            await posthog.evaluate((ph) => {
+                for (let i = 0; i < 15; i++) {
+                    ph.identify('null')
+                    ph.capture('')
+                }
+                // oxlint-disable-next-line no-console
+                console.error('[PostHog.js] [Legacy extension]', new Error('internal failure'))
+                // oxlint-disable-next-line no-console
+                console.error('customer console error')
+                // oxlint-disable-next-line no-console
+                console.error('[PostHog.js] customer message')
+                // oxlint-disable-next-line no-console
+                console.error('rrweb logger error:')
+                ph.captureException(new Error('[PostHog.js] explicitly reported error'))
+            })
+
+            await expect.poll(() => events.countByName('$exception')).toBe(4)
+            expect(events.filterByName('$exception').map((event) => event.properties.$exception_list[0].value)).toEqual(
+                [
+                    'customer console error',
+                    '[PostHog.js] customer message',
+                    'rrweb logger error:',
+                    '[PostHog.js] explicitly reported error',
+                ]
+            )
+            expect(consoleErrors.some((message) => message.includes('[PostHog.js]'))).toBe(true)
+            expect(consoleErrors).toContain('customer console error')
+        })
+
+        test('should exclude SDK diagnostics on a persisted cold start before remote config arrives', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            const config = {
+                capture_exceptions: { capture_console_errors: true },
+                strict_script_versioning: false as const,
+                error_tracking: { __capturePostHogExceptions: true },
+            }
+            await network.mockFlags({ autocaptureExceptions: true })
+            await posthog.init(config)
+            await network.waitForFlags()
+            expect(await posthog.evaluate((ph) => ph.get_property('$exception_capture_enabled_server_side'))).toBe(true)
+            await page.reloadIdle()
+            events.clear()
+
+            let releaseConfig!: () => void
+            const configReady = new Promise<void>((resolve) => {
+                releaseConfig = resolve
+            })
+            let pendingConfigRequests = 0
+            await page.route(/\/(?:array\/[^/]+\/config|flags\/|decide\/)/, async (route) => {
+                pendingConfigRequests++
+                await configReady
+                await route.fallback()
+            })
+            const initialized = posthog.init(config)
+            try {
+                // oxlint-disable-next-line no-console
+                await page.waitForFunction(() => (console.error as any).__POSTHOG_INSTRUMENTED__)
+                await expect.poll(() => pendingConfigRequests).toBeGreaterThan(0)
+                await posthog.evaluate((ph) => {
+                    ph.identify('null')
+                    // oxlint-disable-next-line no-console
+                    console.error('[PostHog.js] [Legacy extension]', new Error('internal cold-start failure'))
+                    // oxlint-disable-next-line no-console
+                    console.error('customer cold-start error')
+                })
+                await events.waitForEvent('$exception')
+                expect(
+                    events.filterByName('$exception').map((event) => event.properties.$exception_list[0].value)
+                ).toEqual(['customer cold-start error'])
+            } finally {
+                releaseConfig()
+                await initialized
+            }
+        })
+
         test('should capture console errors', async ({ posthog, network, page, events }) => {
             await posthog.init({
                 capture_exceptions: {
@@ -206,7 +461,7 @@ test.describe('ErrorTracking autocapture', () => {
             })
             await network.waitForFlags()
             await page.evaluate(() => {
-                //eslint-disable-next-line no-console
+                //oxlint-disable-next-line no-console
                 console.error('This error should be captured with a stack')
             })
 
@@ -215,7 +470,7 @@ test.describe('ErrorTracking autocapture', () => {
             expect(first_exception.type).toBe('Error')
             expect(first_exception.value).toBe('This error should be captured with a stack')
             expect(first_exception.stacktrace).toBeDefined()
-            expect(first_exception.mechanism.handled).toBe(false)
+            expect(first_exception.mechanism).toMatchObject({ handled: true, type: 'onconsole' })
         })
     })
 })

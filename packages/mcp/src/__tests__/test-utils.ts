@@ -88,7 +88,6 @@ export class EventCapture {
  * before it ever calls `posthog.capture`, so a no-op `capture` is enough for
  * tests that assert on captured MCP events.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fakePostHog(): any {
   return {
     capture: () => undefined,

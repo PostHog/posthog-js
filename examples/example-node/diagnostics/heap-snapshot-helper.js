@@ -41,7 +41,7 @@ loadEnvFile()
 
 const CONFIG = {
     PROJECT_API_KEY: process.env.POSTHOG_PROJECT_API_KEY || '',
-    PERSONAL_API_KEY: process.env.POSTHOG_PERSONAL_API_KEY || '',
+    SECRET_KEY: process.env.POSTHOG_SECRET_KEY || '',
     HOST: process.env.POSTHOG_HOST || 'https://app.posthog.com',
     FLAG_KEY: process.env.POSTHOG_TEST_FLAG_KEY || 'beta-feature',
 }
@@ -52,7 +52,7 @@ class HeapSnapshotHelper {
         this.ensureSnapshotDir()
 
         this.posthog = new PostHog(CONFIG.PROJECT_API_KEY, {
-            personalApiKey: CONFIG.PERSONAL_API_KEY,
+            secretKey: CONFIG.SECRET_KEY,
             host: CONFIG.HOST,
             maxCacheSize: 1000,
             debug: false,
@@ -107,7 +107,7 @@ class HeapSnapshotHelper {
             snapshotDir: this.snapshotDir,
         })
 
-        if (CONFIG.PERSONAL_API_KEY) {
+        if (CONFIG.SECRET_KEY) {
             console.log('\n⏳ Waiting for local evaluation to be ready...')
             await this.posthog.waitForLocalEvaluationReady(10000)
         }
@@ -269,13 +269,13 @@ async function quickMemoryLeakRepro() {
     console.log('This will reproduce the memory leak in a simplified way for analysis')
 
     const posthog = new PostHog(CONFIG.PROJECT_API_KEY, {
-        personalApiKey: CONFIG.PERSONAL_API_KEY,
+        secretKey: CONFIG.SECRET_KEY,
         host: CONFIG.HOST,
         maxCacheSize: 1000,
         debug: false,
     })
 
-    if (CONFIG.PERSONAL_API_KEY) {
+    if (CONFIG.SECRET_KEY) {
         await posthog.waitForLocalEvaluationReady(10000)
     }
 

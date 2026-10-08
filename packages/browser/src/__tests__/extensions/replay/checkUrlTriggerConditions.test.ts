@@ -71,8 +71,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         persistedSession = null
 
         mockPostHog = createMockPostHog({
-            register_for_session: jest.fn(),
-            get_property: jest.fn((key: string) => {
+            register_for_session: vi.fn(),
+            get_property: vi.fn((key: string) => {
                 if (key === SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION) {
                     return persistedSession
                 }
@@ -185,43 +185,42 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         callCount: fc.integer({ min: 2, max: 50 }),
                     }),
                     ({ triggerUrls, blocklistUrls, currentUrl, callCount }) => {
-                        onPauseCalls = 0
-                        onResumeCalls = 0
-                        onActivateCalls = 0
-                        persistedSession = null
-                        urlTriggerMatching.urlBlocked = false
-                        // Reset URL tracking state for each property test run
-                        ;(urlTriggerMatching as any)._lastCheckedUrl = ''
+                        for (const checkedUrl of [
+                            currentUrl,
+                            triggerUrls[0].url.replace('/.*', '/page'),
+                            ...blocklistUrls.map((rule) => rule.url.replace('/.*', '/page')),
+                        ]) {
+                            onPauseCalls = 0
+                            onResumeCalls = 0
+                            onActivateCalls = 0
+                            persistedSession = null
+                            urlTriggerMatching = new URLTriggerMatching(mockPostHog)
 
-                        configureTriggers(triggerUrls, blocklistUrls)
-                        setWindowLocation(currentUrl)
+                            configureTriggers(triggerUrls, blocklistUrls)
+                            setWindowLocation(checkedUrl)
+                            const sessionId = 'session-' + checkedUrl
+                            const urlMatchesTrigger = triggerUrls.some((t) => new RegExp(t.url).test(checkedUrl))
+                            const urlMatchesBlocklist = blocklistUrls.some((b) => new RegExp(b.url).test(checkedUrl))
 
-                        const sessionId = 'session-' + currentUrl
+                            for (let i = 0; i < callCount; i++) {
+                                urlTriggerMatching.checkUrlTriggerConditions(
+                                    () => {
+                                        onPauseCalls++
+                                        urlTriggerMatching.urlBlocked = true
+                                    },
+                                    () => {
+                                        onResumeCalls++
+                                        urlTriggerMatching.urlBlocked = false
+                                    },
+                                    createActivateCallback(sessionId),
+                                    sessionId
+                                )
+                            }
 
-                        const urlMatchesTrigger = triggerUrls.some((t) => new RegExp(t.url).test(currentUrl))
-                        const urlMatchesBlocklist = blocklistUrls.some((b) => new RegExp(b.url).test(currentUrl))
-
-                        for (let i = 0; i < callCount; i++) {
-                            urlTriggerMatching.checkUrlTriggerConditions(
-                                () => {
-                                    onPauseCalls++
-                                    urlTriggerMatching.urlBlocked = true
-                                },
-                                () => {
-                                    onResumeCalls++
-                                    urlTriggerMatching.urlBlocked = false
-                                },
-                                createActivateCallback(sessionId),
-                                sessionId
-                            )
+                            expect(onActivateCalls).toBe(urlMatchesTrigger && !urlMatchesBlocklist ? 1 : 0)
+                            expect(onPauseCalls).toBe(urlMatchesBlocklist ? 1 : 0)
+                            expect(onResumeCalls).toBe(0)
                         }
-
-                        if (urlMatchesTrigger && !urlMatchesBlocklist) {
-                            return onActivateCalls === 1
-                        } else if (urlMatchesBlocklist) {
-                            return onPauseCalls >= 1
-                        }
-                        return true
                     }
                 ),
                 { numRuns: 100 }
@@ -237,22 +236,18 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         transitions: fc.array(fc.boolean(), { minLength: 1, maxLength: 20 }),
                     }),
                     ({ blockedUrl, unblockedUrl, transitions }) => {
-                        onPauseCalls = 0
-                        onResumeCalls = 0
-                        onActivateCalls = 0
-                        urlTriggerMatching.urlBlocked = false
-
+                        onPauseCalls = onResumeCalls = onActivateCalls = 0
+                        persistedSession = null
+                        urlTriggerMatching = new URLTriggerMatching(mockPostHog)
                         configureTriggers([{ url: '.*', matching: 'regex' }], [{ url: blockedUrl, matching: 'regex' }])
-
                         const sessionId = 'test-session-transitions'
-
-                        for (const shouldBlock of transitions) {
-                            const url = shouldBlock ? blockedUrl : unblockedUrl
-                            setWindowLocation(url)
-
-                            // Reset lastCheckedUrl to force the check (simulating actual URL changes)
-                            ;(urlTriggerMatching as any)._lastCheckedUrl = ''
-
+                        let blocked = false
+                        let pauses = 0
+                        let resumes = 0
+                        for (const shouldBlock of [false, true, true, false, ...transitions, true]) {
+                            if (shouldBlock && !blocked) pauses++
+                            if (!shouldBlock && blocked) resumes++
+                            setWindowLocation(shouldBlock ? blockedUrl : unblockedUrl)
                             urlTriggerMatching.checkUrlTriggerConditions(
                                 () => {
                                     onPauseCalls++
@@ -262,14 +257,15 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                                     onResumeCalls++
                                     urlTriggerMatching.urlBlocked = false
                                 },
-                                () => {
-                                    onActivateCalls++
-                                },
+                                createActivateCallback(sessionId),
                                 sessionId
                             )
+                            blocked = shouldBlock
+                            expect(onPauseCalls).toBe(pauses)
+                            expect(onResumeCalls).toBe(resumes)
+                            expect(urlTriggerMatching.urlBlocked).toBe(blocked)
+                            expect(onActivateCalls).toBe(1)
                         }
-
-                        return onPauseCalls > 0 || onResumeCalls > 0 || onActivateCalls > 0
                     }
                 ),
                 { numRuns: 100 }
@@ -386,7 +382,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             const cachedRegex = cache.get(pattern)
             expect(cachedRegex).toBeDefined()
 
-            const regexConstructorSpy = jest.spyOn(global, 'RegExp')
+            const regexConstructorSpy = vi.spyOn(global, 'RegExp')
 
             setWindowLocation('https://example.com/page')
             checkTriggers('test-session')
@@ -409,7 +405,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             expect(cache.size).toBe(1)
         })
 
-        it('handles invalid regex patterns gracefully', () => {
+        it('omits invalid trigger regex from the configuration cache', () => {
             const triggers: SessionRecordingUrlTrigger[] = [
                 { url: '[invalid(regex', matching: 'regex' },
                 { url: 'valid\\.pattern', matching: 'regex' },
@@ -422,7 +418,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             expect(cache.has('[invalid(regex')).toBe(false)
         })
 
-        it('handles invalid blocklist regex patterns gracefully', () => {
+        it('omits invalid blocklist regex from the configuration cache', () => {
             const blocklist: SessionRecordingUrlTrigger[] = [{ url: '*invalid*', matching: 'regex' }]
 
             configureTriggers([], blocklist)
@@ -438,23 +434,23 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('checks trigger conditions on first call for a URL', () => {
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             setWindowLocation('https://example.com/page1')
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'test-session')
 
             expect(onActivate).toHaveBeenCalledTimes(1)
         })
 
         it('skips checking when URL has not changed', () => {
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             const url = 'https://example.com/page1'
             setWindowLocation(url)
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'test-session')
             expect(onActivate).toHaveBeenCalledTimes(1)
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'test-session')
             expect(onActivate).toHaveBeenCalledTimes(1)
         })
 
@@ -463,21 +459,11 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             // First URL
             setWindowLocation('https://example.com/page1')
-            urlTriggerMatching.checkUrlTriggerConditions(
-                jest.fn(),
-                jest.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
             expect(onActivateCalls).toBe(1)
 
             // Same URL - should skip, so onActivate not called again
-            urlTriggerMatching.checkUrlTriggerConditions(
-                jest.fn(),
-                jest.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
             expect(onActivateCalls).toBe(1)
 
             // Verify that _lastCheckedUrl was set to page1
@@ -485,12 +471,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             // Different URL - should check again and update _lastCheckedUrl
             setWindowLocation('https://example.com/page2')
-            urlTriggerMatching.checkUrlTriggerConditions(
-                jest.fn(),
-                jest.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
 
             // Verify that _lastCheckedUrl was updated to page2
             expect((urlTriggerMatching as any)._lastCheckedUrl).toBe('https://example.com/page2')
@@ -503,9 +484,9 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             const url = 'https://example.com/page'
             setWindowLocation(url)
 
-            const onPause = jest.fn()
-            const onResume = jest.fn()
-            const onActivate = jest.fn()
+            const onPause = vi.fn()
+            const onResume = vi.fn()
+            const onActivate = vi.fn()
 
             for (let i = 0; i < 1000; i++) {
                 urlTriggerMatching.checkUrlTriggerConditions(onPause, onResume, onActivate, 'test-session')
@@ -517,16 +498,16 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         })
 
         it('resets URL tracking on stop()', () => {
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             const url = 'https://example.com/page'
             setWindowLocation(url)
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session-1')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'test-session-1')
             expect(onActivate).toHaveBeenCalledTimes(1)
 
             urlTriggerMatching.stop()
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'test-session-2')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'test-session-2')
             expect(onActivate).toHaveBeenCalledTimes(2)
         })
 
@@ -534,7 +515,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             const url = 'https://example.com/page'
             setWindowLocation(url)
 
-            urlTriggerMatching.checkUrlTriggerConditions(jest.fn(), jest.fn(), jest.fn(), 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), vi.fn(), 'test-session')
 
             const lastCheckedUrl = (urlTriggerMatching as any)._lastCheckedUrl
             expect(lastCheckedUrl).toBe(url)
@@ -548,18 +529,22 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         it('skips blocklist checks when URL has not changed', () => {
             configureTriggers([], [{ url: 'blocked\\.com', matching: 'regex' }])
 
-            const onPause = jest.fn(() => {
+            const regex = [...(urlTriggerMatching as any)._compiledBlocklistRegexes.values()][0]
+            const testSpy = vi.spyOn(regex, 'test')
+            const onPause = vi.fn(() => {
                 urlTriggerMatching.urlBlocked = true
             })
 
             setWindowLocation('https://blocked.com/page')
             urlTriggerMatching.urlBlocked = false
 
-            urlTriggerMatching.checkUrlTriggerConditions(onPause, jest.fn(), jest.fn(), 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(onPause, vi.fn(), vi.fn(), 'test-session')
             expect(onPause).toHaveBeenCalledTimes(1)
+            expect(testSpy).toHaveBeenCalledTimes(1)
 
-            urlTriggerMatching.checkUrlTriggerConditions(onPause, jest.fn(), jest.fn(), 'test-session')
+            urlTriggerMatching.checkUrlTriggerConditions(onPause, vi.fn(), vi.fn(), 'test-session')
             expect(onPause).toHaveBeenCalledTimes(1)
+            expect(testSpy).toHaveBeenCalledTimes(1)
         })
     })
 })

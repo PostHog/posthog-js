@@ -3,15 +3,24 @@ import { PostHog } from '../posthog-core'
 import { ScrollManager } from '../scroll-manager'
 import { SessionIdChangedCallback } from '../types'
 
-const mockWindowGetter = jest.fn()
-jest.mock('../utils/globals', () => ({
-    ...jest.requireActual('../utils/globals'),
+const mockWindowGetter = vi.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
     get window() {
         return mockWindowGetter()
     },
 }))
 
 describe('PageView ID manager', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.runOnlyPendingTimers()
+        vi.useRealTimers()
+    })
+
     const firstTimestamp = new Date()
     const duration = 42
     const secondTimestamp = new Date(firstTimestamp.getTime() + duration * 1000)
@@ -110,13 +119,62 @@ describe('PageView ID manager', () => {
             expect(secondPageView.$pageview_id).toEqual(pageviewId2)
         })
 
+        it('resets scroll maximums for a new pageview', () => {
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-a' },
+                scrollY: 2000,
+                document: {
+                    documentElement: {
+                        clientHeight: 1000,
+                        scrollHeight: 4000,
+                    },
+                },
+            })
+            pageViewIdManager.doPageView(firstTimestamp, pageviewId1)
+            instance.scrollManager['_updateScrollData']()
+
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-b' },
+                scrollY: 0,
+                document: {
+                    documentElement: {
+                        clientHeight: 1000,
+                        scrollHeight: 500,
+                    },
+                },
+            })
+            pageViewIdManager.doPageView(secondTimestamp, pageviewId2)
+            vi.runOnlyPendingTimers()
+
+            const pageLeave = pageViewIdManager.doPageLeave(secondTimestamp)
+            expect(pageLeave.$prev_pageview_max_scroll).toEqual(0)
+            expect(pageLeave.$prev_pageview_max_scroll_percentage).toEqual(1)
+            expect(pageLeave.$prev_pageview_max_content).toEqual(1000)
+            expect(pageLeave.$prev_pageview_max_content_percentage).toEqual(1)
+        })
+
         it('can handle scroll updates before doPageView is called', () => {
             instance.scrollManager['_updateScrollData']()
             const firstPageView = pageViewIdManager.doPageView(firstTimestamp, pageviewId1)
             expect(firstPageView.$prev_pageview_last_scroll).toBeUndefined()
 
+            vi.runOnlyPendingTimers()
             const secondPageView = pageViewIdManager.doPageView(secondTimestamp, pageviewId2)
             expect(secondPageView.$prev_pageview_last_scroll).toBeDefined()
+        })
+
+        it('can handle a scroll update after the document is unavailable', () => {
+            mockWindowGetter.mockReturnValue({})
+
+            expect(() => instance.scrollManager['_updateScrollData']()).not.toThrow()
+            expect(instance.scrollManager.getContext()).toMatchObject({
+                lastScrollY: 0,
+                maxScrollY: 0,
+                maxScrollHeight: 0,
+                lastContentY: 0,
+                maxContentY: 0,
+                maxContentHeight: 0,
+            })
         })
 
         it('should include the pathname', () => {
@@ -134,7 +192,7 @@ describe('PageView ID manager', () => {
         let sessionIdCallback: SessionIdChangedCallback
 
         beforeEach(() => {
-            const mockOnSessionId = jest.fn((callback: SessionIdChangedCallback) => {
+            const mockOnSessionId = vi.fn((callback: SessionIdChangedCallback) => {
                 sessionIdCallback = callback
                 return () => {} // unsubscribe function
             })
@@ -145,8 +203,8 @@ describe('PageView ID manager', () => {
                     onSessionId: mockOnSessionId,
                 },
                 scrollManager: {
-                    resetContext: jest.fn(),
-                    getContext: jest.fn(),
+                    resetContext: vi.fn(),
+                    getContext: vi.fn(),
                 },
             } as unknown as PostHog
 
@@ -167,6 +225,7 @@ describe('PageView ID manager', () => {
             expect(pageViewManager._currentPageview?.pathname).toBe('/page-a')
 
             // Act: Simulate session rotation due to activity timeout (30 min idle)
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('new-session-id', 'new-window-id', {
                 noSessionId: false,
                 activityTimeout: true,
@@ -175,7 +234,7 @@ describe('PageView ID manager', () => {
 
             // Assert: State should be cleared
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should clear state on session past maximum length', () => {
@@ -198,6 +257,7 @@ describe('PageView ID manager', () => {
             pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
 
             // Act: Simulate session change after posthog.reset()
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('new-session-id', 'new-window-id', {
                 noSessionId: true,
                 activityTimeout: false,
@@ -206,7 +266,7 @@ describe('PageView ID manager', () => {
 
             // Assert: State should be cleared
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should NOT clear state when changeReason is undefined (initial session)', () => {
@@ -248,6 +308,7 @@ describe('PageView ID manager', () => {
         it('should clear state when this tab adopts a sibling tab session rotation', () => {
             pageViewManager.doPageView(new Date('2024-01-01T10:00:00'), 'pv-1')
 
+            vi.mocked(instance.scrollManager.resetContext).mockClear()
             sessionIdCallback('adopted-session-id', 'window-id', {
                 noSessionId: false,
                 activityTimeout: false,
@@ -256,17 +317,17 @@ describe('PageView ID manager', () => {
             })
 
             expect(pageViewManager._currentPageview).toBeUndefined()
-            expect(instance.scrollManager.resetContext).toHaveBeenCalled()
+            expect(instance.scrollManager.resetContext).toHaveBeenCalledTimes(1)
         })
 
         it('should cleanup subscription on destroy', () => {
-            const unsubscribe = jest.fn()
-            const mockOnSessionId = jest.fn(() => unsubscribe)
+            const unsubscribe = vi.fn()
+            const mockOnSessionId = vi.fn(() => unsubscribe)
 
             instance = {
                 config: {},
                 sessionManager: { onSessionId: mockOnSessionId },
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             pageViewManager = new PageViewManager(instance)
@@ -280,7 +341,7 @@ describe('PageView ID manager', () => {
             instance = {
                 config: {},
                 sessionManager: undefined,
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             // Should not throw
@@ -299,13 +360,13 @@ describe('PageView ID manager', () => {
         })
 
         it('should handle destroy being called multiple times', () => {
-            const unsubscribe = jest.fn()
-            const mockOnSessionId = jest.fn(() => unsubscribe)
+            const unsubscribe = vi.fn()
+            const mockOnSessionId = vi.fn(() => unsubscribe)
 
             instance = {
                 config: {},
                 sessionManager: { onSessionId: mockOnSessionId },
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             pageViewManager = new PageViewManager(instance)

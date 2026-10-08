@@ -5,7 +5,8 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     --ph-survey-box-padding: 20px 24px;
     --ph-survey-max-width: 300px;
-    --ph-survey-z-index: 2147483645; /* Z_INDEX_SURVEYS from constants.ts */
+    /* Split to avoid precision loss when Lightning CSS minifies large custom-property numbers. */
+    --ph-survey-z-index: calc(2147480000 + 3645); /* Z_INDEX_SURVEYS from constants.ts */
     --ph-survey-border-color: #dcdcdc;
     --ph-survey-border-bottom: 1.5px solid var(--ph-survey-border-color);
     --ph-survey-border-radius: 10px;
@@ -198,12 +199,14 @@
     gap: 8px;
 }
 
-.thank-you-message-header ~ .bottom-section {
+.thank-you-message-header ~ .bottom-section,
+.intro-screen-header ~ .bottom-section {
     padding-top: 16px;
 }
 
 .question-container,
-.thank-you-message {
+.thank-you-message,
+.intro-screen {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -223,7 +226,8 @@
 
 /* --- Constrain user-supplied HTML content --- */
 .survey-question-description,
-.thank-you-message-body {
+.thank-you-message-body,
+.intro-screen-body {
     word-wrap: break-word;
     overflow-wrap: break-word;
 
@@ -253,7 +257,8 @@
 }
 
 .survey-form,
-.thank-you-message {
+.thank-you-message,
+.intro-screen {
     position: relative;
     text-align: left;
     width: 100%;
@@ -667,6 +672,21 @@
 }
 
 .thank-you-message-body {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* --- Intro Screen --- */
+.intro-screen {
+    text-align: center;
+    animation: ph-survey-fade-in 0.3s ease-out forwards;
+}
+
+.intro-screen-header {
+    margin: 10px 0 0;
+}
+
+.intro-screen-body {
     font-size: 14px;
     opacity: 0.8;
 }

@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`getChangedState correctness tests should handle Redux-style state changes 1`] = `
+exports[`getChangedState > correctness tests > should handle 'Redux-style state changes' 1`] = `
 {
   "todos": [
     {
@@ -28,13 +28,13 @@ exports[`getChangedState correctness tests should handle Redux-style state chang
 }
 `;
 
-exports[`getChangedState correctness tests should handle added keys 1`] = `
+exports[`getChangedState > correctness tests > should handle 'added keys' 1`] = `
 {
   "c": 3,
 }
 `;
 
-exports[`getChangedState correctness tests should handle arrays as primitive values 1`] = `
+exports[`getChangedState > correctness tests > should handle 'arrays as primitive values' 1`] = `
 {
   "list": [
     1,
@@ -45,13 +45,13 @@ exports[`getChangedState correctness tests should handle arrays as primitive val
 }
 `;
 
-exports[`getChangedState correctness tests should handle changed keys 1`] = `
+exports[`getChangedState > correctness tests > should handle 'changed keys' 1`] = `
 {
   "b": 5,
 }
 `;
 
-exports[`getChangedState correctness tests should handle deeply nested changes within depth limit 1`] = `
+exports[`getChangedState > correctness tests > should handle 'deeply nested changes within depth li…' 1`] = `
 {
   "level1": {
     "level2": {
@@ -63,7 +63,7 @@ exports[`getChangedState correctness tests should handle deeply nested changes w
 }
 `;
 
-exports[`getChangedState correctness tests should handle depth limit respected 1`] = `
+exports[`getChangedState > correctness tests > should handle 'depth limit respected' 1`] = `
 {
   "l1": {
     "l2": "max depth reached, checking for changed value",
@@ -71,15 +71,15 @@ exports[`getChangedState correctness tests should handle depth limit respected 1
 }
 `;
 
-exports[`getChangedState correctness tests should handle empty objects 1`] = `
+exports[`getChangedState > correctness tests > should handle 'empty objects' 1`] = `
 {
   "a": 1,
 }
 `;
 
-exports[`getChangedState correctness tests should handle identical states 1`] = `{}`;
+exports[`getChangedState > correctness tests > should handle 'identical states' 1`] = `{}`;
 
-exports[`getChangedState correctness tests should handle mixed data types 1`] = `
+exports[`getChangedState > correctness tests > should handle 'mixed data types' 1`] = `
 {
   "array": [
     4,
@@ -96,7 +96,7 @@ exports[`getChangedState correctness tests should handle mixed data types 1`] = 
 }
 `;
 
-exports[`getChangedState correctness tests should handle nested object changes 1`] = `
+exports[`getChangedState > correctness tests > should handle 'nested object changes' 1`] = `
 {
   "settings": {
     "theme": "light",
@@ -107,7 +107,7 @@ exports[`getChangedState correctness tests should handle nested object changes 1
 }
 `;
 
-exports[`getChangedState correctness tests should handle null and undefined values 1`] = `
+exports[`getChangedState > correctness tests > should handle 'null and undefined values' 1`] = `
 {
   "a": "changed",
   "b": "defined",
@@ -115,14 +115,14 @@ exports[`getChangedState correctness tests should handle null and undefined valu
 }
 `;
 
-exports[`getChangedState correctness tests should handle number vs boolean (non-object input) 1`] = `{}`;
+exports[`getChangedState > correctness tests > should handle 'number vs boolean (non-object input)' 1`] = `{}`;
 
-exports[`getChangedState correctness tests should handle object vs null (non-object input) 1`] = `{}`;
+exports[`getChangedState > correctness tests > should handle 'object vs null (non-object input)' 1`] = `{}`;
 
-exports[`getChangedState correctness tests should handle removed keys 1`] = `
+exports[`getChangedState > correctness tests > should handle 'removed keys' 1`] = `
 {
   "c": 3,
 }
 `;
 
-exports[`getChangedState correctness tests should handle string vs object (non-object input) 1`] = `{}`;
+exports[`getChangedState > correctness tests > should handle 'string vs object (non-object input)' 1`] = `{}`;

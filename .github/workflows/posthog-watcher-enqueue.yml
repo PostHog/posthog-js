@@ -12,11 +12,7 @@ on:
     pull_request_review_comment:
         types: [created]
 
-permissions:
-    contents: write # write queue.json to the state branch
-    issues: read
-    pull-requests: read
-    actions: write # dispatch the drain workflow immediately after enqueueing
+permissions: {}
 
 concurrency:
     group: posthog-watcher-enqueue-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -24,13 +20,32 @@ concurrency:
 
 jobs:
     enqueue:
-        if: ${{ github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event.pull_request.head.repo.full_name == github.repository }}
+        permissions:
+            contents: write # write queue.json to the state branch
+            issues: read
+            pull-requests: read
+            actions: write # dispatch the drain workflow immediately after enqueueing
+        if: >-
+            ${{
+              github.event_name == 'issues' ||
+              (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@posthog-watcher')) ||
+              (
+                github.event.pull_request.head.repo.full_name == github.repository &&
+                startsWith(github.event.pull_request.head.ref, 'posthog-watcher/') &&
+                (github.event_name != 'pull_request_review' || github.event.review.state == 'commented' || github.event.review.state == 'changes_requested')
+              )
+            }}
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Audit runner egress
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                egress-policy: audit
+
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Enqueue watcher event
-              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
+              uses: PostHog/posthog-watcher-action@1c47c46c8cd9647f6c146bb56fd436ae45387279
               with:
                   mode: enqueue
                   trigger-drain-workflow: 'true'

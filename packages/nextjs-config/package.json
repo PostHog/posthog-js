@@ -1,10 +1,10 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.9.68",
+  "version": "1.11.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
-  "description": "NextJS configuration helper for Posthog 🦔",
+  "description": "NextJS configuration helper for Posthog \ud83e\udd94",
   "repository": {
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js.git",
@@ -19,12 +19,13 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "check-types": "tsc --noEmit --project tsconfig.build.json",
     "prepublishOnly": "pnpm lint && pnpm build",
     "clean": "rimraf dist",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
-    "test:unit": "jest --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
@@ -46,9 +47,9 @@
   "license": "MIT",
   "dependencies": {
     "@posthog/cli": "catalog:",
-    "semver": "^7.7.2",
     "@posthog/plugin-utils": "workspace:^",
-    "@posthog/webpack-plugin": "workspace:^"
+    "@posthog/webpack-plugin": "workspace:^",
+    "semver": "^7.8.5"
   },
   "keywords": [
     "posthog",
@@ -59,11 +60,10 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
-    "@types/semver": "^7.7.0",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
-    "next": "^15.5.7",
-    "ts-jest": "catalog:"
+    "@types/semver": "^7.7.1",
+    "next": "^15.5.22",
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   },
   "peerDependencies": {
     "next": ">12.1.0"

@@ -1,21 +1,20 @@
 import * as React from 'react'
-import { renderHook, act } from '@testing-library/react'
+import type { Mock } from 'vitest'
+import { render, renderHook, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { useThumbSurvey } from '../useThumbSurvey'
 import { SurveyEventName, SurveyEventProperties } from 'posthog-js'
 import { isUndefined } from '../../utils/type-utils'
 
-jest.useFakeTimers()
-
 describe('useThumbSurvey hook', () => {
     let posthog: PostHog
-    let captureMock: jest.Mock
-    let displaySurveyMock: jest.Mock
+    let captureMock: Mock
+    let displaySurveyMock: Mock
     let wrapper: React.FC<{ children: React.ReactNode }>
 
     beforeEach(() => {
-        captureMock = jest.fn()
-        displaySurveyMock = jest.fn()
+        captureMock = vi.fn()
+        displaySurveyMock = vi.fn()
 
         posthog = {
             capture: captureMock,
@@ -39,6 +38,12 @@ describe('useThumbSurvey hook', () => {
                 )
 
                 expect(captureMock).toHaveBeenCalledTimes(shouldAutoTrack ? 1 : 0)
+                if (shouldAutoTrack) {
+                    expect(captureMock).toHaveBeenCalledWith(SurveyEventName.SHOWN, {
+                        [SurveyEventProperties.SURVEY_ID]: 'test-survey',
+                        sessionRecordingUrl: 'https://app.posthog.com/replay/123',
+                    })
+                }
                 expect(!isUndefined(result.current.trackShown)).toBe(shouldExposeTrackShown)
             }
         )
@@ -92,7 +97,7 @@ describe('useThumbSurvey hook', () => {
         })
 
         it('should call onResponse callback', () => {
-            const onResponse = jest.fn()
+            const onResponse = vi.fn()
             const { result } = renderHook(() => useThumbSurvey({ surveyId: 'test-survey', onResponse }), { wrapper })
 
             act(() => {
@@ -100,6 +105,35 @@ describe('useThumbSurvey hook', () => {
             })
 
             expect(onResponse).toHaveBeenCalledWith('down')
+        })
+    })
+
+    describe('across separately bundled entrypoints', () => {
+        afterEach(() => {
+            vi.resetModules()
+        })
+
+        it('lets a hook from one module copy read the client from a provider in another', async () => {
+            vi.resetModules()
+            const providerCopy = await vi.importActual<typeof import('../../context')>('../../context')
+            vi.resetModules()
+            const hookCopy = await vi.importActual<typeof import('../useThumbSurvey')>('../useThumbSurvey')
+
+            const client = { capture: vi.fn(), surveys: { displaySurvey: vi.fn() } } as unknown as PostHog
+            let respond: (value: 'up' | 'down') => void = () => {}
+            function ThumbSurvey() {
+                respond = hookCopy.useThumbSurvey({ surveyId: 'survey-id' }).respond
+                return null
+            }
+            render(
+                <providerCopy.PostHogProvider client={client}>
+                    <ThumbSurvey />
+                </providerCopy.PostHogProvider>
+            )
+            act(() => respond('up'))
+
+            expect(client.capture).toHaveBeenCalledWith(SurveyEventName.SHOWN, expect.anything())
+            expect(client.surveys.displaySurvey).toHaveBeenCalledTimes(1)
         })
     })
 })

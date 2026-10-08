@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { HeadObjectCommand, PutObjectCommand, S3Client, type PutObjectCommandInput } from '@aws-sdk/client-s3'
 
 let cachedClient: S3Client | null = null
 
@@ -51,6 +51,27 @@ export async function s3ObjectExists(bucket: string, key: string): Promise<boole
     }
 }
 
+export function createPutObjectInput(
+    bucket: string,
+    key: string,
+    filePath: string,
+    options: {
+        contentType?: string
+        cacheControl?: string
+        ifNoneMatch?: string
+    } = {}
+): PutObjectCommandInput {
+    return {
+        Bucket: bucket,
+        Key: key,
+        Body: fs.createReadStream(filePath),
+        ContentType: options.contentType,
+        CacheControl: options.cacheControl,
+        IfNoneMatch: options.ifNoneMatch,
+        Tagging: 'public=true',
+    }
+}
+
 export async function putS3ObjectFromFile(
     bucket: string,
     key: string,
@@ -58,16 +79,8 @@ export async function putS3ObjectFromFile(
     options: {
         contentType?: string
         cacheControl?: string
+        ifNoneMatch?: string
     } = {}
 ): Promise<void> {
-    await getS3Client().send(
-        new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: fs.createReadStream(filePath),
-            ContentType: options.contentType,
-            CacheControl: options.cacheControl,
-            Tagging: 'public=true',
-        })
-    )
+    await getS3Client().send(new PutObjectCommand(createPutObjectInput(bucket, key, filePath, options)))
 }

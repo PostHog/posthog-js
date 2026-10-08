@@ -1,0 +1,5 @@
+node_modules/
+ios/build/
+ios/*.xcworkspace/
+ios/Pods/
+*.log

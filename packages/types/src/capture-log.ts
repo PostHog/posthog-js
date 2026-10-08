@@ -79,10 +79,17 @@ export interface Logger {
 
 export interface OtlpAnyValue {
     stringValue?: string
-    intValue?: number
+    /**
+     * proto3 JSON maps int64 to a string, which is the form the SDK emits.
+     * `number` stays valid because encoded records persist in the logs queue:
+     * one written by an earlier version rehydrates in the numeric form and is
+     * re-sent unchanged. The wire format accepts both.
+     */
+    intValue?: string | number
     doubleValue?: number
     boolValue?: boolean
     arrayValue?: { values: OtlpAnyValue[] }
+    kvlistValue?: { values: OtlpKeyValue[] }
 }
 
 export interface OtlpKeyValue {

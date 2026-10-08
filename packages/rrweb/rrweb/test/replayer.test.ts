@@ -23,16 +23,35 @@ import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
 import shadowDomEvents from './events/shadow-dom';
+import shadowDomRefusedHostEvents from './events/shadow-dom-refused-host';
 import badTextareaEvents from './events/bad-textarea';
 import badStyleEvents from './events/bad-style';
 import StyleSheetTextMutation from './events/style-sheet-text-mutation';
 import canvasInIframe from './events/canvas-in-iframe';
 import adoptedStyleSheet from './events/adopted-style-sheet';
+import adoptedStyleSheetBeforeShadowRoot from './events/adopted-style-sheet-before-shadow-root';
+import adoptedStyleSheetShadowHostReadd, {
+  eventsWithClearWhileDetached,
+} from './events/adopted-style-sheet-shadow-host-readd';
+import adoptedStyleSheetStaleRetry from './events/adopted-style-sheet-stale-retry';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
-import { ReplayerEvents } from '@posthog/rrweb-types';
+import hugeAddMutationEvents from './events/huge-add-mutation';
+import hugeAddMutationDialogEvents from './events/huge-add-mutation-dialog';
+import hugeAddCssomRulesEvents, {
+  HEAD_ID,
+  DIV_ID,
+} from './events/huge-add-cssom-rules';
+import svgXlinkHrefEvents from './events/svg-xlink-href';
+import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
+import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
+import {
+  EventType,
+  IncrementalSource,
+  ReplayerEvents,
+} from '@posthog/rrweb-types';
 
 interface ISuite {
   code: string;
@@ -164,6 +183,74 @@ describe('replayer', function () {
     expect(currentState).toEqual('paused');
   });
 
+  it('applies the full snapshot when pausing exactly at its timestamp', async () => {
+    const eventsWithLaterResize = [
+      ...styleSheetRuleEvents,
+      {
+        type: EventType.IncrementalSnapshot,
+        data: {
+          source: IncrementalSource.ViewportResize,
+          width: 1200,
+          height: 900,
+        },
+        timestamp: styleSheetRuleEvents[0].timestamp + 1400,
+      },
+    ].sort((a, b) => a.timestamp - b.timestamp);
+    await page.evaluate(`events = ${JSON.stringify(eventsWithLaterResize)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events);
+        const fullSnapshot = events.find((event) => event.type === 2);
+        const fullSnapshotOffset = fullSnapshot.timestamp - events[0].timestamp;
+        const frameSize = () => ({
+          width: replayer.iframe.getAttribute('width'),
+          height: replayer.iframe.getAttribute('height'),
+        });
+
+        replayer.pause(1500);
+        const laterFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        const laterFrameSize = frameSize();
+
+        replayer.pause(fullSnapshotOffset);
+        const snapshotFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        const snapshotFrameSize = frameSize();
+
+        return { laterFrameHasJss, laterFrameSize, snapshotFrameHasJss, snapshotFrameSize };
+      })()
+    `);
+
+    expect(result).toEqual({
+      laterFrameHasJss: true,
+      laterFrameSize: { width: '1200', height: '900' },
+      snapshotFrameHasJss: false,
+      snapshotFrameSize: { width: '1000', height: '800' },
+    });
+  });
+
+  for (const useVirtualDom of [true, false]) {
+    it(`replaces a re-added node instead of duplicating it (virtual dom: ${useVirtualDom})`, async () => {
+      await page.evaluate(
+        `events = ${JSON.stringify(readdNodeSubtreeSwapEvents)}`,
+      );
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(600);
+        const container = replayer.iframe.contentDocument.getElementById('container');
+        ({
+          childElementCount: container.childElementCount,
+          childClasses: [...container.children].map((c) => c.className),
+        });
+      `);
+
+      expect(result).toEqual({
+        childElementCount: 1,
+        childClasses: ['b'],
+      });
+    });
+  }
+
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const actionLength = await page.evaluate(`
@@ -255,6 +342,47 @@ describe('replayer', function () {
 
     await assertDomSnapshot(page);
   });
+
+  for (const useVirtualDom of [true, false]) {
+    it(`keeps a stylesheet attached when late CSS text replaces it (virtual dom: ${useVirtualDom})`, async () => {
+      const eventsWithLateCssText = [
+        ...styleSheetRuleEvents,
+        {
+          type: EventType.IncrementalSnapshot,
+          data: {
+            source: IncrementalSource.Mutation,
+            adds: [],
+            removes: [],
+            texts: [],
+            attributes: [
+              {
+                id: 101,
+                attributes: { _cssText: 'a { color: rgb(1, 2, 3); }' },
+              },
+            ],
+          },
+          timestamp: styleSheetRuleEvents[0].timestamp + 3200,
+        },
+      ];
+      await page.evaluate(`events = ${JSON.stringify(eventsWithLateCssText)}`);
+
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(3500);
+        const doc = replayer.iframe.contentDocument;
+        ({
+          stylesheetCount: doc.querySelectorAll('style[data-meta^="from full-snapshot"]').length,
+          linkColor: replayer.iframe.contentWindow.getComputedStyle(doc.querySelector('a')).color,
+        });
+      `);
+
+      expect(result).toEqual({
+        stylesheetCount: 1,
+        linkColor: 'rgb(1, 2, 3)',
+      });
+    });
+  }
 
   it('should delete fast forwarded StyleSheetRules that where removed', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
@@ -798,6 +926,27 @@ describe('replayer', function () {
     ).toEqual('shadow dom two');
   });
 
+  // Guards both the appendNode call site here and the isShadowHost one in
+  // rrweb-snapshot's buildNodeWithSN; removing either fails this test.
+  it('keeps applying a mutation batch when the shadow host is refused', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(shadowDomRefusedHostEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(1050);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval('video', (element) => element.shadowRoot),
+    ).toBeNull();
+    expect(
+      await contentDocument!.evaluate(
+        () => document.querySelector('#after-refused-host')?.textContent,
+      ),
+    ).toEqual('still applied');
+  });
+
   it('can fast-forward mutation events containing painted canvas in iframe', async () => {
     await page.evaluate(`
       events = ${JSON.stringify(canvasInIframe)};
@@ -858,14 +1007,110 @@ describe('replayer', function () {
     expect(status).toEqual(false);
   });
 
+  it('applies a huge add mutation with sibling order intact', async () => {
+    await page.evaluate(`events = ${JSON.stringify(hugeAddMutationEvents)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const div = doc.querySelector('#root');
+        const children = Array.from(div.children);
+        return {
+          childCount: children.length,
+          first: children[0].textContent,
+          last: children[children.length - 1].textContent,
+          styleAfterA: children[1].textContent,
+          lastOfBatch1: children[1100].textContent,
+          firstOfBatch2: children[1101].textContent,
+          lastOfBatch2: children[1700].textContent,
+          bodyOrder: Array.from(doc.body.children).map(
+            (el) => el.id || el.tagName,
+          ),
+        };
+      })()
+    `);
+    expect(result).toEqual({
+      // A + 1100 batch-1 styles + 600 batch-2 styles + B
+      childCount: 1702,
+      first: 'A',
+      last: 'B',
+      styleAfterA: '.m1c0 { color: red; }',
+      lastOfBatch1: '.m1c1099 { color: red; }',
+      firstOfBatch2: '.m2c0 { color: red; }',
+      lastOfBatch2: '.m2c599 { color: red; }',
+      // the sibling-of-root add must land between #root and #d-span
+      bodyOrder: ['root', 'c-span', 'd-span'],
+    });
+  });
+
+  it.each([
+    ['<head>', HEAD_ID],
+    ['a body <div>', DIV_ID],
+  ])(
+    'keeps CSSOM rules when a huge add batch lands in %s',
+    async (_, batchParentId) => {
+      await page.evaluate(
+        `events = ${JSON.stringify(hugeAddCssomRulesEvents(batchParentId))}`,
+      );
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const rules = (id) =>
+          Array.from(doc.getElementById(id).sheet.cssRules, (r) => r.cssText);
+        return {
+          metaCount: doc.getElementsByTagName('meta').length,
+          head: rules('head-style').map((r) => r.split(' ')[0]),
+          div: rules('div-style'),
+          paddingLeft: getComputedStyle(doc.getElementById('padded'))
+            .paddingLeft,
+        };
+      })()
+    `);
+      expect(result).toEqual({
+        metaCount: 1100,
+        head: ['.from-6', '.padded'],
+        div: ['.from-11 { color: red; }'],
+        paddingLeft: '7px',
+      });
+    },
+  );
+
+  it('opens a modal dialog added inside a huge add mutation', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(hugeAddMutationDialogEvents)}`,
+    );
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: false });
+        replayer.pause(200);
+        const doc = replayer.iframe.contentDocument;
+        const dialog = doc.querySelector('dialog');
+        return {
+          open: dialog.open,
+          isModal: dialog.matches('dialog:modal'),
+        };
+      })()
+    `);
+    expect(result).toEqual({ open: true, isModal: true });
+  });
+
   it('replays same timestamp events in correct order', async () => {
     await page.evaluate(`events = ${JSON.stringify(orderingEvents)}`);
-    await page.evaluate(`
-      const { Replayer } = rrweb;
-      const replayer = new Replayer(events);
-      replayer.play();
-    `);
-    await page.waitForTimeout(50);
+    await page.evaluate((finishEvent) => {
+      const win = window as IWindow;
+      const replayer = new win.rrweb.Replayer(win.events);
+      // A loaded runner may not deliver the first frame within 50 ms.
+      return new Promise<void>((resolve) => {
+        replayer.on(finishEvent, () => resolve());
+        replayer.play();
+      });
+    }, ReplayerEvents.Finish);
 
     await assertDomSnapshot(page);
   });
@@ -882,6 +1127,43 @@ describe('replayer', function () {
     await page.waitForTimeout(50);
 
     await assertDomSnapshot(page);
+  });
+
+  it('applies xlink:href attribute mutations with their namespace', async () => {
+    await page.evaluate(`events = ${JSON.stringify(svgXlinkHrefEvents)}`);
+    await page.evaluate(`
+      const { Replayer } = rrweb;
+      const replayer = new Replayer(events);
+      replayer.play();
+    `);
+    await page.waitForTimeout(200);
+
+    const href = await page.evaluate(`
+      replayer.iframe.contentDocument
+        .querySelector('use')
+        .getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    `);
+    expect(href).toBe('#icon-b');
+  });
+
+  it('keeps autocomplete="off" on inputs when a mutation changes the attribute', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(inputAutocompleteMutationEvents)}`,
+    );
+    await page.evaluate(`
+      const { Replayer } = rrweb;
+      const replayer = new Replayer(events);
+      replayer.play();
+    `);
+    await page.waitForTimeout(200);
+
+    const autocompletes = await page.evaluate(`
+      [
+        replayer.iframe.contentDocument.querySelector('input').getAttribute('autocomplete'),
+        replayer.iframe.contentDocument.querySelector('textarea').getAttribute('autocomplete'),
+      ]
+    `);
+    expect(autocompletes).toEqual(['off', 'off']);
   });
 
   it('should destroy the replayer after calling destroy()', async () => {
@@ -970,6 +1252,154 @@ describe('replayer', function () {
     await waitForRAF(page);
     await page.evaluate('replayer.pause(600);');
     await checkCorrectness();
+  });
+
+  it('can replay adopted stylesheet events that arrive before the shadow root is attached', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetBeforeShadowRoot)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    // the retry loop in applyAdoptedStyleSheet needs a few real timer ticks
+    // after the shadow-attaching mutation (at 20ms) has been applied
+    await page.waitForTimeout(1000);
+
+    const state = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'late-shadow-host',
+      ) as HTMLElement;
+      const anchor = host.shadowRoot!.querySelector('a')!;
+      return {
+        adoptedSheetCount: host.shadowRoot!.adoptedStyleSheets.length,
+        ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+          (s) => s.cssRules.length,
+        ),
+        anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+      };
+    });
+    expect(state.adoptedSheetCount).toBe(1);
+    expect(state.ruleCounts).toEqual([3]);
+    expect(state.anchorColor).toBe('rgb(255, 0, 0)');
+  });
+
+  it('re-adopts stylesheets when a shadow host is removed and re-added without a new AdoptedStyleSheet event', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetShadowHostReadd)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    await page.waitForTimeout(1000);
+
+    const checkCorrectness = async () => {
+      const state = await page.evaluate(() => {
+        const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+        const host = iframe.contentDocument!.querySelector(
+          'late-shadow-host',
+        ) as HTMLElement;
+        const anchor = host.shadowRoot!.querySelector('a')!;
+        return {
+          adoptedSheetCount: host.shadowRoot!.adoptedStyleSheets.length,
+          ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+            (s) => s.cssRules.length,
+          ),
+          anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+        };
+      });
+      expect(state.adoptedSheetCount).toBe(1);
+      expect(state.ruleCounts).toEqual([3]);
+      expect(state.anchorColor).toBe('rgb(255, 0, 0)');
+    };
+    await checkCorrectness();
+
+    // fast-forward mode: the re-add mutation is applied to the virtual dom
+    await page.evaluate('replayer.play(0);');
+    await waitForRAF(page);
+    await page.evaluate('replayer.pause(600);');
+    await checkCorrectness();
+  });
+
+  it('does not re-adopt sheets that were cleared while the host was detached', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(eventsWithClearWhileDetached)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    await page.waitForTimeout(1000);
+
+    const checkCorrectness = async () => {
+      const adoptedSheetCount = await page.evaluate(() => {
+        const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+        const host = iframe.contentDocument!.querySelector(
+          'late-shadow-host',
+        ) as HTMLElement;
+        return host.shadowRoot!.adoptedStyleSheets.length;
+      });
+      expect(adoptedSheetCount).toBe(0);
+    };
+    await checkCorrectness();
+
+    await page.evaluate('replayer.play(0);');
+    await waitForRAF(page);
+    await page.evaluate('replayer.pause(600);');
+    await checkCorrectness();
+  });
+
+  it('adopts stylesheets when playback pauses past the retry window before the shadow root attaches', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetBeforeShadowRoot)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(115);
+    `);
+    // sit between the AdoptedStyleSheet event (offset 110) and the
+    // shadow-attaching mutation (offset 120) until the wall-clock retry
+    // budget (~4.5s) is exhausted
+    await page.waitForTimeout(5000);
+    await page.evaluate('replayer.play(115);');
+    await page.waitForTimeout(500);
+
+    const adoptedSheetCount = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'late-shadow-host',
+      ) as HTMLElement;
+      return host.shadowRoot!.adoptedStyleSheets.length;
+    });
+    expect(adoptedSheetCount).toBe(1);
+  });
+
+  it('does not let a stale adoption retry overwrite a newer stylesheet list', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetStaleRetry)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    // wait past the first event's last surviving retry (~1610ms), which
+    // without the token guard re-adopts the stale stylesheet list
+    await page.waitForTimeout(2500);
+
+    const state = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'late-shadow-host',
+      ) as HTMLElement;
+      const anchor = host.shadowRoot!.querySelector('a')!;
+      return {
+        ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+          (s) => s.cssRules.length,
+        ),
+        anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+      };
+    });
+    // the second AdoptedStyleSheet event (2 rules, blue anchor) must win over
+    // the first (3 rules, red anchor)
+    expect(state.ruleCounts).toEqual([2]);
+    expect(state.anchorColor).toBe('rgb(0, 0, 255)');
   });
 
   it('can replay modification events for adoptedStyleSheet', async () => {
@@ -1274,5 +1704,231 @@ describe('replayer', function () {
 `);
     const newColor = 'rgb(255, 255, 0)'; // yellow
     expect(changedColors).toEqual([newColor, newColor]);
+  });
+
+  describe('seekYieldBudgetMs', () => {
+    // a sub-millisecond budget forces the smallest possible chunks, so the
+    // rebuild exercises the yielding path even on small fixtures
+    const TINY_BUDGET = 0.0001;
+
+    it('ends a chunked pause(t) in the same state as a synchronous one', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            currentTime: replayer.getCurrentTime(),
+            state: replayer['service']['state']['value'],
+            actionLength: replayer['timer']['actions'].length,
+            timerOffset: replayer['timer']['timeOffset'],
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        currentTime: 2500,
+        state: 'paused',
+        actionLength: 0,
+        timerOffset: 0,
+      });
+    });
+
+    it('renders the same DOM as a synchronous seek', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [chunkedHtml, syncHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const chunked = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          chunked.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const sync = new Replayer(events);
+          sync.pause(1500);
+          return [
+            chunked.iframe.contentDocument.documentElement.outerHTML,
+            sync.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(chunkedHtml).toEqual(syncHtml);
+    });
+
+    it('a rapid second seek supersedes the in-flight rebuild', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [scrubbedHtml, directHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const scrubbed = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          scrubbed.pause(2600);
+          scrubbed.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const direct = new Replayer(events);
+          direct.pause(1500);
+          return [
+            scrubbed.iframe.contentDocument.documentElement.outerHTML,
+            direct.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(scrubbedHtml).toEqual(directHtml);
+    });
+
+    it('starts playback once a chunked play(t) rebuild completes', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.play(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'playing', timerActive: true });
+    });
+
+    it('destroy() during a chunked rebuild cancels it cleanly', async () => {
+      const errors = await page.evaluate(`
+        (async () => {
+          const errs = [];
+          window.addEventListener('error', (e) => errs.push(String(e.message)));
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          replayer.destroy();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return errs;
+        })()
+      `);
+      expect(errors).toEqual([]);
+    });
+
+    it('Finish fires only after a chunked seek to the end has fully applied', async () => {
+      const order = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          const order = [];
+          replayer.on('flush', () => order.push('flush'));
+          replayer.on('finish', () => order.push('finish'));
+          replayer.pause(replayer.getMetaData().totalTime + 100);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          return order;
+        })()
+      `);
+      expect(order).toContain('flush');
+      expect(order).toContain('finish');
+      expect(order.indexOf('finish')).toBeGreaterThan(order.indexOf('flush'));
+    });
+
+    it('going live after a mutation chunk commits the frame and live mutations reach the iframe', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          // Browser clock precision can let the entire seek finish between polls,
+          // even with a tiny budget. Force each event to exhaust its chunk budget.
+          const originalNow = performance.now;
+          let tick = originalNow.call(performance);
+          performance.now = () => ++tick;
+          try {
+            replayer.pause(2600);
+            await new Promise((resolve, reject) => {
+              const startedAt = Date.now();
+              const poll = () => {
+                if (replayer.usingVirtualDom) return resolve();
+                if (Date.now() - startedAt > 2000)
+                  return reject(new Error('virtual dom never engaged'));
+                setTimeout(poll, 1);
+              };
+              poll();
+            });
+          } finally {
+            performance.now = originalNow;
+          }
+          const baseline = Date.now();
+          replayer.startLive(baseline);
+          // cancelling the rebuild must commit and drain the virtual dom —
+          // otherwise every live mutation writes to a detached tree
+          const virtualDomDrained = replayer.usingVirtualDom === false;
+          const bodyId = replayer.getMirror().getId(replayer.iframe.contentDocument.body);
+          replayer.addEvent({
+            type: 3, // IncrementalSnapshot
+            data: {
+              source: 0, // Mutation
+              texts: [],
+              attributes: [{ id: bodyId, attributes: { 'data-live': 'yes' } }],
+              removes: [],
+              adds: [],
+            },
+            timestamp: baseline + 20,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            virtualDomDrained,
+            liveMutationApplied:
+              replayer.iframe.contentDocument.body.getAttribute('data-live') === 'yes',
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        virtualDomDrained: true,
+        liveMutationApplied: true,
+      });
+    });
+
+    it('going live during a chunked play(t) rebuild reaches live with a working timer', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.play(1500);
+          replayer.startLive();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'live', timerActive: true });
+    });
+
+    it('going live during a chunked rebuild cancels it and leaves the live timer alone', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.pause(2600);
+          // the rebuild's leftover chunks must stop once we're live — they
+          // would interleave stale seek-time events with live DOM writes
+          let castsAfterLive = 0;
+          replayer.on('event-cast', () => castsAfterLive++);
+          replayer.startLive();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+            castsAfterLive,
+            rebuildFlagCleared: replayer['seekRebuildInFlight'] === false,
+            lastPlayedReset:
+              replayer['service']['state']['context']['lastPlayedEvent'] ===
+              null,
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        state: 'live',
+        timerActive: true,
+        castsAfterLive: 0,
+        rebuildFlagCleared: true,
+        lastPlayedReset: true,
+      });
+    });
   });
 });

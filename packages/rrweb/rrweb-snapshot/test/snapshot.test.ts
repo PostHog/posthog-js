@@ -32,6 +32,42 @@ const serializeNode = (node: Node): serializedNodeWithId | null => {
   });
 };
 
+describe('iframe load listener cleanup', () => {
+  it('should not throw when iframe removeEventListener is missing', () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const mirror = new Mirror();
+    let disposer: (() => void) | undefined;
+
+    serializeNodeWithId(iframe, {
+      doc: document,
+      mirror,
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onIframeListenerRegistered: (_iframeNode, iframeDisposer) => {
+        disposer = iframeDisposer;
+      },
+    });
+
+    Object.defineProperty(iframe, 'removeEventListener', {
+      configurable: true,
+      value: undefined,
+    });
+
+    expect(disposer).toBeDefined();
+    expect(() => disposer?.()).not.toThrow();
+
+    document.body.removeChild(iframe);
+  });
+});
+
 describe('absolute url to stylesheet', () => {
   const href = 'http://localhost/css/style.css';
 
@@ -251,6 +287,191 @@ describe('form', () => {
   });
 });
 
+describe('attribute masking', () => {
+  type AttributeMaskingOptions = {
+    maskAllElementAttributes?: boolean;
+    newlyAddedElement?: boolean;
+    maskAttributeFn?: (
+      name: string,
+      value: string,
+      element: Element,
+    ) => string;
+  };
+
+  const serializeElement = (
+    el: Element,
+    opts: AttributeMaskingOptions,
+  ): elementNode =>
+    serializeNodeWithId(el, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      ...opts,
+    }) as elementNode;
+
+  const serializeWith = (
+    html: string,
+    selector: string,
+    opts: AttributeMaskingOptions,
+  ): elementNode => {
+    document.write(html);
+    return serializeElement(document.querySelector(selector)!, opts);
+  };
+
+  it('leaves attributes untouched by default', () => {
+    const sn = serializeWith(
+      `<div id="d1" class="c1" aria-label="Jane Doe" title="secret"></div>`,
+      'div',
+      {},
+    );
+    expect(sn.attributes['aria-label']).toBe('Jane Doe');
+    expect(sn.attributes.title).toBe('secret');
+  });
+
+  it('maskAllElementAttributes masks PII-bearing rendering and form attributes', () => {
+    const sn = serializeWith(
+      `<input id="user@example.com" class="account-user@example.com" style="--user: user@example.com" src="/avatar/user@example.com" value="user@example.com" type="text" rr_width="user@example.com" />`,
+      'input',
+      { maskAllElementAttributes: true },
+    );
+    for (const name of [
+      'id',
+      'class',
+      'style',
+      'src',
+      'value',
+      'type',
+      'rr_width',
+    ]) {
+      expect(sn.attributes[name]).toMatch(/^\*+$/);
+    }
+    expect(Object.values(sn.attributes).join(' ')).not.toContain(
+      'user@example.com',
+    );
+  });
+
+  it('masks the synthesized live input value after form serialization', () => {
+    document.write(`<input value="stale" />`);
+    const input = document.querySelector('input')!;
+    input.value = 'alice@example.com';
+    const maskAttributeFn = vi.fn((name: string, value: string) =>
+      name === 'value' ? '[VALUE-MASKED]' : value,
+    );
+    const sn = serializeElement(input, { maskAttributeFn });
+    expect(sn.attributes.value).toBe('[VALUE-MASKED]');
+    expect(maskAttributeFn).toHaveBeenCalledWith(
+      'value',
+      'alice@example.com',
+      input,
+    );
+  });
+
+  it.each([
+    ['full snapshots', false],
+    ['newly added nodes', true],
+  ])(
+    'masks source rr_open_mode on closed dialogs in %s',
+    (_path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toMatch(/^\*+$/);
+      expect(sn.attributes.rr_open_mode).not.toContain('alice@example.com');
+    },
+  );
+
+  it.each([
+    ['modal', 'full snapshots', false],
+    ['non-modal', 'full snapshots', false],
+    ['modal', 'newly added nodes', true],
+    ['non-modal', 'newly added nodes', true],
+  ] as const)(
+    'preserves generated %s dialog mode in %s',
+    (openMode, _path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+      vi.spyOn(dialog, 'matches').mockReturnValue(openMode === 'modal');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toBe(openMode);
+    },
+  );
+
+  it('ignores maskAttributeFn when maskAllElementAttributes is set', () => {
+    const maskAttributeFn = vi.fn((name: string, value: string) =>
+      name === 'aria-label' ? 'REDACTED' : value,
+    );
+    const sn = serializeWith(
+      `<div aria-label="Jane Doe" title="visible"></div>`,
+      'div',
+      { maskAllElementAttributes: true, maskAttributeFn },
+    );
+    // the options are mutually exclusive and the coarse one fails closed, so
+    // the callback cannot unmask what maskAllElementAttributes hides
+    expect(sn.attributes['aria-label']).toMatch(/^\*+$/);
+    expect(sn.attributes.title).toMatch(/^\*+$/);
+    expect(maskAttributeFn).not.toHaveBeenCalled();
+  });
+
+  it('passes SVG and namespaced attributes with an Element to the callback', () => {
+    const sn = serializeWith(
+      `<svg><use xlink:href="/sprites.svg#user@example.com" data-owner="user@example.com"></use></svg>`,
+      'use',
+      {
+        maskAttributeFn: (name, _value, element) =>
+          `[${element.namespaceURI}:${name}]`,
+      },
+    );
+    expect(sn.attributes['xlink:href']).toBe(
+      '[http://www.w3.org/2000/svg:xlink:href]',
+    );
+    expect(sn.attributes['data-owner']).toBe(
+      '[http://www.w3.org/2000/svg:data-owner]',
+    );
+  });
+
+  it('masks an inaccessible iframe source under its final rr_src key', () => {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('src', '/frame?email=alice@example.com');
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      value: null,
+    });
+    const maskAttributeFn = vi.fn((name: string) => `[${name}-MASKED]`);
+    const sn = serializeElement(iframe, { maskAttributeFn });
+    expect(sn.attributes.src).toBeUndefined();
+    expect(sn.attributes.rr_src).toBe('[rr_src-MASKED]');
+    expect(maskAttributeFn).toHaveBeenCalledWith(
+      'rr_src',
+      expect.stringContaining('alice@example.com'),
+      iframe,
+    );
+    expect(maskAttributeFn).not.toHaveBeenCalledWith(
+      'src',
+      expect.anything(),
+      iframe,
+    );
+  });
+});
+
 describe('blocked elements with CSS transforms', () => {
   const renderWithStyle = (html: string, styles: string): HTMLElement => {
     const styleEl = document.createElement('style');
@@ -466,6 +687,165 @@ describe('jsdom snapshot', () => {
     expect(sn).toMatchObject({
       type: 0,
     });
+  });
+});
+
+describe('canvas rr_dataURL with a configured canvas mask provider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const serializeCanvas = (
+    canvas: HTMLCanvasElement,
+    canvasMaskingConfigured: (() => boolean) | undefined,
+  ): elementNode =>
+    serializeNodeWithId(canvas, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      recordCanvas: true,
+      canvasMaskingConfigured,
+    }) as elementNode;
+
+  const make2dCanvas = () => {
+    const canvas = document.createElement('canvas');
+    (canvas as { __context?: string }).__context = '2d';
+    // a non-transparent pixel so is2DCanvasBlank sees a painted canvas
+    const getImageData = vi.fn(() => ({
+      data: new Uint8ClampedArray([255, 0, 0, 255]),
+    }));
+    const getContext = vi.fn(() => ({ getImageData }));
+    canvas.getContext = getContext as unknown as typeof canvas.getContext;
+    const toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+    canvas.toDataURL = toDataURL;
+    return { canvas, getContext, toDataURL };
+  };
+
+  it('serializes an observed 2d canvas when no provider is configured', () => {
+    const { canvas, toDataURL } = make2dCanvas();
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+    expect(toDataURL).toHaveBeenCalled();
+  });
+
+  it('never reads pixels from an observed 2d canvas when a provider is configured', () => {
+    const { canvas, getContext, toDataURL } = make2dCanvas();
+
+    const sn = serializeCanvas(canvas, () => true);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(getContext).not.toHaveBeenCalled();
+    expect(toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('honors a provider that appears between two serializations', () => {
+    let configured = false;
+    const thunk = () => configured;
+
+    const first = make2dCanvas();
+    const firstSn = serializeCanvas(first.canvas, thunk);
+    expect(firstSn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+
+    configured = true;
+    const second = make2dCanvas();
+    const secondSn = serializeCanvas(second.canvas, thunk);
+    expect(secondSn.attributes.rr_dataURL).toBeUndefined();
+    expect(second.toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('serializes an unobserved-context canvas when no provider is configured', () => {
+    // the blank comparison canvas created inside the serializer falls back to
+    // this prototype stub (jsdom has no real toDataURL)
+    const prototypeToDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/webp;base64,blank');
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+    expect(prototypeToDataURL).toHaveBeenCalled();
+  });
+
+  it('serializes a tainted 2d canvas without its pixels instead of throwing', () => {
+    // a cross-origin draw taints the canvas, and the browser then refuses both
+    // the blank check and the read
+    const canvas = document.createElement('canvas');
+    (canvas as { __context?: string }).__context = '2d';
+    const taint = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    canvas.getContext = (() => ({
+      getImageData: taint,
+    })) as unknown as typeof canvas.getContext;
+    canvas.toDataURL = taint;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    // the node still serializes, so the full snapshot survives
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(sn.tagName).toBe('canvas');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('logs a non-SecurityError canvas failure every time instead of blaming taint', () => {
+    // a different failure must still reach the console even after the tainted
+    // warning has fired once for this module
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new TypeError('unrelated toDataURL failure');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    serializeCanvas(canvas, () => false);
+    serializeCanvas(canvas, () => false);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).not.toMatch(/cross-origin/);
+    expect(warn.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    warn.mockRestore();
+  });
+
+  it('serializes a tainted unobserved-context canvas without its pixels', () => {
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = () => {
+      throw new DOMException('tainted canvas', 'SecurityError');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(sn.tagName).toBe('canvas');
+    warn.mockRestore();
+  });
+
+  it('never reads pixels from an unobserved-context canvas when a provider is configured', () => {
+    const prototypeToDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/webp;base64,blank');
+    const canvas = document.createElement('canvas');
+    const toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+    canvas.toDataURL = toDataURL;
+
+    const sn = serializeCanvas(canvas, () => true);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(toDataURL).not.toHaveBeenCalled();
+    expect(prototypeToDataURL).not.toHaveBeenCalled();
   });
 });
 

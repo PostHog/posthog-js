@@ -5,6 +5,16 @@ function makeLargeBase64(sizeInChars = 12_000): string {
   return `${'A'.repeat(sizeInChars - 1)}=`
 }
 
+function makeLargeBase64Url(sizeInBytes = 9_000): string {
+  return Buffer.from(Array.from({ length: sizeInBytes }, (_, index) => index % 256)).toString('base64url')
+}
+
+function makeLargeBase64DataUrl(sizeInChars = 12_000, lineEnding?: '\n' | '\r\n'): string {
+  const payload = makeLargeBase64(sizeInChars)
+  const encodedPayload = lineEnding ? payload.match(/.{1,76}/g)!.join(lineEnding) : payload
+  return `data:image/png;base64,${encodedPayload}`
+}
+
 function makeLargeNonBase64(sizeInChars = 12_000): string {
   return 'Hello, world! This is NOT base64. '.repeat(Math.ceil(sizeInChars / 34))
 }
@@ -109,10 +119,14 @@ describe('sanitizeEvent - response content blocks', () => {
     expect(result.response.content[0]).toEqual(textResource)
   })
 
-  it('should redact unknown content types with type name in message', () => {
+  it.each([
+    ['video', 'video'],
+    ['phc_123456789012345678901234567890', '[redacted]'],
+    [makeLargeBase64(), '[binary data redacted - not supported by PostHog MCP analytics]'],
+  ])('should redact unknown content types with type name in message (case %#)', (type, shownType) => {
     const event = makeEvent({
       response: {
-        content: [{ type: 'video', data: 'somestuff', mimeType: 'video/mp4' }],
+        content: [{ type, data: 'somestuff', mimeType: 'video/mp4' }],
       },
     })
 
@@ -120,7 +134,7 @@ describe('sanitizeEvent - response content blocks', () => {
 
     expect(result.response.content[0]).toEqual({
       type: 'text',
-      text: '[unsupported content type "video" redacted - not supported by PostHog MCP analytics]',
+      text: `[unsupported content type "${shownType}" redacted - not supported by PostHog MCP analytics]`,
     })
   })
 
@@ -195,6 +209,45 @@ describe('sanitizeEvent - response content blocks', () => {
     })
   })
 
+  it.each([
+    [
+      'plain boundary',
+      'https://example.test/?value=%70hx_123456789012345678901234567890&token=x',
+      'https://example.test/?value=%5Bredacted%5D&token=%5Bredacted%5D',
+    ],
+    ['only field', 'https://e.test/?v=%70hx_123456789012345678901234567890', 'https://e.test/?v=%5Bredacted%5D'],
+    [
+      'after an encoded slash',
+      'https://e.test/?v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/?v=x%2F%5Bredacted%5D',
+    ],
+    [
+      'after an encoded comma',
+      'https://e.test/?v=a,%70hx_123456789012345678901234567890',
+      'https://e.test/?v=a%2C%5Bredacted%5D',
+    ],
+    [
+      'in a nested URL',
+      'https://e.test/?u=https://x.test/%70hx_123456789012345678901234567890',
+      'https://e.test/?u=https%3A%2F%2Fx.test%2F%5Bredacted%5D',
+    ],
+    ['as a key', 'https://e.test/?%70hx_123456789012345678901234567890=1', 'https://e.test/?%5Bredacted%5D=1'],
+    [
+      'in the host',
+      'https://u:p@%70hx_123456789012345678901234567890.example.com/',
+      'https://%5Bredacted%5D@[redacted].example.com/',
+    ],
+    [
+      'in a fragment',
+      'https://e.test/#v=x/%70hx_123456789012345678901234567890',
+      'https://e.test/#v=x%2F%5Bredacted%5D',
+    ],
+  ])('should redact PostHog tokens exposed by URL field decoding (%s)', (_, text, expected) => {
+    const event = makeEvent({ response: { content: [{ type: 'text', text }] } })
+
+    expect(sanitizeEvent(event).response.content[0].text).toBe(expected)
+  })
+
   it('should handle null and undefined response without error', () => {
     const resultNull = sanitizeEvent(makeEvent({ response: null }))
     const resultUndef = sanitizeEvent(makeEvent({ response: undefined }))
@@ -231,6 +284,82 @@ describe('sanitizeEvent - parameter scanning', () => {
     const result = sanitizeEvent(event)
 
     expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact large base64url strings (>10KB)', () => {
+    const largeBase64Url = makeLargeBase64Url()
+
+    const event = makeEvent({
+      parameters: { imageData: largeBase64Url },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact valid low-entropy base64url strings', () => {
+    const largeBase64Url = Buffer.alloc(9_000, 0xff).toString('base64url')
+
+    const event = makeEvent({
+      parameters: { imageData: largeBase64Url },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact large base64 data URLs (>10KB)', () => {
+    const largeDataUrl = makeLargeBase64DataUrl()
+
+    const event = makeEvent({
+      parameters: { imageData: largeDataUrl },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+  ] as const)('should redact large base64 data URLs with %s-wrapped payloads', (_name, lineEnding) => {
+    const wrappedDataUrl = makeLargeBase64DataUrl(12_000, lineEnding)
+
+    const event = makeEvent({
+      parameters: { imageData: wrappedDataUrl },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact large base64 data URLs with percent-encoded payload characters', () => {
+    const payload = Buffer.from(Array.from({ length: 9_000 }, (_, index) => index % 256)).toString('base64')
+    const encodedPayload = payload.replace(/[+/=]/g, (character) => `%${character.charCodeAt(0).toString(16)}`)
+    const dataUrl = `data:application/octet-stream;base64,${encodedPayload}`
+
+    const result = sanitizeEvent(makeEvent({ parameters: { dataUrl } }))
+
+    expect(result.parameters.dataUrl).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should leave long non-base64 data URLs and CRLF-wrapped ordinary text unchanged', () => {
+    const dataUrlWithoutBase64 = `data:text/plain,${'ordinary text payload!'.repeat(600)}`
+    const invalidBase64DataUrl = `data:text/plain;base64,${'ordinary text payload!'.repeat(600)}`
+    const malformedDataUrl = `data:application/octet-stream;base64,${'AAAA%ZZ'.repeat(1_500)}`
+    const ordinaryText = `${'This is ordinary prose, not encoded data. '.repeat(150)}\r\n${'More ordinary prose. '.repeat(300)}`
+
+    const event = makeEvent({
+      parameters: { dataUrlWithoutBase64, invalidBase64DataUrl, malformedDataUrl, ordinaryText },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters).toEqual({ dataUrlWithoutBase64, invalidBase64DataUrl, malformedDataUrl, ordinaryText })
   })
 
   it('should leave large non-base64 strings unchanged', () => {
@@ -326,6 +455,133 @@ describe('sanitizeEvent - parameter scanning', () => {
 
     expect(resultNull.parameters).toBeNull()
     expect(resultUndef.parameters).toBeUndefined()
+  })
+})
+
+describe('sanitizeEvent - exception values', () => {
+  it('should redact PostHog tokens from every exception value without mutating the original', () => {
+    const event = makeEvent({
+      isError: true,
+      error: {
+        $exception_list: [
+          {
+            type: 'Error',
+            value: 'Project token phc_123456789012345678901234567890',
+            mechanism: { type: 'generic', handled: true },
+          },
+          {
+            type: 'Error',
+            value: 'Personal token phx_abcdefghijklmnopqrstuvwxyz1234',
+            mechanism: { type: 'generic', handled: true },
+          },
+        ],
+        $exception_level: 'error',
+      },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.error?.$exception_list.map((exception) => exception.value)).toEqual([
+      'Project token [redacted]',
+      'Personal token [redacted]',
+    ])
+    expect(event.error?.$exception_list[0].value).toContain('phc_')
+  })
+})
+
+describe('sanitizeEvent - resource name', () => {
+  // `$identify` names its request the same way a read does, so gating redaction
+  // on the read event type used to publish the raw address alongside the person.
+  it.each(['mcp:resources/read', 'identify', '$exception'])(
+    'redacts credentials from a %s resource name',
+    (eventType) => {
+      const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
+
+      expect(sanitizeEvent(event).resourceName).toBe('https://%5Bredacted%5D@example.com/guide')
+    }
+  )
+})
+
+describe('sanitizeEvent - intent PII redaction', () => {
+  it('redacts structured PII from the agent-narrated intent', () => {
+    const event = makeEvent({
+      userIntent: 'Looking up orders for jane.doe@acme.com and calling +1 (415) 555-0142 about a refund.',
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Looking up orders for [redacted] and calling [redacted] about a refund.')
+  })
+
+  it('composes PII redaction with PostHog token redaction on the intent', () => {
+    const event = makeEvent({
+      userIntent: 'Rotating token phc_123456789012345678901234567890 for user carol@example.org.',
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Rotating token [redacted] for user [redacted].')
+  })
+
+  it('redacts PII carried inside a URL the intent narrates', () => {
+    // PII has to be stripped before the URL rewrite: rewriting percent-encodes
+    // the `@` the email pattern anchors on, and `alice%40example.com` would ship.
+    const event = makeEvent({
+      userIntent: 'Open https://example.com/?email=alice@example.com&token=fakesecret',
+    })
+
+    const intent = sanitizeEvent(event).userIntent as string
+
+    expect(intent).not.toContain('alice@example.com')
+    expect(intent).not.toContain('fakesecret')
+    // The host is not PII and stays, so the intent is still readable.
+    expect(intent).toContain('example.com')
+  })
+
+  it('redacts a PostHog token whose shape a PII pattern would otherwise split', () => {
+    // The phone pattern matches the `-415-555-0142-` run inside this token. Run
+    // before the credential pass it would replace just that, leaving the two
+    // halves of the token behind.
+    const event = makeEvent({ userIntent: 'Rotating phx_AAAAAAAA-415-555-0142-AAAAAAAAAAAAAAAAAAAA' })
+
+    expect(sanitizeEvent(event).userIntent).toBe('Rotating [redacted]')
+  })
+
+  it('stubs a base64 blob narrated as the intent rather than PII-splicing it apart', () => {
+    // A Luhn-valid run inside the blob is enough for the card pass to splice
+    // `[redacted]` into it; the base64 detector would then reject it and the
+    // whole blob would be captured. The size gate has to read the raw value.
+    const blob = `${'AAAA/'.repeat(2_052)}4111111111111111/AAA`
+
+    expect(sanitizeEvent(makeEvent({ userIntent: blob })).userIntent).toBe(
+      '[binary data redacted - not supported by PostHog MCP analytics]'
+    )
+  })
+
+  it('does not redact the same PII shapes from structured parameters or responses', () => {
+    const event = makeEvent({
+      userIntent: 'Enriching the profile for dave@example.com from the CRM.',
+      parameters: { email: 'dave@example.com', ip: '203.0.113.42' },
+      response: { content: [{ type: 'text', text: 'Matched dave@example.com at 203.0.113.42.' }] },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Enriching the profile for [redacted] from the CRM.')
+    // Structured tool data keeps the same shapes: they are often legitimate here.
+    expect(result.parameters).toEqual({ email: 'dave@example.com', ip: '203.0.113.42' })
+    expect((result.response as { content: { text: string }[] }).content[0].text).toBe(
+      'Matched dave@example.com at 203.0.113.42.'
+    )
+  })
+
+  it('does not mutate the original intent string', () => {
+    const original = 'Paging on-call about ticket from user@example.com right now.'
+    const event = makeEvent({ userIntent: original })
+
+    sanitizeEvent(event)
+
+    expect(event.userIntent).toBe(original)
   })
 })
 

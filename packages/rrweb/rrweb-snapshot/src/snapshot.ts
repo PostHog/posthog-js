@@ -3,6 +3,7 @@ import type {
   SlimDOMOptions,
   MaskTextFn,
   MaskInputFn,
+  MaskAttributeFn,
   KeepIframeSrcFn,
   ICanvas,
   DialogAttributes,
@@ -23,6 +24,7 @@ import {
   isElement,
   isShadowRoot,
   maskInputValue,
+  maskAttributeValue,
   isNativeShadowDom,
   stringifyStylesheet,
   hasEmptyShorthandLonghand,
@@ -32,8 +34,17 @@ import {
   checkDataURLSize,
   recompressBase64Image,
   absolutifyURLs,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
+import {
+  beginSnapshotCostTracking,
+  countSerializedNode,
+  deferStylesheetLink,
+  endSnapshotCostTracking,
+  runNonDeferrableStylesheetWork,
+  shouldDeferStylesheetInlining,
+} from './snapshot-cost';
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
@@ -44,7 +55,7 @@ export function genId(): number {
   return _id++;
 }
 
-function getValidTagName(element: HTMLElement): Lowercase<string> {
+function getValidTagName(element: Element): Lowercase<string> {
   if (element instanceof HTMLFormElement) {
     return 'form';
   }
@@ -64,9 +75,29 @@ function getValidTagName(element: HTMLElement): Lowercase<string> {
 let canvasService: HTMLCanvasElement | null;
 let canvasCtx: CanvasRenderingContext2D | null;
 
-// eslint-disable-next-line no-control-regex
+// a tainted canvas fails on every snapshot, so warn once rather than on each one
+let taintedCanvasWarned = false;
+function warnCanvasUnreadable(error: unknown): void {
+  // only a cross-origin taint throws SecurityError. Anything else is unexpected,
+  // so log it every time like the img inline path does, rather than blaming taint
+  if ((error as { name?: string } | null)?.name !== 'SecurityError') {
+    console.warn(
+      'Cannot read canvas pixels, so this canvas is left out of the recording.',
+      error,
+    );
+    return;
+  }
+  if (taintedCanvasWarned) return;
+  taintedCanvasWarned = true;
+  console.warn(
+    'Cannot read canvas pixels, so this canvas is left out of the recording. A cross-origin image or video drawn into it taints it.',
+    error,
+  );
+}
+
+// oxlint-disable-next-line no-control-regex
 const SRCSET_NOT_SPACES = /^[^ \t\n\r\u000c]+/; // Don't use \s, to avoid matching non-breaking space
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SRCSET_COMMAS_OR_SPACES = /^[, \t\n\r\u000c]+/;
 
 function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
@@ -96,7 +127,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
   }
 
   const output = [];
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     collectCharacters(SRCSET_COMMAS_OR_SPACES);
     if (pos >= attributeValue.length) {
@@ -114,7 +144,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
       let descriptorsStr = '';
       url = absoluteToDoc(doc, url);
       let inParens = false;
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const c = attributeValue.charAt(pos);
         if (c === '') {
@@ -189,7 +218,7 @@ export function transformAttribute(
   tagName: Lowercase<string>,
   name: Lowercase<string>,
   value: string | null,
-  element?: HTMLElement,
+  element?: Element,
   dataURLOptions?: DataURLOptions,
 ): string | null {
   if (!value) {
@@ -257,16 +286,31 @@ export function transformAttribute(
 }
 
 export function ignoreAttribute(
-  tagName: string,
+  tagName: Lowercase<string>,
   name: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _value: unknown,
 ): boolean {
-  return (tagName === 'video' || tagName === 'audio') && name === 'autoplay';
+  return (
+    (tagName === 'video' || tagName === 'audio') &&
+    toLowerCase(name) === 'autoplay'
+  );
+}
+
+/**
+ * Whether a `<link>`'s `rel` marks it as a stylesheet, matching `rel` as the
+ * space-separated, ASCII-case-insensitive token list it is. The distinction
+ * matters because `<link rel=preload as=style>` carries the same URL as the
+ * stylesheet it preloads while applying no CSS of its own.
+ */
+function isStylesheetLink(rel: unknown): boolean {
+  if (typeof rel !== 'string') {
+    return false;
+  }
+  return toLowerCase(rel).split(/\s+/).includes('stylesheet');
 }
 
 export function _isBlockedElement(
-  element: HTMLElement,
+  element: Element,
   blockClass: string | RegExp,
   blockSelector: string | null,
 ): boolean {
@@ -360,6 +404,16 @@ export function needMaskingText(
 // Returns a disposer that removes the load listener and clears any pending
 // timer — call it if the iframe is detached before the listener fires.
 // https://stackoverflow.com/a/36155560
+function removeEventListenerSafely(
+  target: Pick<EventTarget, 'removeEventListener'>,
+  type: string,
+  listener: EventListenerOrEventListenerObject,
+): void {
+  const removeEventListener = target.removeEventListener;
+  if (typeof removeEventListener !== 'function') return;
+  removeEventListener.call(target, type, listener);
+}
+
 function onceIframeLoaded(
   iframeEl: HTMLIFrameElement,
   listener: () => unknown,
@@ -391,7 +445,7 @@ function onceIframeLoaded(
         clearTimeout(timer);
         timer = null;
       }
-      iframeEl.removeEventListener('load', onInitialLoad);
+      removeEventListenerSafely(iframeEl, 'load', onInitialLoad);
       iframeEl.addEventListener('load', onSubsequentLoad);
       listener();
     };
@@ -404,10 +458,10 @@ function onceIframeLoaded(
         timer = null;
       }
       if (fired) {
-        iframeEl.removeEventListener('load', onSubsequentLoad);
+        removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
       } else {
         fired = true;
-        iframeEl.removeEventListener('load', onInitialLoad);
+        removeEventListenerSafely(iframeEl, 'load', onInitialLoad);
       }
     };
   }
@@ -433,13 +487,13 @@ function onceIframeLoaded(
     iframeEl.addEventListener('load', onSubsequentLoad);
     return () => {
       clearTimeout(initialTimer);
-      iframeEl.removeEventListener('load', onSubsequentLoad);
+      removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
     };
   }
   // Transient blank during navigation — wait for the real load.
   iframeEl.addEventListener('load', onSubsequentLoad);
   return () => {
-    iframeEl.removeEventListener('load', onSubsequentLoad);
+    removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
   };
 }
 
@@ -503,9 +557,12 @@ function serializeNode(
     maskInputOptions: MaskInputOptions;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes: boolean;
+    maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -523,9 +580,12 @@ function serializeNode(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
   } = options;
@@ -554,16 +614,19 @@ function serializeNode(
         rootId,
       };
     case n.ELEMENT_NODE:
-      return serializeElementNode(n as HTMLElement, {
+      return serializeElementNode(n as Element, {
         doc,
         blockClass,
         blockSelector,
         inlineStylesheet,
         maskInputOptions,
         maskInputFn,
+        maskAllElementAttributes,
+        maskAttributeFn,
         dataURLOptions,
         inlineImages,
         recordCanvas,
+        canvasMaskingConfigured,
         keepIframeSrcFn,
         newlyAddedElement,
         rootId,
@@ -623,6 +686,12 @@ function serializeTextNode(
         // We can't read all of the sheet's .cssRules and expect them
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
+      } else if (
+        shouldDeferStylesheetInlining((parent as HTMLStyleElement).sheet)
+      ) {
+        // Budget spent - keep the raw textContent, which is what we already fall
+        // back to for sheets we can't read. Costs us `@import` expansion and the
+        // browser's rule normalisation, not the CSS itself.
       } else if ((parent as HTMLStyleElement).sheet?.cssRules) {
         const stringified = stringifyStylesheet(
           (parent as HTMLStyleElement).sheet!,
@@ -643,7 +712,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    text = SCRIPT_PLACEHOLDER;
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn
@@ -676,7 +745,7 @@ function hrefFrom(n: unknown): string | undefined {
 }
 
 function serializeElementNode(
-  n: HTMLElement,
+  n: Element,
   options: {
     doc: Document;
     blockClass: string | RegExp;
@@ -684,9 +753,12 @@ function serializeElementNode(
     inlineStylesheet: boolean;
     maskInputOptions: MaskInputOptions;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes: boolean;
+    maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -702,15 +774,19 @@ function serializeElementNode(
     inlineStylesheet,
     maskInputOptions = {},
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
     rootId,
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
   const tagName = getValidTagName(n);
+  const generatedAttributeNames = new Set<string>();
   let attributes: attributes = {};
   const len = n.attributes.length;
   for (let i = 0; i < len; i++) {
@@ -727,7 +803,18 @@ function serializeElementNode(
     }
   }
   // remote css
-  if (tagName === 'link' && inlineStylesheet) {
+  // a blocked link is serialized as a dimensions-only placeholder, so reading its
+  // sheet would be wasted work - and deferring it would leak CSS the block excluded
+  if (
+    tagName === 'link' &&
+    inlineStylesheet &&
+    !needBlock &&
+    // Only a real stylesheet link. `preload`/`prefetch` links carry the URL of
+    // a sheet without applying it, so the href lookup below happily resolves
+    // them to the loaded sheet - and then the whole stylesheet is inlined twice
+    // into the snapshot, once on an element the replayer must leave alone.
+    isStylesheetLink(attributes.rel)
+  ) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -745,7 +832,14 @@ function serializeElementNode(
     }
     let cssText: string | null = null;
     if (stylesheet) {
-      cssText = stringifyStylesheet(stylesheet);
+      if (shouldDeferStylesheetInlining(stylesheet)) {
+        // This snapshot has already spent its stylesheet budget. Leave `rel`/`href`
+        // in place so the replayer can still load the sheet remotely, and hand the
+        // element to the caller to inline off the critical path.
+        deferStylesheetLink(n as HTMLLinkElement);
+      } else {
+        cssText = stringifyStylesheet(stylesheet);
+      }
     }
     if (cssText) {
       delete attributes.rel;
@@ -758,10 +852,12 @@ function serializeElementNode(
     tagName === 'style' &&
     (n as HTMLStyleElement).sheet &&
     // TODO: Currently we only try to get dynamic stylesheet when it is an empty style element
-    !(n.innerText || dom.textContent(n) || '').trim().length
+    !((n as HTMLElement).innerText || dom.textContent(n) || '').trim().length
   ) {
-    const cssText = stringifyStylesheet(
-      (n as HTMLStyleElement).sheet as CSSStyleSheet,
+    // a CSSOM-only sheet has no href or textContent fallback, so it can never
+    // be deferred; its rules must not charge the budget either
+    const cssText = runNonDeferrableStylesheetWork(() =>
+      stringifyStylesheet((n as HTMLStyleElement).sheet as CSSStyleSheet),
     );
     if (cssText) {
       attributes._cssText = cssText;
@@ -779,8 +875,8 @@ function serializeElementNode(
       value
     ) {
       attributes.value = maskInputValue({
-        element: n,
-        type: getInputType(n),
+        element: n as HTMLElement,
+        type: getInputType(n as HTMLElement),
         tagName,
         value,
         maskInputOptions,
@@ -815,41 +911,54 @@ function serializeElementNode(
       attributes.rr_open_mode = 'modal';
       attributes.ph_rr_could_not_detect_modal = true;
     }
+    generatedAttributeNames.add('rr_open_mode');
   }
 
   // canvas image data
-  if (tagName === 'canvas' && recordCanvas) {
-    if ((n as ICanvas).__context === '2d') {
-      // only record this on 2d canvas
-      if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
-        attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+  // when a canvas mask provider is configured, canvas pixels only ever reach
+  // the payload through the masked frame stream — serializing them here would
+  // bypass the masking
+  if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured?.()) {
+    // `toDataURL` throws a SecurityError on a canvas the page tainted with a
+    // cross-origin draw. This runs inside the full-snapshot serialize pass, so
+    // an escaping throw costs the whole recording: no FullSnapshot event is
+    // emitted and no observer is ever attached. Drop the canvas instead.
+    try {
+      if ((n as ICanvas).__context === '2d') {
+        // only record this on 2d canvas
+        if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
+          attributes.rr_dataURL = (n as HTMLCanvasElement).toDataURL(
+            dataURLOptions.type,
+            dataURLOptions.quality,
+          );
+        }
+      } else if (!('__context' in n)) {
+        // context is unknown, better not call getContext to trigger it
+        const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
-      }
-    } else if (!('__context' in n)) {
-      // context is unknown, better not call getContext to trigger it
-      const canvasDataURL = (n as HTMLCanvasElement).toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
 
-      // create blank canvas of same dimensions
-      const blankCanvas = doc.createElement('canvas');
-      blankCanvas.width = (n as HTMLCanvasElement).width;
-      blankCanvas.height = (n as HTMLCanvasElement).height;
-      const blankCanvasDataURL = blankCanvas.toDataURL(
-        dataURLOptions.type,
-        dataURLOptions.quality,
-      );
+        // create blank canvas of same dimensions
+        const blankCanvas = doc.createElement('canvas');
+        blankCanvas.width = (n as HTMLCanvasElement).width;
+        blankCanvas.height = (n as HTMLCanvasElement).height;
+        const blankCanvasDataURL = blankCanvas.toDataURL(
+          dataURLOptions.type,
+          dataURLOptions.quality,
+        );
 
-      // no need to save dataURL if it's the same as blank canvas
-      if (canvasDataURL !== blankCanvasDataURL) {
-        attributes.rr_dataURL = canvasDataURL;
+        // no need to save dataURL if it's the same as blank canvas
+        if (canvasDataURL !== blankCanvasDataURL) {
+          attributes.rr_dataURL = canvasDataURL;
+        }
       }
+    } catch (err) {
+      warnCanvasUnreadable(err);
     }
   }
   // save image offline
+  let serializationComplete = false;
   if (tagName === 'img' && inlineImages) {
     if (!canvasService) {
       canvasService = doc.createElement('canvas');
@@ -859,16 +968,29 @@ function serializeElementNode(
     const imageSrc: string =
       image.currentSrc || image.getAttribute('src') || '<unknown-src>';
     const priorCrossOrigin = image.crossOrigin;
+    // recordInlineImage can fire after the masking pass at the end of this
+    // function, in which case the values it assigns must be masked here.
+    const maskLateAttribute = (name: string, value: string) =>
+      serializationComplete
+        ? maskAttributeValue({
+            element: n,
+            name,
+            value,
+            maskAllElementAttributes,
+            maskAttributeFn,
+          })
+        : value;
     const recordInlineImage = () => {
-      image.removeEventListener('load', recordInlineImage);
+      removeEventListenerSafely(image, 'load', recordInlineImage);
       try {
         canvasService!.width = image.naturalWidth;
         canvasService!.height = image.naturalHeight;
         canvasCtx!.drawImage(image, 0, 0);
-        attributes.rr_dataURL = canvasService!.toDataURL(
+        const dataURL = canvasService!.toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
+        attributes.rr_dataURL = maskLateAttribute('rr_dataURL', dataURL);
       } catch (err) {
         if (image.crossOrigin !== 'anonymous') {
           image.crossOrigin = 'anonymous';
@@ -883,9 +1005,14 @@ function serializeElementNode(
         }
       }
       if (image.crossOrigin === 'anonymous') {
-        priorCrossOrigin
-          ? (attributes.crossOrigin = priorCrossOrigin)
-          : image.removeAttribute('crossorigin');
+        if (priorCrossOrigin) {
+          attributes.crossOrigin = maskLateAttribute(
+            'crossOrigin',
+            priorCrossOrigin,
+          );
+        } else {
+          image.removeAttribute('crossorigin');
+        }
       }
     };
     // The image content may not have finished loading yet.
@@ -898,6 +1025,7 @@ function serializeElementNode(
     mediaAttributes.rr_mediaState = (n as HTMLMediaElement).paused
       ? 'paused'
       : 'played';
+    generatedAttributeNames.add('rr_mediaState');
     mediaAttributes.rr_mediaCurrentTime = (n as HTMLMediaElement).currentTime;
     mediaAttributes.rr_mediaPlaybackRate = (n as HTMLMediaElement).playbackRate;
     mediaAttributes.rr_mediaMuted = (n as HTMLMediaElement).muted;
@@ -928,19 +1056,26 @@ function serializeElementNode(
       rr_left: `${Math.floor(left + (doc.defaultView?.scrollX || 0))}px`,
       rr_top: `${Math.floor(top + (doc.defaultView?.scrollY || 0))}px`,
     };
+    generatedAttributeNames.add('rr_width');
+    generatedAttributeNames.add('rr_height');
+    generatedAttributeNames.add('rr_left');
+    generatedAttributeNames.add('rr_top');
     // Captured so rebuild can keep originally-in-flow placeholders in flow
     // instead of forcing `position: absolute` and collapsing sibling layout.
     if (computed) {
       // JSDOM-style envs return '' for unset computed values; normalize to the CSS default.
       attributes.rr_position = computed.position || 'static';
+      generatedAttributeNames.add('rr_position');
       if (computed.transform && computed.transform !== 'none') {
         attributes.rr_transform = computed.transform;
+        generatedAttributeNames.add('rr_transform');
       }
       // Any inline-level box has its in-flow slot rebuilt as the tag's default
       // display once style is stripped, which collapses width/height. Capture
       // so rebuild can restore (promote plain `inline` → `inline-block`).
       if (computed.display && computed.display.startsWith('inline')) {
         attributes.rr_display = computed.display;
+        generatedAttributeNames.add('rr_display');
       }
     }
   }
@@ -953,6 +1088,24 @@ function serializeElementNode(
     }
     delete attributes.src; // prevent auto loading
   }
+
+  // Mask the final serialized representation after synthesized values and
+  // rrweb keys have been applied, so later serialization cannot restore PII.
+  if (maskAllElementAttributes || maskAttributeFn) {
+    for (const [name, value] of Object.entries(attributes)) {
+      if (typeof value === 'string' || value === null) {
+        attributes[name] = maskAttributeValue({
+          element: n,
+          name,
+          value,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          isGenerated: generatedAttributeNames.has(name),
+        });
+      }
+    }
+  }
+  serializationComplete = true;
 
   let isCustomElement: true | undefined;
   try {
@@ -1104,11 +1257,14 @@ export function serializeNodeWithId(
     needsMask?: boolean;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes?: boolean;
+    maskAttributeFn?: MaskAttributeFn;
     slimDOMOptions: SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     keepIframeSrcFn?: KeepIframeSrcFn;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1142,10 +1298,13 @@ export function serializeNodeWithId(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     slimDOMOptions,
     dataURLOptions = {},
     inlineImages = false,
     recordCanvas = false,
+    canvasMaskingConfigured,
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout = 5000,
@@ -1184,6 +1343,8 @@ export function serializeNodeWithId(
     );
   }
 
+  countSerializedNode();
+
   const _serializedNode = serializeNode(n, {
     doc,
     mirror,
@@ -1194,9 +1355,12 @@ export function serializeNodeWithId(
     maskInputOptions,
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes,
+    maskAttributeFn,
     dataURLOptions,
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement,
   });
@@ -1269,10 +1433,13 @@ export function serializeNodeWithId(
       maskInputOptions,
       maskTextFn,
       maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
       slimDOMOptions,
       dataURLOptions,
       inlineImages,
       recordCanvas,
+      canvasMaskingConfigured,
       preserveWhiteSpace,
       onSerialize,
       onIframeLoad,
@@ -1340,10 +1507,13 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            maskAllElementAttributes,
+            maskAttributeFn,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
             onIframeLoad,
@@ -1373,7 +1543,7 @@ export function serializeNodeWithId(
   if (
     serializedNode.type === NodeType.Element &&
     serializedNode.tagName === 'link' &&
-    serializedNode.attributes.rel === 'stylesheet'
+    isStylesheetLink(serializedNode.attributes.rel)
   ) {
     onceStylesheetLoaded(
       n as HTMLLinkElement,
@@ -1392,10 +1562,13 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            maskAllElementAttributes,
+            maskAttributeFn,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
             onIframeLoad,
@@ -1458,10 +1631,13 @@ function snapshot(
     maskAllInputs?: boolean | MaskInputOptions;
     maskTextFn?: MaskTextFn;
     maskInputFn?: MaskInputFn;
+    maskAllElementAttributes?: boolean;
+    maskAttributeFn?: MaskAttributeFn;
     slimDOM?: 'all' | boolean | SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1480,6 +1656,13 @@ function snapshot(
     stylesheetLoadTimeout?: number;
     keepIframeSrcFn?: KeepIframeSrcFn;
     maxDepth?: number;
+    /**
+     * Cap on the number of CSSRules this snapshot may stringify. Sheets past the
+     * cap are left un-inlined and reported by `takeDeferredStylesheetLinks()` so
+     * the caller can inline them off the critical path. Omit or pass 0 for the
+     * previous unbounded behaviour.
+     */
+    inlineStylesheetBudgetRules?: number;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1491,9 +1674,12 @@ function snapshot(
     inlineStylesheet = true,
     inlineImages = false,
     recordCanvas = false,
+    canvasMaskingConfigured,
     maskAllInputs = false,
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     slimDOM = false,
     dataURLOptions,
     preserveWhiteSpace,
@@ -1505,6 +1691,7 @@ function snapshot(
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
     maxDepth,
+    inlineStylesheetBudgetRules,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true
@@ -1532,39 +1719,47 @@ function snapshot(
         }
       : maskAllInputs;
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  return serializeNodeWithId(n, {
-    doc: n,
-    mirror,
-    blockClass,
-    blockSelector,
-    maskTextClass,
-    maskTextSelector,
-    skipChild: false,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    slimDOMOptions,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    preserveWhiteSpace,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn,
-    newlyAddedElement: false,
-    maxDepth,
-  });
+  beginSnapshotCostTracking(inlineStylesheetBudgetRules);
+  try {
+    return serializeNodeWithId(n, {
+      doc: n,
+      mirror,
+      blockClass,
+      blockSelector,
+      maskTextClass,
+      maskTextSelector,
+      skipChild: false,
+      inlineStylesheet,
+      maskInputOptions,
+      maskTextFn,
+      maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
+      slimDOMOptions,
+      dataURLOptions,
+      inlineImages,
+      recordCanvas,
+      canvasMaskingConfigured,
+      preserveWhiteSpace,
+      onSerialize,
+      onIframeLoad,
+      iframeLoadTimeout,
+      onIframeListenerRegistered,
+      onStylesheetLoad,
+      stylesheetLoadTimeout,
+      keepIframeSrcFn,
+      newlyAddedElement: false,
+      maxDepth,
+    });
+  } finally {
+    endSnapshotCostTracking();
+  }
 }
 
 export function visitSnapshot(
   node: serializedNodeWithId,
   onVisit: (node: serializedNodeWithId) => unknown,
-) {
+): void {
   function walk(current: serializedNodeWithId) {
     onVisit(current);
     if (
@@ -1578,7 +1773,7 @@ export function visitSnapshot(
   walk(node);
 }
 
-export function cleanupSnapshot() {
+export function cleanupSnapshot(): void {
   // allow a new recording to start numbering nodes from scratch
   _id = 1;
 }

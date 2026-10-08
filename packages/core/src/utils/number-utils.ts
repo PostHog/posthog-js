@@ -17,7 +17,9 @@ export function clampToRange(value: unknown, min: number, max: number, logger: L
 
   if (!isNumber(value)) {
     logger.warn(' must be a number. using max or fallback. max: ' + max + ', fallback: ' + fallbackValue)
-    return clampToRange(fallbackValue || max, min, max, logger)
+    // Use ?? so a valid fallback of 0 is honored instead of being treated as
+    // absent and replaced by max.
+    return clampToRange(fallbackValue ?? max, min, max, logger)
   } else if (value > max) {
     logger.warn(' cannot be  greater than max: ' + max + '. Using max value instead.')
     return max

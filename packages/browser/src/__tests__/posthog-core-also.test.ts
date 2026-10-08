@@ -1,29 +1,37 @@
+import type { Mock as VitestMock } from 'vitest'
 import { mockLogger } from './helpers/mock-logger'
 
-import * as globals from '../utils/globals'
-import { document, window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
-import { isUndefined } from '@posthog/core'
-import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
-import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, RemoteConfig } from '../types'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression, isArray, isUndefined } from '@posthog/core'
+import {
+    AUTOCAPTURE_DISABLED_SERVER_SIDE,
+    ENABLE_PERSON_PROCESSING,
+    GROUPS,
+    HEATMAPS_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_REMOTE_CONFIG,
+    USER_STATE,
+} from '../constants'
+import { createPosthogInstance, defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
+import { CaptureResult, PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/session-recording'
 import { SessionPropsManager } from '../session-props'
 
-// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
-// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
-// was in package.json#browserslist. `jest.hoisted()` would be the modern
-// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
-// eslint-disable-next-line no-var
-var mockGetProperties: jest.Mock
+// `var` so the hoisted vi.mock factory below can assign to it without TDZ.
+// Previously masked by babel-vi transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `vi.hoisted()` would be the modern
+// fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
+// oxlint-disable-next-line no-var
+var mockGetProperties: VitestMock
 
-jest.mock('../utils/event-utils', () => {
-    const originalEventUtils = jest.requireActual('../utils/event-utils')
-    mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
+vi.mock('@posthog/browser-common/utils/event-utils', async (importOriginal) => {
+    const originalEventUtils = await importOriginal<typeof import('@posthog/browser-common/utils/event-utils')>()
+    mockGetProperties = vi.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
         getEventProperties: mockGetProperties,
@@ -37,28 +45,40 @@ describe('posthog core', () => {
     const defaultConfig = {}
 
     const defaultOverrides = {
-        _send_request: jest.fn(),
+        _send_retriable_request: vi.fn(),
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         // NOTE: Temporary change whilst testing remote config
         const token = config.token || 'testtoken'
-        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
             [token]: {
                 config: {},
                 siteApps: [],
             },
         } as any
         const posthog = defaultPostHog().init(token, config, uuidv7())
-        return Object.assign(posthog, overrides || {})
+        return Object.assign(posthog, { _send_retriable_request: vi.fn() }, overrides || {})
     }
 
-    beforeEach(() => {
-        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+    beforeEach(async () => {
+        const actual = await vi.importActual<typeof import('@posthog/browser-common/utils/event-utils')>(
+            '@posthog/browser-common/utils/event-utils'
+        )
+        mockGetProperties.mockImplementation(actual.getEventProperties)
+        vi.useFakeTimers().setSystemTime(baseUTCDateTime)
+        localStorage.clear()
+        sessionStorage.clear()
+        document!.cookie.split(';').forEach((cookie) => {
+            document!.cookie = `${cookie.split('=')[0].trim()}=; max-age=0; path=/`
+        })
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            testtoken: { config: {}, siteApps: [] },
+        } as any
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     describe('configRenames()', () => {
@@ -79,6 +99,134 @@ describe('posthog core', () => {
     })
 
     describe('capture()', () => {
+        it('keeps replay diagnosis on every event while throttling optional debug properties', () => {
+            const posthog = posthogWith({ capture_pageview: false, autocapture: false })
+            const required = {
+                $recording_status: 'active',
+                $sdk_debug_recording_script_not_loaded: false,
+                $sdk_debug_replay_url_trigger_status: 'trigger_pending',
+                $sdk_debug_replay_event_trigger_status: 'trigger_disabled',
+                $sdk_debug_replay_linked_flag_trigger_status: 'trigger_activated',
+                $sdk_debug_replay_rrweb_error: false,
+                $sdk_debug_replay_internal_buffer_length: 3,
+                $sdk_debug_replay_flushed_size: 100,
+            }
+            const optional = {
+                $sdk_debug_replay_internal_buffer_size: 200,
+                $sdk_debug_session_start: baseUTCDateTime.getTime(),
+                $sdk_debug_rrweb_attached: true,
+                $sdk_debug_rrweb_start_attempted: true,
+                $sdk_debug_replay_trigger_groups_count: 1,
+                $sdk_debug_replay_matched_recording_trigger_groups: [0],
+                $sdk_debug_replay_remote_trigger_matching_config: { url: '/checkout' },
+                $sdk_debug_replay_pending_trigger_conditions: ['url'],
+                $sdk_debug_replay_stale_config: false,
+                $sdk_debug_replay_flush_hold_reason: 'no_interaction_since_recording_started',
+            }
+            const replayProperties = { ...required, ...optional }
+            const persisted = {
+                $sdk_debug_recording_script_not_loaded: required.$sdk_debug_recording_script_not_loaded,
+                $sdk_debug_replay_url_trigger_status: required.$sdk_debug_replay_url_trigger_status,
+                $sdk_debug_replay_event_trigger_status: required.$sdk_debug_replay_event_trigger_status,
+                $sdk_debug_replay_linked_flag_trigger_status: required.$sdk_debug_replay_linked_flag_trigger_status,
+                $sdk_debug_replay_trigger_groups_count: optional.$sdk_debug_replay_trigger_groups_count,
+                $sdk_debug_replay_matched_recording_trigger_groups:
+                    optional.$sdk_debug_replay_matched_recording_trigger_groups,
+                $sdk_debug_replay_remote_trigger_matching_config:
+                    optional.$sdk_debug_replay_remote_trigger_matching_config,
+                $sdk_debug_replay_pending_trigger_conditions: optional.$sdk_debug_replay_pending_trigger_conditions,
+                $sdk_debug_replay_stale_config: optional.$sdk_debug_replay_stale_config,
+            }
+            posthog.register_for_session(persisted)
+            expect(posthog.sessionRecording!.sdkDebugProperties).toMatchObject(persisted)
+            vi.spyOn(posthog.sessionRecording!, 'sdkDebugProperties', 'get').mockReturnValue(replayProperties)
+            const expectRequiredOnly = (event: string): void => {
+                const properties = posthog.capture(event)!.properties
+                expect(properties).toMatchObject({
+                    ...required,
+                    $recording_status: replayProperties.$recording_status,
+                    $sdk_debug_replay_internal_buffer_length: replayProperties.$sdk_debug_replay_internal_buffer_length,
+                })
+                for (const key of Object.keys(optional)) {
+                    expect(properties).not.toHaveProperty(key)
+                }
+            }
+
+            for (const event of ['custom_event', '$feature_flag_called', '$$heatmap']) {
+                expectRequiredOnly(event)
+            }
+            expect(posthog.calculateEventProperties('$pageview', {}, undefined, undefined, true)).toMatchObject(
+                replayProperties
+            )
+            expect(posthog.capture('$pageview')!.properties).toMatchObject(replayProperties)
+
+            replayProperties.$recording_status = 'buffering'
+            replayProperties.$sdk_debug_replay_internal_buffer_length = 0
+            for (const event of [
+                'custom_event',
+                '$exception',
+                '$identify',
+                '$set',
+                '$pageview',
+                '$feature_flag_called',
+                '$$heatmap',
+            ]) {
+                expectRequiredOnly(event)
+            }
+            vi.advanceTimersByTime(29_999)
+            expectRequiredOnly('$autocapture')
+            vi.advanceTimersByTime(1)
+            expect(posthog.capture('$autocapture')!.properties).toMatchObject(replayProperties)
+            expectRequiredOnly('$exception')
+
+            const snapshot = posthog.capture('$snapshot', { $snapshot_data: [] })!.properties
+            for (const key of Object.keys(replayProperties)) {
+                expect(snapshot).not.toHaveProperty(key)
+            }
+        })
+
+        it.each(['property enrichment', 'before_send rejection', 'snapshot capture'])(
+            'does not consume the replay diagnostic interval on %s',
+            (scenario) => {
+                const posthog = posthogWith({
+                    capture_pageview: false,
+                    autocapture: false,
+                    before_send: (event) => (event.event === '$discarded' ? null : event),
+                })
+                const diagnostics = {
+                    $recording_status: 'active',
+                    $sdk_debug_session_start: baseUTCDateTime.getTime(),
+                }
+                vi.spyOn(posthog.sessionRecording!, 'sdkDebugProperties', 'get').mockReturnValue(diagnostics)
+
+                if (scenario === 'property enrichment') {
+                    expect(posthog.calculateEventProperties('$pageview', {})).toMatchObject(diagnostics)
+                } else if (scenario === 'before_send rejection') {
+                    expect(posthog.capture('$discarded')).toBeUndefined()
+                } else {
+                    posthog.capture('$snapshot', { $snapshot_data: [] })
+                }
+
+                expect(posthog.capture('$pageview')!.properties).toMatchObject(diagnostics)
+                expect(posthog.capture('$pageview')!.properties).not.toHaveProperty('$sdk_debug_session_start')
+            }
+        )
+
+        it.each([true, false, undefined])('maps send_instantly: %p to preferSyncCompression', (sendInstantly) => {
+            const requests: unknown[] = []
+            const posthog = posthogWith(defaultConfig, {
+                _send_retriable_request: (request) => {
+                    requests.push(request)
+                },
+            })
+
+            posthog.capture(eventName, {}, { send_instantly: sendInstantly })
+
+            expect(requests).toEqual([
+                expect.objectContaining({ compression: 'best-available', preferSyncCompression: sendInstantly }),
+            ])
+        })
+
         it('adds a UUID to each message', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
             expect(captureData).toHaveProperty('uuid')
@@ -122,7 +270,7 @@ describe('posthog core', () => {
         })
 
         it('calls callbacks added via _addCaptureHook', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
@@ -146,11 +294,11 @@ describe('posthog core', () => {
                 {
                     ...defaultOverrides,
                     sessionPersistence: {
-                        update_search_keyword: jest.fn(),
-                        update_campaign_params: jest.fn(),
-                        update_referrer_info: jest.fn(),
-                        update_config: jest.fn(),
-                        properties: jest.fn(),
+                        update_search_keyword: vi.fn(),
+                        update_campaign_params: vi.fn(),
+                        update_referrer_info: vi.fn(),
+                        update_config: vi.fn(),
+                        properties: vi.fn(),
                         get_property: () => 'anonymous',
                     } as unknown as PostHogPersistence,
                 }
@@ -163,7 +311,7 @@ describe('posthog core', () => {
         })
 
         it('errors with undefined event name', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -174,7 +322,7 @@ describe('posthog core', () => {
         })
 
         it('errors with object event name', () => {
-            const hook = jest.fn()
+            const hook = vi.fn()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -186,30 +334,28 @@ describe('posthog core', () => {
         })
 
         it('respects opt_out_useragent_filter (default: false)', () => {
-            const originalNavigator = globals.navigator
-            ;(globals as any).navigator = {
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue({
                 ...globals.navigator,
                 userAgent:
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-            }
-            const hook = jest.fn()
+            } as Navigator)
+            const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
-            posthog.capture(eventName, {}, {})
-            expect(hook).not.toHaveBeenCalledWith('$event')
-            ;(globals as any)['navigator'] = originalNavigator
+            expect(posthog.capture(eventName, {}, {})).toBeUndefined()
+            expect(hook).not.toHaveBeenCalled()
+            navigatorSpy.mockRestore()
         })
 
         it('respects opt_out_useragent_filter', () => {
-            const originalNavigator = globals.navigator
-            ;(globals as any).navigator = {
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue({
                 ...globals.navigator,
                 userAgent:
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-            }
+            } as Navigator)
 
-            const hook = jest.fn().mockImplementation((event) => event)
+            const hook = vi.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
                 {
                     opt_out_useragent_filter: true,
@@ -229,7 +375,7 @@ describe('posthog core', () => {
                 })
             )
             expect(event.properties['$browser_type']).toEqual('bot')
-            ;(globals as any)['navigator'] = originalNavigator
+            navigatorSpy.mockRestore()
         })
 
         it('truncates long properties', () => {
@@ -328,48 +474,136 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
-                })
+                    timestampMode: 'capture-body',
+                }),
+                undefined
             )
         })
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/i/v0/e/',
-                })
+                }),
+                undefined
             )
         })
 
-        it('sends payloads to overriden endpoint if given', () => {
+        it('rewrites payloads sent to the configured analytics endpoint', () => {
+            const posthog = posthogWith(
+                {
+                    ...defaultConfig,
+                    request_batching: false,
+                    rewriteRequestPath: (url) => {
+                        if (url.pathname === '/i/v0/e/') {
+                            url.pathname = '/events/'
+                        }
+                        return url
+                    },
+                },
+                defaultOverrides
+            )
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
+
+            posthog.capture('event-name', { foo: 'bar', length: 0 })
+
+            const rewrittenEndpoint = 'https://us.i.posthog.com/events/'
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: rewrittenEndpoint,
+                }),
+                undefined
+            )
+            expect(posthog.requestRouter.isIngestionEndpoint(rewrittenEndpoint)).toBe(true)
+        })
+
+        it('sends session recordings with sent_at in the body', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
-            posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
+            posthog.capture(
+                'event-name',
+                { foo: 'bar', length: 0 },
+                {
+                    _url: 'https://app.posthog.com/s/',
+                    _batchKey: 'recordings',
+                }
+            )
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
-                })
+                    timestampMode: 'body',
+                }),
+                undefined
             )
+        })
+
+        it.each(['timer', 'unload'])('keeps different windows of one session in separate %s uploads', (flushMode) => {
+            const posthog = posthogWith({ capture_pageview: false, request_batching: true }, defaultOverrides)
+            const sendRequest = vi.fn()
+            const queue = new RequestQueue(sendRequest)
+            posthog._requestQueue = queue
+
+            for (const windowId of ['window-one', 'window-two', 'window-one']) {
+                posthog.capture(
+                    '$snapshot',
+                    { $session_id: 'session-one', $window_id: windowId },
+                    { _url: 'https://app.posthog.com/s/', _batchKey: 'recordings' }
+                )
+            }
+
+            if (flushMode === 'timer') {
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+            } else {
+                queue.unload()
+            }
+
+            const requests = sendRequest.mock.calls.map(([request]) => request)
+            expect(
+                requests.map((request) => request.data.map((event: CaptureResult) => event.properties.$window_id))
+            ).toEqual([['window-one', 'window-one'], ['window-two']])
+            for (const request of requests) {
+                expect(request).toMatchObject({ batchKey: 'recordings', timestampMode: 'body' })
+            }
+        })
+
+        it.each([
+            ['recordings', 'window-1', 'session-1-window-1'],
+            ['recordings', undefined, 'session-1'],
+            [undefined, 'window-1', undefined],
+        ])('groups requests with batchKey %s and window %s', (batchKey, windowId, batchGroup) => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture(
+                '$snapshot',
+                { $session_id: 'session-1', $window_id: windowId },
+                batchKey ? { _batchKey: batchKey } : undefined
+            )
+
+            expect(vi.mocked(posthog._send_retriable_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
-                })
+                    timestampMode: 'body',
+                }),
+                undefined
             )
         })
 
@@ -380,10 +614,11 @@ describe('posthog core', () => {
 
                 posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
 
-                expect(posthog._send_request).toHaveBeenCalledWith(
+                expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         transport,
-                    })
+                    }),
+                    undefined
                 )
             }
         )
@@ -396,44 +631,103 @@ describe('posthog core', () => {
         })
     })
 
+    describe('_onRemoteConfig failure dispatch', () => {
+        it('passes the failure result to every extension', async () => {
+            const posthog = await createPosthogInstance()
+            const heatmapsResult = vi.spyOn(posthog.heatmaps!, 'onRemoteConfig')
+
+            // the test helper delivers a successful config during init; clear that
+            // state so this test observes what a failure does on a fresh page
+            posthog.autocapture!['_isDisabledServerSide'] = null
+            posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+
+            posthog._onRemoteConfig({ ok: false })
+
+            // autocapture keeps waiting for a server verdict: stays disabled,
+            // with no server opt-out value persisted
+            expect(posthog.autocapture!.isEnabled).toBe(false)
+            expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+
+            // heatmaps behaves as it would for a config without a heatmaps key:
+            // nothing persisted, not started
+            expect(heatmapsResult).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBeUndefined()
+            expect(posthog.heatmaps!.isEnabled).toBe(false)
+        })
+
+        it('reaches every registered extension and no failure branch throws', async () => {
+            const posthog = await createPosthogInstance()
+            const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
+            expect(handlers.length).toBeGreaterThanOrEqual(9)
+            const spies = handlers.map((ext: any) => vi.spyOn(ext, 'onRemoteConfig'))
+
+            expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()
+
+            for (const spy of spies) {
+                expect(spy).toHaveBeenCalledWith({ ok: false })
+            }
+        })
+
+        it('session recording treats a failure like a config without recording settings', async () => {
+            const posthog = await createPosthogInstance()
+            posthog.sessionRecording!.onRemoteConfig({ ok: false })
+
+            const other = await createPosthogInstance()
+            other.sessionRecording!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(posthog.sessionRecording!.status).toBe(other.sessionRecording!.status)
+            expect(posthog.sessionRecording!.started).toBe(false)
+        })
+    })
+
     describe('_afterFlagsResponse', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('ignores legacy field defaultIdentifiedOnly from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
         it('enables compression from flags response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['base64'] } as RemoteConfig })
 
             expect(posthog.compression).toEqual('base64')
         })
 
         it('does not enable compression from flags response if compression is disabled', () => {
-            const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
+            const posthog = posthogWith({
+                disable_compression: true,
+                persistence: 'memory',
+                bootstrap: { distinctID: 'test-id' },
+            })
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -441,7 +735,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -449,7 +743,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
@@ -462,30 +756,40 @@ describe('posthog core', () => {
         const overrides: Partial<PostHog> = {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
-                remove_event_timer: jest.fn(),
+                remove_event_timer: vi.fn(),
                 get_property: () => 'anonymous',
                 props: {},
-                register: jest.fn(),
+                register: vi.fn(),
+                syncCookieProperties: vi.fn(),
+                consumeCookieIdentityChange: vi.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-                get_property: () => 'anonymous',
+                get_property: () => undefined,
             } as unknown as PostHogPersistence,
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
+                checkAndGetSessionAndWindowId: vi.fn().mockReturnValue({
                     windowId: 'windowId',
                     sessionId: 'sessionId',
                 }),
             } as unknown as SessionIdManager,
             sessionPropsManager: {
-                getSessionProps: jest.fn().mockReturnValue({
+                getSessionProps: vi.fn().mockReturnValue({
                     $session_entry_referring_domain: 'https://referrer.example.com',
                 }),
             } as unknown as SessionPropsManager,
         }
 
         beforeEach(() => {
+            overrides.persistence!.props = {}
             mockGetProperties.mockReturnValue({ $lib: 'web' })
+            vi.mocked(overrides.sessionManager!.checkAndGetSessionAndWindowId).mockReturnValue({
+                windowId: 'windowId',
+                sessionId: 'sessionId',
+            } as any)
+            vi.mocked(overrides.sessionPropsManager!.getSessionProps).mockReturnValue({
+                $session_entry_referring_domain: 'https://referrer.example.com',
+            })
 
             posthog = posthogWith(
                 {
@@ -515,6 +819,129 @@ describe('posthog core', () => {
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
+        })
+
+        it('uses a sibling subdomain identity change for the next event and reloads flags', () => {
+            const props = { distinct_id: 'anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: vi.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: vi.fn(),
+                unregister: vi.fn(),
+                syncCookieProperties: vi.fn().mockImplementation(() => {
+                    props.distinct_id = 'identified-user'
+                    props.$user_state = 'identified'
+                    return true
+                }),
+                consumeCookieIdentityChange: vi.fn().mockReturnValue(true),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
+            const reloadFeatureFlags = vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties.distinct_id).toBe('identified-user')
+            expect(properties.$is_identified).toBe(true)
+            expect(posthog._cachedPersonProperties).toBeNull()
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('reloads flags for a same-ID sibling identity-state transition', () => {
+            const props = { distinct_id: 'shared-id', $user_state: 'identified' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: vi.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: vi.fn(),
+                unregister: vi.fn(),
+                syncCookieProperties: vi.fn().mockImplementation(() => {
+                    props.$user_state = 'anonymous'
+                    return true
+                }),
+                consumeCookieIdentityChange: vi.fn().mockReturnValue(true),
+            } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { sensitive_session_property: 'previous-user' }
+            const sessionPersistence = {
+                properties: () => ({ ...sessionProps }),
+                get_property: () => undefined,
+                clear: vi.fn(() => {
+                    delete sessionProps.sensitive_session_property
+                }),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
+            const reloadFeatureFlags = vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties.sensitive_session_property).toBeUndefined()
+            expect(posthog._cachedPersonProperties).toBeNull()
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
+        })
+
+        it('preserves groups registered after a sibling reset was reconciled', () => {
+            const props: Properties = {
+                distinct_id: 'new-anonymous',
+                $user_state: 'anonymous',
+                [GROUPS]: { organization: 'new-organization' },
+            }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: vi.fn(),
+                get_property: (key: string) => props[key],
+                register: vi.fn(),
+                unregister: vi.fn(),
+                syncCookieProperties: vi.fn(),
+                consumeCookieIdentityChange: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+                clear: vi.fn(),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties[GROUPS]).toEqual({ organization: 'new-organization' })
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+        })
+
+        it('clears a sibling reset before registering new session properties', () => {
+            const props = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                get_property: (key: string) => props[key as keyof typeof props],
+                unregister: vi.fn(),
+                syncCookieProperties: vi.fn(),
+                consumeCookieIdentityChange: vi.fn().mockReturnValueOnce(true),
+            } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { previous_user_property: 'private-value' }
+            const sessionPersistence = {
+                clear: vi.fn(() => {
+                    Object.keys(sessionProps).forEach((key) => delete sessionProps[key])
+                }),
+                register: vi.fn((properties: Record<string, unknown>) => Object.assign(sessionProps, properties)),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            vi.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            posthog.register_for_session({ current_user_property: 'current-value' })
+
+            expect(sessionProps).toEqual({ current_user_property: 'current-value' })
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
@@ -574,6 +1001,7 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $config_defaults: 'unset',
             })
+            expect(posthog.persistence.syncCookieProperties).toHaveBeenCalled()
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
@@ -721,7 +1149,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -736,7 +1164,22 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
+            )
+
+            posthog._handle_unload()
+
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
+        it('captures $pageleave when capture_pageview uses granular options', () => {
+            const posthog = posthogWith(
+                {
+                    capture_pageview: { search: true },
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -751,7 +1194,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -766,7 +1209,7 @@ describe('posthog core', () => {
                     capture_pageleave: true,
                     request_batching: true,
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             posthog._handle_unload()
@@ -781,7 +1224,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue }
+                { _requestQueue: { enqueue: vi.fn(), unload: vi.fn() } as unknown as RequestQueue }
             )
 
             posthog._handle_unload()
@@ -790,7 +1233,7 @@ describe('posthog core', () => {
         })
 
         it('drains logs via a sendBeacon flush', () => {
-            const flushLogs = jest.fn()
+            const flushLogs = vi.fn()
             const posthog = posthogWith(
                 {
                     capture_pageview: true,
@@ -806,7 +1249,7 @@ describe('posthog core', () => {
         })
 
         it('calls surveys.handlePageUnload when present', () => {
-            const handlePageUnload = jest.fn()
+            const handlePageUnload = vi.fn()
             const posthog = posthogWith(
                 {
                     capture_pageview: true,
@@ -831,7 +1274,7 @@ describe('posthog core', () => {
                     capture_pageleave: 'if_capture_pageview',
                     request_batching: true,
                 },
-                { capture: jest.fn(), surveys: {} as unknown as PostHog['surveys'] }
+                { capture: vi.fn(), surveys: {} as unknown as PostHog['surveys'] }
             )
 
             expect(() => posthog._handle_unload()).not.toThrow()
@@ -847,7 +1290,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -861,7 +1304,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -875,7 +1318,7 @@ describe('posthog core', () => {
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
-                    { capture: jest.fn() }
+                    { capture: vi.fn() }
                 )
                 posthog._handle_unload()
 
@@ -893,7 +1336,7 @@ describe('posthog core', () => {
                         distinctID: 'abcd',
                     },
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
@@ -912,6 +1355,19 @@ describe('posthog core', () => {
             )
         })
 
+        it.each([null, undefined, ''])('preserves the persisted identity when distinctID is %j', (distinctID) => {
+            const token = 'bootstrap-nullish-' + uuidv7()
+            const first = posthogWith({ token })
+            const posthog = posthogWith({
+                token,
+                bootstrap: { distinctID },
+            })
+
+            expect(posthog.get_distinct_id()).toBe(first.get_distinct_id())
+            expect(posthog.get_property('$device_id')).toBe(first.get_property('$device_id'))
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
+        })
+
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
@@ -922,7 +1378,7 @@ describe('posthog core', () => {
                     },
                     get_device_id: () => 'og-device-id',
                 },
-                { capture: jest.fn() }
+                { capture: vi.fn() }
             )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
@@ -949,9 +1405,13 @@ describe('posthog core', () => {
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
-            expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlag('disabled')).toBe(false)
             expect(posthog.getFeatureFlag('undef')).toBe(undefined)
-            expect(posthog.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({
+                multivariant: 'variant-1',
+                enabled: true,
+                disabled: false,
+            })
         })
 
         it('sets the right feature flag payloads', () => {
@@ -984,14 +1444,20 @@ describe('posthog core', () => {
             expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
         })
 
-        it('does nothing when empty', () => {
+        it.each([
+            {},
+            { distinctID: null, isIdentifiedID: null, featureFlags: null, featureFlagPayloads: null, sessionID: null },
+        ])('does nothing when bootstrap is %j', (bootstrap) => {
+            // memory persistence with an empty bootstrap is the exact volatile-identity case the init
+            // warning covers, so allow that console.warn here instead of failing on it.
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith({
-                bootstrap: {},
+                bootstrap,
                 persistence: 'memory',
             })
+            warnSpy.mockRestore()
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.get_distinct_id()).toEqual(expect.any(String))
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
@@ -1001,16 +1467,16 @@ describe('posthog core', () => {
             expect(posthog.featureFlags.getFlagVariants()).toEqual({})
         })
 
-        it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
-            let called = false
+        it('onFeatureFlags should be called immediately with active bootstrapped flags', () => {
+            const callback = vi.fn()
             const posthog = posthogWith({
                 bootstrap: {
-                    featureFlags: { multivariant: 'variant-1' },
+                    featureFlags: { multivariant: 'variant-1', disabled: false },
                 },
             })
 
-            posthog.featureFlags.onFeatureFlags(() => (called = true))
-            expect(called).toEqual(true)
+            posthog.featureFlags.onFeatureFlags(callback)
+            expect(callback).toHaveBeenCalledWith(['multivariant'], { multivariant: 'variant-1' })
         })
 
         it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
@@ -1041,7 +1507,7 @@ describe('posthog core', () => {
 
         describe('auto-identify on bootstrap', () => {
             afterEach(() => {
-                jest.restoreAllMocks()
+                vi.restoreAllMocks()
             })
 
             it('calls identify when bootstrap has identified distinctID that differs from persisted anonymous ID', () => {
@@ -1052,8 +1518,8 @@ describe('posthog core', () => {
                 expect(first.get_distinct_id()).toBeTruthy()
                 expect(first.persistence.get_property(USER_STATE)).toBe('anonymous')
 
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
-                const captureSpy = jest.spyOn(PostHog.prototype, 'capture')
+                const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
+                const captureSpy = vi.spyOn(PostHog.prototype, 'capture')
 
                 // Second instance bootstraps with an identified user
                 const second = posthogWith({
@@ -1090,7 +1556,7 @@ describe('posthog core', () => {
                 const first = posthogWith({ token })
                 const anonId = first.get_distinct_id()
 
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
 
                 // Second instance bootstraps with the same anonymous ID
                 posthogWith({
@@ -1113,7 +1579,7 @@ describe('posthog core', () => {
                 // First instance creates an anonymous user
                 posthogWith({ token })
 
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
 
                 // Second instance bootstraps with isIdentifiedID that is not true
                 posthogWith({
@@ -1130,7 +1596,7 @@ describe('posthog core', () => {
             it('does not call identify when there is no existing persisted ID (first visit)', () => {
                 const token = 'auto-identify-first-visit-' + uuidv7()
 
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
 
                 // First visit with bootstrap - no prior persistence
                 const posthog = posthogWith({
@@ -1150,11 +1616,11 @@ describe('posthog core', () => {
                 const token = 'auto-identify-already-id-' + uuidv7()
 
                 // First instance: create and identify a user
-                const first = posthogWith({ token }, { capture: jest.fn() })
+                const first = posthogWith({ token }, { capture: vi.fn() })
                 first.identify('existing-user')
                 expect(first.persistence.get_property(USER_STATE)).toBe('identified')
 
-                const identifySpy = jest.spyOn(PostHog.prototype, 'identify')
+                const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
 
                 // Second instance bootstraps with a different identified user
                 const second = posthogWith({
@@ -1176,15 +1642,15 @@ describe('posthog core', () => {
     })
 
     describe('init()', () => {
-        jest.spyOn(window, 'window', 'get')
+        vi.spyOn(window, 'window', 'get')
 
         beforeEach(() => {
-            jest.spyOn(window.console, 'warn').mockImplementation()
-            jest.spyOn(window.console, 'error').mockImplementation()
+            vi.spyOn(window.console, 'warn').mockImplementation(() => {})
+            vi.spyOn(window.console, 'error').mockImplementation(() => {})
         })
 
         it('can set an xhr error handler', () => {
-            const fakeOnXHRError = jest.fn()
+            const fakeOnXHRError = vi.fn()
             const posthog = posthogWith({
                 on_xhr_error: fakeOnXHRError,
             })
@@ -1200,26 +1666,22 @@ describe('posthog core', () => {
             posthogWith(config as Partial<PostHogConfig>)
         })
 
-        it.skip('does not load feature flags, session recording', () => {
-            // TODO this didn't make a tonne of sense in the given form
-            // it makes no sense now
-            // of course mocks added _after_ init will not be called
-            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
-
-            posthog.sessionRecording = {
-                afterFlagsResponse: jest.fn(),
-                startIfEnabledOrStop: jest.fn(),
-            } as unknown as SessionRecording
-            posthog.persistence = {
-                register: jest.fn(),
-                update_config: jest.fn(),
-            } as unknown as PostHogPersistence
-
-            // Feature flags
-            expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
-
-            // Session recording
-            expect(posthog.sessionRecording.onRemoteConfig).not.toHaveBeenCalled()
+        it.each([true, false])('respects startup flags disabled=%s', async (disabled) => {
+            const requests = vi.spyOn(PostHog.prototype, '_send_request').mockImplementation(() => {})
+            let instance: PostHog | undefined
+            try {
+                instance = await createPosthogInstance(uuidv7(), {
+                    advanced_disable_flags: disabled,
+                    capture_pageview: false,
+                })
+                vi.advanceTimersByTime(10)
+                expect(requests.mock.calls.filter(([request]) => request.url.includes('/flags/'))).toHaveLength(
+                    disabled ? 0 : 1
+                )
+            } finally {
+                await instance?.shutdown()
+                requests.mockRestore()
+            }
         })
 
         describe('device id behavior', () => {
@@ -1248,19 +1710,28 @@ describe('posthog core', () => {
                 expect(posthog.persistence!.props.$device_id).toEqual(posthog.persistence!.props.distinct_id)
             })
 
-            it('does not set distinct_id/$device_id if distinct_id is unset', () => {
-                uninitialisedPostHog.persistence = {
-                    props: { distinct_id: 'existing-id' },
-                } as unknown as PostHogPersistence
-                const posthog = uninitialisedPostHog.init(
-                    uuidv7(),
-                    {
-                        get_device_id: (uuid) => uuid,
-                    },
+            it('preserves persisted distinct_id and $device_id when recreating a client', async () => {
+                const token = uuidv7()
+                const original = await createPosthogInstance(token, { persistence: 'localStorage' })
+                original.register({ distinct_id: 'existing-id', $device_id: 'existing-device' })
+                const getDeviceId = vi.fn((uuid) => uuid)
+                const restored = new PostHog().init(
+                    token,
+                    { ...original.config, get_device_id: getDeviceId, loaded: () => {} },
                     uuidv7()
                 )!
-
-                expect(posthog.persistence!.props.distinct_id).not.toEqual('existing-id')
+                try {
+                    expect(restored).not.toBe(original)
+                    expect(restored.persistence!.props).toMatchObject({
+                        distinct_id: 'existing-id',
+                        $device_id: 'existing-device',
+                    })
+                    expect(getDeviceId).not.toHaveBeenCalled()
+                } finally {
+                    restored.persistence!.clear()
+                    await original.shutdown()
+                    await restored.shutdown()
+                }
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
@@ -1297,11 +1768,13 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
             posthog.persistence!.clear()
-            posthog.reloadFeatureFlags = jest.fn()
+            posthog.featureFlags.reset()
+            posthog.featureFlags.reloadFeatureFlags = vi.fn()
         })
 
         it.each([
@@ -1317,7 +1790,7 @@ describe('posthog core', () => {
                 posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
 
                 expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
-                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+                expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
             }
         )
     })
@@ -1330,12 +1803,15 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
             posthog.persistence!.clear()
-            posthog.reloadFeatureFlags = jest.fn()
-            posthog.capture = jest.fn()
+            posthog.featureFlags.reset()
+            posthog.reloadFeatureFlags = vi.fn()
+            posthog.featureFlags.reloadFeatureFlags = vi.fn()
+            posthog.capture = vi.fn()
         })
 
         it('records info on groups', () => {
@@ -1395,7 +1871,7 @@ describe('posthog core', () => {
 
         it('does not send $groupidentify when group already exists with same key and no properties', () => {
             posthog.group('organization', 'org::5')
-            jest.mocked(posthog.capture).mockClear()
+            vi.mocked(posthog.capture).mockClear()
 
             posthog.group('organization', 'org::5')
 
@@ -1407,7 +1883,10 @@ describe('posthog core', () => {
             posthog.group('instance', 'app.posthog.com')
             posthog.group('organization', 'org::5')
 
-            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(2)
+            expect(
+                vi.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                    vi.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+            ).toBe(2)
         })
 
         it('results in a reloadFeatureFlags call if group properties change', () => {
@@ -1416,7 +1895,10 @@ describe('posthog core', () => {
             posthog.group('organization', 'org::5', { name: 'PostHog' })
             posthog.group('instance', 'app.posthog.com')
 
-            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+            expect(
+                vi.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                    vi.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+            ).toBe(3)
         })
 
         it('captures $groupidentify event with $group_set when properties provided', () => {
@@ -1434,7 +1916,7 @@ describe('posthog core', () => {
 
         it('sends $groupidentify with $group_set for an existing group when properties provided', () => {
             posthog.group('organization', 'org::5')
-            jest.mocked(posthog.capture).mockClear()
+            vi.mocked(posthog.capture).mockClear()
 
             posthog.group('organization', 'org::5', { name: 'PostHog' })
 
@@ -1451,13 +1933,14 @@ describe('posthog core', () => {
                     'testtoken',
                     {
                         persistence: 'memory',
+                        bootstrap: { distinctID: 'test-id' },
                     },
                     uuidv7()
                 )!
                 posthog.persistence!.clear()
                 // mock this internal queue - not capture
                 posthog._requestQueue = {
-                    enqueue: jest.fn(),
+                    enqueue: vi.fn(),
                 } as unknown as RequestQueue
             })
 
@@ -1470,9 +1953,9 @@ describe('posthog core', () => {
                 // 2 $groupidentify calls from group() + 1 some_event
                 expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(3)
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
                 // need to help TS know event payload data is not an array
-                // eslint-disable-next-line posthog-js/no-direct-array-check
+                // oxlint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
                     throw new Error('')
                 }
@@ -1482,14 +1965,51 @@ describe('posthog core', () => {
                     instance: 'app.posthog.com',
                 })
             })
+
+            it('merges event-specific groups with registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({
+                    company: 'company::5',
+                    project: 'project::7',
+                })
+            })
+
+            it('lets event-specific groups override registered groups without changing persistence', () => {
+                posthog.group('project', 'project::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({ project: 'project::7' })
+                expect(posthog.getGroups()).toEqual({ project: 'project::5' })
+            })
+
+            it('allows an empty event-specific groups object to omit registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: {} })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({})
+            })
         })
 
         describe('error handling', () => {
             it('handles blank keys being passed', () => {
-                ;(window as any).console.error = jest.fn()
-                ;(window as any).console.warn = jest.fn()
+                ;(window as any).console.error = vi.fn()
+                ;(window as any).console.warn = vi.fn()
 
-                posthog.register = jest.fn()
+                posthog.register = vi.fn()
 
                 posthog.group(null as unknown as string, 'foo')
                 posthog.group('organization', null as unknown as string)
@@ -1524,7 +2044,10 @@ describe('posthog core', () => {
                 expect(posthog.persistence!.props['$groups']).toEqual({})
                 expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
 
-                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+                expect(
+                    vi.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                        vi.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+                ).toBe(3)
             })
         })
     })
@@ -1558,6 +2081,24 @@ describe('posthog core', () => {
             expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
         })
 
+        it('releases cookie synchronization suppression when device ID generation throws', async () => {
+            const error = new Error('device id failed')
+            const posthog = await createPosthogInstance(uuidv7(), {
+                persistence: 'localStorage+cookie',
+                cookieWinsOnConflict: true,
+            })
+            const endSuppression = vi.spyOn(posthog.persistence!, '_endCookieSyncSuppression')
+            const publish = vi.spyOn(posthog.persistence!, '_publishSuppressedCookieSnapshot')
+            posthog.config.get_device_id = () => {
+                throw error
+            }
+
+            expect(() => posthog.reset()).toThrow(error)
+            expect(endSuppression).toHaveBeenCalledWith(false)
+            expect(publish).not.toHaveBeenCalled()
+            expect((posthog.persistence! as any)._cookieSyncSuppressed).toBe(false)
+        })
+
         it('does not crash when no recording remote config has been stored', async () => {
             const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
 
@@ -1573,7 +2114,7 @@ describe('posthog core', () => {
         })
 
         it('falls back to advanced_disable_decide with deprecation warning', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const warnSpy = vi.spyOn(mockLogger, 'warn')
             const posthog = posthogWith({ advanced_disable_decide: true })
             expect(posthog._shouldDisableFlags()).toBe(true)
             expect(warnSpy).toHaveBeenCalledWith(
@@ -1582,7 +2123,7 @@ describe('posthog core', () => {
         })
 
         it('prioritizes advanced_disable_flags over advanced_disable_decide', () => {
-            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const warnSpy = vi.spyOn(mockLogger, 'warn')
             const posthog = posthogWith({
                 advanced_disable_flags: false,
                 advanced_disable_decide: true,
@@ -1601,7 +2142,7 @@ describe('posthog core', () => {
 
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
-            const posthog = posthogWith({ loaded: jest.fn() })
+            const posthog = posthogWith({ loaded: vi.fn() })
 
             posthog._loaded()
 
@@ -1622,23 +2163,23 @@ describe('posthog core', () => {
 
         describe('/flags', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('is called by default', async () => {
-                const sendRequestMock = jest.fn()
+                const sendRequestMock = vi.fn()
                 await createPosthogInstance(uuidv7(), {
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        requirePostHogInstance(ph)._send_request = sendRequestMock
                     },
                 })
 
                 // Advance past the 5ms debounce timer from reloadFeatureFlags
-                jest.advanceTimersByTime(10)
+                vi.advanceTimersByTime(10)
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
                     url: 'http://localhost/flags/?v=2',
@@ -1646,57 +2187,61 @@ describe('posthog core', () => {
             })
 
             it('does not call flags if disabled', async () => {
-                const sendRequestMock = jest.fn()
+                const sendRequestMock = vi.fn()
                 await createPosthogInstance(uuidv7(), {
                     advanced_disable_flags: true,
                     loaded: (ph) => {
-                        ph._send_request = sendRequestMock
+                        requirePostHogInstance(ph)._send_request = sendRequestMock
                     },
                 })
 
-                jest.advanceTimersByTime(10)
+                vi.advanceTimersByTime(10)
                 expect(sendRequestMock).not.toHaveBeenCalled()
             })
         })
     })
 
     describe('capturing pageviews', () => {
-        it('captures not capture pageview if disabled', async () => {
-            jest.useFakeTimers()
-
+        it('does not capture pageview if disabled', async () => {
+            vi.useFakeTimers()
+            const beforeSend = vi.fn((event) => event)
             const instance = await createPosthogInstance(uuidv7(), {
                 capture_pageview: false,
+                before_send: beforeSend,
             })
-            instance.capture = jest.fn()
-
-            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-            // but you do :shrug:
-            instance.capture('not a pageview', {})
-
-            jest.runOnlyPendingTimers()
-
-            expect(instance.capture).not.toHaveBeenLastCalledWith(
-                '$pageview',
-                { title: 'test' },
-                { send_instantly: true }
-            )
+            try {
+                instance.capture('not a pageview', {})
+                vi.runOnlyPendingTimers()
+                expect(beforeSend).toHaveBeenCalledWith(expect.objectContaining({ event: 'not a pageview' }))
+                expect(beforeSend.mock.calls.map(([event]) => event.event)).not.toContain('$pageview')
+            } finally {
+                await instance.shutdown()
+            }
         })
 
         it('captures pageview if enabled', async () => {
-            jest.useFakeTimers()
-
-            const instance = await createPosthogInstance(uuidv7(), {
-                capture_pageview: true,
-            })
-            instance.capture = jest.fn()
-
-            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-            // but you do :shrug:
-            instance.capture('not a pageview', {})
-
-            jest.runOnlyPendingTimers()
-
-            expect(instance.capture).toHaveBeenLastCalledWith('$pageview', { title: 'test' }, { send_instantly: true })
+            const originalTitle = document!.title
+            document!.title = 'startup title'
+            const capture = vi.spyOn(PostHog.prototype, 'capture')
+            const beforeSend = vi.fn((event) => event)
+            let instance: PostHog | undefined
+            try {
+                instance = await createPosthogInstance(uuidv7(), {
+                    capture_pageview: true,
+                    before_send: beforeSend,
+                })
+                vi.runOnlyPendingTimers()
+                expect(capture).toHaveBeenCalledWith('$pageview', { title: 'startup title' }, { send_instantly: true })
+                const pageviews = beforeSend.mock.calls
+                    .map(([event]) => event)
+                    .filter((event) => event.event === '$pageview')
+                expect(pageviews).toHaveLength(1)
+                expect(pageviews[0].properties.title).toBe('startup title')
+            } finally {
+                await instance?.shutdown()
+                capture.mockRestore()
+                document!.title = originalTitle
+            }
         })
     })
 
@@ -1709,7 +2254,7 @@ describe('posthog core', () => {
             instance = await createPosthogInstance(token, {
                 api_host: 'https://us.posthog.com',
             })
-            instance.sessionManager!.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
+            instance.sessionManager!.checkAndGetSessionAndWindowId = vi.fn().mockReturnValue({
                 windowId: 'windowId',
                 sessionId: 'sessionId',
                 sessionStartTimestamp: new Date().getTime() - 30000,
@@ -1751,5 +2296,19 @@ describe('_send_request', () => {
         const eventRequest = { url: 'http://localhost/e/' }
         posthog._send_request(eventRequest)
         expect(eventRequest.url).toBe('http://localhost/e/')
+    })
+
+    it('uses the configured fallback when best-available compression is unavailable', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+        posthog.compression = undefined
+        const requestOptions = {
+            url: 'http://localhost/flags/',
+            compression: 'best-available' as const,
+            compressionFallback: Compression.Base64,
+        }
+
+        posthog._send_request(requestOptions)
+
+        expect(requestOptions.compression).toBe(Compression.Base64)
     })
 })

@@ -1,7 +1,10 @@
 {
     "compilerOptions": {
         "outDir": "dist",
-        "module": "es6",
-        "moduleResolution": "node"
+        "module": "Node16",
+        "moduleResolution": "Node16",
+        "rootDir": "./src",
+        "types": ["node"],
+        "strict": false
     }
 }

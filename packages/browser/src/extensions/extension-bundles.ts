@@ -22,7 +22,7 @@
  * @module
  */
 
-import { Autocapture } from '../autocapture'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { DeadClicksAutocapture } from './dead-clicks-autocapture'
 import { ExceptionObserver } from './exception-autocapture'
 import { HistoryAutocapture } from './history-autocapture'
@@ -33,13 +33,15 @@ import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
-import { PostHogSurveys } from '../posthog-surveys'
+import { BrowserSurveys } from '../browser-surveys'
 import { Toolbar } from './toolbar'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { WebExperiments } from '../web-experiments'
 import { PostHogConversations } from './conversations/posthog-conversations'
 import { PostHogLogs } from '../posthog-logs'
+import { PostHogMetrics } from '../posthog-metrics'
+import { WebMCP } from './webmcp'
 
 type ExtensionClasses = NonNullable<PostHogConfig['__extensionClasses']>
 
@@ -55,7 +57,7 @@ export const SessionReplayExtensions = {
 
 /** Autocapture, click tracking, heatmaps, and web vitals. */
 export const AnalyticsExtensions = {
-    autocapture: Autocapture,
+    autocapture: BrowserAutocapture,
     historyAutocapture: HistoryAutocapture,
     heatmaps: Heatmaps,
     deadClicksAutocapture: DeadClicksAutocapture,
@@ -86,7 +88,7 @@ export const TracingExtensions = {
 
 /** In-app surveys. Includes feature flags for targeting. */
 export const SurveysExtensions = {
-    surveys: PostHogSurveys,
+    surveys: BrowserSurveys,
     ...FeatureFlagsExtensions,
 } as const satisfies ExtensionClasses
 
@@ -111,6 +113,16 @@ export const LogsExtensions = {
     logs: PostHogLogs,
 } as const satisfies ExtensionClasses
 
+/** The posthog.metrics API (count, gauge, histogram). */
+export const MetricsExtensions = {
+    metrics: PostHogMetrics,
+} as const satisfies ExtensionClasses
+
+/** WebMCP tool call capture. */
+export const WebMCPExtensions = {
+    webMCP: WebMCP,
+} as const satisfies ExtensionClasses
+
 /** All extensions — equivalent to the default `posthog-js` bundle. */
 export const AllExtensions = {
     ...FeatureFlagsExtensions,
@@ -125,4 +137,6 @@ export const AllExtensions = {
     ...ExperimentsExtensions,
     ...ConversationsExtensions,
     ...LogsExtensions,
+    ...MetricsExtensions,
+    ...WebMCPExtensions,
 } as const satisfies ExtensionClasses

@@ -1,4 +1,5 @@
 import { PostHogPersistedProperty } from '../types'
+import { createTestClient, PostHogCoreTestClient } from '../testing'
 import type { Logger } from '../types'
 import { PostHogLogs } from './index'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig } from './types'
@@ -33,20 +34,20 @@ const createMockInstance = (overrides: Record<string, any> = {}): any => {
   const store: Record<string, any> = {}
   const instance: any = {
     optedOut: false,
-    getDistinctId: jest.fn(() => 'user-123'),
-    getSessionId: jest.fn(() => 'sess-456'),
-    getLibraryId: jest.fn(() => 'posthog-core-tests'),
-    getLibraryVersion: jest.fn(() => '0.0.0-test'),
-    getPersistedProperty: jest.fn((key: string) => store[key]),
-    setPersistedProperty: jest.fn((key: string, value: any) => {
+    getDistinctId: vi.fn(() => 'user-123'),
+    getSessionId: vi.fn(() => 'sess-456'),
+    getLibraryId: vi.fn(() => 'posthog-core-tests'),
+    getLibraryVersion: vi.fn(() => '0.0.0-test'),
+    getPersistedProperty: vi.fn((key: string) => store[key]),
+    setPersistedProperty: vi.fn((key: string, value: any) => {
       if (value === null || value === undefined) {
         delete store[key]
       } else {
         store[key] = value
       }
     }),
-    _sendLogsBatch: jest.fn(() => Promise.resolve({ kind: 'ok' })),
-    addPendingPromise: jest.fn(<T>(promise: Promise<T>) => promise),
+    _sendLogsBatch: vi.fn(() => Promise.resolve({ kind: 'ok' })),
+    addPendingPromise: vi.fn(<T>(promise: Promise<T>) => promise),
     _store: store,
     ...overrides,
   }
@@ -59,13 +60,13 @@ const immediateOnReady = (fn: () => void): void => fn()
 
 const createMockLogger = (): Logger => {
   const logger: any = {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    critical: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    critical: vi.fn(),
   }
-  logger.createLogger = jest.fn(() => logger)
+  logger.createLogger = vi.fn(() => logger)
   return logger as Logger
 }
 
@@ -80,6 +81,82 @@ const getContextFor = (instance: any) => (): { distinctId?: string; sessionId?: 
   sessionId: instance.getSessionId() || undefined,
 })
 
+// Drives a real core host rather than a stubbed `_sendLogsBatch`, so the sender's
+// error classification and the queue bookkeeping are exercised together.
+describe('PostHogLogs over the core sender', () => {
+  const createLogsOverCore = (status: number): { logs: PostHogLogs; client: PostHogCoreTestClient } => {
+    const [client, mocks] = createTestClient('TEST_API_KEY', {
+      fetchRetryCount: 0,
+      preloadFeatureFlags: false,
+    })
+    mocks.fetch.mockResolvedValue({
+      status,
+      text: () => Promise.resolve('err'),
+      json: () => Promise.resolve({ status: 'err' }),
+    })
+    const logs = new PostHogLogs(
+      client,
+      resolveForTest(),
+      createMockLogger(),
+      () => ({ distinctId: 'user-123' }),
+      immediateOnReady
+    )
+    return { logs, client }
+  }
+
+  const queueOf = (client: PostHogCoreTestClient): BufferedLogEntry[] =>
+    client.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
+
+  it.each([408, 429, 500, 503])('keeps records queued when the endpoint answers %i', async (status) => {
+    const { logs, client } = createLogsOverCore(status)
+    logs.captureLog({ body: 'keep me' })
+
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+
+    expect(queueOf(client)).toHaveLength(1)
+  })
+
+  it('retains and resends records after transport retries are exhausted', async () => {
+    vi.useRealTimers()
+    const [client, mocks] = createTestClient('TEST_API_KEY', {
+      fetchRetryCount: 2,
+      fetchRetryDelay: 1,
+      preloadFeatureFlags: false,
+    })
+    const unavailableResponse = { status: 503, text: async () => 'unavailable', json: async () => ({}) }
+    mocks.fetch
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce({ status: 200, text: async () => 'ok', json: async () => ({}) })
+    const logs = new PostHogLogs(
+      client,
+      resolveForTest(),
+      createMockLogger(),
+      () => ({ distinctId: 'user-123' }),
+      immediateOnReady
+    )
+
+    logs.captureLog({ body: 'retry me' })
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+    expect(mocks.fetch).toHaveBeenCalledTimes(3)
+    expect(queueOf(client)).toHaveLength(1)
+
+    await expect(logs.flush()).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(4)
+    expect(queueOf(client)).toHaveLength(0)
+  })
+
+  it('drops the batch when the endpoint answers 401', async () => {
+    const { logs, client } = createLogsOverCore(401)
+    logs.captureLog({ body: 'unauthorized' })
+
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+
+    expect(queueOf(client)).toHaveLength(0)
+  })
+})
+
 describe('PostHogLogs', () => {
   let mockInstance: any
   let logger: Logger
@@ -87,11 +164,175 @@ describe('PostHogLogs', () => {
   beforeEach(() => {
     mockInstance = createMockInstance()
     logger = createMockLogger()
+    // Retry delays carry jitter; pinned to its midpoint so every timing
+    // assertion here measures the backoff itself and cannot flake.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
 
   it('constructs without throwing', () => {
     const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), immediateOnReady)
     expect(logs).toBeDefined()
+  })
+
+  describe('clearQueue', () => {
+    it('does not let an in-flight batch drop records captured after the clear', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: vi.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the clear' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.captureLog({ body: 'captured after the clear' })
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the clear' }])
+    })
+  })
+
+  describe('a 413 retry that lands after the queue is cleared', () => {
+    it('does not re-send records the clear purged', async () => {
+      const sentBodies: string[][] = []
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: vi.fn((payload: any) => {
+          sentBodies.push(payload.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue))
+          // Only the first send is held open; any retry resolves at once so a
+          // regression fails on the assertion rather than by hanging the test.
+          return sentBodies.length === 1
+            ? new Promise((resolve) => (releaseSend = resolve))
+            : Promise.resolve({ kind: 'ok' })
+        }),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'purged one' })
+      logs.captureLog({ body: 'purged two' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      // A 413 makes `_flushInner` retry the same records with a smaller batch cap.
+      releaseSend({ kind: 'too-large' })
+      await flushing
+
+      expect(sentBodies).toEqual([['purged one', 'purged two']])
+    })
+  })
+
+  describe('a clear that lands between two batches of one flush', () => {
+    it('still advances the batch assembled after the clear', async () => {
+      const sent: string[][] = []
+      let releasePersist: (() => void) | null = null
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: vi.fn((payload: any) => {
+          sent.push(payload.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue))
+          return Promise.resolve({ kind: 'ok' })
+        }),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady,
+        () => new Promise<void>((resolve) => (releasePersist = resolve))
+      )
+      logs.captureLog({ body: 'a' })
+      logs.captureLog({ body: 'b' })
+
+      const flushing = logs.flush()
+      // Let batch ['a'] send and park inside the persist await between batches.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve()
+      }
+      logs.clearQueue()
+      logs.captureLog({ body: 'c' })
+      // Each batch installs a fresh persist gate; release whichever is pending until
+      // the flush drains.
+      for (let i = 0; i < 20; i++) {
+        const pending = releasePersist
+        releasePersist = null
+        pending?.()
+        await Promise.resolve()
+      }
+      await flushing
+
+      expect({ sent, queue: readQueue(mockInstance).map((e) => e.record.body.stringValue) }).toEqual({
+        sent: [['a'], ['c']],
+        queue: [],
+      })
+    })
+  })
+
+  describe('reset during an in-flight flush', () => {
+    it('does not let an in-flight batch drop records captured after the reset', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: vi.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the reset' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.reset()
+      logs.captureLog({ body: 'captured after the reset' })
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the reset' }])
+    })
+
+    it('does not let a flush started after the reset run alongside the in-flight one', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: vi.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the reset' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.reset()
+      logs.captureLog({ body: 'captured after the reset' })
+      const second = logs.flush()
+
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+      await second
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the reset' }])
+    })
   })
 
   describe('captureLog', () => {
@@ -112,6 +353,29 @@ describe('PostHogLogs', () => {
         PostHogPersistedProperty.LogsQueue,
         expect.any(Array)
       )
+    })
+
+    it('stamps a record from `capturedAt` rather than live state', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      const occurredAtMs = Date.now() - 5000
+
+      logs.captureLog(
+        { body: 'buffered before identify' },
+        { context: { distinctId: 'anon-1', sessionId: 'session-1' }, occurredAtMs }
+      )
+
+      const [{ record }] = readQueue(mockInstance)
+      const attributes = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value.stringValue]))
+      expect(attributes.posthogDistinctId).toBe('anon-1')
+      expect(attributes.sessionId).toBe('session-1')
+      expect(record.timeUnixNano).toBe(String(occurredAtMs) + '000000')
+      expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
     })
 
     it('maps severity levels correctly', () => {
@@ -363,7 +627,7 @@ describe('PostHogLogs', () => {
     })
 
     it('silently drops captures when onReady never invokes fn (rejected init)', () => {
-      const neverReady = jest.fn(() => {
+      const neverReady = vi.fn(() => {
         /* simulate rejected init: fn is never called */
       })
       const logs = new PostHogLogs(mockInstance, resolveForTest(), logger, getContextFor(mockInstance), neverReady)
@@ -381,13 +645,13 @@ describe('PostHogLogs', () => {
         pending.push(fn)
       }
       const instance = createMockInstance({
-        getDistinctId: jest.fn().mockReturnValue('user-A'),
+        getDistinctId: vi.fn().mockReturnValue('user-A'),
       })
 
       const logs = new PostHogLogs(instance, resolveForTest(), logger, getContextFor(instance), defer)
       logs.captureLog({ body: 'captured-as-user-A' })
 
-      instance.getDistinctId = jest.fn().mockReturnValue('user-B')
+      instance.getDistinctId = vi.fn().mockReturnValue('user-B')
 
       pending.forEach((fn) => fn())
 
@@ -457,7 +721,7 @@ describe('PostHogLogs', () => {
     })
 
     it('uses the scopeName constructor param as the OTLP scope name', async () => {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),
@@ -479,7 +743,7 @@ describe('PostHogLogs', () => {
         payload.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
       )
       expect(resourceAttrs['telemetry.sdk.name']).toEqual({ stringValue: 'posthog-core-tests' })
-      jest.useRealTimers()
+      vi.useRealTimers()
     })
 
     it('defaults service.name to "unknown_service" when not configured', async () => {
@@ -539,7 +803,7 @@ describe('PostHogLogs', () => {
     it('splits a large queue into multiple batches of maxBatchRecordsPerPost and persists after each', async () => {
       const sendOrder: number[] = []
       let persistCallsBeforeSecondSend = 0
-      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+      mockInstance._sendLogsBatch = vi.fn(async (payload: any) => {
         // Record the persist count *at the start of* send #2. The first send
         // must have already persisted its queue advance by then — otherwise a
         // crash between sends could double-send the first batch.
@@ -572,7 +836,7 @@ describe('PostHogLogs', () => {
 
     it('halves maxBatchRecordsPerPost and retries the same records on too-large outcome', async () => {
       const sendSizes: number[] = []
-      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+      mockInstance._sendLogsBatch = vi.fn(async (payload: any) => {
         const size = payload.resourceLogs[0].scopeLogs[0].logRecords.length
         sendSizes.push(size)
         if (sendSizes.length === 1) {
@@ -604,7 +868,7 @@ describe('PostHogLogs', () => {
       // cap, each healthy send grows it back by 1 until the configured
       // maximum is reached.
       const sendSizes: number[] = []
-      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+      mockInstance._sendLogsBatch = vi.fn(async (payload: any) => {
         const size = payload.resourceLogs[0].scopeLogs[0].logRecords.length
         sendSizes.push(size)
         // First POST is rejected as too-large; everything else succeeds.
@@ -636,7 +900,7 @@ describe('PostHogLogs', () => {
     })
 
     it('drops the only record when too-large arrives on a batch of size 1', async () => {
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'too-large' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'too-large' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ maxBatchRecordsPerPost: 1 }),
@@ -654,7 +918,7 @@ describe('PostHogLogs', () => {
     })
 
     it('warns explicitly when dropping a size-1 413 (visibility for the lost record)', async () => {
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'too-large' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'too-large' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ maxBatchRecordsPerPost: 1 }),
@@ -666,7 +930,7 @@ describe('PostHogLogs', () => {
       await logs.flush()
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+        expect.stringContaining('Dropping a single log record with batch size 1')
       )
     })
 
@@ -674,7 +938,7 @@ describe('PostHogLogs', () => {
       // First record returns too-large with size 1 (drops and warns), then
       // the rest of the queue should continue flushing normally.
       let callCount = 0
-      mockInstance._sendLogsBatch = jest.fn(() => {
+      mockInstance._sendLogsBatch = vi.fn(() => {
         callCount++
         return Promise.resolve(callCount === 1 ? { kind: 'too-large' } : { kind: 'ok' })
       })
@@ -701,7 +965,7 @@ describe('PostHogLogs', () => {
       // then 413 on size 1 is the permanent drop. Verifies the cap actually
       // shrinks all the way down before the size-1 drop fires.
       const sendSizes: number[] = []
-      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+      mockInstance._sendLogsBatch = vi.fn(async (payload: any) => {
         const size = payload.resourceLogs[0].scopeLogs[0].logRecords.length
         sendSizes.push(size)
         return { kind: 'too-large' }
@@ -724,13 +988,13 @@ describe('PostHogLogs', () => {
       expect(sendSizes).toEqual([1])
       expect(readQueue(mockInstance)).toHaveLength(0)
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+        expect.stringContaining('Dropping a single log record with batch size 1')
       )
     })
 
     it('keeps records in the queue on retry-later outcome and re-throws the carried error', async () => {
       const netErr = new Error('offline')
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'retry-later', error: netErr }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'retry-later', error: netErr }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),
@@ -747,7 +1011,7 @@ describe('PostHogLogs', () => {
 
     it('drops the batch on fatal outcome and re-throws the carried error', async () => {
       const bogus = new Error('malformed')
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'fatal', error: bogus }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'fatal', error: bogus }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),
@@ -764,11 +1028,11 @@ describe('PostHogLogs', () => {
 
     it('awaits _waitForStoragePersist between batches so a crash can’t replay records', async () => {
       const sequence: string[] = []
-      mockInstance._sendLogsBatch = jest.fn(async (payload: any) => {
+      mockInstance._sendLogsBatch = vi.fn(async (payload: any) => {
         sequence.push(`send:${payload.resourceLogs[0].scopeLogs[0].logRecords.length}`)
         return { kind: 'ok' }
       })
-      const waitForStoragePersist = jest.fn(async () => {
+      const waitForStoragePersist = vi.fn(async () => {
         sequence.push('waitForPersist')
       })
       const logs = new PostHogLogs(
@@ -794,7 +1058,7 @@ describe('PostHogLogs', () => {
 
     it('serializes concurrent flush calls rather than racing them', async () => {
       let resolveFirst: (v: any) => void = () => {}
-      mockInstance._sendLogsBatch = jest.fn(
+      mockInstance._sendLogsBatch = vi.fn(
         () =>
           new Promise((r) => {
             resolveFirst = r
@@ -820,8 +1084,8 @@ describe('PostHogLogs', () => {
   })
 
   describe('flush triggers', () => {
-    beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
 
     it('fires a flush when the buffer hits maxBufferSize', () => {
       const logs = new PostHogLogs(
@@ -856,9 +1120,9 @@ describe('PostHogLogs', () => {
       // Only one timer armed, not three — subsequent enqueues inside the
       // window must not push the flush out.
       expect(mockInstance._sendLogsBatch).not.toHaveBeenCalled()
-      jest.advanceTimersByTime(4999)
+      vi.advanceTimersByTime(4999)
       expect(mockInstance._sendLogsBatch).not.toHaveBeenCalled()
-      jest.advanceTimersByTime(1)
+      vi.advanceTimersByTime(1)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
@@ -874,13 +1138,13 @@ describe('PostHogLogs', () => {
       logs.captureLog({ body: 'b' })
       // Threshold path flushed already; advancing time must not trigger a second send.
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
-      jest.advanceTimersByTime(5000)
+      vi.advanceTimersByTime(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
     it('re-arms the timer after a failed flush so a retry happens without a new capture', async () => {
       // First flush fails (retry-later keeps the records); the second succeeds.
-      mockInstance._sendLogsBatch = jest
+      mockInstance._sendLogsBatch = vi
         .fn()
         .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('net') })
         .mockResolvedValueOnce({ kind: 'ok' })
@@ -895,13 +1159,475 @@ describe('PostHogLogs', () => {
       logs.captureLog({ body: 'retry-me' })
 
       // First timer fires → flush #1 → retry-later → record retained, timer re-armed.
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
       expect(readQueue(mockInstance)).toHaveLength(1)
 
       // No new capture: the re-armed timer alone fires the retry, which drains.
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
+    it('waits out Retry-After even when a capture re-arms the timer mid-flush', async () => {
+      // The capture that lands while the send is in flight arms a timer at the
+      // plain interval; the 429 then asks for far longer. The earlier timer must
+      // not fire first, or the SDK sends inside the window it was told to skip.
+      mockInstance._sendLogsBatch = vi.fn(async () => {
+        logs.captureLog({ body: 'arrived mid-flush' })
+        return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+      })
+
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let the size trigger send inside a Retry-After window', async () => {
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBufferSize: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Enough records to trip the size trigger, well inside the window.
+      logs.captureLog({ body: 'second' })
+      logs.captureLog({ body: 'third' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let onReconnect send inside a Retry-After window', async () => {
+      // `online` fires on every network handover; it says nothing about the
+      // rate-limit window the endpoint set.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('flushes on reconnect once the Retry-After window has passed', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 5000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Stop just short of the deadline, then cross it without letting the
+      // re-armed timer fire — otherwise the timer satisfies the assertion and
+      // the test says nothing about onReconnect.
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      vi.setSystemTime(Date.now() + 2)
+
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let a capture after an explicit flush send inside the window', async () => {
+      // `flush()` is the lifecycle path (RN foreground/background, shutdown).
+      // It leaves no timer behind, so the next capture is the one that arms
+      // one — at the plain interval unless the window floors it.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      logs.captureLog({ body: 'second' })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(295_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let a capture during an explicit flush send inside the window', async () => {
+      // The sibling case covers a capture *after* the flush settles. This one
+      // lands while the send is in flight, so it arms the timer at the plain
+      // interval before the window exists.
+      let release: (v: any) => void = () => {}
+      mockInstance._sendLogsBatch = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve
+          })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      const flushed = logs.flush().catch(() => {})
+      await vi.advanceTimersByTimeAsync(0)
+
+      logs.captureLog({ body: 'second' })
+      release({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      await flushed
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('arms a timer when onReconnect lands inside the window after an explicit flush', async () => {
+      // `flush()` leaves no timer behind, so returning early here without
+      // arming one leaves the records with nothing scheduled at all.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      logs.onReconnect()
+
+      await vi.advanceTimersByTimeAsync(289_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('releases a record captured mid-flush once that flush closes the window', async () => {
+      // The capture arms against the window that was open when it landed; the
+      // outcome then closes that window, so the timer has to come back down.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      let sends = 0
+      mockInstance._sendLogsBatch = vi.fn(async () => {
+        sends += 1
+        if (sends === 1) {
+          return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+        }
+        await Promise.resolve()
+        if (sends === 2) {
+          logs.captureLog({ body: 'mid' })
+        }
+        return { kind: 'ok' }
+      })
+
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await logs.flush().catch(() => {})
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit and must not end the
+      // wait.
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'too-large' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBatchRecordsPerPost: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // A batch of one the endpoint cannot accept: the record is dropped.
+      await logs.flush()
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('ends the window when an explicit flush succeeds', async () => {
+      // The endpoint just accepted a batch, so the wait it asked for earlier is
+      // over — the gated paths must not stay blocked for the rest of it.
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000, maxBufferSize: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await logs.flush()
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Asserted through a gated path: a plain capture would flush either way.
+      logs.reset()
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps its own backoff when the endpoint asks for less', async () => {
+      // A proxy answering `Retry-After: 1` must not turn the retry into a
+      // one-second hot loop against an endpoint already refusing traffic.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('503'), retryAfterMs: 10 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not restart a served-out wait for a capture during the retry', async () => {
+      // A deadline, not a duration. The retry's timer has already fired, so the
+      // capture below arms the next one — and it sees the wait still set,
+      // because the send it belongs to has not settled. Holding a duration here
+      // re-arms for the whole window again and leaves the record 300s behind an
+      // endpoint that has already recovered.
+      let settle: ((outcome: any) => void) | undefined
+      let call = 0
+      mockInstance._sendLogsBatch = vi.fn(() => {
+        call++
+        if (call === 1) {
+          return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        }
+        return new Promise((resolve) => {
+          settle = resolve
+        })
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // The wait elapses and the retry goes out, but hangs.
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      settle?.({ kind: 'ok' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      // One interval, not another window.
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('closes the window at the ceiling for a host out-pacing it', async () => {
+      // RN takes flush() on every app-state transition, and each refusal pushes
+      // the deadline out. The ceiling is what stops the gated paths — the size
+      // trigger and onReconnect — from being suppressed for good.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 60_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Lifecycle flushes every 5s against a 30s window, for longer than the
+      // 5-minute ceiling. Sampled rather than asserted through onReconnect:
+      // whether a given moment falls inside a window is timing-dependent, but
+      // past the ceiling it must fall outside one.
+      let sawWindowClosed = false
+      for (let i = 0; i < 70; i++) {
+        await vi.advanceTimersByTimeAsync(5000)
+        // Sampled before the flush: a flush that finds the window closed opens
+        // a fresh one, so sampling after it would always look open.
+        if ((logs as any)._retryAfter.remainingMs() === 0) {
+          sawWindowClosed = true
+        }
+        logs.captureLog({ body: `line ${i}` })
+        await logs.flush().catch(() => {})
+      }
+      expect(sawWindowClosed).toBe(true)
+    })
+
+    it('keeps flushing after a backward clock step', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBufferSize: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      const real = Date.now()
+      vi.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
+
+      // A gated path: suppressed for the size of the step without the guard.
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('ends the wait when a later failure names none', async () => {
+      // 429 with a window, then a plain 503: the queue drops back to its own
+      // backoff rather than waiting the old window out on every attempt.
+      const outcomes: any[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'retry-later', error: new Error('503') },
+      ]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      // Back on the plain backoff, not another 300s.
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('keeps flushing on the interval while captures keep arriving', async () => {
+      // Every capture arms the timer. Re-arming a pending one would push the
+      // flush out for as long as logs keep coming, stranding a steady stream
+      // that never reaches the size trigger.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000, maxBufferSize: 100 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+
+      for (let i = 0; i < 30; i++) {
+        logs.captureLog({ body: `line ${i}` })
+        await vi.advanceTimersByTimeAsync(2000)
+      }
+
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalled()
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
@@ -915,19 +1641,42 @@ describe('PostHogLogs', () => {
       )
       logs.captureLog({ body: 'one' })
 
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
       expect(readQueue(mockInstance)).toHaveLength(0)
 
       // Successful drain leaves nothing queued, so no further timer should fire.
-      await jest.advanceTimersByTimeAsync(20000)
+      await vi.advanceTimersByTimeAsync(20000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('caps the retry delay at 30s however long the outage runs', async () => {
+      // The logs contract states the backoff as capped at ~30s. Without the cap
+      // a 5s interval reaches 320s after six doublings.
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'retry-later', error: new Error('down') }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'retry-me' })
+
+      // Ten failures, well past the six doublings the exponent allows.
+      for (let i = 0; i < 10; i++) {
+        await vi.advanceTimersByTimeAsync(30_000)
+      }
+      // Capped, the delay settles at 30s and 300s of outage buys ten retries on
+      // top of the two the first doublings allow. Uncapped it reaches 320s and
+      // buys six attempts in total, so the difference is not a rounding one.
+      expect(mockInstance._sendLogsBatch.mock.calls.length).toBeGreaterThanOrEqual(11)
     })
 
     it('backs off exponentially across consecutive failed flushes', async () => {
       // Every flush fails, so the record stays queued and the retry interval grows:
       // base (initial), base (1st retry), 2x, 4x, ...
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'retry-later', error: new Error('down') }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'retry-later', error: new Error('down') }))
       const base = 1000
       const logs = new PostHogLogs(
         mockInstance,
@@ -938,27 +1687,27 @@ describe('PostHogLogs', () => {
       )
       logs.captureLog({ body: 'x' })
 
-      await jest.advanceTimersByTimeAsync(base) // initial timer → attempt #1
+      await vi.advanceTimersByTimeAsync(base) // initial timer → attempt #1
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
-      await jest.advanceTimersByTimeAsync(base) // 1st retry still at base → attempt #2
+      await vi.advanceTimersByTimeAsync(base) // 1st retry still at base → attempt #2
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
 
       // Now backoff: next retry is 2x base — base alone must not fire it.
-      await jest.advanceTimersByTimeAsync(base)
+      await vi.advanceTimersByTimeAsync(base)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
-      await jest.advanceTimersByTimeAsync(base) // 2x base elapsed → attempt #3
+      await vi.advanceTimersByTimeAsync(base) // 2x base elapsed → attempt #3
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
 
       // Next retry is 4x base.
-      await jest.advanceTimersByTimeAsync(2 * base)
+      await vi.advanceTimersByTimeAsync(2 * base)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
-      await jest.advanceTimersByTimeAsync(2 * base) // 4x base elapsed → attempt #4
+      await vi.advanceTimersByTimeAsync(2 * base) // 4x base elapsed → attempt #4
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(4)
     })
 
     it('resets the backoff after a successful flush', async () => {
       let shouldFail = true
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve(shouldFail ? { kind: 'retry-later', error: new Error('down') } : { kind: 'ok' })
       )
       const base = 1000
@@ -971,23 +1720,23 @@ describe('PostHogLogs', () => {
       )
       logs.captureLog({ body: 'a' })
 
-      await jest.advanceTimersByTimeAsync(base) // attempt #1 fail (failures→1)
-      await jest.advanceTimersByTimeAsync(base) // attempt #2 fail (failures→2, next 2x)
-      await jest.advanceTimersByTimeAsync(2 * base) // attempt #3 fail (failures→3, next 4x)
+      await vi.advanceTimersByTimeAsync(base) // attempt #1 fail (failures→1)
+      await vi.advanceTimersByTimeAsync(base) // attempt #2 fail (failures→2, next 2x)
+      await vi.advanceTimersByTimeAsync(2 * base) // attempt #3 fail (failures→3, next 4x)
       shouldFail = false
-      await jest.advanceTimersByTimeAsync(4 * base) // attempt #4 succeeds → drains + resets
+      await vi.advanceTimersByTimeAsync(4 * base) // attempt #4 succeeds → drains + resets
       expect(readQueue(mockInstance)).toHaveLength(0)
 
       // A new capture flushes at the base interval again, not the backed-off one.
-      ;(mockInstance._sendLogsBatch as jest.Mock).mockClear()
+      ;(mockInstance._sendLogsBatch as vi.Mock).mockClear()
       logs.captureLog({ body: 'b' })
-      await jest.advanceTimersByTimeAsync(base)
+      await vi.advanceTimersByTimeAsync(base)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
     it('onReconnect flushes immediately without waiting out the backoff', async () => {
       let shouldFail = true
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve(shouldFail ? { kind: 'retry-later', error: new Error('down') } : { kind: 'ok' })
       )
       const base = 1000
@@ -1000,22 +1749,44 @@ describe('PostHogLogs', () => {
       )
       logs.captureLog({ body: 'x' })
 
-      await jest.advanceTimersByTimeAsync(base) // attempt #1 fails → record retained, backoff armed
+      await vi.advanceTimersByTimeAsync(base) // attempt #1 fails → record retained, backoff armed
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
       expect(readQueue(mockInstance)).toHaveLength(1)
 
       // Reconnect drains now — no timer advance needed.
       shouldFail = false
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
   })
 
+  describe('flushWithTimeout', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('clears the timeout timer when the flush finishes first', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      mockInstance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [
+        { record: { body: { stringValue: 'a' } } },
+      ])
+
+      await logs.flushWithTimeout(5000)
+
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('shutdown', () => {
-    beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
 
     it('drains the queue and clears any armed flush timer', async () => {
       const logs = new PostHogLogs(
@@ -1033,12 +1804,27 @@ describe('PostHogLogs', () => {
 
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
       // Advancing past the original interval must not produce a second flush.
-      jest.advanceTimersByTime(10000)
+      vi.advanceTimersByTime(10000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
+    it('clears the timeout timer when the final flush finishes first', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'a' })
+
+      await logs.shutdown(5000)
+
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
     it('swallows flush errors so shutdown can complete', async () => {
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'fatal', error: new Error('boom') }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'fatal', error: new Error('boom') }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),
@@ -1082,7 +1868,7 @@ describe('PostHogLogs', () => {
 
     it('while a flush is in flight, the shared promise coordinates a single drain', async () => {
       let resolveFirst: (v: any) => void = () => {}
-      mockInstance._sendLogsBatch = jest.fn(
+      mockInstance._sendLogsBatch = vi.fn(
         () =>
           new Promise((r) => {
             resolveFirst = r
@@ -1098,8 +1884,8 @@ describe('PostHogLogs', () => {
       logs.captureLog({ body: 'a' })
 
       // Real timers only here — shutdown(timeoutMs) path uses safeSetTimeout,
-      // which is incompatible with the default `jest.useFakeTimers()`.
-      jest.useRealTimers()
+      // which is incompatible with the default `vi.useFakeTimers()`.
+      vi.useRealTimers()
 
       const flushP = logs.flush()
       const shutdownP = logs.shutdown()
@@ -1112,9 +1898,9 @@ describe('PostHogLogs', () => {
     })
 
     it('races the final flush against timeoutMs so a stalled send does not hang shutdown', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       // _sendLogsBatch never resolves — the budget must force shutdown to return.
-      mockInstance._sendLogsBatch = jest.fn(() => new Promise(() => {}))
+      mockInstance._sendLogsBatch = vi.fn(() => new Promise(() => {}))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest(),
@@ -1241,10 +2027,10 @@ describe('PostHogLogs', () => {
     })
 
     it('never crashes the caller when a fn throws — drops the record (fail closed) and logs', () => {
-      const thrower = jest.fn(() => {
+      const thrower = vi.fn(() => {
         throw new Error('bad filter')
       })
-      const after = jest.fn((r: any) => ({ ...r, body: `${r.body}!` }))
+      const after = vi.fn((r: any) => ({ ...r, body: `${r.body}!` }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ beforeSend: [thrower, after] }),
@@ -1264,8 +2050,8 @@ describe('PostHogLogs', () => {
   })
 
   describe('rate limiting', () => {
-    beforeEach(() => jest.useFakeTimers({ now: 0 }))
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => vi.useFakeTimers({ now: 0 }))
+    afterEach(() => vi.useRealTimers())
 
     // Tabular form for the simple in-window cap cases. Bespoke ones
     // (warn-once, window-roll reset, clock-jump backward, beforeSend
@@ -1334,7 +2120,7 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(1)
       expect(logger.warn).toHaveBeenCalledTimes(1)
 
-      jest.setSystemTime(1001)
+      vi.setSystemTime(1001)
       logs.captureLog({ body: 'window-2-kept' })
       logs.captureLog({ body: 'window-2-dropped' })
       expect(readQueue(mockInstance)).toHaveLength(2)
@@ -1350,7 +2136,7 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       // Seed the window at t=5000, fill the budget.
-      jest.setSystemTime(5000)
+      vi.setSystemTime(5000)
       logs.captureLog({ body: 'a' })
       logs.captureLog({ body: 'b' })
       logs.captureLog({ body: 'dropped-pre-jump' })
@@ -1360,7 +2146,7 @@ describe('PostHogLogs', () => {
       // Without the `elapsed < 0` guard, the rate cap would stay "stuck"
       // until `now` exceeds the old window-start again — potentially
       // dropping every log for the duration of the backward jump.
-      jest.setSystemTime(5000 - 60 * 60 * 1000)
+      vi.setSystemTime(5000 - 60 * 60 * 1000)
       logs.captureLog({ body: 'accepted-post-jump' })
 
       expect(readQueue(mockInstance)).toHaveLength(3)
@@ -1371,7 +2157,7 @@ describe('PostHogLogs', () => {
       // beforeSend drops the first record; rate cap is 1 per window. The
       // SECOND capture should still succeed — if beforeSend consumed the
       // budget, it'd be dropped.
-      const beforeSend = jest
+      const beforeSend = vi
         .fn()
         .mockReturnValueOnce(null)
         .mockImplementation((r: any) => r)
@@ -1395,7 +2181,7 @@ describe('PostHogLogs', () => {
       let resolveSend: (v: any) => void = () => {}
       let captureDuringSend: (() => void) | null = null
 
-      mockInstance._sendLogsBatch = jest.fn(
+      mockInstance._sendLogsBatch = vi.fn(
         () =>
           new Promise((r) => {
             if (captureDuringSend) {
@@ -1449,7 +2235,7 @@ describe('PostHogLogs', () => {
       const sendGate = new Promise((r) => {
         resolveSend = r
       })
-      mockInstance._sendLogsBatch = jest.fn(() => sendGate)
+      mockInstance._sendLogsBatch = vi.fn(() => sendGate)
 
       const logs = new PostHogLogs(
         mockInstance,
@@ -1483,11 +2269,11 @@ describe('PostHogLogs', () => {
       // batch's advance — under-dropping and re-sending an already-sent record.
       const entry = (body: string): any => ({ record: { body: { stringValue: body } } })
       mockInstance._store[PostHogPersistedProperty.LogsQueue] = [entry('a'), entry('b'), entry('c'), entry('d')]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'ok' }))
 
       let persistCalls = 0
+      // oxlint-disable-next-line prefer-const
       let logs: PostHogLogs
-      // eslint-disable-next-line prefer-const
       logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ maxBufferSize: 4, maxQueueSize: 4, maxBatchRecordsPerPost: 2 }),

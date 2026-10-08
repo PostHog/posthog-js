@@ -1,25 +1,28 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { StyleProp, ViewStyle } from 'react-native'
 
-import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
+import { getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
+import { shouldShuffleQuestions } from '../survey-shuffling'
+import { canCaptureSurvey, createSurveyProgress, SurveyProgress } from '../survey-progress'
+import { Survey, SurveyQuestion, type SurveyResponses, maybeAdd, SurveyQuestionBranchingType } from '@posthog/core'
 import {
-  Survey,
-  SurveyAppearance,
-  SurveyQuestion,
-  type SurveyResponses,
-  maybeAdd,
-  SurveyQuestionBranchingType,
-} from '@posthog/core'
-import {
-  buildSurveyResponseProperties,
+  buildSurveyResponseEventProperties,
   getSurveyInteractionProperty,
-  getSurveyResponseKey,
+  recordSurveyAnswer,
   SURVEY_LANGUAGE_PROPERTY,
-  surveyHasResponses,
 } from '@posthog/core/surveys'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'
+
+// Events receive the configured survey, not its shuffled display copies. Supply
+// positional indices here so legacy response properties do not depend on rendering.
+const withOriginalQuestionIndices = (survey: Survey) => ({
+  questions: survey.questions.map((question, originalQuestionIndex) => ({
+    ...question,
+    originalQuestionIndex,
+  })),
+})
 
 export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog, surveyLanguage?: string | null): void => {
   posthog.capture('survey shown', {
@@ -35,15 +38,24 @@ export const sendSurveyEvent = (
   responses: SurveyResponses = {},
   survey: Survey,
   posthog: PostHog,
-  surveyLanguage?: string | null
+  surveyLanguage?: string | null,
+  progress?: SurveyProgress,
+  completed = true
 ): void => {
   posthog.capture('survey sent', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
-    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
-    ...buildSurveyResponseProperties(responses, survey),
+    ...buildSurveyResponseEventProperties({
+      event: 'sent',
+      survey: withOriginalQuestionIndices(survey),
+      responses,
+      submissionId: progress?.submissionId,
+      completed: progress ? completed : undefined,
+      surveyLanguage,
+      questionSnapshots: progress?.questionSnapshots,
+    }),
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
     },
@@ -54,73 +66,106 @@ export const dismissedSurveyEvent = (
   survey: Survey,
   responses: SurveyResponses = {},
   posthog: PostHog,
-  surveyLanguage?: string | null
+  surveyLanguage?: string | null,
+  progress?: SurveyProgress
 ): void => {
   posthog.capture('survey dismissed', {
     $survey_name: survey.name,
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
-    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
-    $survey_partially_completed: surveyHasResponses(responses),
-    ...buildSurveyResponseProperties(responses, survey),
+    ...buildSurveyResponseEventProperties({
+      event: 'dismissed',
+      survey: withOriginalQuestionIndices(survey),
+      responses,
+      submissionId: progress?.submissionId,
+      surveyLanguage,
+      questionSnapshots: progress?.questionSnapshots,
+    }),
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
   })
 }
 
+function nextQuestion(
+  survey: Survey,
+  progress: SurveyProgress,
+  originalQuestionIndex: number,
+  response: string | string[] | number | null
+) {
+  if (!shouldShuffleQuestions(survey)) return getNextSurveyStep(survey, originalQuestionIndex, response)
+  // Shuffled surveys cannot use branching and must advance through display order.
+  // Non-shuffled surveys retain the configured/original-index branching semantics.
+  return progress.questionIndex === progress.questionOrder.length - 1
+    ? SurveyQuestionBranchingType.End
+    : progress.questionIndex + 1
+}
+
 export function Questions({
   survey,
+  client,
   surveyLanguage,
   appearance,
   styleOverrides,
-  responses = {},
+  initialProgress,
+  onProgressChange = () => true,
   onResponsesChange = () => {},
   onSubmit,
 }: {
   survey: Survey
+  client?: PostHog
   surveyLanguage?: string | null
   appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
-  responses?: SurveyResponses
+  initialProgress?: SurveyProgress
+  onProgressChange?: (progress: SurveyProgress, completed: boolean) => boolean
   onResponsesChange?: (responses: SurveyResponses) => void
   onSubmit: () => void
 }): JSX.Element {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
-  const posthog = usePostHog()
+  const [progress, setProgress] = useState(() => initialProgress ?? createSurveyProgress(survey))
+  const completedRef = useRef(false)
+  const progressRef = useRef(progress)
+  const currentQuestionIndex = progress.questionIndex
+  const surveyQuestions = useMemo(
+    () =>
+      progress.questionOrder.map((index) => ({
+        ...survey.questions[index],
+        originalQuestionIndex: index,
+      })),
+    [survey, progress.questionOrder]
+  )
+  const posthogFromHook = usePostHog()
+  const posthog = client ?? posthogFromHook
 
   const onNextButtonClick = ({
     res,
     originalQuestionIndex,
     questionId,
-  }: // displayQuestionIndex,
-  {
+  }: {
     res: string | string[] | number | null
     originalQuestionIndex: number
     questionId: string
-    // displayQuestionIndex: number
   }): void => {
-    const responseKey = getSurveyResponseKey(questionId)
-
-    const allResponses = {
-      ...responses,
-      [responseKey]: res,
+    if (completedRef.current || progressRef.current !== progress || !canCaptureSurvey(posthog)) return
+    const answer = recordSurveyAnswer(progress, questionId, res, surveyQuestions[currentQuestionIndex])
+    const nextStep = nextQuestion(survey, progress, originalQuestionIndex, res)
+    const completed = nextStep === SurveyQuestionBranchingType.End
+    const nextProgress: SurveyProgress = {
+      ...progress,
+      ...answer,
+      questionIndex: completed ? currentQuestionIndex : nextStep,
+      surveyLanguage,
     }
-    onResponsesChange(allResponses)
-
-    // Get the next question index based on conditional logic
-    const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
-
-    if (nextStep === SurveyQuestionBranchingType.End) {
-      // End the survey
-      sendSurveyEvent(allResponses, survey, posthog, surveyLanguage)
-      onSubmit()
-    } else {
-      // Move to the next question
-      setCurrentQuestionIndex(nextStep)
+    if (onProgressChange(nextProgress, completed) === false) return
+    progressRef.current = nextProgress
+    completedRef.current = completed
+    setProgress(nextProgress)
+    onResponsesChange(answer.responses)
+    if (survey.enable_partial_responses || completed) {
+      sendSurveyEvent(answer.responses, survey, posthog, surveyLanguage, nextProgress, completed)
     }
+    if (completed) onSubmit()
   }
 
   const question = surveyQuestions[currentQuestionIndex]
@@ -140,7 +185,10 @@ export function Questions({
 
 type GetQuestionComponentProps = {
   question: SurveyQuestion
-  appearance: SurveyAppearance
+  // The question components each declare `SurveyAppearanceTheme`; typing this
+  // intermediate as the shared `SurveyAppearance` dropped every React
+  // Native-only field, which the `as any` below then hid.
+  appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
   onSubmit: (res: string | string[] | number | null) => void
 }

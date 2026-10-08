@@ -2,6 +2,10 @@ import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
+test.beforeEach(async ({ page }) => {
+    await page.clock.install()
+})
+
 const startOptions = {
     options: {
         session_recording: {
@@ -29,9 +33,6 @@ test.describe('Session recording - multiple ingestion controls', () => {
         await start(startOptions, page, context)
         await page.expectCapturedEventsToBe([])
         await page.resetCapturedEvents()
-    })
-
-    test('respects sampling when overriding linked flag', async ({ page }) => {
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
@@ -45,17 +46,34 @@ test.describe('Session recording - multiple ingestion controls', () => {
         })
 
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+    })
 
+    test('respects sampling when overriding linked flag', async ({ page }) => {
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
             ph?.startSessionRecording({ linked_flag: true })
         })
         await page.locator('[data-cy-input]').type('hello posthog!')
-        // there's nothing to wait for... so, just wait a bit
-        await page.waitForTimeout(250)
+        // A linked-flag override must not release zero-sampled replay.
+        await page.clock.runFor(4500)
         // no new events
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
         await page.resetCapturedEvents()
+
+        // Releasing only sampling proves the earlier linked-flag override took effect.
+        await page.evaluate(() => (window as WindowWithPostHog).posthog!.startSessionRecording({ sampling: true }))
+        await page.locator('[data-cy-input]').type('sampling alone releases the linked override')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+    })
+
+    test('all-controls override releases a fresh recording gated by both sampling and linked flag', async ({
+        page,
+    }) => {
+        await page.resetCapturedEvents()
+        await page.locator('[data-cy-input]').type('fresh session remains gated')
+        await page.clock.runFor(4500)
+        await page.expectCapturedEventsToBe([])
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog

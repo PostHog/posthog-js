@@ -1,15 +1,23 @@
+import type { Mock as VitestMock } from 'vitest'
 import { USER_STATE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
+import { normalizeCaptureResult, standardVolatileCaptureProperties } from './helpers/normalize-capture-result'
+
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}))
 
 describe('identify()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: VitestMock
 
     beforeEach(() => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
         const token = uuidv7()
         // NOTE: Temporary change whilst testing remote config
         assignableWindow._POSTHOG_REMOTE_CONFIG = {
@@ -24,20 +32,23 @@ describe('identify()', () => {
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
+                capture_pageview: false,
                 disable_surveys: true,
             },
             token
         )
 
         instance = Object.assign(posthog, {
-            register: jest.fn(),
+            register: vi.fn(),
             featureFlags: {
-                setAnonymousDistinctId: jest.fn(),
-                setPersonPropertiesForFlags: jest.fn(),
-                unsetPersonPropertiesForFlags: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
+                setAnonymousDistinctId: vi.fn(),
+                setPersonPropertiesForFlags: vi.fn(),
+                unsetPersonPropertiesForFlags: vi.fn(),
+                reloadFeatureFlags: vi.fn(),
+                reset: vi.fn(),
+                resetFlagCallReported: vi.fn(),
             },
-            unregister: jest.fn(),
+            unregister: vi.fn(),
         })
 
         instance.persistence!.set_property(USER_STATE, 'anonymous')
@@ -45,11 +56,74 @@ describe('identify()', () => {
         instance.persistence!.props['$device_id'] = 'oldIdentity'
     })
 
+    afterEach(async () => {
+        await instance.shutdown()
+    })
+
     it('registers new user id and updates alias', () => {
         instance.identify('a-new-id')
 
         expect(instance.register).toHaveBeenCalledWith({ $user_id: 'a-new-id' })
         expect(instance.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
+    })
+
+    it('reloads flags when synchronization adopts the requested identity', () => {
+        instance.config.cookieWinsOnConflict = true
+        vi.spyOn(instance.persistence!, 'syncCookieProperties').mockImplementation(() => {
+            instance.persistence!.props.distinct_id = 'a-new-id'
+            instance.persistence!.props.$user_state = 'identified'
+            return true
+        })
+
+        instance.identify('a-new-id')
+
+        expect(instance.featureFlags?.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        expect(instance.featureFlags?.resetFlagCallReported).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleans an adopted cookie identity before applying explicit identify properties', () => {
+        instance.config.cookieWinsOnConflict = true
+        vi.spyOn(instance.persistence!, 'syncCookieProperties')
+            .mockImplementationOnce(() => {
+                instance.persistence!.props.distinct_id = 'sibling-anonymous-id'
+                instance.persistence!.props.$user_state = 'anonymous'
+                return true
+            })
+            .mockReturnValue(false)
+        vi.spyOn(instance.persistence!, 'consumeCookieIdentityChange').mockReturnValueOnce(true).mockReturnValue(false)
+        const resetFeatureFlags = instance.featureFlags!.reset as VitestMock
+        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as VitestMock
+
+        instance.identify('a-new-id', { plan: 'pro' })
+
+        expect(resetFeatureFlags.mock.invocationCallOrder[0]).toBeLessThan(
+            setPersonPropertiesForFlags.mock.invocationCallOrder[0]!
+        )
+        expect(setPersonPropertiesForFlags).toHaveBeenCalledWith({ $set: { plan: 'pro' }, $set_once: {} }, false)
+    })
+
+    it('releases suppression without publishing a final snapshot when identify throws', () => {
+        instance.config.cookieWinsOnConflict = true
+        vi.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)
+        const endSuppression = vi.spyOn(instance.persistence!, '_endCookieSyncSuppression')
+        const publish = vi.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        vi.spyOn(instance.persistence!, 'set_property').mockImplementation(() => {
+            throw new Error('persistence failed')
+        })
+
+        expect(() => instance.identify('a-new-id')).toThrow()
+        expect(endSuppression).toHaveBeenCalledWith(false)
+        expect(publish).not.toHaveBeenCalled()
+    })
+
+    it('publishes the identified snapshot before capturing the identify event', () => {
+        instance.config.cookieWinsOnConflict = true
+        const publish = vi.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        const capture = vi.spyOn(instance, 'capture')
+
+        instance.identify('a-new-id')
+
+        expect(publish.mock.invocationCallOrder[0]).toBeLessThan(capture.mock.invocationCallOrder[0]!)
     })
 
     it('calls capture when identity changes', () => {
@@ -67,6 +141,29 @@ describe('identify()', () => {
             })
         )
         expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+    })
+
+    it('omits the previous anonymous id and clears the flags handoff when reuseAnonymousId is enabled', () => {
+        instance.config.reuseAnonymousId = true
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+
+        instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+        const capturedEvent = beforeSendMock.mock.calls[0][0]
+        expect(capturedEvent).toEqual(
+            expect.objectContaining({
+                event: '$identify',
+                properties: expect.objectContaining({
+                    distinct_id: 'a-new-id',
+                }),
+                $set: { email: 'john@example.com' },
+                $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
+            })
+        )
+        expect(capturedEvent.properties).not.toHaveProperty('$anon_distinct_id')
+        expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith(undefined)
+        expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+        expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
     })
 
     it('sets user state when identifying', () => {
@@ -178,12 +275,90 @@ describe('identify()', () => {
             })
         )
         expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+
+        const capturedEvent = beforeSendMock.mock.calls[0][0]
+        expect(capturedEvent.properties.$device_id).toBe('oldIdentity')
+        expect(
+            normalizeCaptureResult(capturedEvent, [
+                ...standardVolatileCaptureProperties.filter(
+                    (field) => field !== 'distinct_id' && field !== '$device_id'
+                ),
+                'token',
+            ])
+        ).toMatchSnapshot()
     })
 
     describe('identity did not change', () => {
         beforeEach(() => {
             // set the current/old identity
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
+        })
+
+        describe('when the persisted user state is anonymous', () => {
+            beforeEach(() => {
+                instance.persistence!.set_property(USER_STATE, 'anonymous')
+            })
+
+            it('marks the user identified and captures one person-processed $set event', () => {
+                instance.identify('a-new-id')
+
+                expect(instance.persistence!.get_property(USER_STATE)).toBe('identified')
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$set',
+                        properties: expect.objectContaining({
+                            $process_person_profile: true,
+                            $set: {},
+                            $set_once: {},
+                        }),
+                        $set_once: expect.objectContaining({
+                            $initial_current_url: expect.any(String),
+                        }),
+                    })
+                )
+                expect(beforeSendMock).not.toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$identify',
+                    })
+                )
+                expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
+
+            it('captures exactly one $set event with properties and does not duplicate it on the next identify', () => {
+                instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+                instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$set',
+                        properties: expect.objectContaining({
+                            $set: { email: 'john@example.com' },
+                            $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
+                        }),
+                    })
+                )
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
+
+            it('does not let an existing property cache suppress the identity-state transition event', () => {
+                const properties = { email: 'john@example.com' }
+                instance.setPersonProperties(properties)
+                beforeSendMock.mockClear()
+                instance.persistence!.set_property(USER_STATE, 'anonymous')
+
+                instance.identify('a-new-id', properties)
+
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$set' }))
+                expect(instance.persistence!.get_property(USER_STATE)).toBe('identified')
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
         })
 
         it('does not capture or set user properties', () => {
@@ -230,7 +405,8 @@ describe('identify()', () => {
 
     describe('invalid id passed', () => {
         it('does not update user', () => {
-            console.error = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
 
             instance.debug()
 
@@ -245,7 +421,8 @@ describe('identify()', () => {
         })
 
         it('does not update user when distinct ID is $posthog_cookieless', () => {
-            console.error = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
 
             instance.debug()
 
@@ -268,8 +445,9 @@ describe('identify()', () => {
             expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
         })
 
-        it('does not reload feature flags if identity does not change', () => {
+        it('does not reload feature flags if identity and identified state do not change', () => {
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
 
             instance.identify('a-new-id')
 
@@ -277,8 +455,9 @@ describe('identify()', () => {
             expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
         })
 
-        it('reloads feature flags if identity does not change but properties do', () => {
+        it('updates feature flag properties without reloading if identity and identified state do not change', () => {
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
 
             instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
 
@@ -304,7 +483,7 @@ describe('identify()', () => {
         it('clears flag calls reported when identity changes', () => {
             instance.identify('a-new-id')
 
-            expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+            expect(instance.featureFlags.resetFlagCallReported).toHaveBeenCalled()
         })
     })
 

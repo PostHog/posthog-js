@@ -28,7 +28,6 @@ import {
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
     triggerGroupsMatchSessionRecordingStatus,
-    RecordingTriggersStatusV2,
     TriggerType,
     AndTriggerMatching,
     OrTriggerMatching,
@@ -37,8 +36,8 @@ import {
 } from './triggerMatching'
 import { sampleOnProperty } from '../../sampling'
 import { isBoolean, isNull, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
-import { createLogger } from '../../../utils/logger'
-import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 
 const logger = createLogger('[SessionRecording]')
 
@@ -148,6 +147,11 @@ export interface RecordingStrategy {
     hasPendingTriggers(sessionId: string): boolean
 
     /**
+     * Describe trigger conditions that are currently waiting for activation without persisting debug state.
+     */
+    getPendingTriggerConditions(sessionId: string): string[]
+
+    /**
      * Stop and cleanup the strategy
      */
     stop(): void
@@ -168,7 +172,8 @@ export class V1RecordingStrategy implements RecordingStrategy {
         private readonly _eventTriggerMatching: EventTriggerMatching,
         private readonly _linkedFlagMatching: LinkedFlagMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
-        private readonly _tryTakeFullSnapshot: () => void
+        private readonly _tryTakeFullSnapshot: () => void,
+        private readonly _onTriggerActivated: () => void
     ) {}
 
     onRemoteConfig(config: SessionRecordingPersistedConfig): void {
@@ -193,6 +198,7 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         this._linkedFlagMatching.onConfig(config, (flag, variant) => {
             this._reportStarted('linked_flag_matched', { flag, variant })
+            this._onTriggerActivated()
         })
     }
 
@@ -317,6 +323,24 @@ export class V1RecordingStrategy implements RecordingStrategy {
         return this._triggerStatusMatcher?.triggerStatus(sessionId) === TRIGGER_PENDING
     }
 
+    getPendingTriggerConditions(sessionId: string): string[] {
+        const legs = [
+            {
+                label: 'URL condition not matched',
+                status: this._urlTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'event condition not matched',
+                status: this._eventTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'linked flag condition not matched',
+                status: this._linkedFlagMatching.triggerStatusNoSideEffects(),
+            },
+        ]
+        return legs.filter(({ status }) => status === TRIGGER_PENDING).map(({ label }) => label)
+    }
+
     stop(): void {
         this._removeEventTriggerCaptureHook?.()
         this._removeEventTriggerCaptureHook = undefined
@@ -339,7 +363,8 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         private readonly _instance: PostHog,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
-        private readonly _tryAddCustomEvent: (tag: string, payload: any) => void
+        private readonly _tryAddCustomEvent: (tag: string, payload: any) => void,
+        private readonly _onTriggerActivated: (triggerType?: TriggerType) => void
     ) {}
 
     onRemoteConfig(config: SessionRecordingPersistedConfig): void {
@@ -373,7 +398,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             triggerGroupMatchers: this._triggerGroupMatchers,
             triggerGroupSamplingResults: this._triggerGroupSamplingResults,
             minimumDuration: this.getMinimumDuration(context.sessionId),
-        } as RecordingTriggersStatusV2)
+        })
     }
 
     getMinimumDuration(sessionId: string): number | null {
@@ -421,6 +446,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
                     matcher.activateTrigger(triggerType, sessionId)
                     this.updateActiveTriggers(sessionId)
+                    this._onTriggerActivated(triggerType)
                 },
                 sessionId
             )
@@ -477,6 +503,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
                             matcher.activateTrigger(triggerType, sessionId)
                             this.updateActiveTriggers(sessionId)
+                            this._onTriggerActivated(triggerType)
                         },
                         sessionId
                     )
@@ -619,6 +646,17 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         return false
     }
 
+    getPendingTriggerConditions(sessionId: string): string[] {
+        return this._triggerGroupMatchers.flatMap((matcher) => {
+            if (matcher.triggerStatusNoSideEffects(sessionId) !== TRIGGER_PENDING) {
+                return []
+            }
+            return matcher
+                .getPendingTriggerConditions(sessionId)
+                .map((condition) => `trigger group "${matcher.group.name}": ${condition}`)
+        })
+    }
+
     stop(): void {
         this._removeEventTriggerCaptureHook?.()
         this._removeEventTriggerCaptureHook = undefined
@@ -655,6 +693,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                     group_id: group.id,
                     group_name: group.name,
                 })
+                this._onTriggerActivated()
             })
             this._triggerGroupMatchers.push(matcher)
         }

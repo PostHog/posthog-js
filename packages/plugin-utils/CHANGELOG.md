@@ -1,5 +1,27 @@
 # @posthog/plugin-utils
 
+## 2.0.0
+
+### Major Changes
+
+- [#4705](https://github.com/PostHog/posthog-js/pull/4705) [`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Change the default `sourcemaps.releaseMode` to `event`: set `sourcemaps.releaseMode: 'symbol-set'`, or `POSTHOG_RELEASE_MODE=symbol-set`, to keep binding uploaded symbol sets to a release. The `@posthog/plugin-utils` bump is major, so an installed plugin keeps the old default until the plugin itself is upgraded.
+
+  `event` mode requires a posthog-cli with `release resolve` and `--release-mode`, and `posthog-js` 1.409.0, `posthog-node` 5.47.0, or `@posthog/core` 1.46.0 at runtime. An older CLI fails a rollup build and skips the upload on webpack and Next.js. An older SDK reports no release on exceptions. (2026-09-02)
+
+## 1.2.0
+
+### Minor Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Add experimental `sourcemaps.releaseMode: 'event'` to the rollup plugin. In event mode the plugin resolves the release with `posthog-cli release resolve` and injects its id into every chunk, so exceptions report their release directly instead of it being bound to the uploaded symbol sets, and chunk ids are derived from chunk content so a rebuild of unchanged code reuses the symbol set already uploaded. The option defaults to the `POSTHOG_RELEASE_MODE` environment variable and then to `symbol-set`, which behaves exactly as before. Event mode needs a posthog-cli with the `release resolve` command.
+  (2026-08-19)
+
+## 1.1.3
+
+### Patch Changes
+
+- [#4512](https://github.com/PostHog/posthog-js/pull/4512) [`1030636`](https://github.com/PostHog/posthog-js/commit/10306368b32ae7b016d993cf14ffc474fad240e9) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Inject chunk ids (a fresh random id per build) into chunks in-memory during `renderChunk` instead of letting posthog-cli rewrite the emitted files on disk in `writeBundle`. The written bundle already contains the chunk-id snippet, so Subresource Integrity plugins (e.g. vite-plugin-sri3, which hashes chunks in `generateBundle`) now compute hashes over the final content and the browser no longer blocks the scripts. `writeBundle` runs the non-mutating `sourcemap upload` instead of `sourcemap process`, and with `deleteAfterUpload` the plugin deletes the `.map` files itself rather than passing `--delete-after` (which also rewrites the `.js` files).
+  (2026-08-13)
+
 ## 1.1.2
 
 ### Patch Changes

@@ -11,6 +11,10 @@ export const DEVICE_ID = '$device_id'
 export const DEVICE_MODEL = '$device_model'
 export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
+export const FACEBOOK_CLICK_ID = '$fbc'
+export const PERSISTENCE_FACEBOOK_CLICK_ID = '$fbc_persistence'
+export const FACEBOOK_BROWSER_ID = '$fbp'
+export const PERSISTENCE_FACEBOOK_BROWSER_ID = '$fbp_persistence'
 export const EVENT_TIMERS_KEY = '__timers'
 export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
@@ -20,8 +24,10 @@ export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capt
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
+export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
+export const RECORDING_REMOTE_CONFIG_TTL_MS = 1000 * 60 * 60
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 // @deprecated can be removed along with eager loaded replay
@@ -53,30 +59,20 @@ export const SESSION_RECORDING_TRIGGER_V2_GROUP_URL_PREFIX = '$posthog_sr_group_
 export const SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX = '$posthog_sr_group_sampling_'
 export const SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP = '$debug_first_full_snapshot_timestamp'
 export const SESSION_RECORDING_FLUSHED_SIZE = '$sess_rec_flush_size'
-export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
-export const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
-export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
-export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
-export const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
-export const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
-export const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
-export const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
-export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
-export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
+export const GROUPS = '$groups'
 export const SURVEYS = '$surveys'
 export const SURVEYS_LOADED_AT = '$surveys_loaded_at'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
+export const SURVEYS_ACTIVATED_SESSION = '$surveys_activated_session'
+export const SURVEYS_ACTIVATED_TIMESTAMPS = '$surveys_activated_timestamps'
 export const PRODUCT_TOURS = 'ph_product_tours'
 export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
+export const PRODUCT_TOURS_ACTIVATED_SESSION = '$product_tours_activated_session'
 export const CONVERSATIONS = '$conversations'
 export const CONVERSATIONS_LEGACY_WIDGET_SESSION_ID = '$conversations_widget_session_id'
 export const CONVERSATIONS_LEGACY_TICKET_ID = '$conversations_ticket_id'
 export const CONVERSATIONS_LEGACY_WIDGET_STATE = '$conversations_widget_state'
 export const CONVERSATIONS_LEGACY_USER_TRAITS = '$conversations_user_traits'
-export const FLAG_CALL_REPORTED = '$flag_call_reported'
-export const FLAG_CALL_REPORTED_SESSION_ID = '$flag_call_reported_session_id'
-export const PERSISTENCE_FEATURE_FLAG_ERRORS = '$feature_flag_errors'
-export const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
@@ -87,8 +83,6 @@ export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
-export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
-export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
 
 /**
  * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
@@ -99,13 +93,14 @@ export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
-export const SDK_DIST_CHANNEL = '$sdk_dist_channel'
 export const SDK_DEBUG_EXTENSIONS_INIT_METHOD = '$sdk_debug_extensions_init_method'
 export const SDK_DEBUG_EXTENSIONS_INIT_TIME_MS = '$sdk_debug_extensions_init_time_ms'
 export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'
+export const SDK_DEBUG_REPLAY_STALE_CONFIG = '$sdk_debug_replay_stale_config'
 export const SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS = '$sdk_debug_replay_event_trigger_status'
 export const SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS = '$sdk_debug_replay_linked_flag_trigger_status'
 export const SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS = '$sdk_debug_replay_matched_recording_trigger_groups'
+export const SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS = '$sdk_debug_replay_pending_trigger_conditions'
 export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_replay_remote_trigger_matching_config'
 export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
 export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'
@@ -114,6 +109,14 @@ export const SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED = '$sdk_debug_rrweb_start_at
 export const SESSION_RECORDING_START_REASON = '$session_recording_start_reason'
 
 export const SURVEYS_REQUEST_TIMEOUT_MS = 10000
+// How long the cached `$surveys` definitions are considered fresh. After this, the next
+// `getSurveys` call serves the cache immediately but kicks off a background refresh so
+// server-side changes (e.g. a survey switched from popover to API) propagate to a
+// long-lived tab without needing a page reload.
+export const SURVEYS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+// After a failed background refresh we back off for the same window as the cache TTL before
+// trying again. Aliased to make the shared duration intentional rather than coincidental.
+export const SURVEYS_REFRESH_BACKOFF_MS = SURVEYS_CACHE_TTL_MS
 export const LOAD_EXT_NOT_FOUND = 'PostHog loadExternalDependency extension not found.'
 
 /* EVENT NAMES - interned to reduce bundle size */
@@ -129,7 +132,6 @@ export const USER_STATE_IDENTIFIED = 'identified'
 export const PERSON_PROFILES_IDENTIFIED_ONLY = 'identified_only' as const
 
 /* DOM EVENT NAMES - interned to reduce bundle size */
-export const DOM_EVENT_VISIBILITYCHANGE = 'visibilitychange'
 export const DOM_EVENT_BEFOREUNLOAD = 'beforeunload'
 
 export const EVENT_PAGEVIEW = '$pageview'
@@ -141,3 +143,22 @@ export const EVENT_GROUPIDENTIFY = '$groupidentify'
 export const Z_INDEX_TOURS = 2147483646
 export const Z_INDEX_SURVEYS = 2147483645
 export const Z_INDEX_CONVERSATIONS = 2147483644
+
+export {
+    PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
+    ENABLED_FEATURE_FLAGS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
+    FLAG_CALL_REPORTED,
+    FLAG_CALL_REPORTED_SESSION_ID,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
+    DOM_EVENT_VISIBILITYCHANGE,
+} from '@posthog/browser-common/constants'

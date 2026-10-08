@@ -2,6 +2,8 @@
 // Copyright (c) 2012 Functional Software, Inc. dba Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
+import { isWebKit } from '@posthog/core';
+
 type PrototypeOwner = Node | ShadowRoot | MutationObserver | Element;
 type TypeofPrototypeOwner =
   | typeof Node
@@ -107,31 +109,60 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
   }
 
   const iframeEl = document.createElement('iframe');
+  iframeEl.style.display = 'none';
+  let keepIframeAttached = false;
   try {
     document.body.appendChild(iframeEl);
     const win = iframeEl.contentWindow;
     if (!win) return candidate.prototype as BasePrototypeCache[T];
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
     const untaintedObject = (win as any)[key]
       .prototype as BasePrototypeCache[T];
 
     if (!untaintedObject) return defaultPrototype;
 
+    // WebKit tears down an iframe's ScriptExecutionContext when it is detached
+    // from the DOM, and MutationObserver.deliver() silently drops callbacks when
+    // its scriptExecutionContext() is null (webkit.org/b/179224), so prototypes
+    // taken from a detached iframe stop working on WebKit.
+    // Adapted from upstream rrweb #1854, with one difference: the iframe stays
+    // attached for the lifetime of the page instead of being removed on recorder
+    // teardown. Observers are torn down per-document here (e.g. a same-origin
+    // iframe being removed), and the cached prototype must outlive any one of
+    // them; removing the shared iframe on the first teardown - or reusing the
+    // cache after a stop/restart cycle - would silently break the survivors.
+    if (isWebKit(navigator.userAgent)) {
+      // both the upstream default block class and the PostHog one, so the
+      // recorder never serializes this iframe whichever config is in use
+      iframeEl.classList.add('rr-block', 'ph-no-capture');
+      iframeEl.setAttribute('__rrwebUntaintedPrototype', key);
+      keepIframeAttached = true;
+    }
+
     return (untaintedBasePrototype[key] = untaintedObject);
   } catch {
     return defaultPrototype;
   } finally {
-    if (iframeEl.parentNode) {
+    if (!keepIframeAttached && iframeEl.parentNode) {
       document.body.removeChild(iframeEl);
     }
   }
 }
 
-const untaintedAccessorCache: Record<
+// Group by prototype so every node access can reuse the property key instead
+// of allocating `${key}.${String(accessor)}` on the serialization hot path.
+// Both levels have null prototypes: neither prototype names nor accessor names
+// like `constructor` may resolve to inherited objects or functions.
+type AccessorCache = Record<
   string,
   (this: PrototypeOwner, ...args: unknown[]) => unknown
-> = {};
+>;
+const untaintedAccessorCache: Record<keyof BasePrototypeCache, AccessorCache> =
+  Object.create(null);
+untaintedAccessorCache.Node = Object.create(null);
+untaintedAccessorCache.ShadowRoot = Object.create(null);
+untaintedAccessorCache.MutationObserver = Object.create(null);
+untaintedAccessorCache.Element = Object.create(null);
 
 export function getUntaintedAccessor<
   K extends keyof BasePrototypeCache,
@@ -141,14 +172,11 @@ export function getUntaintedAccessor<
   instance: BasePrototypeCache[K],
   accessor: T,
 ): BasePrototypeCache[K][T] {
-  const cacheKey = `${key}.${String(accessor)}`;
-  if (untaintedAccessorCache[cacheKey])
-    return untaintedAccessorCache[cacheKey].call(
-      instance,
-    ) as BasePrototypeCache[K][T];
+  const cache: AccessorCache = untaintedAccessorCache[key];
+  const cached = cache[accessor as string];
+  if (cached) return cached.call(instance) as BasePrototypeCache[K][T];
 
   const untaintedPrototype = getUntaintedPrototype(key);
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const untaintedAccessor = Object.getOwnPropertyDescriptor(
     untaintedPrototype,
     accessor,
@@ -156,7 +184,7 @@ export function getUntaintedAccessor<
 
   if (!untaintedAccessor) return instance[accessor];
 
-  untaintedAccessorCache[cacheKey] = untaintedAccessor;
+  cache[accessor as string] = untaintedAccessor;
 
   return untaintedAccessor.call(instance) as BasePrototypeCache[K][T];
 }
@@ -166,7 +194,6 @@ type BaseMethod<K extends keyof BasePrototypeCache> = (
   ...args: unknown[]
 ) => unknown;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const untaintedMethodCache: Record<string, BaseMethod<any>> = {};
 export function getUntaintedMethod<
   K extends keyof BasePrototypeCache,
@@ -208,6 +235,24 @@ export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
 }
 
+let isConnectedGetter: PropertyDescriptor['get'] | null | undefined;
+
+export function isConnected(n: Node): boolean | undefined {
+  if (isConnectedGetter === undefined) {
+    const getter = Object.getOwnPropertyDescriptor(
+      getUntaintedPrototype('Node'),
+      'isConnected',
+    )?.get;
+    // The prototype may have been cached before this optional getter was
+    // patched. Validate the function at first use, then cache only that function.
+    // Non-native or unavailable implementations retain the old containment path.
+    isConnectedGetter = getter?.toString().includes('[native code]')
+      ? getter
+      : null;
+  }
+  return isConnectedGetter?.call(n);
+}
+
 export function contains(n: Node, other: Node): boolean {
   return getUntaintedMethod('Node', n, 'contains')(other);
 }
@@ -245,6 +290,27 @@ export function mutationObserverCtor(): (typeof MutationObserver)['prototype']['
   return getUntaintedPrototype('MutationObserver').constructor;
 }
 
+// Each call to `patch` installs a "layer" in the wrapper chain. A wrapper calls
+// down through its layer's mutable `next` reference rather than closing over the
+// original directly, so that any layer can later be spliced out of the chain —
+// even when newer wrappers sit on top of it.
+//
+// Without this, restoring a patch only worked when it was still on top of the
+// chain (`source[name] === wrapped`). rrweb patches shared globals such as
+// `Element.prototype.attachShadow` (shadow-dom-manager) and the observers, and
+// multiple recorder instances or repeated start/stop cycles wrap the same global
+// more than once. Restores then routinely ran out of order and silently no-op'd.
+// Each leaked wrapper stayed in the call path, and repeated cycles grew the chain
+// without bound until a real call walked a chain deep enough to overflow the call
+// stack ("RangeError: Maximum call stack size exceeded").
+interface PatchLayer {
+  next: (...args: unknown[]) => unknown;
+}
+
+function isFunction(value: any): value is (...args: any[]) => any {
+  return typeof value === 'function';
+}
+
 // copy from https://github.com/getsentry/sentry-javascript/blob/b2109071975af8bf0316d3b5b38f519bdaf5dc15/packages/utils/src/object.ts
 export function patch(
   source: { [key: string]: any },
@@ -258,18 +324,32 @@ export function patch(
       };
     }
 
-    const original = source[name] as () => unknown;
-    const wrapped = replacement(original);
+    const original = source[name] as (...args: unknown[]) => unknown;
+
+    const layer: PatchLayer = {
+      next: original,
+    };
+
+    // The wrapper receives this stable delegate instead of `original`, so the
+    // function it actually calls can be re-pointed when a lower layer is removed.
+    const callNext = function (this: unknown, ...args: unknown[]) {
+      return layer.next.apply(this, args);
+    };
+
+    const wrapped = replacement(callNext);
 
     // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
     // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
     if (typeof wrapped === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       wrapped.prototype = wrapped.prototype || {};
       Object.defineProperties(wrapped, {
         __rrweb_original__: {
           enumerable: false,
           value: original,
+        },
+        __rrweb_layer__: {
+          enumerable: false,
+          value: layer,
         },
       });
     }
@@ -277,7 +357,39 @@ export function patch(
     source[name] = wrapped;
 
     return () => {
-      source[name] = original;
+      // If we're still on top, hand back whatever we currently delegate to
+      // (lower layers may already have been removed, so this is not necessarily
+      // the `original` we captured at install time).
+      if (source[name] === wrapped) {
+        source[name] = layer.next;
+        return;
+      }
+
+      // Otherwise newer wrappers sit on top of us. Find the layer directly above us
+      // and re-point it past us, removing our wrapper from the call path without
+      // disturbing the newer wrappers. posthog-js ships its own copy of this
+      // function under `__posthog_layer__` and wraps the same console methods, so
+      // walk both markers — a walk that recognised only its own would give up here
+      // and leave our wrapper in the call path for the life of the page.
+      const layerOf = (method: unknown): PatchLayer | undefined =>
+        isFunction(method)
+          ?
+            (((method as any).__rrweb_layer__ ?? (method as any).__posthog_layer__) as PatchLayer | undefined)
+          : undefined;
+      let current: any = source[name];
+      let currentLayer = layerOf(current);
+      while (currentLayer) {
+        if (currentLayer.next === wrapped) {
+          currentLayer.next = layer.next;
+          return;
+        }
+        current = currentLayer.next;
+        currentLayer = layerOf(current);
+      }
+
+      // If we get here we're buried under a non-rrweb wrapper that closed over
+      // us directly, or we've already been removed / replaced wholesale. There's
+      // nothing safe to do, so leave the chain untouched.
     };
   } catch {
     return () => {
@@ -293,6 +405,7 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  isConnected,
   contains,
   getRootNode,
   host,
@@ -302,4 +415,19 @@ export default {
   querySelectorAll,
   mutationObserver: mutationObserverCtor,
   patch,
+} as {
+  childNodes: typeof childNodes;
+  parentNode: typeof parentNode;
+  parentElement: typeof parentElement;
+  textContent: typeof textContent;
+  isConnected: typeof isConnected;
+  contains: typeof contains;
+  getRootNode: typeof getRootNode;
+  host: typeof host;
+  styleSheets: typeof styleSheets;
+  shadowRoot: typeof shadowRoot;
+  querySelector: typeof querySelector;
+  querySelectorAll: typeof querySelectorAll;
+  mutationObserver: typeof mutationObserverCtor;
+  patch: typeof patch;
 };

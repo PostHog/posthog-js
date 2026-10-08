@@ -1,13 +1,20 @@
 import { FetchLike } from '../types'
+import { isString } from './type-utils'
 
 export * from './bot-detection'
+export * from './browser-utils'
 export * from './bucketed-rate-limiter'
+// Named rather than `export *`: the budgets, markers and `sanitizeString` are
+// shared with the OTLP encoder but are not public API.
+export { toJsonSafeValue } from './json-utils'
+export { parseRetryAfterMs } from './retry-after'
 export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
 export * from './promise-queue'
 export * from './logger'
 export * from './user-agent-utils'
+export * from './webview-app-utils'
 
 export const STRING_FORMAT = 'utf8'
 
@@ -21,6 +28,27 @@ export function getEventUuid(uuid: unknown, generateUuid: () => string): string 
   return isValidUUID(uuid) ? uuid : generateUuid()
 }
 
+/**
+ * Creates an `Error` with the given `name`, in a way that also holds on pages where a browser
+ * extension has made `Error.prototype.name` non-writable. A plain `error.name = ...` throws
+ * there in strict mode, and swallowing that throw leaves the name as `Error`. Defining an own
+ * property on the instance shadows the prototype property instead. The descriptor matches what
+ * a plain assignment produces, so the resulting error is unchanged everywhere else.
+ *
+ * @param name the value for `error.name`, e.g. `'AbortError'`
+ * @param message the error message
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+ */
+export function createNamedError(name: string, message?: string): Error {
+  const error = new Error(message)
+  try {
+    Object.defineProperty(error, 'name', { value: name, writable: true, enumerable: true, configurable: true })
+  } catch {
+    // a page hostile enough to harden `Error.prototype` can also patch `Object.defineProperty`
+  }
+  return error
+}
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)
@@ -32,6 +60,11 @@ function isEmpty(truthyValue: string): boolean {
     return true
   }
   return false
+}
+
+/** Detects HTTP(S) URLs and explicit relative paths by prefix; does not validate URL syntax. */
+export function isUrl(value: unknown): value is string {
+  return isString(value) && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
 }
 
 export function removeTrailingSlash(url: string): string {
@@ -83,6 +116,14 @@ export function currentISOTime(): string {
   return new Date().toISOString()
 }
 
+export function trySafe<T>(fn: () => T): T | undefined {
+  try {
+    return fn()
+  } catch {
+    return undefined
+  }
+}
+
 export function safeSetTimeout(fn: () => void, timeout: number): any {
   // NOTE: we use this so rarely that it is totally fine to do `safeSetTimeout(fn, 0)``
   // rather than setImmediate.
@@ -92,13 +133,35 @@ export function safeSetTimeout(fn: () => void, timeout: number): any {
   return t
 }
 
+export async function raceWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T | void> {
+  let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<void>((resolve, reject) => {
+        timeoutHandle = safeSetTimeout(() => {
+          try {
+            onTimeout?.()
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeoutHandle)
+  }
+}
+
 // NOTE: We opt for this slightly imperfect check as the global "Promise" object can get mutated in certain environments
 export const isPromise = (obj: any): obj is Promise<any> => {
   return obj && typeof obj.then === 'function'
-}
-
-export const isError = (x: unknown): x is Error => {
-  return x instanceof Error
 }
 
 export function getFetch(): FetchLike | undefined {

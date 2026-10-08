@@ -1,5 +1,5 @@
 import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
-import { Linking, AppState, AppStateStatus } from 'react-native'
+import { Linking, AppState, AppStateStatus, Dimensions, Platform } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { FeatureFlagError, JsonType } from '@posthog/core'
@@ -14,8 +14,8 @@ const typePreservationCases: Array<{ name: string; value: JsonType; buggyString:
   { name: 'nested object', value: { x: 1, deep: ['a', 'b'] }, buggyString: '[object Object]' },
 ]
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog React Native', () => {
   describe('evaluation contexts', () => {
@@ -94,13 +94,13 @@ describe('PostHog React Native', () => {
   let mockStorage: PostHogCustomStorage
   let cache: any = {}
 
-  jest.setTimeout(500)
-  jest.useRealTimers()
+  vi.setConfig({ testTimeout: 500 })
+  vi.useRealTimers()
 
   let posthog: PostHog
 
   beforeEach(() => {
-    ;(globalThis as any).window.fetch = jest.fn(async (url) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url) => {
       let res: any = { status: 'ok' }
       if (url.includes('flags')) {
         res = {
@@ -143,12 +143,40 @@ describe('PostHog React Native', () => {
     expect(posthog.getDistinctId()).toEqual('bar')
   })
 
+  it('should send custom request headers with SDK requests', async () => {
+    posthog = new PostHog('test-token', {
+      requestHeaders: { Authorization: 'Bearer test-jwt' },
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+    })
+    await posthog.ready()
+
+    await posthog.reloadFeatureFlagsAsync()
+    posthog.capture('test-event')
+    await posthog.flush()
+
+    const expectedHeaders = expect.objectContaining({
+      Authorization: 'Bearer test-jwt',
+      'Content-Type': 'application/json',
+    })
+
+    expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/flags/'),
+      expect.objectContaining({ headers: expectedHeaders })
+    )
+    expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/batch/'),
+      expect.objectContaining({ headers: expectedHeaders })
+    )
+  })
+
   it.each([
     ['missing', undefined as unknown as string],
     ['empty', ''],
     ['blank', '   '],
   ])('should initialize disabled instead of throwing when the api key is %s', async (_case, apiKey) => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
       posthog = new PostHog(apiKey, {
@@ -174,7 +202,7 @@ describe('PostHog React Native', () => {
 
       expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "You must pass your PostHog project's api key. The client will be disabled."
+        'You must pass your PostHog project token. The client will be disabled.'
       )
     } finally {
       consoleErrorSpy.mockRestore()
@@ -191,6 +219,27 @@ describe('PostHog React Native', () => {
 
     expect(posthog.getAnonymousId()).toEqual('bar')
     expect(posthog.getDistinctId()).toEqual('bar')
+  })
+
+  it.each([
+    { surveys: [], expected: [] },
+    { surveys: false, expected: undefined },
+  ])('caches remote config surveys $surveys as $expected', async ({ surveys, expected }) => {
+    ;(globalThis as any).window.fetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({ surveys }),
+    }))
+    posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      captureAppLifecycleEvents: false,
+    })
+
+    await posthog.ready()
+    await posthog._onSurveysReady()
+
+    expect(posthog.getPersistedProperty(PostHogPersistedProperty.Surveys)).toEqual(expected)
   })
 
   it('should allow customising of native app properties', async () => {
@@ -217,7 +266,7 @@ describe('PostHog React Native', () => {
         return properties
       },
     })
-    await posthog.ready()
+    await posthog2.ready()
 
     expect(posthog2.getCommonEventProperties()).toEqual({
       $lib: 'posthog-react-native',
@@ -242,6 +291,31 @@ describe('PostHog React Native', () => {
     await posthog2.shutdown()
   })
 
+  describe('$screen_width and $screen_height', () => {
+    const originalOS = Platform.OS
+
+    afterEach(() => {
+      Platform.OS = originalOS
+      vi.mocked(Dimensions.get).mockRestore()
+    })
+
+    it.each([
+      { os: 'ios', expected: { $screen_width: 951, $screen_height: 669 } },
+      { os: 'android', expected: { $screen_width: 466, $screen_height: 678 } },
+      { os: 'web', expected: { $screen_width: 466, $screen_height: 678 } },
+    ])('on $os reports $expected', async ({ os, expected }) => {
+      Platform.OS = os as typeof Platform.OS
+      vi.spyOn(Dimensions, 'get').mockImplementation((dim) =>
+        dim === 'window'
+          ? { width: 951, height: 669, scale: 3, fontScale: 1 }
+          : { width: 466, height: 678, scale: 3, fontScale: 1 }
+      )
+      posthog = new PostHog('test-token', { flushInterval: 0 })
+
+      expect(posthog.getCommonEventProperties()).toMatchObject(expected)
+    })
+  })
+
   describe('screen', () => {
     it('should set a $screen_name property on screen', async () => {
       posthog = new PostHog('test-token', {
@@ -262,7 +336,7 @@ describe('PostHog React Native', () => {
   describe('captureAppLifecycleEvents', () => {
     it('should trigger an Application Installed event', async () => {
       // arrange
-      const onCapture = jest.fn()
+      const onCapture = vi.fn()
 
       // act
       posthog = new PostHog('1', {
@@ -296,7 +370,7 @@ describe('PostHog React Native', () => {
 
     it('should trigger an Application Updated event', async () => {
       // arrange
-      const onCapture = jest.fn()
+      const onCapture = vi.fn()
       posthog = new PostHog('1', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: true,
@@ -312,10 +386,10 @@ describe('PostHog React Native', () => {
       })
 
       onCapture.mockClear()
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and detects an update (not a fresh
-      // install).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks for an update.
+      await posthog.shutdown()
+
       // act
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -351,8 +425,8 @@ describe('PostHog React Native', () => {
 
     it('should include the initial url', async () => {
       // arrange
-      Linking.getInitialURL = jest.fn(() => Promise.resolve('https://example.com'))
-      const onCapture = jest.fn()
+      Linking.getInitialURL = vi.fn(() => Promise.resolve('https://example.com'))
+      const onCapture = vi.fn()
 
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -370,10 +444,9 @@ describe('PostHog React Native', () => {
 
       onCapture.mockClear()
 
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and fires only "Opened" (not a
-      // fresh-install pair).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks the stored version.
+      await posthog.shutdown()
 
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -401,7 +474,7 @@ describe('PostHog React Native', () => {
 
     it('should track app background and foreground', async () => {
       // arrange
-      const onCapture = jest.fn()
+      const onCapture = vi.fn()
       posthog = new PostHog('1', {
         customStorage: mockStorage,
         captureAppLifecycleEvents: true,
@@ -416,7 +489,7 @@ describe('PostHog React Native', () => {
         expect(onCapture).toHaveBeenCalledTimes(2)
       })
 
-      const cb: (state: AppStateStatus) => void = (AppState.addEventListener as jest.Mock).mock.calls[1][1]
+      const cb: (state: AppStateStatus) => void = (AppState.addEventListener as vi.Mock).mock.calls[1][1]
 
       // act
       cb('background')
@@ -454,7 +527,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should allow immediate calls but delay for the stored values', async () => {
-      const onCapture = jest.fn()
+      const onCapture = vi.fn()
       mockStorage.setItem(PostHogPersistedProperty.AnonymousId, 'my-anonymous-id')
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -507,8 +580,8 @@ describe('PostHog React Native', () => {
     beforeEach(async () => {
       cache = {}
       storage = {
-        getItem: jest.fn((key: string) => cache[key]),
-        setItem: jest.fn((key: string, value: string) => {
+        getItem: vi.fn((key: string) => cache[key]),
+        setItem: vi.fn((key: string, value: string) => {
           cache[key] = value
         }),
       }
@@ -516,9 +589,94 @@ describe('PostHog React Native', () => {
       await rnStorage.preloadPromise
     })
 
+    it.each(['reset', 'optOut'] as const)('clears unfinished survey storage on %s before restart', async (action) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      posthog.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, [{ submissionId: 'old-user' }])
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      await posthog[action]()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+    })
+
+    it.each([false, true])('clears only this project on opt-out (pending preload=%s)', async (pendingPreload) => {
+      const otherProgress = {
+        project: 'other-project',
+        surveyKey: 'survey',
+        shape: 'shape',
+        updatedAt: Date.now(),
+        progress: { submissionId: 'other' },
+      }
+      rnStorage.setItem(PostHogPersistedProperty.SurveysInProgress, [
+        { project: '1', progress: { submissionId: 'old-user' } },
+        otherProgress,
+        { ...otherProgress, updatedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 },
+      ])
+      await rnStorage.waitForPersist()
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const backend = {
+        ...storage,
+        getItem: (key: string) => {
+          const value = cache[key] ?? null
+          return pendingPreload ? gate.then(() => value) : value
+        },
+      }
+      posthog = new PostHog('1', { customStorage: backend, captureAppLifecycleEvents: false, flushInterval: 0 })
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      const optedOut = posthog.optOut()
+      release()
+      await optedOut
+      await posthog.ready()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      expect(restored.getItem(PostHogPersistedProperty.OptedOut)).toBe(true)
+    })
+
+    it.each(['resolve', 'reject'])('optOut awaits and propagates the core result (%s)', async (outcome) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      let resolve!: () => void
+      let reject!: (error: Error) => void
+      const coreResult = new Promise<void>((yes, no) => {
+        resolve = yes
+        reject = no
+      })
+      const coreOptOut = vi.spyOn(Object.getPrototypeOf(PostHog.prototype), 'optOut').mockReturnValue(coreResult)
+      try {
+        const settled = vi.fn()
+        const result = posthog.optOut()
+        void result.then(settled, settled)
+        await rnStorage.waitForPersist()
+        await Promise.resolve()
+        expect(settled).not.toHaveBeenCalled()
+        if (outcome === 'resolve') {
+          resolve()
+          await expect(result).resolves.toBeUndefined()
+        } else {
+          const error = new Error('core opt-out failed')
+          reject(error)
+          await expect(result).rejects.toBe(error)
+        }
+      } finally {
+        coreOptOut.mockRestore()
+      }
+    })
+
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       // Sync-storage init: feature flags should be readable immediately without
@@ -530,14 +688,15 @@ describe('PostHog React Native', () => {
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // The override write is debounced; drain it so the second instance reads
-      // it from `storage` without preload.
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance to persist the override and clear its
+      // timers before replacing it.
+      await posthog.shutdown()
 
       // New instance but same sync storage — the override persisted via
       // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
@@ -548,7 +707,7 @@ describe('PostHog React Native', () => {
         customStorage: storage,
         captureAppLifecycleEvents: false,
       })
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'persisted-on-shutdown')
       // Debounced — nothing written to the backend yet.
@@ -558,23 +717,23 @@ describe('PostHog React Native', () => {
 
       // _shutdown drains pending writes, so the value reaches the backend even
       // though no flush/background transition forced it.
-      const written = (storage.setItem as jest.Mock).mock.calls
+      const written = (storage.setItem as vi.Mock).mock.calls
         .map((call) => JSON.parse(call[1] as string))
         .find((blob) => blob.content[PostHogPersistedProperty.DistinctId] === 'persisted-on-shutdown')
       expect(written).toBeDefined()
     })
 
     it('drains debounced storage writes when the app backgrounds', () => {
-      ;(AppState.addEventListener as jest.Mock).mockClear()
+      ;(AppState.addEventListener as vi.Mock).mockClear()
       posthog = new PostHog('1', {
         customStorage: storage,
         captureAppLifecycleEvents: false,
       })
       // With captureAppLifecycleEvents off, the constructor registers exactly
       // one AppState listener (the lifecycle one is gated on that flag).
-      const onAppStateChange = (AppState.addEventListener as jest.Mock).mock.calls[0][1]
+      const onAppStateChange = (AppState.addEventListener as vi.Mock).mock.calls[0][1]
 
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
       posthog.setPersistedProperty(PostHogPersistedProperty.DistinctId, 'persisted-on-background')
       // Debounced — nothing on disk yet.
       expect(storage.setItem).not.toHaveBeenCalled()
@@ -583,7 +742,7 @@ describe('PostHog React Native', () => {
       onAppStateChange('background')
 
       expect(storage.setItem).toHaveBeenCalled()
-      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      const written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('persisted-on-background')
     })
 
@@ -596,9 +755,9 @@ describe('PostHog React Native', () => {
       await (posthog as any)._eventsStorage.waitForPersist()
 
       // Sanity: the previous user is on disk.
-      let written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      let written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('previous-user')
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       // Logout. The clear must reach disk synchronously (drained), NOT wait out
       // the debounce — otherwise a crash in the window would resurface the
@@ -606,7 +765,7 @@ describe('PostHog React Native', () => {
       posthog.reset()
 
       expect(storage.setItem).toHaveBeenCalled()
-      written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.DistinctId]).toBeUndefined()
     })
 
@@ -617,14 +776,14 @@ describe('PostHog React Native', () => {
       })
       posthog.identify('user-a')
       await (posthog as any)._eventsStorage.waitForPersist()
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       // Switch accounts. The new identity must reach disk synchronously, not on
       // the debounce — a crash in the window must not leave user-a on disk.
       posthog.identify('user-b')
 
       expect(storage.setItem).toHaveBeenCalled()
-      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      const written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.DistinctId]).toEqual('user-b')
     })
 
@@ -635,14 +794,14 @@ describe('PostHog React Native', () => {
       })
       // Seed a log so the logs pipeline has something to flush.
       posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ message: 'log' }])
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       posthog.captureException(new Error('boom'), { $exception_level: 'fatal' })
 
       // A fatal exception can crash the app within the debounce window, so both
       // pipelines reach disk synchronously: the events file (holding the
       // exception) and the logs file.
-      const writes = (storage.setItem as jest.Mock).mock.calls
+      const writes = (storage.setItem as vi.Mock).mock.calls
       const wroteLogs = writes.some((c) => String(c[0]).includes('logs'))
       const eventsWrite = writes.find((c) => !String(c[0]).includes('logs'))
       expect(wroteLogs).toBe(true)
@@ -661,7 +820,7 @@ describe('PostHog React Native', () => {
         customStorage: storage,
         captureAppLifecycleEvents: false,
       })
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       posthog.captureException(new Error('boom'))
 
@@ -673,14 +832,14 @@ describe('PostHog React Native', () => {
         customStorage: storage,
         captureAppLifecycleEvents: false,
       })
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       posthog.optOut()
 
       // A hard kill within the debounce window must not lose the opt-out and
       // resurface as "capture allowed" on next launch.
       expect(storage.setItem).toHaveBeenCalled()
-      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      const written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.OptedOut]).toBe(true)
     })
 
@@ -689,12 +848,12 @@ describe('PostHog React Native', () => {
         customStorage: storage,
         captureAppLifecycleEvents: false,
       })
-      ;(storage.setItem as jest.Mock).mockClear()
+      ;(storage.setItem as vi.Mock).mockClear()
 
       posthog.optIn()
 
       expect(storage.setItem).toHaveBeenCalled()
-      const written = JSON.parse((storage.setItem as jest.Mock).mock.calls.at(-1)![1] as string)
+      const written = JSON.parse((storage.setItem as vi.Mock).mock.calls.at(-1)![1] as string)
       expect(written.content[PostHogPersistedProperty.OptedOut]).toBe(false)
     })
 
@@ -830,11 +989,11 @@ describe('PostHog React Native', () => {
   describe('person and group properties for flags', () => {
     describe('default person properties', () => {
       afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
       })
 
       it('should set default person properties on initialization when enabled', async () => {
-        jest.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
+        vi.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
           $lib: 'posthog-react-native',
           $lib_version: '1.2.3',
         })
@@ -927,7 +1086,7 @@ describe('PostHog React Native', () => {
       })
 
       it('should set default properties synchronously during reset without extra reload', async () => {
-        jest.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
+        vi.spyOn(PostHog.prototype, 'getCommonEventProperties').mockReturnValue({
           $lib: 'posthog-react-native',
           $lib_version: '1.2.3',
         })
@@ -1112,14 +1271,15 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with same distinctId and new properties', async () => {
-        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        await posthog.shutdown()
+        ;(globalThis as any).window.fetch = vi.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
           flushInterval: 0,
           preloadFeatureFlags: false,
         })
         const distinctId = 'user-123'
-        jest.spyOn(posthog, 'getDistinctId').mockReturnValue(distinctId)
+        vi.spyOn(posthog, 'getDistinctId').mockReturnValue(distinctId)
         await posthog.ready()
         ;(globalThis as any).window.fetch.mockClear()
 
@@ -1134,14 +1294,15 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with different distinctId', async () => {
-        ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
+        await posthog.shutdown()
+        ;(globalThis as any).window.fetch = vi.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
           flushInterval: 0,
           preloadFeatureFlags: false,
         })
         await posthog.ready()
-        jest.spyOn(posthog, 'getDistinctId').mockReturnValue('user-123')
+        vi.spyOn(posthog, 'getDistinctId').mockReturnValue('user-123')
         ;(globalThis as any).window.fetch.mockClear()
 
         posthog.identify('some-new-distinct-id', { email: 'different@example.com' })
@@ -1213,7 +1374,7 @@ describe('PostHog React Native', () => {
 
     describe('reloadFeatureFlags parameter', () => {
       beforeEach(async () => {
-        ;(globalThis as any).window.fetch = jest.fn(async (url) => {
+        ;(globalThis as any).window.fetch = vi.fn(async (url) => {
           let res: any = { status: 'ok' }
           if (url.includes('flags')) {
             res = {
@@ -1362,8 +1523,8 @@ describe('PostHog React Native', () => {
       beforeEach(async () => {
         cache = {}
         storage = {
-          getItem: jest.fn((key: string) => cache[key]),
-          setItem: jest.fn((key: string, value: string) => {
+          getItem: vi.fn((key: string) => cache[key]),
+          setItem: vi.fn((key: string, value: string) => {
             cache[key] = value
           }),
         }
@@ -1444,7 +1605,7 @@ describe('PostHog React Native', () => {
         await posthog.shutdown()
 
         // Second launch - should NOT fire "Application Installed" again
-        const onCapture2 = jest.fn()
+        const onCapture2 = vi.fn()
         posthog = new PostHog('test-api-key', {
           customStorage: storage,
           captureAppLifecycleEvents: true,
@@ -1776,15 +1937,15 @@ describe('PostHog React Native', () => {
       })
       await posthog.ready()
 
-      const flushSpy = jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
-      const logsFlushSpy = jest.spyOn((posthog as any)._logs, 'flush').mockResolvedValue(undefined)
-      const waitForPersistSpy = jest
+      const flushSpy = vi.spyOn(posthog, 'flush').mockResolvedValue(undefined)
+      const logsFlushSpy = vi.spyOn((posthog as any)._logs, 'flush').mockResolvedValue(undefined)
+      const waitForPersistSpy = vi
         .spyOn((posthog as any)._logsStorage, 'waitForPersist')
         .mockResolvedValue(undefined as never)
 
       // AppState.addEventListener is globally mocked; grab the callback that
       // was passed to it during PostHog construction and invoke it manually.
-      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const calls = (AppState.addEventListener as vi.Mock).mock.calls
       const changeCall = calls.find((c) => c[0] === 'change')
       expect(changeCall).toBeDefined()
       const callback = changeCall![1]
@@ -1810,11 +1971,11 @@ describe('PostHog React Native', () => {
 
       // Suppress console.error noise from the assertion itself; the spy still
       // records the call for verification.
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
-      jest.spyOn(posthog, 'flush').mockResolvedValue(undefined)
-      jest.spyOn((posthog as any)._logs, 'flush').mockRejectedValue(new Error('logs transport down'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      vi.spyOn(posthog, 'flush').mockResolvedValue(undefined)
+      vi.spyOn((posthog as any)._logs, 'flush').mockRejectedValue(new Error('logs transport down'))
 
-      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const calls = (AppState.addEventListener as vi.Mock).mock.calls
       const callback = calls.find((c) => c[0] === 'change')![1]
       callback('background' as AppStateStatus)
 
@@ -1837,7 +1998,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const sendSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       ;(posthog as any)._logs.captureLog({ body: 'integration-test' })
       await (posthog as any)._logs.flush()
@@ -1861,23 +2022,33 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
-      const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const logsShutdownSpy = vi.spyOn((posthog as any)._logs, 'shutdown')
+      const sendLogsSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
-      // Queue a log and fire a single capture so both pipelines have work.
-      ;(posthog as any)._logs.captureLog({ body: 'terminal' })
-      posthog.capture('terminal-event', {})
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
+      try {
+        // Queue a log and fire a single capture so both pipelines have work.
+        ;(posthog as any)._logs.captureLog({ body: 'terminal' })
+        posthog.capture('terminal-event', {})
 
-      await posthog.shutdown(5000)
+        await posthog.shutdown(5000)
 
-      // Both pipelines drained through the shared shutdown path. Logs use
-      // the smaller of the caller's shutdown budget and the configured
-      // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
-      expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
-      expect(sendLogsSpy).toHaveBeenCalled()
+        // Both pipelines drained through the shared shutdown path. Logs use
+        // the smaller of the caller's shutdown budget and the configured
+        // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
+        expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
+        expect(sendLogsSpy).toHaveBeenCalled()
 
-      logsShutdownSpy.mockRestore()
-      sendLogsSpy.mockRestore()
+        const drainTimeoutIndex = setTimeoutSpy.mock.calls.findLastIndex(() => true)
+        expect(drainTimeoutIndex).toBeGreaterThanOrEqual(0)
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[drainTimeoutIndex].value)
+      } finally {
+        setTimeoutSpy.mockRestore()
+        clearTimeoutSpy.mockRestore()
+        logsShutdownSpy.mockRestore()
+        sendLogsSpy.mockRestore()
+      }
     })
 
     it('pre-init captureLog is drained on flush once init completes', async () => {
@@ -1894,7 +2065,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const sendSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       await (posthog as any)._logs.flush()
 
@@ -2009,7 +2180,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const sendLogsSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       posthog.captureLog({ body: 'manual-flush-target' })
       await posthog.flushLogs()
@@ -2033,7 +2204,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const sendSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       posthog.captureLog({ body: 'platform-tagged' })
       await posthog.flushLogs()
@@ -2063,7 +2234,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      const sendSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
+      const sendSpy = vi.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
       posthog.captureLog({ body: 'overridden' })
       await posthog.flushLogs()
@@ -2113,7 +2284,7 @@ describe('PostHog React Native', () => {
 
       // Stub the flag store directly — `getFeatureFlags()` is the same
       // primitive logs reads at capture time.
-      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue({
+      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({
         'new-checkout': true,
         'experiment-ab': 'variant-a',
       } as any)
@@ -2140,7 +2311,7 @@ describe('PostHog React Native', () => {
       await posthog.ready()
       await (posthog as any)._logsStorage.preloadPromise
 
-      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue(undefined)
+      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue(undefined)
 
       posthog.captureLog({ body: 'no-flags' })
 
@@ -2164,7 +2335,7 @@ describe('PostHog React Native', () => {
       // events, which emit `$active_feature_flags: []` for back-compat (the
       // shared helper preserves the empty array; only the caller's gate
       // differs).
-      jest.spyOn(posthog, 'getFeatureFlags').mockReturnValue({} as any)
+      vi.spyOn(posthog, 'getFeatureFlags').mockReturnValue({} as any)
 
       posthog.captureLog({ body: 'empty-flags' })
 
@@ -2188,7 +2359,7 @@ describe('PostHog React Native', () => {
       // the first capture omits `app.state` (correct — we don't guess). Drive
       // explicit 'active' then 'background' transitions through the listener
       // to verify the foreground/background mapping end-to-end.
-      const calls = (AppState.addEventListener as jest.Mock).mock.calls
+      const calls = (AppState.addEventListener as vi.Mock).mock.calls
       const callback = calls.find((c) => c[0] === 'change')![1]
 
       callback('active' as AppStateStatus)
@@ -2260,7 +2431,7 @@ describe('Feature flag error tracking', () => {
   let posthog: PostHog
 
   beforeEach(() => {
-    ;(globalThis as any).window.fetch = jest.fn()
+    ;(globalThis as any).window.fetch = vi.fn()
     posthog = new PostHog('test-api-key', {
       flushAt: 1,
       host: 'https://app.posthog.com',
@@ -2281,7 +2452,7 @@ describe('Feature flag error tracking', () => {
   })
 
   it('should set $feature_flag_error to flag_missing when flag is not in response', async () => {
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 200,
@@ -2312,7 +2483,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2322,7 +2493,7 @@ describe('Feature flag error tracking', () => {
   })
 
   it('should set $feature_flag_error to errors_while_computing_flags when server returns that flag', async () => {
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 200,
@@ -2353,7 +2524,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2363,7 +2534,7 @@ describe('Feature flag error tracking', () => {
   })
 
   it('should set $feature_flag_error to quota_limited when quota limited', async () => {
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 200,
@@ -2388,7 +2559,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2400,7 +2571,7 @@ describe('Feature flag error tracking', () => {
 
   it('should set $feature_flag_error to api_error_500 when request fails with 500', async () => {
     // First, let the initial setup succeed
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 500,
@@ -2417,7 +2588,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2427,7 +2598,7 @@ describe('Feature flag error tracking', () => {
   })
 
   it('should join multiple errors with commas', async () => {
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 200,
@@ -2450,7 +2621,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2462,7 +2633,7 @@ describe('Feature flag error tracking', () => {
   })
 
   it('should not set $feature_flag_error when flag is found successfully', async () => {
-    ;(globalThis as any).window.fetch = jest.fn().mockImplementation((url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/flags/')) {
         return Promise.resolve({
           status: 200,
@@ -2494,7 +2665,7 @@ describe('Feature flag error tracking', () => {
 
     await posthog.flush()
 
-    const calls = ((globalThis as any).window.fetch as jest.Mock).mock.calls
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
     const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
     expect(captureCall).toBeDefined()
     const body = JSON.parse(captureCall[1].body)
@@ -2502,5 +2673,44 @@ describe('Feature flag error tracking', () => {
     expect(featureFlagEvent).toBeDefined()
     // $feature_flag_error should not be present
     expect(featureFlagEvent.properties.$feature_flag_error).toBeUndefined()
+  })
+
+  it.each([
+    ['getFeatureFlag', (client: PostHog) => client.getFeatureFlag('my-flag', { sendEvent: false })],
+    ['isFeatureEnabled', (client: PostHog) => client.isFeatureEnabled('my-flag', { sendEvent: false })],
+  ] as const)('should not send $feature_flag_called from %s when sendEvent is false', async (_, callFn) => {
+    ;(globalThis as any).window.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/flags/')) {
+        return Promise.resolve({
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              flags: {
+                'my-flag': {
+                  key: 'my-flag',
+                  enabled: true,
+                  variant: undefined,
+                  reason: undefined,
+                  metadata: { id: 1, version: 1, payload: undefined, description: undefined },
+                },
+              },
+              errorsWhileComputingFlags: false,
+              requestId: 'test-request-id',
+              evaluatedAt: Date.now(),
+            }),
+        })
+      }
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ status: 'ok' }) })
+    })
+
+    await posthog.reloadFeatureFlagsAsync()
+
+    expect(callFn(posthog)).toBe(true)
+
+    await posthog.flush()
+
+    const calls = ((globalThis as any).window.fetch as vi.Mock).mock.calls
+    const captureCall = calls.find((call: any[]) => call[0].includes('/batch'))
+    expect(captureCall).toBeUndefined()
   })
 })

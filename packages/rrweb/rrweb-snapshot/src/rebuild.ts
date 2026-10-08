@@ -12,8 +12,10 @@ import {
   Mirror,
   isNodeMetaEqual,
   extractFileExtension,
+  attachShadowRootSafely,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
-import postcss from 'postcss';
+import postcss, { type Parser } from 'postcss';
 
 const tagMap: tagMap = {
   script: 'noscript',
@@ -72,7 +74,10 @@ export function adaptCssForReplay(cssText: string, cache: BuildCache): string {
     const ast: { css: string } = postcss([
       mediaSelectorPlugin,
       pseudoClassPlugin,
-    ]).process(cssText, { parser: safeParser });
+    ]).process(cssText, {
+      // The DefinitelyTyped package can resolve a different PostCSS patch, but the parser API is compatible.
+      parser: safeParser as unknown as Parser,
+    });
     result = ast.css;
   } catch (error) {
     // on the replay side so should be ok to just log here
@@ -109,6 +114,7 @@ function isPlausibleCustomElementName(name: string): boolean {
 }
 
 const warnedCustomElementNames = new Set<string>();
+const warnedShadowHostTags = new Set<string>();
 
 function safeDocNode(
   n: textNode,
@@ -118,6 +124,16 @@ function safeDocNode(
     cache: BuildCache;
   },
 ) {
+  // A `<script>` is rebuilt as `<noscript>` so it cannot execute (see tagMap).
+  // Its serialized content is the SCRIPT_PLACEHOLDER sentinel, never real script
+  // text. Scripting is off in the replay iframe, so `<noscript>` content renders
+  // as visible text — and the `noscript { display: none }` replay style is
+  // document-scoped, so it never reaches shadow roots. Emit an empty text node so
+  // the placeholder cannot render in any context.
+  if (n.textContent === SCRIPT_PLACEHOLDER) {
+    return options.doc.createTextNode('');
+  }
+
   let stringContent = n.textContent;
   if (n.isStyle && options.hackCss) {
     try {
@@ -406,13 +422,28 @@ function buildNode(
          * we can remove it.
          */
         if (!node.shadowRoot) {
-          node.attachShadow({ mode: 'open' });
+          if (
+            !attachShadowRootSafely(node) &&
+            !warnedShadowHostTags.has(tagName)
+          ) {
+            warnedShadowHostTags.add(tagName);
+            console.warn('rrweb: browser refused a shadow root on', tagName);
+          }
         } else {
           while (node.shadowRoot.firstChild) {
             node.shadowRoot.removeChild(node.shadowRoot.firstChild);
           }
         }
       }
+
+      // The replay iframe is a live document, so the viewer's own browser
+      // offers autofill on these fields. Accepting a suggestion would write the
+      // viewer's saved data into the replay, where it reads as the recorded
+      // user's input.
+      if (tagName === 'input' || tagName === 'textarea') {
+        node.setAttribute('autocomplete', 'off');
+      }
+
       return node;
     }
     case NodeType.Text:
@@ -463,18 +494,21 @@ export function buildNodeWithSN(
    * This situation (duplicated nodes) can happen when recorder has some unfixed bugs and the same node is recorded twice. Or something goes wrong when saving or transferring event data.
    * Duplicated node creation may cause unexpected errors in replayer. This check tries best effort to prevent the errors.
    */
+  let staleNode: Node | null = null;
   if (mirror.has(n.id)) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const nodeInMirror = mirror.getNode(n.id)!;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const meta = mirror.getMeta(nodeInMirror)!;
     // For safety concern, check if the node in mirror is the same as the node we are trying to build
     if (isNodeMetaEqual(meta, n)) return mirror.getNode(n.id);
+    staleNode = nodeInMirror;
   }
   let node = buildNode(n, { doc, hackCss, cache });
   if (!node) {
     return null;
   }
+  // The meta differs, so re-point the id at the replacement without leaving
+  // the stale node in the document where no later mirror-based remove can reach it.
+  staleNode?.parentNode?.removeChild(staleNode);
   // If the snapshot is created by checkout, the rootId doesn't change but the iframe's document can be changed automatically when a new iframe element is created.
   if (n.rootId && (mirror.getNode(n.rootId) as Document) !== doc) {
     mirror.replace(n.rootId, doc);
@@ -516,6 +550,17 @@ export function buildNodeWithSN(
     !skipChild
   ) {
     for (const childN of n.childNodes) {
+      if (
+        childN.isShadow &&
+        n.isShadowHost &&
+        isElement(node) &&
+        !node.shadowRoot
+      ) {
+        // The browser refused a shadow root on this host, so there is nowhere for this
+        // subtree to go. Appending it to the light DOM instead would put shadow-scoped
+        // <style> nodes in the document, where their rules apply to the whole page.
+        continue;
+      }
       const childNode = buildNodeWithSN(childN, {
         doc,
         mirror,
@@ -595,7 +640,6 @@ function visit(mirror: Mirror, onVisit: (node: Node) => void) {
 
   for (const id of mirror.getIds()) {
     if (mirror.has(id)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       walk(mirror.getNode(id)!);
     }
   }

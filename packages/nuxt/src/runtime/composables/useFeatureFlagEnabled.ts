@@ -6,7 +6,9 @@ import { usePostHog } from './usePostHog'
  *
  * @remarks
  * This composable initializes with the current feature flag value and automatically
- * updates when PostHog feature flags are reloaded.
+ * updates when PostHog feature flags are reloaded. The ref contains `false` for a conclusive off
+ * evaluation and `undefined` when no evaluation is available. Globally inactive flags are omitted
+ * from remote responses and are therefore unavailable after the latest response loads.
  *
  * **Server-Side Rendering (SSR) Behavior:**
  * - During SSR, PostHog is typically not available or feature flags are not yet loaded

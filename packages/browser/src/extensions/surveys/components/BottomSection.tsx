@@ -1,4 +1,4 @@
-import { window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 
 import { SurveyAppearance } from '../../../posthog-surveys-types'
 

@@ -1,3 +1,4 @@
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
 import {
     getBrowserDetectionHints,
     getBrowserLanguage,
@@ -5,48 +6,51 @@ import {
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
-} from '../../utils/event-utils'
-import * as globals from '../../utils/globals'
+} from '@posthog/browser-common/utils/event-utils'
+import * as globals from '@posthog/browser-common/utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
+            vi.spyOn(globals, 'location', 'get').mockReturnValue(
+                new URL('https://example.com:8443/known/path?q=1') as unknown as Location
+            )
             const properties = getEventProperties()
-            expect(properties['$current_url']).toBeDefined()
-            expect(properties['$host']).toBeDefined()
-            expect(properties['$pathname']).toBeDefined()
+            expect(properties['$current_url']).toBe('https://example.com:8443/known/path?q=1')
+            expect(properties['$host']).toBe('example.com:8443')
+            expect(properties['$pathname']).toBe('/known/path')
         })
 
         it('should have user agent in properties', () => {
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = 'blah'
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue('blah')
             const properties = getEventProperties()
             expect(properties['$raw_user_agent']).toBe('blah')
         })
 
         it('should truncate very long user agents in properties', () => {
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = 'a'.repeat(1001)
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue('a'.repeat(1001))
             const properties = getEventProperties()
             expect(properties['$raw_user_agent'].length).toBe(1000)
             expect(properties['$raw_user_agent'].substring(995)).toBe('aa...')
         })
 
         it('should mask out personal data from URL', () => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345&other=true',
+            } as Location)
             const properties = getEventProperties(true)
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=true')
         })
 
         it('should mask out custom personal data', () => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345&other=true',
+            } as Location)
             const properties = getEventProperties(true, ['other'])
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
         })
@@ -56,16 +60,63 @@ describe(`event-utils`, () => {
             ['when disable_capture_url_hashes is false', false, 'https://www.example.com/path?gclid=12345#section'],
             ['when disable_capture_url_hashes is true', true, 'https://www.example.com/path?gclid=12345'],
         ])('should handle hash in current URL %s', (_description, disableCaptureUrlHashes, expectedUrl) => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345#section' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345#section',
+            } as Location)
             const properties = getEventProperties(false, undefined, undefined, disableCaptureUrlHashes)
             expect(properties['$current_url']).toEqual(expectedUrl)
         })
 
         it('should have timezone and timezone offset', () => {
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Pacific/Auckland',
+            } as Intl.ResolvedDateTimeFormatOptions)
+            vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-345)
             const properties = getEventProperties()
-            expect(properties).toHaveProperty('$timezone')
-            expect(properties).toHaveProperty('$timezone_offset')
+            expect(properties['$timezone']).toBe('Pacific/Auckland')
+            expect(properties['$timezone_offset']).toBe(-345)
+        })
+    })
+
+    describe('webview app properties', () => {
+        const androidUA =
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36'
+
+        const iosUA =
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+
+        it.each([
+            [androidUA + ' LinkedInApp/2.295.106', 'LinkedIn', '2.295.106', undefined, 'Chrome', 120],
+            [androidUA + ' [LinkedInApp]', 'LinkedIn', undefined, undefined, 'Chrome', 120],
+            [androidUA + ' [FBAN/FB4A;FBAV/440.0.0;]', 'Facebook', '440.0.0', undefined, 'Chrome', 120],
+            [iosUA + ' [FBIOS;FBAV/440.0.0;]', 'Facebook', '440.0.0', undefined, 'Facebook Mobile', null],
+            [androidUA + ' GSA/315.0.1', 'Google', '315.0.1', false, 'Chrome', 120],
+            [androidUA + ' GSA/315.0.1', 'Google', '315.0.1', true, 'Google Search App', 315],
+            [androidUA + ' musical_ly_2022803040 app_version/28.3.4', 'TikTok', '28.3.4', undefined, 'Chrome', 120],
+            [androidUA + ' musical_ly_2022803040', 'TikTok', undefined, undefined, 'Chrome', 120],
+            [androidUA + ' WA4A/2.26.30.97', 'WhatsApp', '2.26.30.97', undefined, 'Chrome', 120],
+            [androidUA + ' [FBAN/Orca-Android;FBAV/440.0.0;]', 'Messenger', '440.0.0', undefined, 'Chrome', 120],
+        ])(
+            'adds app properties for %s without changing browser attribution',
+            (ua, app, version, gsa, browser, browserVersion) => {
+                vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
+                const properties = getEventProperties(false, undefined, gsa)
+                expect(properties['$webview_app']).toBe(app)
+                if (version) {
+                    expect(properties['$webview_app_version']).toBe(version)
+                } else {
+                    expect(properties).not.toHaveProperty('$webview_app_version')
+                }
+                expect(properties['$browser']).toBe(browser)
+                expect(properties['$browser_version']).toBe(browserVersion)
+            }
+        )
+
+        it.each([androidUA, androidUA.replace('; wv', ''), ''])('omits unknown app properties for %s', (ua) => {
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
+            const properties = getEventProperties()
+            expect(properties).not.toHaveProperty('$webview_app')
+            expect(properties).not.toHaveProperty('$webview_app_version')
         })
     })
 
@@ -102,8 +153,8 @@ describe(`event-utils`, () => {
         }
 
         beforeEach(() => {
-            // @ts-expect-error ok to set global in test
-            globals['userAgent'] = androidTabletDesktopUA
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(androidTabletDesktopUA)
+            mockScreen(1280, 800, 1)
         })
 
         afterEach(() => {
@@ -114,15 +165,23 @@ describe(`event-utils`, () => {
             }
             if (originalMaxTouchPoints) {
                 Object.defineProperty(window.navigator, 'maxTouchPoints', originalMaxTouchPoints)
+            } else {
+                delete (window.navigator as any).maxTouchPoints
             }
             if (originalScreenWidth) {
                 Object.defineProperty(window.screen, 'width', originalScreenWidth)
+            } else {
+                delete (window.screen as any).width
             }
             if (originalScreenHeight) {
                 Object.defineProperty(window.screen, 'height', originalScreenHeight)
+            } else {
+                delete (window.screen as any).height
             }
             if (originalDevicePixelRatio) {
                 Object.defineProperty(window, 'devicePixelRatio', originalDevicePixelRatio)
+            } else {
+                delete (window as any).devicePixelRatio
             }
         })
 
@@ -152,7 +211,7 @@ describe(`event-utils`, () => {
         })
 
         it('should remain Desktop when Client Hints platform is not Android', () => {
-            mockNavigator({ platform: 'Linux' }, 0)
+            mockNavigator({ platform: 'Linux' }, 5)
 
             const properties = getEventProperties()
             expect(properties['$device_type']).toBe('Desktop')
@@ -204,8 +263,7 @@ describe(`event-utils`, () => {
         const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
         beforeEach(() => {
-            // @ts-expect-error ok to set global in test
-            globals['userAgent'] = chromeMacOsUA
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(chromeMacOsUA)
         })
 
         afterEach(() => {
@@ -235,21 +293,23 @@ describe(`event-utils`, () => {
 
     describe('timezones', () => {
         it('should compute timezone', () => {
-            const timezone = getTimezone()
-            expect(typeof timezone).toBe('string')
+            vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+                timeZone: 'Pacific/Auckland',
+            } as Intl.ResolvedDateTimeFormatOptions)
+            expect(getTimezone()).toBe('Pacific/Auckland')
         })
 
         it('should compute timezone offset as a number', () => {
-            const offset = getTimezoneOffset()
-            expect(typeof offset).toBe('number')
+            vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-345)
+            expect(getTimezoneOffset()).toBe(-345)
         })
     })
 
     describe('browser language', () => {
-        let languageGetter: jest.SpyInstance
+        let languageGetter: VitestSpyInstance
 
         beforeEach(() => {
-            languageGetter = jest.spyOn(window.navigator, 'language', 'get')
+            languageGetter = vi.spyOn(window.navigator, 'language', 'get')
             languageGetter.mockReturnValue('pt-BR')
         })
 

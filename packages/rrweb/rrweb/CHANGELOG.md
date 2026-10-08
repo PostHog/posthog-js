@@ -1,5 +1,136 @@
 # rrweb
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [[`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721)]:
+    - @posthog/rrweb-utils@0.0.65
+    - @posthog/rrweb-snapshot@0.0.68
+
+## 0.1.7
+
+### Patch Changes
+
+- [#4320](https://github.com/PostHog/posthog-js/pull/4320) [`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727) Thanks [@posthog](https://github.com/apps/posthog)! - Bound the main-thread cost of the recorder's initial full snapshot, and start measuring it.
+
+    `stringifyStylesheet` reads `cssText` for every CSSRule of every stylesheet, all inside the one uninterruptible task that takes the full snapshot. On CSS-heavy pages that is the dominant cost, and it has been observed freezing the UI (no rendering, scrolling, or cursor movement) for seconds. The existing `maxDepth` guard doesn't help, since it only bounds deep DOMs, not wide ones or heavy CSS.
+
+    Stylesheet inlining now stops after a budget of CSSRules per snapshot (`session_recording.inlineStylesheetBudgetRules`, default 10,000; set `0` for the previous unbounded behaviour). Sheets past the budget are serialized without `_cssText`, keeping `rel`/`href` so replay can load them remotely, and are then inlined one per idle callback and delivered as attribute mutations. Replay fidelity is preserved; the work is just no longer one long blocking task.
+
+    The snapshot's cost is also now measured and reported on captured events, so slow snapshots are visible without a browser profile: `$sdk_debug_replay_slowest_full_snapshot_ms`, `$sdk_debug_replay_slowest_full_snapshot_stylesheet_ms`, `$sdk_debug_replay_slowest_full_snapshot_nodes`, `$sdk_debug_replay_slowest_full_snapshot_css_rules`, `$sdk_debug_replay_deferred_stylesheets`, and, for the incremental path, `$sdk_debug_replay_slowest_mutation_batch_ms`. (2026-08-05)
+
+- Updated dependencies [[`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727)]:
+    - @posthog/rrweb-snapshot@0.0.68
+    - @posthog/rrdom@0.0.68
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
+    - @posthog/rrweb-utils@0.0.64
+    - @posthog/rrweb-snapshot@0.0.67
+
+## 0.1.5
+
+### Patch Changes
+
+- [#4223](https://github.com/PostHog/posthog-js/pull/4223) [`045d79c`](https://github.com/PostHog/posthog-js/commit/045d79cf5ce9a5b58872b987bc5689a396321485) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Terminate the canvas encode worker when session recording stops. Previously stopping a recording with canvas capture enabled cancelled the capture loop but left the dedicated worker running; dedicated workers are not cleaned up by becoming unreachable, so every stop/start cycle leaked a worker thread along with its capture-resolution OffscreenCanvas (~8MB of pixel buffer at 1080p) and frame-fingerprint state.
+  (2026-07-23)
+
+## 0.1.4
+
+### Patch Changes
+
+- [#4209](https://github.com/PostHog/posthog-js/pull/4209) [`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` from the input observer's _synchronous_ native-setter call. The previous fix only guarded the deferred hooked setter; the synchronous `original.set.call(this, value)` still ran with a non-native `this` (a proxy, custom element, or cross-realm object) and threw inside the host page's own assignment. The recorder now probes the native getter — which fails the same internal-slot brand check as the setter — before forwarding: a non-native `this` is skipped, so the recorder no longer re-throws from its own frame, while genuine elements (including file inputs that legitimately throw on a programmatic value) keep their native behavior. The input event handler and `getInputType` are similarly guarded against reading native accessors on a non-native `this`.
+  (2026-07-22)
+- Updated dependencies [[`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c)]:
+    - @posthog/rrweb-snapshot@0.0.67
+    - @posthog/rrdom@0.0.67
+
+## 0.1.3
+
+### Patch Changes
+
+- [#4157](https://github.com/PostHog/posthog-js/pull/4157) [`4a2ecf5`](https://github.com/PostHog/posthog-js/commit/4a2ecf5ccdc3ed2567a5d59dcdcf88c6541d9b1b) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `NotAllowedError` ("Sharing constructed stylesheets in multiple documents is not allowed") when a page assigns a `CSSStyleSheet` constructed in a different document to `adoptedStyleSheets`. That assignment is the host page's own invalid operation, but the recorder's patched setter sat on the call stack, so the exception was attributed to rrweb and churned fingerprints in error tracking. The recorder now contains this specific rejection (matched by its standardized `NotAllowedError` name, so it works even when the setter throws from an iframe realm) and skips recording those sheets, while still re-throwing any other native-setter error so host-page behaviour is preserved.
+  (2026-07-15)
+
+## 0.1.2
+
+### Patch Changes
+
+- [#4151](https://github.com/PostHog/posthog-js/pull/4151) [`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` when a programmatic input-value change happens on an object that is not a genuine native input element (for example a proxy on the element prototype chain). The recorder drops that one replay update instead of throwing.
+  (2026-07-15)
+
+## 0.1.1
+
+### Patch Changes
+
+- [#4073](https://github.com/PostHog/posthog-js/pull/4073) [`f48eaf2`](https://github.com/PostHog/posthog-js/commit/f48eaf2242dafdf72e8fc9dd739b90c9a6b89513) Thanks [@pauldambra](https://github.com/pauldambra)! - Canvas capture now fingerprints raw pixels before encoding, so unchanged frames skip the expensive image encode entirely. Previously every captured frame was encoded (webp/png) and base64'd just to compute a fingerprint, with unchanged frames dropped only after paying the full encode cost — for a static canvas at the default fps this burned CPU continuously for the lifetime of the page. Blank first frames are now detected from pixel data and never encoded either (previously they cost two encodes: one for the frame and one for a transparent reference blob). No response shapes changed, and unchanged-frame detection is equal or stricter: dedupe compares dimension-tagged raw pixels using two independent 32-bit hashes rather than encoded bytes, so the rare frames that previously deduped on identical lossy-encoded output now transmit, and a resize retransmits even when the raw bytes happen to match (any equal-pixel-count resize of a uniform fill, e.g. 100x200 redrawn at 200x100). The one exception in the "sends more" direction: a canvas that resizes while never having shown content stays skipped — it is blank at either size. Changed frames pay a small new pixel-readback + hash cost on top of the encode, so always-animating canvases do slightly more work per frame; static canvases — the case that burned continuously — drop from a full encode per tick to a readback + hash.
+  (2026-07-15)
+
+- [#4131](https://github.com/PostHog/posthog-js/pull/4131) [`c50b27f`](https://github.com/PostHog/posthog-js/commit/c50b27f54e551ea76b1a7e7b935346bcf4d13ebf) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: non-user-initiated events (media autoplay, canvas/font/stylesheet churn) no longer unfreeze a frozen page, so background activity cannot flush the frozen mutation buffer (port of upstream rrweb #1697)
+  (2026-07-15)
+
+## 0.1.0
+
+### Minor Changes
+
+- [#4129](https://github.com/PostHog/posthog-js/pull/4129) [`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add `session_recording.attributeFilter` option that passes an attribute allowlist through to the native MutationObserver, so mutations to unlisted attributes (e.g. animation-driven inline `style` churn) never cost recording CPU (port of upstream rrweb #1873)
+  (2026-07-15)
+
+### Patch Changes
+
+- [#4130](https://github.com/PostHog/posthog-js/pull/4130) [`5116a41`](https://github.com/PostHog/posthog-js/commit/5116a413a5d95706a4fb38dc6c40a0525cb16578) Thanks [@pauldambra](https://github.com/pauldambra)! - perf: when a node is re-encountered while collecting added nodes, move it to the end of the added set so the emit phase processes adds in latest-DOM order. This avoids paying for out-of-order deferrals on large mutation batches (port of upstream rrweb #1302).
+  (2026-07-15)
+- Updated dependencies [[`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc)]:
+    - @posthog/rrweb-utils@0.0.63
+    - @posthog/rrweb-snapshot@0.0.66
+
+## 0.0.79
+
+### Patch Changes
+
+- [#4118](https://github.com/PostHog/posthog-js/pull/4118) [`f630394`](https://github.com/PostHog/posthog-js/commit/f6303946729b2882e495a06d75b8458433a74646) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `RangeError: Maximum call stack size exceeded` originating from the shared rrweb `patch()` helper. It patches shared globals such as `Element.prototype.attachShadow` (shadow-dom-manager) and the DOM/canvas observers, so multiple recorder instances or repeated start/stop cycles wrap the same global more than once. Previously an out-of-order restore silently no-op'd, leaving the wrapper in the call path; repeated cycles grew the wrapper chain without bound until a real call walked a chain deep enough to overflow the stack. Wrappers now delegate through a mutable per-layer link so any layer can be torn down even when newer wrappers sit on top of it, keeping the chain bounded. Recording behavior is unchanged. This applies the same fix as #4063 (fetch/XHR) to the shared helper so every rrweb-record caller inherits the bounded-chain behavior.
+  (2026-07-10)
+- Updated dependencies [[`f630394`](https://github.com/PostHog/posthog-js/commit/f6303946729b2882e495a06d75b8458433a74646)]:
+    - @posthog/rrweb-utils@0.0.62
+    - @posthog/rrweb-snapshot@0.0.66
+
+## 0.0.78
+
+### Patch Changes
+
+- [#4113](https://github.com/PostHog/posthog-js/pull/4113) [`45f17ee`](https://github.com/PostHog/posthog-js/commit/45f17eeb14a5fefd160309e50b29ddad4d044c53) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay leaking a shadow-root observer when a same-origin iframe is removed
+
+    Follow-up to the shadow-observer iframe-teardown fix: `takeFullSnapshot`'s `onSerialize` registers every shadow root with the top-level document, so a root nested in a same-origin iframe was keyed to the wrong document and its observer/buffer were not disconnected when that iframe was removed (they lingered until the next full snapshot). `addShadowRoot` now derives the owning document from the host element, so per-document teardown matches iframe-nested roots too. (2026-07-08)
+
+## 0.0.77
+
+### Patch Changes
+
+- [#4114](https://github.com/PostHog/posthog-js/pull/4114) [`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix: avoid throwing when rrweb recorder cleanup cannot remove a listener
+  (2026-07-08)
+- Updated dependencies [[`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b)]:
+    - @posthog/rrweb-snapshot@0.0.66
+    - @posthog/rrdom@0.0.66
+
+## 0.0.76
+
+### Patch Changes
+
+- [#4112](https://github.com/PostHog/posthog-js/pull/4112) [`38bb185`](https://github.com/PostHog/posthog-js/commit/38bb185fac9d0e20250620932e2dcbcf44dd1da9) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix session replay silently dropping shadow DOM mutations after an iframe teardown
+
+    The single shared ShadowDomManager observes every shadow root on the page, but MutationBuffer.reset() disconnected it. That reset fires whenever any one buffer is torn down, so an iframe being removed or navigating away disconnected every shadow-root observer page-wide. Shadow DOM content (for example a widget mounted in an open shadow root) then stopped recording until the next periodic full snapshot re-registered it. Buffer teardown now releases only its own resources; global shadow observation is reset by takeFullSnapshot and on recording stop. (2026-07-08)
+
+## 0.0.75
+
+### Patch Changes
+
+- [#4033](https://github.com/PostHog/posthog-js/pull/4033) [`e803b8f`](https://github.com/PostHog/posthog-js/commit/e803b8f253a0498da4469657203813102b3d3e8f) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay: guard the canvas recording inline worker against blob-script load failures. When a strict page CSP (worker-src / script-src blob:), an ad blocker, or a network hiccup prevents the inline worker from loading, canvas snapshotting now disables itself quietly instead of surfacing an uncaught NetworkError. The rest of session replay keeps working.
+  (2026-07-01)
+
 ## 0.0.74
 
 ### Patch Changes

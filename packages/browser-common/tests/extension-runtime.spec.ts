@@ -1,0 +1,197 @@
+/* oxlint-disable compat/compat */
+import type { Logger } from '@posthog/core'
+
+import type { Client } from '../src/client'
+import type { Extension } from '../src/extension'
+import { ExtensionRuntime } from '../src/extension-runtime'
+import type { ExtensionToken } from '../src/token'
+import { createTestClient } from './helpers/test-client'
+
+const logger: Logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    critical: vi.fn(),
+    createLogger: vi.fn(() => logger),
+}
+
+function testExtension(
+    name: string,
+    setup: (client: Client) => void | Promise<void> = vi.fn(),
+    dispose: (() => void) | undefined = vi.fn()
+): Extension {
+    return { name, setup, dispose }
+}
+
+function createRuntime(): {
+    runtime: ExtensionRuntime
+    client: Client
+    add: (extension: Extension) => Promise<void>
+} {
+    const client = createTestClient()
+    const runtime = new ExtensionRuntime(logger, client)
+    const add = (extension: Extension): Promise<void> => runtime.add(extension)
+    return { runtime, client, add }
+}
+
+describe('ExtensionRuntime', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('passes the client adapter and reserves names while setup is pending', async () => {
+        const { add, client } = createRuntime()
+        let receivedClient: Client | undefined
+        let resolveSetup: (() => void) | undefined
+        const registration = add(
+            testExtension(
+                'pending',
+                (value) =>
+                    new Promise<void>((resolve) => {
+                        receivedClient = value
+                        resolveSetup = resolve
+                    })
+            )
+        )
+
+        expect(receivedClient).toBe(client)
+        await expect(add(testExtension('pending'))).rejects.toThrow('already registered')
+
+        resolveSetup?.()
+        await registration
+    })
+
+    it('resolves registered extensions by typed stable name during setup and removes them on disposal', async () => {
+        interface LogsExtension extends Extension {
+            captureLog(): void
+        }
+        const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
+        const ConsumerLogsExtension = `${'logs'}` as ExtensionToken<LogsExtension>
+        const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
+        const { runtime, add } = createRuntime()
+        const captureLog = vi.fn()
+        let resolvedDuringSetup: LogsExtension | undefined
+        const extension: LogsExtension = {
+            name: LogsExtension,
+            setup: () => {
+                resolvedDuringSetup = runtime.getExtension(ConsumerLogsExtension)
+                resolvedDuringSetup?.captureLog()
+            },
+            captureLog,
+        }
+
+        expect(runtime.getExtension(MissingExtension)).toBeUndefined()
+        await add(extension)
+
+        expect(resolvedDuringSetup).toBe(extension)
+        expect(captureLog).toHaveBeenCalledTimes(1)
+        expect(runtime.getExtension(LogsExtension)).toBe(extension)
+        expect(runtime.getExtension<LogsExtension>('logs')).toBe(extension)
+
+        runtime.dispose()
+        expect(runtime.getExtension(LogsExtension)).toBeUndefined()
+    })
+
+    it.each([
+        {
+            label: 'synchronous',
+            setup: () => {
+                throw new Error('setup failed')
+            },
+        },
+        { label: 'asynchronous', setup: () => Promise.reject(new Error('setup failed')) },
+    ])('releases names and cleans up after $label setup failure', async ({ setup }) => {
+        const { add } = createRuntime()
+        const dispose = vi.fn()
+
+        await add(testExtension('failed', setup, dispose))
+
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(logger.error).toHaveBeenCalledWith('Failed to set up browser extension "failed"', expect.any(Error))
+
+        await expect(add(testExtension('failed'))).resolves.toBeUndefined()
+    })
+
+    it.each(['resolve', 'reject'] as const)('cleans pending setup immediately after late %s', async (outcome) => {
+        const { runtime, add } = createRuntime()
+        let settle: (() => void) | undefined
+        const dispose = vi.fn()
+        const registration = add(
+            testExtension(
+                'pending',
+                () =>
+                    new Promise<void>((resolve, reject) => {
+                        settle = () => (outcome === 'resolve' ? resolve() : reject(new Error('late failure')))
+                    }),
+                dispose
+            )
+        )
+
+        runtime.dispose()
+        expect(dispose).toHaveBeenCalledTimes(1)
+
+        settle?.()
+        await registration
+        expect(dispose).toHaveBeenCalledTimes(1)
+    })
+
+    it('disposes extensions in reverse registration order', async () => {
+        const { runtime, add } = createRuntime()
+        let patched = 'host'
+        const wrappingExtension = (name: string): Extension => {
+            let previous = patched
+            return testExtension(
+                name,
+                () => {
+                    previous = patched
+                    patched = `${name}(${patched})`
+                },
+                () => {
+                    patched = previous
+                }
+            )
+        }
+
+        await add(wrappingExtension('first'))
+        await add(wrappingExtension('second'))
+        expect(patched).toBe('second(first(host))')
+
+        runtime.dispose()
+
+        expect(patched).toBe('host')
+    })
+
+    it('logs rejected asynchronous cleanup without waiting for it', async () => {
+        const { runtime, add } = createRuntime()
+        const error = new Error('async dispose failed')
+        await add(
+            testExtension('async', vi.fn(), async () => {
+                throw error
+            })
+        )
+
+        expect(() => runtime.dispose()).not.toThrow()
+        await Promise.resolve()
+
+        expect(logger.error).toHaveBeenCalledWith('Failed to dispose browser extension "async"', error)
+    })
+
+    it('isolates cleanup errors, cleans each extension once, and rejects later additions', async () => {
+        const { runtime, add } = createRuntime()
+        const successfulDispose = vi.fn()
+        await add(
+            testExtension('failing', vi.fn(), () => {
+                throw new Error('dispose failed')
+            })
+        )
+        await add(testExtension('successful', vi.fn(), successfulDispose))
+
+        expect(() => runtime.dispose()).not.toThrow()
+        runtime.dispose()
+
+        expect(successfulDispose).toHaveBeenCalledTimes(1)
+        expect(logger.error).toHaveBeenCalledWith('Failed to dispose browser extension "failing"', expect.any(Error))
+        await expect(add(testExtension('late'))).rejects.toThrow('disposed')
+    })
+})

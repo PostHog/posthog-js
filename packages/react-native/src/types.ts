@@ -12,9 +12,44 @@ export type PostHogNavigationRef = {
   current?: PostHogNavigationRef | any | undefined
 }
 
+export type PostHogRageClickConfig = {
+  /**
+   * Enable or disable rage click (rage tap) detection.
+   *
+   * When enabled the native SDK emits a `$rageclick` event whenever a user
+   * taps the same area repeatedly in quick succession.
+   *
+   * @default true
+   */
+  enabled?: boolean
+  /**
+   * Number of consecutive taps required to trigger a rage click.
+   *
+   * @default 3
+   */
+  minimumTapCount?: number
+  /**
+   * Maximum pixel distance between consecutive taps for them to still
+   * count toward a rage click.
+   *
+   * @default 30
+   */
+  thresholdPoints?: number
+  /**
+   * Maximum time in seconds allowed between consecutive taps.
+   *
+   * @default 1.0
+   */
+  timeoutInterval?: number
+}
+
 export type PostHogAutocaptureOptions = {
   /**
-   * Enable autocapture of touch events
+   * Enable autocapture of touch events.
+   *
+   * On React Native Web this also captures `click` events — mouse, trackpad, keyboard
+   * activation and programmatic clicks — emitted with `$event_type: 'click'`, since
+   * browsers fire `touchend` only for touch input.
    *
    * @default false
    */
@@ -119,9 +154,22 @@ export interface PostHogCustomAppProperties {
   $timezone?: string | null
   /** Whether the app is running on an emulator/simulator */
   $is_emulator?: boolean | null
+  /** React Native version like "0.79.6" */
+  $react_native_version?: string | null | undefined
 }
 
 export type PostHogSessionReplayConfig = {
+  /**
+   * Capture touch coordinates in session replay. Set to false to keep screenshots
+   * without recording taps that could reveal sensitive input on a known keypad layout.
+   * Does not change masking or `PostHogProvider` touch autocapture.
+   * Android and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;
+   * older plugins and `posthog-react-native-session-replay` ignore this option.
+   * Set before constructing PostHog. Changes after initialization do not update native state.
+   *
+   * @default true
+   */
+  captureTouches?: boolean
   /**
    * Enable masking of all text and text input fields
    *
@@ -186,6 +234,49 @@ export type PostHogSessionReplayConfig = {
    */
   captureNetworkTelemetry?: boolean
   /**
+   * Verify that masks remain aligned while capturing session replay screenshots.
+   * Android only. Requires `@posthog/react-native-plugin`.
+   *
+   * Enabling this can preserve screenshots during pixel-only redraws, including
+   * continuously animated content, but performs additional view hierarchy walks
+   * while a screenshot is captured.
+   *
+   * @default false
+   */
+  verifyScreenshotMaskAlignment?: boolean
+  /**
+   * Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0.
+   * For example, 0.5 captures half the width and height, or one quarter of the pixels.
+   * The logical replay viewport is unchanged. Non-finite values use the native default.
+   * Android only. Requires `@posthog/react-native-plugin` 2.8.0 or later.
+   * Does not enable session replay or change compression quality or color mode.
+   *
+   * @experimental
+   * @default 1.0
+   */
+  screenshotScale?: number
+  /**
+   * Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated.
+   * Higher values generally retain more detail and produce larger payloads.
+   * Compression is lossy, except at quality 100 on Android 10, which uses lossless WebP.
+   * Non-finite values use the native default. Does not change screenshot resolution.
+   * Android only. Requires `@posthog/react-native-plugin` 2.8.0 or later.
+   *
+   * @experimental
+   * @default 30
+   */
+  screenshotCompressionQuality?: number
+  /**
+   * Experimental. Screenshot bitmap pixel format. ARGB_8888 preserves transparency and color precision.
+   * RGB_565 uses half the bitmap memory but reduces color precision and removes alpha,
+   * making transparent window regions appear black. Unsupported devices fall back to ARGB_8888.
+   * Android only. Requires `@posthog/react-native-plugin` 2.8.0 or later.
+   *
+   * @experimental
+   * @default 'ARGB_8888'
+   */
+  screenshotColorMode?: 'ARGB_8888' | 'RGB_565'
+  /**
    * Schedule screenshot image capture on a background queue.
    * iOS only
    * Experimental support
@@ -209,3 +300,11 @@ export interface PostHogCustomStorage {
   getItem: (key: string) => string | null | Promise<string | null>
   setItem: (key: string, value: string) => void | Promise<void>
 }
+
+/**
+ * Mints a signed identity-verification token for a push subscription request.
+ *
+ * Called by the native SDK with the current `distinctId` and `appId`. Return
+ * `null` to send the request without an identity token.
+ */
+export type PostHogPushIdentityProvider = (distinctId: string, appId: string) => Promise<string | null>

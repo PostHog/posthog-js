@@ -1,8 +1,14 @@
 import {
   snapshot,
   type MaskInputOptions,
+  type Mirror,
   slimDOMDefaults,
   createMirror,
+  takeDeferredStylesheetLinks,
+  recordDeferredStylesheetsAbandoned,
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
+  noteVisibilityChange,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -11,6 +17,7 @@ import {
 } from './observer';
 import {
   on,
+  callAllSafely,
   callSafely,
   getWindowWidth,
   getWindowHeight,
@@ -40,6 +47,7 @@ import { IframeManager } from './iframe-manager';
 import { ShadowDomManager } from './shadow-dom-manager';
 import { CanvasManager } from './observers/canvas/canvas-manager';
 import { StylesheetManager } from './stylesheet-manager';
+import type { DeferredLinkInliningTask } from './stylesheet-manager';
 import ProcessedNodeManager from './processed-node-manager';
 import {
   callbackWrapper,
@@ -60,7 +68,6 @@ try {
   if (Array.from([1], (x) => x * 2)[0] !== 2) {
     const cleanFrame = document.createElement('iframe');
     document.body.appendChild(cleanFrame);
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- Array.from is static and doesn't rely on binding
     Array.from = cleanFrame.contentWindow?.Array.from || Array.from;
     document.body.removeChild(cleanFrame);
   }
@@ -69,9 +76,275 @@ try {
 }
 
 const mirror = createMirror();
+
+// incremental sources which fire without user interaction (e.g. a looping
+// background video, a JS animation) and so must not unfreeze a frozen page
+// (upstream rrweb #1697). Hoisted so the check does not allocate per event.
+const nonUserInitiatedSources = new Set<IncrementalSource>([
+  IncrementalSource.Mutation,
+  IncrementalSource.MediaInteraction, // often automatic e.g. background video loop
+  IncrementalSource.StyleSheetRule,
+  IncrementalSource.CanvasMutation,
+  IncrementalSource.Font,
+  IncrementalSource.Log,
+  IncrementalSource.StyleDeclaration,
+  IncrementalSource.AdoptedStyleSheet,
+]);
+type IdleTask = { cancel: () => void };
+type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
+
+function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
+  const win = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (
+        cb: (deadline: IdleDeadline) => void,
+        opts?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+  if (typeof win.requestIdleCallback === 'function') {
+    // the timeout keeps a permanently busy main thread from starving the CSS
+    const handle = win.requestIdleCallback(cb, { timeout: 2000 });
+    return { cancel: () => win.cancelIdleCallback?.(handle) };
+  }
+  // no idle scheduling (e.g. Safari <= 17): space the chunks out instead, so
+  // they don't run back-to-back inside the page-load busy window
+  const handle = setTimeout(cb, 250);
+  return { cancel: () => clearTimeout(handle) };
+}
+
+// CSSRules stringified per slice before re-checking the idle deadline. A rule
+// stringifies in single-digit microseconds, so a slice stays around a
+// millisecond even on slow devices - small enough that overshooting a deadline
+// by one slice is negligible, big enough that a permanently busy page still
+// finishes real work with its one guaranteed slice per callback.
+const DEFERRED_STYLESHEET_RULES_PER_SLICE = 200;
+
+// Without idle deadlines (the setTimeout fallback in whenIdle) each tick gets a
+// fixed slice allowance instead: a tick stays a few ms, while a giant sheet
+// still completes in seconds rather than minutes.
+const DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK = 10;
+
+// Safety cap for the synchronous teardown flush (stop() / pagehide): at most
+// this many slices, i.e. 10,000 rules - the same synchronous CSS work the
+// default snapshot budget allows, tens of ms at worst. A sheet estimated not
+// to fit in what's left of the cap is abandoned up front (spending the budget
+// on it would emit nothing while starving the sheets queued behind it), and
+// everything abandoned or still queued at the cap is counted.
+const DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES = 50;
+
+/** Controls one full snapshot's queue of budget-deferred stylesheets. */
+type DeferredStylesheetInlining = {
+  /** Drop everything still queued; nothing further is emitted. */
+  cancel: () => void;
+  /**
+   * Synchronously finish what remains - the partially-stringified sheet
+   * included - up to {@link DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES}, so the
+   * `_cssText` mutations reach the recorder before teardown. Sheets estimated
+   * not to fit in the remaining budget are abandoned (and counted) up front,
+   * so one oversized sheet cannot starve the cheap sheets queued behind it.
+   */
+  flush: () => void;
+};
+
+/**
+ * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
+ * of stylesheet budget, emitting each as an attribute mutation. The unit of work is
+ * a bounded range of CSSRules, not a whole sheet: a resumable cursor stringifies
+ * {@link DEFERRED_STYLESHEET_RULES_PER_SLICE} rules per slice and accumulates, so
+ * even a monolithic sheet never holds the main thread for one long task. At least
+ * one slice per idle callback so a busy main thread still makes progress, more
+ * slices (and more sheets) while the deadline says we're genuinely idle. A sheet's
+ * mutation is emitted atomically when its last slice completes - cancelling
+ * mid-sheet emits nothing for that sheet.
+ *
+ * Exported for unit tests only.
+ */
+export function inlineDeferredStylesheets(
+  links: Array<HTMLLinkElement | null>,
+  stylesheetManager: StylesheetManager,
+  onDone: () => void,
+): DeferredStylesheetInlining {
+  let cancelled = false;
+  let pending: IdleTask | null = null;
+  let index = 0;
+  // resumable stringification of the sheet currently being inlined; the
+  // accumulated slices live inside the task, so dropping it drops them
+  let task: DeferredLinkInliningTask | null = null;
+
+  const hasWork = () => task !== null || index < links.length;
+
+  const startNextTask = () => {
+    const link = links[index];
+    // release the element so completed entries aren't pinned by this closure
+    links[index] = null;
+    index += 1;
+    if (link) {
+      callSafely(() => {
+        task = stylesheetManager.beginDeferredLinkInlining(
+          link,
+          mirror.getId(link),
+        );
+      });
+    }
+  };
+
+  const advanceActiveTask = () => {
+    if (!task) {
+      return;
+    }
+    const activeTask = task;
+    let finished = true;
+    callSafely(() => {
+      finished = activeTask.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+    });
+    if (finished) {
+      task = null;
+    }
+  };
+
+  const runOneSlice = () => {
+    if (!task) {
+      startNextTask();
+    }
+    advanceActiveTask();
+  };
+
+  const step = (deadline?: IdleDeadline) => {
+    pending = null;
+    if (cancelled) {
+      return;
+    }
+    let slices = 0;
+    do {
+      try {
+        runOneSlice();
+      } catch (e) {
+        // a throwing consumer emit or mask callback must not surface as an
+        // uncaught error on the customer's page; the sheet is dropped and
+        // counted, and the sheets behind it still get their turn
+        task?.discard();
+        task = null;
+        recordDeferredStylesheetsAbandoned(1);
+      }
+      slices += 1;
+    } while (
+      // a sheet's own emit can synchronously cancel()/flush() this queue (a
+      // full snapshot or recorder stop from inside emit); a superseded tick
+      // must stop immediately and leave completion signalling to them
+      !cancelled &&
+      hasWork() &&
+      (deadline
+        ? !deadline.didTimeout && deadline.timeRemaining() > 5
+        : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
+    );
+    if (cancelled) {
+      return;
+    }
+    if (hasWork()) {
+      pending = whenIdle(step);
+    } else {
+      onDone();
+    }
+  };
+
+  pending = whenIdle(step);
+
+  return {
+    cancel: () => {
+      cancelled = true;
+      // drop the half-stringified sheet, if any; its mutation is never emitted
+      task?.discard();
+      task = null;
+      pending?.cancel();
+      pending = null;
+    },
+    flush: () => {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      pending?.cancel();
+      pending = null;
+      let slices = 0;
+      let skipped = 0;
+      while (hasWork() && slices < DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES) {
+        if (!task) {
+          startNextTask();
+        }
+        const activeTask = task;
+        if (!activeTask) {
+          // this link had nothing to inline; on to the next
+          continue;
+        }
+        // Fairness: the budget is shared and a sheet only emits when its LAST
+        // slice completes, so a sheet that cannot finish in the remaining
+        // budget would burn it emitting nothing while starving every sheet
+        // queued behind it - abandon that one sheet up front instead.
+        // remainingRules() undercounts rules hidden in still-unopened frames,
+        // so a sheet can still overrun; re-checking every slice corrects the
+        // estimate as frames open.
+        const slicesNeeded =
+          Math.floor(
+            activeTask.remainingRules() / DEFERRED_STYLESHEET_RULES_PER_SLICE,
+          ) + 1;
+        if (slicesNeeded > DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slices) {
+          activeTask.discard();
+          task = null;
+          skipped += 1;
+          continue;
+        }
+        try {
+          advanceActiveTask();
+        } catch (e) {
+          // a throwing consumer emit or mask callback must not abort the
+          // drain; the sheet is dropped and counted, and the sheets queued
+          // behind it still get their turn
+          task?.discard();
+          task = null;
+          skipped += 1;
+        }
+        slices += 1;
+      }
+      if (hasWork() || skipped > 0) {
+        // whatever was skipped or is still queued keeps only its href in the replay
+        let abandoned = skipped + (task !== null ? 1 : 0);
+        for (let i = index; i < links.length; i++) {
+          if (links[i] !== null) {
+            abandoned += 1;
+          }
+        }
+        recordDeferredStylesheetsAbandoned(abandoned);
+        task?.discard();
+        task = null;
+      }
+      onDone();
+    },
+  };
+}
+
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
+  // per-recorder, unlike its module-level siblings, so a stale recorder's stop
+  // handler can't touch a newer recorder's pending deferred inlining
+  let deferredStylesheetInlining: DeferredStylesheetInlining | undefined;
+  // also per-recorder: a deferred start emits before it inits, and that emit can
+  // synchronously stop this recorder and start a replacement. Removing the listener
+  // mid-dispatch doesn't abort the callback that is already running, so the stale
+  // init() would take a full snapshot through the replacement's module-level
+  // takeFullSnapshot (resetting the shared mirror mid-stream) and push a second
+  // observer set onto handlers this stop already drained - one no stop handler can
+  // remove. Every callback boundary in init() therefore re-checks this flag.
+  let stopped = false;
+  // init() is meant to run once, but the deferred-start listeners stay registered
+  // until the stop drains them, and page code can dispatch its own DOMContentLoaded
+  // after the browser's (a common way to bootstrap late-injected scripts). A second
+  // run would take another full snapshot and stack a second observer set on the
+  // first: the stylesheet observer restores the exact function it captured, so the
+  // forward-order drain reinstalls the older patch and leaves CSSStyleSheet.prototype
+  // wrapped for the life of the page.
+  let initialized = false;
   const {
     emit,
     checkoutEveryNms,
@@ -83,16 +356,20 @@ function record<T = eventWithTime>(
     maskTextClass = 'rr-mask',
     maskTextSelector = null,
     inlineStylesheet = true,
+    inlineStylesheetBudgetRules,
     maskAllInputs,
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
     maskInputFn,
     maskTextFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     hooks,
     packFn,
     sampling = {},
     dataURLOptions: _dataURLOptions = {},
     canvasResolutionScale,
+    canvasMasking,
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
@@ -106,6 +383,7 @@ function record<T = eventWithTime>(
     plugins,
     keepIframeSrcFn = () => false,
     ignoreCSSAttributes = new Set([]),
+    attributeFilter,
     errorHandler,
   } = options;
 
@@ -216,7 +494,7 @@ function record<T = eventWithTime>(
       e.type !== EventType.FullSnapshot &&
       !(
         e.type === EventType.IncrementalSnapshot &&
-        e.data.source === IncrementalSource.Mutation
+        nonUserInitiatedSources.has(e.data.source)
       )
     ) {
       // we've got a user initiated event so first we need to apply
@@ -334,6 +612,8 @@ function record<T = eventWithTime>(
   const stylesheetManager = new StylesheetManager({
     mutationCb: wrappedMutationEmit,
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
+    maskAllElementAttributes,
+    maskAttributeFn,
   });
 
   const iframeManager = new IframeManager({
@@ -359,6 +639,8 @@ function record<T = eventWithTime>(
 
   const processedNodeManager = new ProcessedNodeManager();
 
+  const canvasMaskingConfigured = canvasMasking?.configured;
+
   canvasManager = new CanvasManager({
     recordCanvas,
     mutationCb: wrappedCanvasMutationEmit,
@@ -369,6 +651,7 @@ function record<T = eventWithTime>(
     sampling: sampling.canvas,
     dataURLOptions,
     resolutionScale: canvasResolutionScale,
+    canvasMasking,
   });
 
   const shadowDomManager = new ShadowDomManager({
@@ -384,7 +667,10 @@ function record<T = eventWithTime>(
       dataURLOptions,
       maskTextFn,
       maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
       recordCanvas,
+      canvasMaskingConfigured,
       inlineImages,
       sampling,
       slimDOMOptions,
@@ -393,6 +679,7 @@ function record<T = eventWithTime>(
       canvasManager,
       keepIframeSrcFn,
       processedNodeManager,
+      attributeFilter,
     },
     mirror,
   });
@@ -401,96 +688,181 @@ function record<T = eventWithTime>(
     if (!recordDOM) {
       return;
     }
-    wrappedEmit(
-      {
-        type: EventType.Meta,
-        data: {
-          href: window.location.href,
-          width: getWindowWidth(),
-          height: getWindowHeight(),
+    // This whole body is one uninterruptible main-thread task: the serialize
+    // pass, the FullSnapshot emit, the locked-mutation drain on unlock, and the
+    // adoptedStyleSheets stringification all land in the same freeze, so they
+    // are tracked as one window. `snapshot()`'s own tracking nests inside it.
+    beginSnapshotCostTracking(inlineStylesheetBudgetRules);
+    try {
+      wrappedEmit(
+        {
+          type: EventType.Meta,
+          data: {
+            href: window.location.href,
+            width: getWindowWidth(),
+            height: getWindowHeight(),
+          },
         },
-      },
-      isCheckout,
-    );
-
-    // When we take a full snapshot, old tracked StyleSheets need to be removed.
-    stylesheetManager.reset();
-
-    shadowDomManager.init();
-
-    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
-    const node = snapshot(document, {
-      mirror,
-      blockClass,
-      blockSelector,
-      maskTextClass,
-      maskTextSelector,
-      inlineStylesheet,
-      maskAllInputs: maskInputOptions,
-      maskTextFn,
-      maskInputFn,
-      slimDOM: slimDOMOptions,
-      dataURLOptions,
-      recordCanvas,
-      inlineImages,
-      onSerialize: (n) => {
-        if (isSerializedIframe(n, mirror)) {
-          iframeManager.addIframe(n as HTMLIFrameElement);
-        }
-        if (isSerializedStylesheet(n, mirror)) {
-          stylesheetManager.trackLinkElement(n as HTMLLinkElement);
-        }
-        if (hasShadowRoot(n)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
-        }
-      },
-      onIframeLoad: (iframe, childSn) => {
-        iframeManager.attachIframe(iframe, childSn);
-        shadowDomManager.observeAttachShadow(iframe);
-      },
-      onIframeListenerRegistered: (
-        iframe: HTMLIFrameElement,
-        disposer: () => void,
-      ) => {
-        iframeManager.registerLoadListenerDisposer(iframe, disposer);
-      },
-      onStylesheetLoad: (linkEl, childSn) => {
-        stylesheetManager.attachLinkElement(linkEl, childSn);
-      },
-      keepIframeSrcFn,
-    });
-
-    if (!node) {
-      return console.warn('Failed to snapshot the document');
-    }
-
-    wrappedEmit(
-      {
-        type: EventType.FullSnapshot,
-        data: {
-          node,
-          initialOffset: getWindowScroll(window),
-        },
-      },
-      isCheckout,
-    );
-    mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-
-    if (recordCrossOriginIframes) {
-      iframeManager.reattachIframes();
-    }
-
-    // Some old browsers don't support adoptedStyleSheets.
-    if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
-      stylesheetManager.adoptStyleSheets(
-        document.adoptedStyleSheets,
-        mirror.getId(document),
+        isCheckout,
       );
+      // the Meta emit can stop this recorder and start a replacement; the rest
+      // of the snapshot would then run against the replacement's shared state
+      if (stopped) return;
+
+      // Any deferred inlining from the previous snapshot targets mirror ids that this
+      // snapshot is about to replace, so drop it rather than emitting stale mutations.
+      // No sheet is lost: this snapshot re-serializes every link, so a still-attached
+      // sheet is either inlined within the new budget or re-deferred into a new queue.
+      deferredStylesheetInlining?.cancel();
+      deferredStylesheetInlining = undefined;
+
+      // When we take a full snapshot, old tracked StyleSheets need to be removed.
+      stylesheetManager.reset();
+
+      shadowDomManager.init();
+
+      mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+      let node: ReturnType<typeof snapshot> = null;
+      let deferredStylesheetLinks: HTMLLinkElement[] = [];
+      try {
+        node = snapshot(document, {
+          mirror,
+          blockClass,
+          blockSelector,
+          maskTextClass,
+          maskTextSelector,
+          inlineStylesheet,
+          maskAllInputs: maskInputOptions,
+          inlineStylesheetBudgetRules,
+          maskTextFn,
+          maskInputFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          slimDOM: slimDOMOptions,
+          dataURLOptions,
+          recordCanvas,
+          canvasMaskingConfigured,
+          inlineImages,
+          onSerialize: (n) => {
+            if (isSerializedIframe(n, mirror)) {
+              iframeManager.addIframe(n as HTMLIFrameElement);
+            }
+            if (isSerializedStylesheet(n, mirror)) {
+              stylesheetManager.trackLinkElement(n as HTMLLinkElement);
+            }
+            if (hasShadowRoot(n)) {
+              shadowDomManager.addShadowRoot(
+                dom.shadowRoot(n as Node)!,
+                document,
+              );
+            }
+          },
+          onIframeLoad: (iframe, childSn) => {
+            iframeManager.attachIframe(iframe, childSn);
+            shadowDomManager.observeAttachShadow(iframe);
+          },
+          onIframeListenerRegistered: (
+            iframe: HTMLIFrameElement,
+            disposer: () => void,
+          ) => {
+            iframeManager.registerLoadListenerDisposer(iframe, disposer);
+          },
+          onStylesheetLoad: (linkEl, childSn) => {
+            stylesheetManager.attachLinkElement(linkEl, childSn);
+          },
+          keepIframeSrcFn,
+        });
+      } finally {
+        // drain even when the snapshot throws, so a failed snapshot doesn't
+        // leave links queued for the next one
+        deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      }
+      // the serialize pass runs the user's mask callbacks, and one of those can
+      // stop this recorder and start a replacement; the tree it just built is
+      // keyed to a mirror the replacement has already reset, so emitting it now
+      // would land a second, conflicting full snapshot in the replacement's stream
+      if (stopped) return;
+
+      if (!node) {
+        return console.warn('Failed to snapshot the document');
+      }
+
+      wrappedEmit(
+        {
+          type: EventType.FullSnapshot,
+          data: {
+            node,
+            initialOffset: getWindowScroll(window),
+          },
+        },
+        isCheckout,
+      );
+      // same for the FullSnapshot emit: the stop already drained the buffers
+      // and reset the mirror this tail would otherwise unlock and emit against
+      if (stopped) return;
+      mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+      canvasManager.onFullSnapshot();
+
+      if (deferredStylesheetLinks.length) {
+        const inlining = inlineDeferredStylesheets(
+          deferredStylesheetLinks,
+          stylesheetManager,
+          () => {
+            // queue drained: drop the handle so the closure and its links can
+            // be collected; a superseded queue must not clobber the handle of
+            // the one a newer full snapshot installed
+            if (deferredStylesheetInlining === inlining) {
+              deferredStylesheetInlining = undefined;
+            }
+          },
+        );
+        deferredStylesheetInlining = inlining;
+      }
+
+      if (recordCrossOriginIframes) {
+        iframeManager.reattachIframes();
+      }
+
+      // Some old browsers don't support adoptedStyleSheets.
+      if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
+        stylesheetManager.adoptStyleSheets(
+          document.adoptedStyleSheets,
+          mirror.getId(document),
+        );
+    } finally {
+      endSnapshotCostTracking();
+    }
   };
 
   try {
     const handlers: listenerHandler[] = [];
+
+    // pagehide is the last event a dying page can rely on; flush the deferred
+    // CSS synchronously so it reaches the emitted stream while the SDK's own
+    // pagehide flush (registered after this one) can still ship it.
+    handlers.push(
+      on(
+        'pagehide',
+        () => {
+          try {
+            deferredStylesheetInlining?.flush();
+          } catch (e) {
+            // flush drives the user's emit/mask callbacks; their throw must
+            // not surface on the host page's pagehide dispatch
+          }
+          deferredStylesheetInlining = undefined;
+        },
+        window,
+      ),
+    );
+
+    // A hidden tab can be frozen or its renderer suspended by the OS, which
+    // turns the wall-clock cost samples into sleep measurements. rrweb-snapshot
+    // has no DOM event access of its own, so the recorder feeds it the
+    // suspension boundaries; see snapshot-cost.ts for the discard rules.
+    for (const suspensionEvent of ['visibilitychange', 'freeze', 'resume']) {
+      handlers.push(on(suspensionEvent, noteVisibilityChange, document));
+    }
 
     // Disposes per-iframe observer cleanups and unlinks them from `handlers`.
     runAndDetachIframeCleanup = (iframeId: number) => {
@@ -619,12 +991,15 @@ function record<T = eventWithTime>(
           sampling,
           recordDOM,
           recordCanvas,
+          canvasMaskingConfigured,
           inlineImages,
           userTriggeredOnInput,
           collectFonts,
           doc,
           maskInputFn,
           maskTextFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
           keepIframeSrcFn,
           blockSelector,
           slimDOMOptions,
@@ -636,10 +1011,12 @@ function record<T = eventWithTime>(
           processedNodeManager,
           canvasManager,
           ignoreCSSAttributes,
+          attributeFilter,
           plugins:
             plugins
               ?.filter((p) => p.observer)
               ?.map((p) => ({
+                name: p.name,
                 observer: p.observer!,
                 options: p.options,
                 callback: (payload: object) =>
@@ -660,15 +1037,17 @@ function record<T = eventWithTime>(
       try {
         const iframeId = mirror.getId(iframeEl);
         const cleanup = observe(iframeEl.contentDocument!);
-        handlers.push(cleanup);
-        // Accumulate cleanups across iframe navigations.
-        if (iframeId !== -1) {
-          let bucket = iframeObserverCleanups.get(iframeId);
-          if (!bucket) {
-            bucket = new Set();
-            iframeObserverCleanups.set(iframeId, bucket);
+        if (typeof cleanup === 'function') {
+          handlers.push(cleanup);
+          // Accumulate cleanups across iframe navigations.
+          if (iframeId !== -1) {
+            let bucket = iframeObserverCleanups.get(iframeId);
+            if (!bucket) {
+              bucket = new Set();
+              iframeObserverCleanups.set(iframeId, bucket);
+            }
+            bucket.add(cleanup);
           }
-          bucket.add(cleanup);
         }
       } catch (error) {
         // TODO: handle internal error
@@ -722,8 +1101,24 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
+      if (stopped || initialized) return;
+      // set before the snapshot, so a repeat dispatch from inside its own emit
+      // bails out too instead of nesting a second init in this one
+      initialized = true;
       takeFullSnapshot();
-      handlers.push(observe(document));
+      // the snapshot emits, and that emit can stop this recorder too
+      if (stopped) return;
+      const cleanup = observe(document);
+      // observe() starts the plugins, and a plugin observer can emit while it sets
+      // up - the network plugin replays the performance entries the page already
+      // has - so the stop can land here too. It drained `handlers` before this
+      // cleanup existed, so pushing it there would leave every observer observe()
+      // just started with no reachable stop path; release them directly instead.
+      if (stopped) {
+        if (typeof cleanup === 'function') callAllSafely([cleanup]);
+        return;
+      }
+      if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
       handlers.push(on('mozfullscreenchange', emitFullscreenChange));
@@ -739,7 +1134,9 @@ function record<T = eventWithTime>(
             type: EventType.DomContentLoaded,
             data: {},
           });
-          if (recordAfter === 'DOMContentLoaded') init();
+          // defer past this listener so the page's own non-capture DOMContentLoaded
+          // listeners (e.g. ones adding mask/block classes) run before the snapshot
+          if (recordAfter === 'DOMContentLoaded') setTimeout(init, 0);
         }),
       );
       handlers.push(
@@ -757,11 +1154,25 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
-      handlers.forEach((h) => callSafely(h));
+      // set before any teardown, so a deferred-start callback that is mid-dispatch
+      // bails out instead of resuming into init() once this returns
+      stopped = true;
+      // finish the deferred CSS while the emit path is still wired up, so the
+      // sheets this recording deferred don't silently vanish with it
+      try {
+        deferredStylesheetInlining?.flush();
+      } catch (e) {
+        // flush drives the user's emit/mask callbacks; their throw must not
+        // abort the teardown below and leak observers and listeners
+      }
+      deferredStylesheetInlining = undefined;
+      callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
       iframeManager.destroy();
       iframeObserverCleanups.clear();
+      // Global shadow teardown belongs to the recording lifecycle, not per-buffer reset() which would fire on every iframe teardown.
+      shadowDomManager.reset();
       mirror.reset();
       recording = false;
       unregisterErrorHandler();
@@ -772,7 +1183,17 @@ function record<T = eventWithTime>(
   }
 }
 
-record.addCustomEvent = <T>(tag: string, payload: T) => {
+// Describe the callable API's attached properties without emitting a runtime namespace.
+// oxlint-disable-next-line typescript/no-namespace
+declare namespace record {
+  var addCustomEvent: <T>(tag: string, payload: T) => void;
+  var freezePage: () => void;
+  var takeFullSnapshot: (isCheckout?: boolean) => void;
+  var isRecording: () => boolean;
+  var mirror: Mirror;
+}
+
+record.addCustomEvent = (<T>(tag: string, payload: T) => {
   if (!recording) {
     throw new Error('please add custom event after start recording');
   }
@@ -783,18 +1204,23 @@ record.addCustomEvent = <T>(tag: string, payload: T) => {
       payload,
     },
   });
-};
+}) satisfies typeof record.addCustomEvent;
 
-record.freezePage = () => {
+record.freezePage = (() => {
   mutationBuffers.forEach((buf) => buf.freeze());
-};
+}) satisfies typeof record.freezePage;
 
-record.takeFullSnapshot = (isCheckout?: boolean) => {
+record.takeFullSnapshot = ((isCheckout?: boolean) => {
   if (!recording) {
     throw new Error('please take full snapshot after start recording');
   }
   takeFullSnapshot(isCheckout);
-};
+}) satisfies typeof record.takeFullSnapshot;
+
+// record() returns its stop handler synchronously, but init() can be deferred
+// until DOMContentLoaded or load. Until init() runs nothing is observed, so a
+// caller that only holds the stop handler cannot tell recording from pending.
+record.isRecording = (() => recording) satisfies typeof record.isRecording;
 
 record.mirror = mirror;
 

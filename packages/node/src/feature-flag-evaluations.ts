@@ -17,6 +17,8 @@ export type EvaluatedFlagRecord = {
   version: number | undefined
   reason: string | undefined
   locallyEvaluated: boolean
+  /** Whether the flag is linked to an experiment; undefined when the server did not report it. */
+  hasExperiment: boolean | undefined
 }
 
 /**
@@ -117,22 +119,26 @@ export class FeatureFlagEvaluations {
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
    * existing cache.
    *
-   * Flags that were not returned from the underlying evaluation are treated as
-   * disabled (returns `false`).
+   * Flags that were not returned from the underlying evaluation resolve to
+   * `options.defaultValue` (`false` unless overridden). A flag that has a value —
+   * including a conclusive `false` result and variant strings — always wins over
+   * `options.defaultValue`. Use `getFlag()` to distinguish an absent result from `false`.
    */
-  isEnabled(key: string): boolean {
+  isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
     const flag = this._flags[key]
     this._recordAccess(key)
-    return flag?.enabled ?? false
+    return flag?.enabled ?? options.defaultValue ?? false
   }
 
   /**
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple.
    *
-   * Returns the variant string for multivariate flags, `true` for enabled flags
-   * without a variant, `false` for disabled flags, and `undefined` for flags that
-   * were not returned by the evaluation.
+   * Returns the variant string for multivariate flags, `true` for boolean flags that
+   * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`
+   * for flags that were not returned by the evaluation. Cached inactive definitions are
+   * conclusive `false` results during local evaluation, while remote evaluation omits
+   * globally inactive flags.
    */
   getFlag(key: string): FeatureFlagValue | undefined {
     const flag = this._flags[key]
@@ -286,6 +292,10 @@ export class FeatureFlagEvaluations {
       [`$feature/${key}`]: response,
       $feature_flag_request_id: this._requestId,
       $feature_flag_evaluated_at: flag?.locallyEvaluated ? Date.now() : this._evaluatedAt,
+    }
+
+    if (flag?.hasExperiment !== undefined) {
+      properties.$feature_flag_has_experiment = flag.hasExperiment
     }
 
     if (flag?.locallyEvaluated && this._flagDefinitionsLoadedAt !== undefined) {

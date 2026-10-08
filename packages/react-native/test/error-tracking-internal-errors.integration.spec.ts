@@ -9,20 +9,20 @@ describe('isPostHogFetchNetworkError recognizes real core errors', () => {
   beforeAll(() => {
     // The SDK flush/shutdown lifecycle is timer-driven; the suite's global fake timers
     // would deadlock awaited async operations, so use real timers here.
-    jest.useRealTimers()
+    vi.useRealTimers()
   })
 
   afterAll(() => {
     ;(globalThis as any).window.fetch = originalFetch
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('returns true for the error core throws when fetch fails', async () => {
-    ;(globalThis as any).window.fetch = jest.fn(() => {
+    ;(globalThis as any).window.fetch = vi.fn(() => {
       throw new Error('offline')
     })
 
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
       const posthog = new PostHog('test-token', {

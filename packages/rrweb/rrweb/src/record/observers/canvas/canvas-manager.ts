@@ -8,10 +8,12 @@ import type {
   IWindow,
   listenerHandler,
   CanvasArg,
+  CanvasMasking,
   DataURLOptions,
 } from '@posthog/rrweb-types';
 import { isBlocked } from '../../../utils';
 import { CanvasContext } from '@posthog/rrweb-types';
+import { computeFrameMaskRegions, SKIP_FRAME } from './canvas-mask';
 import initCanvas2DMutationObserver from './2d';
 import initCanvasContextObserver from './canvas';
 import initCanvasWebGLMutationObserver from './webgl';
@@ -29,6 +31,15 @@ type pendingCanvasMutationsMap = Map<
 // resolution. matches the floor the PostHog SDK applies before passing the option in.
 const MIN_CANVAS_RESOLUTION_SCALE = 0.1;
 
+// Each path below turns canvas capture off for the whole session, so it must say why:
+// otherwise the user sees an empty canvas in playback and no canvas events at all.
+const CSP_BLOB_HINT =
+  'A page CSP that omits blob: from worker-src or script-src blocks it';
+
+function warnCanvasCapture(message: string, ...details: unknown[]): void {
+  console.warn(`[replay] canvas capture: ${message}`, ...details);
+}
+
 export class CanvasManager {
   private pendingCanvasMutations: pendingCanvasMutationsMap = new Map();
   private rafStamps: RafStamps = { latestId: 0, invokeId: null };
@@ -42,14 +53,23 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
+  private resetFrameDedup: (() => void) | null = null;
+
+  // Node ids are reused across full snapshots, so the encode worker's dedup
+  // map would otherwise keep suppressing an idle canvas forever — leaving the
+  // new snapshot's epoch without any frame to repaint that canvas from after
+  // a seek. Called after each full snapshot so every canvas re-emits one frame.
+  public onFullSnapshot(): void {
+    this.resetFrameDedup?.();
+  }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
-  public acquire() {
+  public acquire(): void {
     this.refCount += 1;
   }
 
-  public reset() {
+  public reset(): void {
     if (this.refCount > 0) {
       this.refCount -= 1;
     }
@@ -76,19 +96,19 @@ export class CanvasManager {
     }
   }
 
-  public freeze() {
+  public freeze(): void {
     this.frozen = true;
   }
 
-  public unfreeze() {
+  public unfreeze(): void {
     this.frozen = false;
   }
 
-  public lock() {
+  public lock(): void {
     this.locked = true;
   }
 
-  public unlock() {
+  public unlock(): void {
     this.locked = false;
   }
 
@@ -106,6 +126,7 @@ export class CanvasManager {
     // so playback dimensions/aspect are unchanged, just softer. invalid/unset defaults to 1
     // (full resolution).
     resolutionScale?: number;
+    canvasMasking?: CanvasMasking;
   }) {
     const {
       sampling = 'all',
@@ -115,6 +136,7 @@ export class CanvasManager {
       recordCanvas,
       dataURLOptions,
       resolutionScale,
+      canvasMasking,
     } = options;
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
@@ -130,6 +152,7 @@ export class CanvasManager {
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
         resolutionScale,
+        canvasMasking,
       });
   }
 
@@ -158,9 +181,13 @@ export class CanvasManager {
     options: {
       dataURLOptions: DataURLOptions;
       resolutionScale?: number;
+      canvasMasking?: CanvasMasking;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
+      warnCanvasCapture(
+        'disabled because this browser does not support OffscreenCanvas',
+      );
       return;
     }
 
@@ -182,8 +209,43 @@ export class CanvasManager {
       true,
     );
     const snapshotInProgressMap: Map<number, boolean> = new Map();
-    const worker =
-      new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
+
+    // The inline worker is materialized by the bundler as a `blob:` object URL and loaded via
+    // `importScripts(blobURL)` inside the worker. A strict page CSP (worker-src/script-src blob:),
+    // an ad blocker, or a transient network hiccup can make that load fail — synchronously as a
+    // thrown error here, or asynchronously as a worker error event. Either way, warn and disable
+    // canvas snapshotting instead of letting an uncaught NetworkError escape and pollute error
+    // tracking; the rest of session replay keeps working.
+    let worker: ImageBitmapDataURLRequestWorker;
+    try {
+      worker = new ImageBitmapDataURLWorker() as ImageBitmapDataURLRequestWorker;
+    } catch (error) {
+      warnCanvasCapture(
+        `disabled because the encode worker did not start. ${CSP_BLOB_HINT}`,
+        error,
+      );
+      // this returns before resetObservers is assigned, so teardown has nothing to
+      // call: undo the getContext patch here or it stays on the page forever,
+      // forcing preserveDrawingBuffer while nothing is being captured
+      canvasContextReset();
+      return;
+    }
+
+    let workerErrored = false;
+    worker.onerror = (error) => {
+      workerErrored = true;
+      warnCanvasCapture(
+        `stopped because the encode worker failed. ${CSP_BLOB_HINT}`,
+        error,
+      );
+      // stop the capture loop; nothing can be encoded without the worker.
+      cancelAnimationFrame(rafId);
+      worker.terminate?.();
+      this.resetFrameDedup = null;
+    };
+    this.resetFrameDedup = () => {
+      worker.postMessage({ resetFrameDedup: true });
+    };
     worker.onmessage = (e) => {
       const { id } = e.data;
       snapshotInProgressMap.set(id, false);
@@ -229,6 +291,8 @@ export class CanvasManager {
       });
     };
 
+    let maskSkipWarned = false;
+    let snapshotFailureWarned = false;
     const timeBetweenSnapshots = 1000 / fps;
     let lastSnapshotTime = 0;
     let rafId: number;
@@ -256,6 +320,10 @@ export class CanvasManager {
     };
 
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
+      // the worker failed to load (e.g. CSP blocked the blob script); stop capturing.
+      if (workerErrored) {
+        return;
+      }
       if (lastSnapshotTime && timestamp - lastSnapshotTime < timeBetweenSnapshots) {
         rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
@@ -263,9 +331,11 @@ export class CanvasManager {
       lastSnapshotTime = timestamp;
 
       getCanvas()
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         .forEach(async (canvas: HTMLCanvasElement) => {
           const id = this.mirror.getId(canvas);
+          // every canvas the mirror does not know yet shares id -1: one dedup key in the
+          // encode worker, and a mutation the player cannot apply to any node
+          if (id === -1) return;
           if (snapshotInProgressMap.get(id)) return;
 
           // The browser throws if the canvas is 0 in size
@@ -310,6 +380,26 @@ export class CanvasManager {
             // display size, so playback dimensions/aspect are unchanged, just softer.
             const captureWidth = Math.max(1, Math.round(displayWidth * scale));
             const captureHeight = Math.max(1, Math.round(displayHeight * scale));
+            // computed before the await so regions and display dims describe
+            // the same frame even if the canvas resizes mid-snapshot
+            const maskRegions = computeFrameMaskRegions(
+              options.canvasMasking,
+              canvas,
+              captureWidth,
+              captureHeight,
+              displayWidth,
+              displayHeight,
+            );
+            if (maskRegions === SKIP_FRAME) {
+              if (!maskSkipWarned) {
+                maskSkipWarned = true;
+                warnCanvasCapture(
+                  'dropped a frame because the mask provider did not return valid regions. A provider that always fails records no canvas frames at all',
+                );
+              }
+              snapshotInProgressMap.set(id, false);
+              return;
+            }
             const bitmap = await createImageBitmap(
               canvas,
               // only ask for a quality resampling filter when we're actually downscaling;
@@ -333,10 +423,18 @@ export class CanvasManager {
                 displayWidth,
                 displayHeight,
                 dataURLOptions: options.dataURLOptions,
+                maskRegions,
               },
               [bitmap],
             );
-          } catch {
+          } catch (error) {
+            if (!snapshotFailureWarned) {
+              snapshotFailureWarned = true;
+              warnCanvasCapture(
+                'dropped a frame because the snapshot failed. A canvas that fails every frame records no canvas frames at all',
+                error,
+              );
+            }
             snapshotInProgressMap.set(id, false);
           }
         });
@@ -348,6 +446,11 @@ export class CanvasManager {
     this.resetObservers = () => {
       canvasContextReset();
       cancelAnimationFrame(rafId);
+      // a dedicated worker is not terminated by becoming unreachable; without
+      // this, every recorder restart leaks a worker thread plus its
+      // capture-resolution OffscreenCanvas
+      worker.terminate?.();
+      this.resetFrameDedup = null;
     };
   }
 
@@ -403,7 +506,7 @@ export class CanvasManager {
     this.rafIdTimestamp = requestAnimationFrame(setLatestRAFTimestamp);
   }
 
-  flushPendingCanvasMutations() {
+  flushPendingCanvasMutations(): void {
     this.pendingCanvasMutations.forEach(
       (_values: canvasMutationCommand[], canvas: HTMLCanvasElement) => {
         const id = this.mirror.getId(canvas);
@@ -415,7 +518,7 @@ export class CanvasManager {
     );
   }
 
-  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number) {
+  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number): void {
     if (this.frozen || this.locked) {
       return;
     }

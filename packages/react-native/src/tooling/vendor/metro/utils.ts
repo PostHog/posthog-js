@@ -24,31 +24,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// eslint-disable-next-line import/no-extraneous-dependencies
+// oxlint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import type * as baseJSBundleType from 'metro/private/DeltaBundler/Serializers/baseJSBundle'
 import type * as sourceMapStringType from 'metro/private/DeltaBundler/Serializers/sourceMapString'
 import type * as bundleToStringType from 'metro/private/lib/bundleToString'
-import type { MetroSerializer } from '../../utils'
+import { isDevServerBuild, type Bundle, type MetroSerializer } from '../../utils'
 
 let baseJSBundleModule: any
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line typescript/no-require-imports
   baseJSBundleModule = require('metro/private/DeltaBundler/Serializers/baseJSBundle')
 } catch {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line typescript/no-require-imports
   baseJSBundleModule = require('metro/src/DeltaBundler/Serializers/baseJSBundle')
 }
 
 const baseJSBundle: typeof baseJSBundleType =
   typeof baseJSBundleModule === 'function'
     ? baseJSBundleModule
-    : // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    : // oxlint-disable-next-line typescript/no-unsafe-member-access
       (baseJSBundleModule?.baseJSBundle ?? baseJSBundleModule?.default)
 
 let sourceMapString: typeof sourceMapStringType
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // oxlint-disable-next-line typescript/no-var-requires
   const sourceMapStringModule = require('metro/private/DeltaBundler/Serializers/sourceMapString')
   sourceMapString = (sourceMapStringModule as { sourceMapString: typeof sourceMapStringType }).sourceMapString
 } catch (e) {
@@ -70,12 +70,16 @@ try {
 const bundleToString: typeof bundleToStringType =
   typeof bundleToStringModule === 'function'
     ? bundleToStringModule
-    : // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    : // oxlint-disable-next-line typescript/no-unsafe-member-access
       (bundleToStringModule?.bundleToString ?? bundleToStringModule?.default)
 
 type NewSourceMapStringExport = {
   // Since Metro v0.80.10 https://github.com/facebook/metro/compare/v0.80.9...v0.80.10#diff-1b836d1729e527a725305eef0cec22e44605af2700fa413f4c2489ea1a03aebcL28
   sourceMapString: typeof sourceMapString
+}
+
+type PostHogSerializerOptions = Parameters<MetroSerializer>[3] & {
+  posthogBundleCallback?: (bundle: Bundle) => Bundle
 }
 
 /**
@@ -113,9 +117,16 @@ export const createDefaultMetroSerializer = (): MetroSerializer => {
   return (entryPoint, premodules, graph, options) => {
     // baseJSBundle assigns IDs to modules in a consistent order
     let bundle = (baseJSBundle.default || baseJSBundle)(entryPoint, premodules, graph, options)
+    const serializerOptions = options as PostHogSerializerOptions
+
+    // Inject the final Chunk ID before both code rendering and source-map
+    // generation so they describe the same bundle bytes.
+    if (serializerOptions.posthogBundleCallback && !isDevServerBuild(graph, options)) {
+      bundle = serializerOptions.posthogBundleCallback(bundle)
+    }
 
     const { code } = (bundleToString.default || bundleToString)(bundle)
-    if (graph.transformOptions.hot) {
+    if (isDevServerBuild(graph, options)) {
       // Hot means running in dev server, sourcemaps are generated on demand
       return code
     }

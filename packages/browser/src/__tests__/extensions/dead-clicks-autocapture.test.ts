@@ -1,22 +1,23 @@
+import type { Mock as VitestMock } from 'vitest'
 import { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from '../../extensions/dead-clicks-autocapture'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 
 describe('DeadClicksAutocapture', () => {
-    let mockStart: jest.Mock
+    let mockStart: VitestMock
 
     beforeEach(() => {
-        mockStart = jest.fn()
+        mockStart = vi.fn()
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = () => ({
             start: mockStart,
-            stop: jest.fn(),
+            stop: vi.fn(),
         })
-        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = vi
             .fn()
             .mockImplementation(() => (_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
                 cb()
@@ -48,7 +49,7 @@ describe('DeadClicksAutocapture', () => {
     it('should call loadExternalDependency if script is not already loaded', async () => {
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = undefined
 
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as VitestMock
         mockLoader.mockClear()
 
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
@@ -59,7 +60,7 @@ describe('DeadClicksAutocapture', () => {
 
     it('should not call loadExternalDependency if script is already loaded', async () => {
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as VitestMock
         mockLoader.mockClear()
 
         instance.deadClicksAutocapture.startIfEnabledOrStop()
@@ -82,6 +83,19 @@ describe('DeadClicksAutocapture', () => {
         expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture).toBeUndefined()
     })
 
+    it('disables dead swipes only for consumers that provide their own capture handler (heatmaps path)', async () => {
+        const mockInit = vi.fn().mockReturnValue({ start: mockStart, stop: vi.fn() })
+        assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = mockInit
+        const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
+
+        mockInit.mockClear()
+        new DeadClicksAutocapture(instance, () => true)
+        new DeadClicksAutocapture(instance, () => true, vi.fn())
+
+        expect(mockInit.mock.calls[0][1].capture_dead_swipes).toBeUndefined()
+        expect(mockInit.mock.calls[1][1].capture_dead_swipes).toBe(false)
+    })
+
     it('should stop dead clicks when remote config disables a previously enabled setting', async () => {
         const instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
@@ -98,9 +112,9 @@ describe('DeadClicksAutocapture', () => {
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeDefined()
         expect(mockStart).toHaveBeenCalled()
 
-        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as jest.Mock
+        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as VitestMock
 
-        dca.onRemoteConfig({ captureDeadClicks: false } as any)
+        dca.onRemoteConfig({ ok: true, config: { captureDeadClicks: false } as any })
 
         expect(mockStop).toHaveBeenCalled()
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeUndefined()
@@ -126,8 +140,8 @@ describe('DeadClicksAutocapture', () => {
             ['uses client side setting (disabled) if server side setting is not set', undefined, false, false],
             ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
             ['is disabled when nothing is set', undefined, undefined, false],
-            ['uses server side setting (disabled) if client side setting is not set', undefined, false, false],
-            ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
+            ['uses server side setting (disabled) if client side setting is not set', false, undefined, false],
+            ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
         ])(
             '%s',
             (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
@@ -157,8 +171,8 @@ describe('DeadClicksAutocapture', () => {
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
-            instance.deadClicksAutocapture.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            instance.deadClicksAutocapture.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value
             expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -170,8 +184,11 @@ describe('DeadClicksAutocapture', () => {
             })
 
             instance.deadClicksAutocapture.onRemoteConfig({
-                captureDeadClicks: false,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    captureDeadClicks: false,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(false)
         })

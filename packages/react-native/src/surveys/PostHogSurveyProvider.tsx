@@ -1,27 +1,57 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { dismissedSurveyEvent, sendSurveyShownEvent } from './components/Surveys'
+import {
+  dismissedSurveyEvent,
+  sendSurveyShownEvent,
+} from "./components/Surveys";
 
-import { getActiveMatchingSurveys } from './getActiveMatchingSurveys'
-import { useSurveyStorage } from './useSurveyStorage'
-import { useActivatedSurveys } from './useActivatedSurveys'
-import { SurveyModal } from './components/SurveyModal'
-import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
-import { Survey, SurveyAppearance, SurveyType, type SurveyResponses } from '@posthog/core'
-import { usePostHog } from '../hooks/usePostHog'
-import { useFeatureFlags } from '../hooks/useFeatureFlags'
-import { PostHog } from '../posthog-rn'
-import { applySurveyTranslationForUser } from './survey-translations'
+import { getActiveMatchingSurveys } from "./getActiveMatchingSurveys";
+import { useSurveyStorage } from "./useSurveyStorage";
+import {
+  canCaptureSurvey,
+  createSurveyProgress,
+  SurveyProgress,
+  SurveyProgressStore,
+} from "./survey-progress";
+import { getSurveyIterationKey } from "@posthog/core/surveys";
+import { useActivatedSurveys } from "./useActivatedSurveys";
+import { SurveyModal } from "./components/SurveyModal";
+import {
+  defaultSurveyAppearance,
+  getContrastingTextColor,
+  SurveyAppearance,
+  SurveyAppearanceTheme,
+} from "./surveys-utils";
+import {
+  PostHogPersistedProperty,
+  Survey,
+  SurveyType,
+  type SurveyResponses,
+} from "@posthog/core";
+import { usePostHog } from "../hooks/usePostHog";
+import { useFeatureFlags } from "../hooks/useFeatureFlags";
+import { PostHog } from "../posthog-rn";
+import {
+  applySurveyTranslationForUser,
+  detectUserLanguage,
+} from "./survey-translations";
 
 type ActiveSurveyContextType =
   | {
-      survey: Survey
-      surveyLanguage: string | null
-      onShow: () => void
-      onClose: (submitted: boolean, responses: SurveyResponses) => void
+      survey: Survey;
+      surveyLanguage: string | null;
+      onShow: () => void;
+      onClose: (submitted: boolean, responses: SurveyResponses) => void;
     }
-  | undefined
-const ActiveSurveyContext = React.createContext<ActiveSurveyContextType>(undefined)
+  | undefined;
+const ActiveSurveyContext =
+  React.createContext<ActiveSurveyContextType>(undefined);
 // export const useActiveSurvey = (): ActiveSurveyContextType => React.useContext(ActiveSurveyContext)
 
 // type FeedbackSurveyHook = {
@@ -31,12 +61,12 @@ const ActiveSurveyContext = React.createContext<ActiveSurveyContextType>(undefin
 // }
 const FeedbackSurveyContext = React.createContext<
   | {
-      surveys: Survey[]
-      activeSurvey: Survey | undefined
-      setActiveSurvey: React.Dispatch<React.SetStateAction<Survey | undefined>>
+      surveys: Survey[];
+      activeSurvey: Survey | undefined;
+      setActiveSurvey: React.Dispatch<React.SetStateAction<Survey | undefined>>;
     }
   | undefined
->(undefined)
+>(undefined);
 // export const useFeedbackSurvey = (selector: string): FeedbackSurveyHook | undefined => {
 //   const context = React.useContext(FeedbackSurveyContext)
 //   const survey = context?.surveys.find(
@@ -58,21 +88,32 @@ const FeedbackSurveyContext = React.createContext<
 // }
 
 export type PostHogSurveyProviderProps = {
-  // /**
-  //  * Whether to show the default survey modal when there is an active survey. (Default true)
-  //  * If false, you can call useActiveSurvey and render survey content yourself.
-  //  **/
-  // automaticSurveyModal?: boolean
+  /**
+   * Whether eligible popover surveys are automatically presented. (Default: true)
+   * Set to false to defer presentation — e.g. while a native-stack formSheet/modal is on top.
+   * Deferral is display-only: the survey stays armed and presents once this is true again.
+   * A survey already on screen is not interrupted when this becomes false.
+   *
+   * You own flipping this back to true (e.g. wire it to route/screen focus). While it stays
+   * false the survey remains deferred and never shows — if the un-defer never happens
+   * (sheet dismissed without re-focusing the provider, an unmount, an error boundary), the
+   * survey stays armed indefinitely and no "survey shown" event fires.
+   */
+  autoPresentSurveys?: boolean;
 
   /**
    * The default appearance for surveys when not specified in PostHog.
+   *
+   * Accepts the React Native-only appearance fields as well (e.g.
+   * `maxFontSizeMultiplier`) — they are merged into the same theme object the
+   * survey components read, and PostHog never sends them down.
    */
-  defaultSurveyAppearance?: SurveyAppearance
+  defaultSurveyAppearance?: SurveyAppearance;
 
   /**
    * If true, PosHog appearance will be ignored and defaultSurveyAppearance is always used.
    */
-  overrideAppearanceWithDefault?: boolean
+  overrideAppearanceWithDefault?: boolean;
 
   /**
    * The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView), applied only to Android devices.
@@ -80,37 +121,108 @@ export type PostHogSurveyProviderProps = {
    * - 'height': Resizes the view height (default, for legacy - may cause flickering on some Android devices)
    * @default 'height'
    */
-  androidKeyboardBehavior?: 'padding' | 'height'
+  androidKeyboardBehavior?: "padding" | "height";
 
-  client?: PostHog
+  client?: PostHog;
 
-  children: React.ReactNode
-}
+  children: React.ReactNode;
+};
 
-export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.Element {
-  const posthogFromHook = usePostHog()
-  const posthog = props.client ?? posthogFromHook
-  const { seenSurveys, setSeenSurvey, lastSeenSurveyDate, setLastSeenSurveyDate } = useSurveyStorage()
-  const [surveys, setSurveys] = useState<Survey[]>([])
-  const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(undefined)
-  const activatedSurveys = useActivatedSurveys(posthog, surveys)
+export function PostHogSurveyProvider(
+  props: PostHogSurveyProviderProps,
+): JSX.Element {
+  const posthogFromHook = usePostHog();
+  const posthog = props.client ?? posthogFromHook;
+  const {
+    seenSurveys,
+    setSeenSurvey,
+    lastSeenSurveyDate,
+    setLastSeenSurveyDate,
+    isReady,
+  } = useSurveyStorage(posthog);
+  const progressStore = useMemo(
+    () => new SurveyProgressStore(posthog),
+    [posthog],
+  );
+  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(
+    undefined,
+  );
+  // Latches the id of the survey once its modal has actually painted, so deferring presentation
+  // (autoPresentSurveys=false) never tears down a survey the user is already interacting with.
+  const shownSurveyIdRef = useRef<string | undefined>(undefined);
+  const sessionEpochRef = useRef(0);
+  const activeSessionRef = useRef<object | undefined>(undefined);
+  const activatedSurveys = useActivatedSurveys(posthog, surveys);
+  const invalidateSession = useCallback(() => {
+    sessionEpochRef.current++;
+    activeSessionRef.current = undefined;
+    shownSurveyIdRef.current = undefined;
+  }, []);
 
-  const flags = useFeatureFlags(posthog)
+  const flags = useFeatureFlags(posthog);
+  const [userLanguage, setUserLanguage] = useState(() =>
+    detectUserLanguage(posthog),
+  );
+
+  useEffect(() => {
+    const updateLanguage = () => setUserLanguage(detectUserLanguage(posthog));
+    const unsubscribe = posthog.on("personProperties", updateLanguage);
+    updateLanguage();
+    return unsubscribe;
+  }, [posthog]);
+
+  useEffect(
+    () =>
+      posthog.on("surveysReset", () => {
+        invalidateSession();
+        setActiveSurvey(undefined);
+      }),
+    [posthog, invalidateSession],
+  );
 
   // Load surveys once
   useEffect(() => {
+    let mounted = true;
+    setActiveSurvey(undefined);
+    setSurveys([]);
+    activeSessionRef.current = undefined;
+    shownSurveyIdRef.current = undefined;
     posthog
       .ready()
       .then(() => posthog._onSurveysReady())
-      .then(() => posthog.getSurveys())
-      .then(setSurveys)
-      .catch(() => {})
-  }, [posthog])
+      .then(() => {
+        setUserLanguage(detectUserLanguage(posthog));
+        return posthog.getSurveys();
+      })
+      .then((loadedSurveys) => {
+        if (!mounted) return;
+        // An unavailable cache (failed load or disableSurveys) is not an empty project.
+        if (
+          Array.isArray(
+            posthog.getPersistedProperty(PostHogPersistedProperty.Surveys),
+          )
+        ) {
+          progressStore.reconcile(loadedSurveys);
+        }
+        setSurveys(loadedSurveys);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+      invalidateSession();
+    };
+  }, [posthog, progressStore, invalidateSession]);
 
-  // Whenever state changes and there's no active survey, check if there is a new survey to show
+  // Whenever state changes, re-select the popover survey to show. A survey that has already
+  // painted is left alone; an armed-but-deferred one is re-validated so it can't be presented
+  // after it stops matching (e.g. its targeting flag flips off during a long deferral).
   useEffect(() => {
-    if (activeSurvey) {
-      return
+    if (!isReady || !canCaptureSurvey(posthog)) return;
+    const isShown =
+      !!activeSurvey && shownSurveyIdRef.current === activeSurvey.id;
+    if (isShown) {
+      return;
     }
 
     const activeSurveys = getActiveMatchingSurveys(
@@ -118,23 +230,26 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       flags ?? {},
       seenSurveys,
       activatedSurveys,
-      lastSeenSurveyDate
-    )
+      lastSeenSurveyDate,
+    );
 
-    const popoverSurveys = activeSurveys.filter((survey: Survey) => survey.type === SurveyType.Popover)
-    const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys)
+    const popoverSurveys = activeSurveys.filter(
+      (survey: Survey) => survey.type === SurveyType.Popover,
+    );
+    const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys);
 
     if (popoverSurveyQueue.length === 0) {
-      return
+      setActiveSurvey(undefined);
+      return;
     }
 
-    const nextSurvey = popoverSurveyQueue[0]
-    const delaySeconds = nextSurvey.appearance?.surveyPopupDelaySeconds ?? 0
+    const nextSurvey = popoverSurveyQueue[0];
+    const delaySeconds = nextSurvey.appearance?.surveyPopupDelaySeconds ?? 0;
     // The default in PostHog is 0 seconds
 
     if (delaySeconds <= 0) {
-      setActiveSurvey(nextSurvey)
-      return
+      setActiveSurvey(nextSurvey);
+      return;
     }
 
     const timeoutId = setTimeout(() => {
@@ -143,24 +258,35 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         flags ?? {},
         seenSurveys,
         activatedSurveys,
-        lastSeenSurveyDate
-      )
+        lastSeenSurveyDate,
+      );
 
-      const currentActiveSurvey = currentActiveSurveys.some((s) => s.id === nextSurvey.id)
+      const currentActiveSurvey = currentActiveSurveys.some(
+        (s) => s.id === nextSurvey.id,
+      );
 
       if (currentActiveSurvey) {
-        setActiveSurvey(nextSurvey)
+        setActiveSurvey(nextSurvey);
       }
-    }, delaySeconds * 1000)
+    }, delaySeconds * 1000);
 
     return () => {
-      clearTimeout(timeoutId)
-    }
-  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys, lastSeenSurveyDate])
+      clearTimeout(timeoutId);
+    };
+  }, [
+    activeSurvey,
+    flags,
+    surveys,
+    seenSurveys,
+    activatedSurveys,
+    lastSeenSurveyDate,
+  ]);
 
   const translatedActiveSurvey = useMemo(() => {
-    return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog) : undefined
-  }, [activeSurvey, posthog])
+    return activeSurvey
+      ? applySurveyTranslationForUser(activeSurvey, posthog, userLanguage)
+      : undefined;
+  }, [activeSurvey, posthog, userLanguage]);
 
   // Merge survey appearance so that components and hooks can use a consistent model
   const surveyAppearance = useMemo<SurveyAppearanceTheme>(() => {
@@ -168,7 +294,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       return {
         ...defaultSurveyAppearance,
         ...(props.defaultSurveyAppearance ?? {}),
-      }
+      };
     }
     return {
       ...defaultSurveyAppearance,
@@ -179,43 +305,130 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         ? {
             submitButtonTextColor:
               translatedActiveSurvey.survey.appearance.submitButtonTextColor ??
-              getContrastingTextColor(translatedActiveSurvey.survey.appearance.submitButtonColor),
+              getContrastingTextColor(
+                translatedActiveSurvey.survey.appearance.submitButtonColor,
+              ),
           }
         : {}),
-    }
-  }, [translatedActiveSurvey, props.defaultSurveyAppearance, props.overrideAppearanceWithDefault])
+    };
+  }, [
+    translatedActiveSurvey,
+    props.defaultSurveyAppearance,
+    props.overrideAppearanceWithDefault,
+  ]);
+
+  const activeSession = useMemo(
+    () =>
+      activeSurvey
+        ? {
+            progress:
+              progressStore.load(activeSurvey) ??
+              createSurveyProgress(activeSurvey),
+            completed: false,
+            epoch: sessionEpochRef.current,
+          }
+        : undefined,
+    [activeSurvey, progressStore],
+  );
 
   const activeContext = useMemo(() => {
-    if (!activeSurvey || !translatedActiveSurvey) {
-      return undefined
+    if (!activeSurvey || !translatedActiveSurvey || !activeSession) {
+      return undefined;
     }
     return {
+      client: posthog,
+      initialProgress: activeSession.progress,
+      onProgressChange: (progress: SurveyProgress, completed: boolean) => {
+        if (
+          activeSessionRef.current !== activeSession ||
+          !canCaptureSurvey(posthog) ||
+          progressStore.load(activeSurvey)?.submissionId !==
+            activeSession.progress.submissionId
+        )
+          return false;
+        activeSession.progress = progress;
+        activeSession.completed = completed;
+        if (completed) {
+          progressStore.remove(activeSurvey);
+          setSeenSurvey(activeSurvey);
+        } else {
+          progressStore.save(activeSurvey, progress);
+        }
+        return true;
+      },
       survey: translatedActiveSurvey.survey,
       surveyLanguage: translatedActiveSurvey.language,
       onShow: () => {
-        sendSurveyShownEvent(translatedActiveSurvey.survey, posthog, translatedActiveSurvey.language)
-        setLastSeenSurveyDate(new Date())
+        // Updating translated copy changes this callback, but does not show a new survey.
+        if (
+          activeSession.epoch !== sessionEpochRef.current ||
+          !canCaptureSurvey(posthog)
+        )
+          return;
+        if (shownSurveyIdRef.current === activeSurvey.id) {
+          return;
+        }
+        activeSessionRef.current = activeSession;
+        progressStore.save(activeSurvey, activeSession.progress);
+        shownSurveyIdRef.current = activeSurvey.id;
+        sendSurveyShownEvent(
+          translatedActiveSurvey.survey,
+          posthog,
+          translatedActiveSurvey.language,
+        );
+        setLastSeenSurveyDate(new Date());
       },
       onClose: (submitted: boolean, responses: SurveyResponses) => {
-        setSeenSurvey(activeSurvey.id)
-        setActiveSurvey(undefined)
-        if (!submitted) {
-          dismissedSurveyEvent(translatedActiveSurvey.survey, responses, posthog, translatedActiveSurvey.language)
+        if (activeSessionRef.current !== activeSession) return;
+        activeSessionRef.current = undefined;
+        progressStore.remove(activeSurvey);
+        shownSurveyIdRef.current = undefined;
+        setSeenSurvey(activeSurvey);
+        setActiveSurvey(undefined);
+        if (submitted || activeSession.completed) return;
+        if (canCaptureSurvey(posthog)) {
+          dismissedSurveyEvent(
+            translatedActiveSurvey.survey,
+            responses,
+            posthog,
+            Object.keys(activeSession.progress.responses).length > 0
+              ? activeSession.progress.surveyLanguage
+              : translatedActiveSurvey.language,
+            activeSession.progress,
+          );
         }
       },
-    }
-  }, [activeSurvey, posthog, setLastSeenSurveyDate, setSeenSurvey, translatedActiveSurvey])
+    };
+  }, [
+    activeSurvey,
+    activeSession,
+    posthog,
+    progressStore,
+    setLastSeenSurveyDate,
+    setSeenSurvey,
+    translatedActiveSurvey,
+  ]);
 
-  // Modal is shown for PopOver surveys or if automaticSurveyModal is true, and for all widget surveys
-  // because these would have been invoked by the useFeedbackSurvey hook's showSurveyModal() method
-  const shouldShowModal = activeContext && activeContext.survey.type === SurveyType.Popover
+  // Present a popover survey when autoPresentSurveys is on. Once it has painted (shownSurveyIdRef),
+  // keep it mounted regardless of the gate so a mid-interaction survey is never yanked — the gate
+  // defers not-yet-shown surveys, it does not interrupt a live one.
+  const autoPresent = props.autoPresentSurveys !== false;
+  const isAlreadyShown =
+    !!activeSurvey && shownSurveyIdRef.current === activeSurvey.id;
+  const shouldShowModal =
+    activeContext &&
+    activeContext.survey.type === SurveyType.Popover &&
+    (autoPresent || isAlreadyShown);
 
   return (
     <ActiveSurveyContext.Provider value={activeContext}>
-      <FeedbackSurveyContext.Provider value={{ surveys, activeSurvey, setActiveSurvey }}>
+      <FeedbackSurveyContext.Provider
+        value={{ surveys, activeSurvey, setActiveSurvey }}
+      >
         {props.children}
         {shouldShowModal && (
           <SurveyModal
+            key={activeSession?.progress.submissionId}
             appearance={surveyAppearance}
             androidKeyboardBehavior={props.androidKeyboardBehavior}
             {...activeContext}
@@ -223,11 +436,13 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         )}
       </FeedbackSurveyContext.Provider>
     </ActiveSurveyContext.Provider>
-  )
+  );
 }
 
 export function sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
   return [...surveys].sort(
-    (a, b) => (a.appearance?.surveyPopupDelaySeconds ?? 0) - (b.appearance?.surveyPopupDelaySeconds ?? 0)
-  )
+    (a, b) =>
+      (a.appearance?.surveyPopupDelaySeconds ?? 0) -
+      (b.appearance?.surveyPopupDelaySeconds ?? 0),
+  );
 }

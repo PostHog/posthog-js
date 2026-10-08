@@ -60,6 +60,10 @@ class NoopSpanProcessor implements SpanProcessor {
  * start with `gen_ai.`, `llm.`, `ai.`, or `traceloop.`) are exported;
  * all other spans are silently dropped.
  *
+ * Request-scoped and serverless runtimes should keep a reference to this
+ * processor and await {@link PostHogSpanProcessor.forceFlush} before the request
+ * lifecycle ends. This waits for queued exports without sending one request per span.
+ *
  * This is the recommended integration point when your setup accepts a
  * `SpanProcessor`. If you need a `TraceExporter` instead (e.g. for
  * Vercel's `registerOTel`), use {@link PostHogTraceExporter}.
@@ -69,10 +73,12 @@ class NoopSpanProcessor implements SpanProcessor {
  * import { PostHogSpanProcessor } from '@posthog/ai/otel'
  * import { NodeSDK } from '@opentelemetry/sdk-node'
  *
- * const sdk = new NodeSDK({
- *   spanProcessors: [new PostHogSpanProcessor({ projectToken: 'phc_...' })],
- * })
+ * const processor = new PostHogSpanProcessor({ projectToken: 'phc_...' })
+ * const sdk = new NodeSDK({ spanProcessors: [processor] })
  * sdk.start()
+ *
+ * // In request-scoped runtimes, wait for queued exports before returning.
+ * await processor.forceFlush()
  * ```
  */
 export class PostHogSpanProcessor implements SpanProcessor {

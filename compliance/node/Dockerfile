@@ -1,16 +1,17 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
 # Copy the entire monorepo (needed for workspace dependencies)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY tooling ./tooling
 COPY packages/types ./packages/types
 COPY packages/core ./packages/core
 COPY packages/node ./packages/node
 
 # Install pnpm
-RUN npm install -g pnpm
+RUN npm install -g pnpm@11.7.0
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile

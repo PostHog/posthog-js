@@ -87,7 +87,13 @@ export interface FormattedMessage {
 }
 
 /**
- * Token usage information for AI model responses
+ * Token usage reported by the provider.
+ *
+ * The counts are optional because an absent count means the provider never reported one, which is
+ * not the same as zero: a failed or cancelled call can consume its prompt without ever reporting
+ * usage. Error paths pass whatever arrived before the failure, or `{}` when nothing did, and never
+ * substitute zeros. Costs follow the same rule, so a configured price applies only to a count that
+ * exists.
  */
 export interface TokenUsage {
   inputTokens?: number
@@ -95,6 +101,10 @@ export interface TokenUsage {
   reasoningTokens?: unknown // Use unknown since various providers return different types
   cacheReadInputTokens?: unknown // Use unknown for provider flexibility
   cacheCreationInputTokens?: unknown // Use unknown for provider flexibility
+  // Whether cache tokens are counted separately from inputTokens. Providers that report
+  // them as a subset of inputTokens set this false. Left undefined when the provider's
+  // accounting model is not known, in which case ingestion infers it from the counts.
+  cacheReportingExclusive?: boolean
   webSearchCount?: number // Count of web search queries/calls used
   rawUsage?: unknown // Raw provider usage metadata for backend processing
 }
@@ -105,7 +115,10 @@ export interface TokenUsage {
 export interface GetPromptOptions {
   cacheTtlSeconds?: number
   fallback?: string
+  /** Specific prompt version to fetch. Mutually exclusive with label. */
   version?: number
+  /** Fetch the version this label currently points to, e.g. 'production'. Mutually exclusive with version. */
+  label?: string
 }
 
 /**
@@ -115,7 +128,11 @@ export interface CachedPrompt {
   prompt: string
   name: string
   version: number
+  label?: string
+  config: Record<string, unknown> | null
   fetchedAt: number
+  /** Epoch ms before which a refetch of this entry is skipped. Set after a failed refetch. */
+  retryNotBefore?: number
 }
 
 /**
@@ -126,6 +143,10 @@ export interface PromptApiResponse {
   name: string
   prompt: string
   version: number
+  /** Present when the prompt was fetched by label. */
+  label?: string
+  /** Model parameters or agent configuration stored with the version. Absent on older servers. */
+  config?: unknown
   created_by: string
   created_at: string
   updated_at: string
@@ -140,6 +161,14 @@ export interface PromptRemoteResult {
   prompt: string
   name: string
   version: number
+  /** The label the prompt was fetched by, when fetching with the label option. */
+  label?: string
+  /**
+   * JSON object of model parameters or agent configuration stored with the
+   * prompt version, or null when the version has none. Use defensive access,
+   * e.g. `result.config ?? {}` — fallback results carry no config.
+   */
+  config: Record<string, unknown> | null
 }
 
 /**
@@ -152,6 +181,8 @@ export interface PromptCodeFallbackResult {
   prompt: string
   name: undefined
   version: undefined
+  label: undefined
+  config: undefined
 }
 
 /**

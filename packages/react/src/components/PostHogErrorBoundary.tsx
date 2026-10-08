@@ -1,5 +1,6 @@
 import React, { FunctionComponent } from 'react'
 import { PostHogContext } from '../context'
+import { addReactComponentStack } from '../helpers/react-component-stack'
 import { isFunction } from '../utils/type-utils'
 
 export type Properties = Record<string, any>
@@ -8,12 +9,14 @@ export type PostHogErrorBoundaryFallbackProps = {
     error: unknown
     exceptionEvent: unknown
     componentStack: string
+    /** Retry rendering after the application repairs the error. This does not reset PostHog identity or session. */
+    resetError?: () => void
 }
 
 export type PostHogErrorBoundaryProps = {
     children?: React.ReactNode | (() => React.ReactNode)
     fallback?: React.ReactNode | FunctionComponent<PostHogErrorBoundaryFallbackProps>
-    additionalProperties?: Properties | ((error: unknown) => Properties)
+    additionalProperties?: Properties | ((error: unknown, errorInfo: React.ErrorInfo) => Properties)
 }
 
 type PostHogErrorBoundaryState = {
@@ -43,18 +46,16 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     }
 
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
-        //eslint-disable-next-line react/prop-types
         const { additionalProperties } = this.props
         let currentProperties
         if (isFunction(additionalProperties)) {
-            currentProperties = additionalProperties(error)
+            currentProperties = additionalProperties(error, errorInfo)
         } else if (typeof additionalProperties === 'object') {
             currentProperties = additionalProperties
         }
         const { client } = this.context
-        const exceptionEvent = client.captureException(error, currentProperties)
-
         const { componentStack } = errorInfo
+        const exceptionEvent = client.captureException(addReactComponentStack(error, componentStack), currentProperties)
         this.setState({
             error,
             componentStack: componentStack ?? null,
@@ -62,8 +63,11 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         })
     }
 
+    private _resetError = (): void => {
+        this.setState(INITIAL_STATE)
+    }
+
     public render(): React.ReactNode {
-        //eslint-disable-next-line react/prop-types
         const { children, fallback } = this.props
         const state = this.state
 
@@ -76,13 +80,14 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
                   error: state.error,
                   componentStack: state.componentStack,
                   exceptionEvent: state.exceptionEvent,
+                  resetError: this._resetError,
               }) as React.ReactNode)
             : fallback
 
         if (React.isValidElement(element)) {
             return element as React.ReactElement
         }
-        //eslint-disable-next-line no-console
+        //oxlint-disable-next-line no-console
         console.warn(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
         return <></>
     }

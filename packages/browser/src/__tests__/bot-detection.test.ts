@@ -1,32 +1,32 @@
+import type { Mock as VitestMock } from 'vitest'
 import './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
-import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { defaultPostHog, requirePostHogInstance } from './helpers/posthog-instance'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHogConfig } from '../types'
-import { navigator } from '../utils/globals'
+import { navigator } from '@posthog/browser-common/utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 
 describe('bot detection and pageview collection', () => {
     let posthog: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: VitestMock
     let originalUserAgent: string
 
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
-        const posthog = await new Promise<PostHog>(
-            (resolve) =>
-                defaultPostHog().init(
-                    'testtoken',
-                    {
-                        capture_pageview: false, // Disable auto-capture to avoid race conditions
-                        before_send: beforeSendMock,
-                        ...config,
-                        loaded: (posthog) => resolve(posthog),
-                    },
-                    uuidv7()
-                )!
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
+        const posthog = await new Promise<PostHog>((resolve) =>
+            defaultPostHog().init(
+                'testtoken',
+                {
+                    capture_pageview: false, // Disable auto-capture to avoid race conditions
+                    before_send: beforeSendMock,
+                    ...config,
+                    loaded: (posthog) => resolve(requirePostHogInstance(posthog)),
+                },
+                uuidv7()
+            )!
         )
-        posthog.debug()
         return posthog
     }
 
@@ -266,8 +266,7 @@ describe('bot detection and pageview collection', () => {
 
     describe('edge cases', () => {
         it('should handle missing navigator gracefully', async () => {
-            const originalNav = (global as any).navigator
-            ;(global as any).navigator = undefined
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue(undefined)
 
             posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
@@ -275,20 +274,21 @@ describe('bot detection and pageview collection', () => {
 
             expect(beforeSendMock).toHaveBeenCalled()
             expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
-            ;(global as any).navigator = originalNav
+            navigatorSpy.mockRestore()
         })
 
-        it('should handle custom blocked user agents', async () => {
-            setBotUserAgent('MyCustomBot/1.0')
+        it.each([
+            [['MyCustomMarker'], '$bot_pageview'],
+            [[], '$pageview'],
+        ] as const)('handles custom markers %j', async (markers, expectedEvent) => {
+            setBotUserAgent('MyCustomMarker/1.0')
             posthog = await createPostHog({
-                custom_blocked_useragents: ['MyCustomBot'],
+                custom_blocked_useragents: [...markers],
                 __preview_capture_bot_pageviews: true,
             })
-
             posthog.capture('$pageview')
-
-            expect(beforeSendMock).toHaveBeenCalled()
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$bot_pageview')
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            expect(beforeSendMock.mock.calls[0][0].event).toBe(expectedEvent)
         })
 
         it('should preserve event properties when renaming to $bot_pageview', async () => {

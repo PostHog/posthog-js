@@ -24,8 +24,8 @@ Edit `.env` with your actual values:
 # Your project API key (found on the /setup page in PostHog)
 POSTHOG_PROJECT_API_KEY=phc_your_project_api_key_here
 
-# Your personal API key (for local evaluation and other advanced features)
-POSTHOG_PERSONAL_API_KEY=phx_your_personal_api_key_here
+# Your secret key (for local evaluation and other advanced features)
+POSTHOG_SECRET_KEY=phx_your_secret_key_here
 
 # PostHog host URL (remove this line if using posthog.com)
 POSTHOG_HOST=https://app.posthog.com
@@ -38,7 +38,7 @@ POSTHOG_HOST=https://app.posthog.com
 1. Go to your PostHog instance → Settings → Project Settings
 2. Copy the "Project API Key"
 
-**Personal API Key:**
+**Secret Key:**
 
 1. Go to your PostHog instance → Settings → Personal API Keys
 2. Create a new Personal API Key (required for local evaluation)
@@ -184,5 +184,5 @@ This will run a condensed version of all SDK capabilities in sequence.
 ## Troubleshooting
 
 - **"Missing PostHog credentials"**: Make sure your `.env` file exists and has valid API keys
-- **"Authentication test failed"**: Check that your Personal API key is correct and has the right permissions
+- **"Authentication test failed"**: Check that your secret key is correct and has the right permissions
 - **Flags evaluate to `false`**: This is normal if you haven't created the test flags in your PostHog instance

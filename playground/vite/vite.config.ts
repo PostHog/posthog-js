@@ -1,4 +1,3 @@
-/* eslint-env node */
 import posthog from '@posthog/rollup-plugin'
 import { defineConfig } from 'vite'
 //@ts-ignore

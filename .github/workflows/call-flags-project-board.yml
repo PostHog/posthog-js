@@ -7,12 +7,17 @@ on:
     pull_request:
         types: [opened, ready_for_review, review_requested, synchronize, converted_to_draft, reopened]
 
+permissions: {}
+
 jobs:
     call-flags-project:
+        permissions: {}
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: PostHog/.github/.github/workflows/flags-project-board.yml@69336b569d22687f8982eea6ff7d450a885cda05
+        uses: PostHog/.github/.github/workflows/flags-project-board.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
         with:
             pr_number: ${{ github.event.pull_request.number }}
             pr_node_id: ${{ github.event.pull_request.node_id }}
             is_draft: ${{ github.event.pull_request.draft }}
-        secrets: inherit
+        secrets:
+            PROJECT_BOARD_BOT_APP_ID: ${{ secrets.PROJECT_BOARD_BOT_APP_ID }}
+            PROJECT_BOARD_BOT_PRIVATE_KEY: ${{ secrets.PROJECT_BOARD_BOT_PRIVATE_KEY }}

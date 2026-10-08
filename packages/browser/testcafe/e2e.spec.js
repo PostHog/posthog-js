@@ -18,7 +18,7 @@ fixture('posthog.js capture')
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
             browserLogs[level].forEach((line) => {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.log(`Browser ${level}:`, line)
             })
         })

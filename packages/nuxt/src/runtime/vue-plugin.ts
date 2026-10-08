@@ -10,8 +10,7 @@ export default defineNuxtPlugin({
     const posthogCommon = runtimeConfig.public.posthog as PostHogCommon
     const posthogClientConfig = runtimeConfig.public.posthogClientConfig as PostHogClientConfig
 
-    // prevent nitro from trying to load this
-    if (!window || posthog.__loaded) {
+    if (posthog.__loaded) {
       return
     }
 

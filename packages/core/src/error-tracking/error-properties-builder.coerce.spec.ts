@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+
 import {
   DOMExceptionCoercer,
   ErrorEventCoercer,
@@ -107,6 +109,43 @@ describe('ErrorPropertiesBuilder', () => {
         type: 'CustomTestError',
         value: 'My special error',
         stack: errorObject.stack,
+      })
+    })
+
+    it('should fall back to the synthetic stack when the error has no stack', () => {
+      // Firefox rejects a network `fetch` with a `TypeError` that carries no
+      // stack, so the frames must come from the synthetic exception instead.
+      const errorObject = new CustomTestError('My special error')
+      errorObject.stack = ''
+      const syntheticError = new Error()
+      const exception = coerceInput(errorObject, syntheticError)
+      expect(exception).toMatchObject({
+        type: 'CustomTestError',
+        value: 'My special error',
+        stack: syntheticError.stack,
+        synthetic: true,
+      })
+    })
+
+    it('should preserve a cross-realm error', () => {
+      const crossRealmError = runInNewContext(
+        `new TypeError('cross-realm error', {
+          cause: new Error('cross-realm cause')
+        })`
+      )
+      expect(crossRealmError).not.toBeInstanceOf(Error)
+
+      expect(coerceInput(crossRealmError)).toMatchObject({
+        type: 'TypeError',
+        value: 'cross-realm error',
+        stack: crossRealmError.stack,
+        synthetic: false,
+        cause: {
+          type: 'Error',
+          value: 'cross-realm cause',
+          stack: crossRealmError.cause.stack,
+          synthetic: false,
+        },
       })
     })
 
@@ -223,6 +262,60 @@ describe('ErrorPropertiesBuilder', () => {
         type: 'Error',
         value: 'Extension context invalidated.',
         stack: buriedError.stack,
+      })
+    })
+
+    it('should preserve an error-like stack from a CustomEvent wrapping a PromiseRejectionEvent', () => {
+      const stack = 'TypeError: Extension context invalidated.\n    at extension.js:1:2'
+      const customEvent = new CustomEvent('unhandledrejection', {
+        detail: {
+          reason: {
+            name: 'TypeError',
+            message: 'Extension context invalidated.',
+            stack,
+          },
+        },
+      })
+
+      expect(coerceInput(customEvent)).toMatchObject({
+        type: 'TypeError',
+        value: "'TypeError' captured as exception with message: 'Extension context invalidated.'",
+        stack,
+      })
+    })
+
+    it('should fall back to Error when the object has no name property', () => {
+      const exception = coerceInput({ message: 'oh no disaster' })
+
+      expect(exception).toMatchObject({
+        type: 'Error',
+        value: 'oh no disaster',
+      })
+    })
+
+    it('should fall back to Error when the name property is an empty string', () => {
+      const exception = coerceInput({ name: '', message: 'oh no disaster' })
+
+      expect(exception).toMatchObject({
+        type: 'Error',
+      })
+    })
+
+    it('should preserve a string type when name is a stateful accessor', () => {
+      let reads = 0
+      const candidate = { message: 'boom' }
+
+      Object.defineProperty(candidate, 'name', {
+        // Keep this non-enumerable so the object property scan does not read it first.
+        get() {
+          reads += 1
+          return reads === 1 ? 'TypeError' : 42
+        },
+      })
+
+      expect(coerceInput(candidate)).toMatchObject({
+        type: 'TypeError',
+        value: 'boom',
       })
     })
   })

@@ -1,15 +1,25 @@
 import { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core/vendor/uuidv7'
-import { defineNitroPlugin } from 'nitropack/runtime'
-import { useRuntimeConfig } from '#imports'
 import type { PostHogCommon, PostHogServerConfig } from '../module'
 import type { JsonType } from '@posthog/core'
 
-export default defineNitroPlugin((nitroApp) => {
-  const runtimeConfig = useRuntimeConfig()
-  const posthogCommon = runtimeConfig.public.posthog as PostHogCommon
-  const posthogServerConfig = runtimeConfig.posthogServerConfig as PostHogServerConfig
-  const debug = posthogCommon.debug as boolean
+type RequestContext = { path?: string; method?: string }
+type ErrorHandler = (error: unknown, request?: RequestContext) => Promise<void>
+type NitroBindings = {
+  useRuntimeConfig: () => unknown
+  onError: (handler: ErrorHandler) => void
+  onClose: (handler: () => Promise<void>) => void
+}
+type RuntimeConfig = {
+  public: { posthog: PostHogCommon }
+  posthogServerConfig: PostHogServerConfig
+}
+
+export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose }: NitroBindings): void {
+  const runtimeConfig = useRuntimeConfig() as RuntimeConfig
+  const posthogCommon = runtimeConfig.public.posthog
+  const posthogServerConfig = runtimeConfig.posthogServerConfig
+  const debug = posthogCommon.debug === true
 
   const client = new PostHog(posthogCommon.publicKey, {
     host: posthogCommon.host,
@@ -21,22 +31,30 @@ export default defineNitroPlugin((nitroApp) => {
   }
 
   if (posthogServerConfig.enableExceptionAutocapture) {
-    nitroApp.hooks.hook('error', (error, { event }) => {
+    onError((error, request) => {
       const props: JsonType = {
         $process_person_profile: false,
       }
-      if (event?.path) {
-        props.path = event.path
+      if (request?.path) {
+        try {
+          // Prefix origin-form targets to preserve leading double slashes as part of the path.
+          const target = request.path.startsWith('/') ? `http://localhost${request.path}` : request.path
+          const url = new URL(target, 'http://localhost')
+          props.path = url.pathname + (posthogServerConfig.disable_capture_url_hashes === true ? '' : url.hash)
+        } catch {
+          // A malformed request URL must not prevent capturing the original exception.
+        }
       }
-      if (event?.method) {
-        props.method = event.method
+      if (request?.method) {
+        props.method = request.method
       }
 
       client.captureException(error, uuidv7(), props)
+      return client.flush().catch(() => {})
     })
   }
 
-  nitroApp.hooks.hook('close', async () => {
+  onClose(async () => {
     await client.shutdown()
   })
-})
+}

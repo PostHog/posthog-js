@@ -1,15 +1,22 @@
 import type {
   PostHogCoreOptions,
+  ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
+  Metrics,
+  MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
+  Properties,
+  Span,
+  StartSpanOptions,
+  TracesConfig,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
-import type { FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
+import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
   distinctId: string
@@ -30,8 +37,8 @@ export type UnsetPersonPropertiesMessage = {
 
 export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
-  personProperties?: Record<string, any>
-  groupProperties?: Record<string, Record<string, any>>
+  personProperties?: Properties
+  groupProperties?: Record<string, Properties>
   flagKeys?: string[]
 }
 
@@ -51,6 +58,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * request on capture and may return different values than the ones the code branched on.
    */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
@@ -103,8 +111,9 @@ export type OverrideFeatureFlagsOptions =
 
 export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
-  personProperties?: Record<string, string>
-  groupProperties?: Record<string, Record<string, string>>
+  personProperties?: Properties
+  groupProperties?: Record<string, Properties>
+  /** Skip remote fallback and omit flags that local definitions cannot resolve. */
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
 }
@@ -113,6 +122,13 @@ export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
 }
 
 export type AllFlagsOptions = BaseFlagEvaluationOptions & {
+  /**
+   * Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.
+   * An empty array returns an empty snapshot without evaluating flags; omitting this option
+   * evaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing
+   * from local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are
+   * not cached, so a key missing both locally and remotely costs one `/flags` request per call.
+   */
   flagKeys?: string[]
 }
 
@@ -141,20 +157,90 @@ export type FeatureFlagCondition = {
 
 export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | null
 
+/**
+ * Where a feature flag is meant to be evaluated. Set per flag in PostHog and carried on
+ * every locally cached flag definition. `all` means the flag suits both client-side and
+ * server-side evaluation, so it matches either runtime.
+ */
+export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
+
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 5000
+   */
+  flushInterval?: number
+  /**
+   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   *
+   * @default 10000
+   */
+  maxQueueSize?: number
+  /**
+   * Configuration for the `posthog.metrics` API (count, gauge, histogram).
+   * Set `serviceName` so series can be filtered per service in the Metrics UI.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+   * client.metrics.count('invoices.processed')
+   * ```
+   */
+  metrics?: MetricsConfig
+  /**
+   * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
+   * off until this is set; supplying it is all that's needed to turn it on.
+   *
+   * Set `serviceName` so spans can be attributed and grouped per service — the
+   * product aggregates operations by service and span name.
+   *
+   * `shutdown()` drains spans that have already ended, within the shutdown
+   * timeout; spans still open at that point are discarded.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { traces: { serviceName: 'checkout-api' } })
+   * await client.withSpan('charge', () => stripe.charge(order))
+   * ```
+   *
+   * @experimental Subject to change in a minor release.
+   */
+  traces?: TracesConfig
+  /**
+   * Credential that enables local feature flag evaluation and remote config.
+   *
+   * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
+   * When provided, the client can evaluate feature flags locally and decrypt remote
+   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * `personalApiKey` option; when both are set, `secretKey` takes precedence.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
+   * ```
+   */
+  secretKey?: string
+  /**
+   * @deprecated Use `secretKey` instead.
+   */
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
-  // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
-  featureFlagsPollingInterval?: number
+  /**
+   * The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
+   * Set to null to disable automatic polling. Definitions are still loaded on initialization;
+   * call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.
+   */
+  featureFlagsPollingInterval?: number | null
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
-  // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
+  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
    * Optional cache provider for feature flag definitions.
@@ -179,7 +265,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * })
    * ```
    */
-  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider
+  flagDefinitionCacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   /**
    * Allows modification or dropping of events before they're sent to PostHog.
    * If an array is provided, the functions are run in order.
@@ -292,7 +378,14 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
-}
+  /**
+   * Capture full AI content: PostHog AI wrapper events route through the
+   * dedicated AI capture endpoint, skip string truncation, and pass media
+   * (base64 / data URIs) through unredacted. Privacy mode always wins.
+   * Defaults to false.
+   */
+  enableFullAiCapture?: boolean
+} & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
   id: number
@@ -309,6 +402,12 @@ export type PostHogFeatureFlag = {
       }[]
     }
     payloads?: Record<string, string>
+    // Experiment holdout. Resolved before the release conditions, so a held-out value is
+    // excluded from the flag's targeting entirely.
+    holdout?: {
+      id: number
+      exclusion_percentage: number
+    } | null
     // Flag-level toggle: when true, condition evaluation stops and returns false as soon as a
     // group's property filters match but the rollout percentage excludes the user, rather than
     // continuing to evaluate later groups.
@@ -319,6 +418,25 @@ export type PostHogFeatureFlag = {
   rollout_percentage: null | number
   ensure_experience_continuity: boolean
   experiment_set: number[]
+  /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+  has_experiment?: boolean
+  /**
+   * Evaluation context tags set on the flag. The local evaluation poller keeps a flag only
+   * when this list is empty or shares at least one entry with the SDK's `evaluationContexts`.
+   * Absent when the server does not report it.
+   */
+  evaluation_contexts?: string[]
+  /**
+   * Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,
+   * 2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a
+   * fallback so local-evaluation context filtering still works against those servers.
+   */
+  evaluation_tags?: string[]
+  /**
+   * Where the flag is meant to be evaluated. Absent or null on a flag that does not set a
+   * runtime, and on servers older than the field; both mean `all`, the default PostHog applies.
+   */
+  evaluation_runtime?: FeatureFlagEvaluationRuntime | null
 }
 
 /**
@@ -348,9 +466,14 @@ export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof Featur
  */
 export type FeatureFlagResult = {
   key: string
+  /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
   enabled: boolean
   variant: string | undefined
   payload: JsonType | undefined
+  /** PostHog's evaluation explanation, when available. */
+  reason?: string
+  /** Stable evaluation reason code, when available (for example, `flag_disabled`). */
+  reasonCode?: string
 }
 
 export interface IPostHog {
@@ -378,6 +501,68 @@ export interface IPostHog {
    * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
   captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
+
+  /**
+   * @description Capture an exception as a $exception event.
+   * @param error The error to capture.
+   * @param distinctId Optional user distinct ID.
+   * @param additionalProperties Optional additional properties to include.
+   * @param uuid Optional event UUID.
+   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   */
+  captureException(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    uuid?: EventMessage['uuid'],
+    flags?: FeatureFlagEvaluations
+  ): void
+
+  /**
+   * @description Capture an exception as a $exception event immediately.
+   * @param error The error to capture.
+   * @param distinctId Optional user distinct ID.
+   * @param additionalProperties Optional additional properties to include.
+   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   */
+  captureExceptionImmediate(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    flags?: FeatureFlagEvaluations
+  ): Promise<void>
+
+  /**
+   * @description Capture an AI event on the dedicated AI capture endpoint.
+   * Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAi({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): string | undefined
+
+  /**
+   * @description Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAiImmediate({
+    distinctId,
+    event,
+    properties,
+    groups,
+    flags,
+    sendFeatureFlags,
+  }: EventMessage): Promise<string | undefined>
 
   /**
    * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
@@ -446,7 +631,7 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
-   * @returns true if the flag is on, false if the flag is off, undefined if there was an error.
+   * @returns true if the flag evaluates on, false if it conclusively evaluates off, or undefined if no result is available. Local evaluation resolves cached inactive definitions to false; remote evaluation omits globally inactive flags, leaving no result.
    *
    * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.isEnabled(key)` on the
    *   returned snapshot. Will be removed in the next major version.
@@ -456,8 +641,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
@@ -477,7 +662,7 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
-   * @returns true or string(for multivariates) if the flag is on, false if the flag is off, undefined if there was an error.
+   * @returns true or a variant string if the flag evaluates on, false if it conclusively evaluates off, or undefined if no result is available. Local evaluation resolves cached inactive definitions to false; remote evaluation omits globally inactive flags, leaving no result.
    *
    * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlag(key)` on the
    *   returned snapshot. Will be removed in the next major version.
@@ -487,8 +672,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
@@ -609,14 +794,17 @@ export interface IPostHog {
    * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
    *
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * Local evaluation resolves cached inactive definitions to `false`. Remote evaluation omits
+   * globally inactive flags, so those keys are absent when no local definition is available.
+   *
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
   /**
    * @description Evaluate all feature flags for a specific user.
    *
    * @param distinctId - The user's distinct ID
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 
@@ -629,6 +817,16 @@ export interface IPostHog {
    * @param properties OPTIONAL | which can be a object with any information you'd like to add
    */
   groupIdentify({ groupType, groupKey, properties }: GroupIdentifyMessage): void
+
+  /**
+   * @description Sets a group's properties immediately. Useful for edge environments where the usual queue-based
+   * sending is not preferable. Do not mix immediate and non-immediate calls.
+   *
+   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
+   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   */
+  groupIdentifyImmediate({ groupType, groupKey, properties }: GroupIdentifyMessage): Promise<void>
 
   /**
    * @description Force an immediate reload of the polled feature flags. Please note that they are
@@ -687,12 +885,43 @@ export interface IPostHog {
   getContext(): ContextData | undefined
 
   /**
+   * @description The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
+   * gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
+   * periodically. Configure via the `metrics` client option.
+   */
+  readonly metrics: Metrics
+
+  /**
+   * @description Starts a span without making it active, for work that can't wrap a callback.
+   * Prefer `withSpan`. Always returns a handle — an inert one when tracing is off — so calling
+   * code never has to branch.
+   * @experimental Subject to change in a minor release.
+   */
+  startSpan(name: string, options?: StartSpanOptions): Span
+
+  /**
+   * @description Runs a callback with a span active for its duration and ends the span at return
+   * (sync) or settle (async). Spans started inside nest automatically; a throw or rejection is
+   * recorded on the span and rethrown unchanged.
+   * @experimental Subject to change in a minor release.
+   */
+  withSpan<T>(name: string, fn: (span: Span) => T): T
+  withSpan<T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T
+
+  /**
+   * @description The span currently active on this async execution path, or null outside any
+   * `withSpan` callback.
+   * @experimental Subject to change in a minor release.
+   */
+  getActiveSpan(): Span | null
+
+  /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for
    * a clean shutdown.
    *
    * @param shutdownTimeoutMs The shutdown timeout, in milliseconds. Defaults to 30000 (30s).
    */
-  shutdown(shutdownTimeoutMs?: number): void
+  shutdown(shutdownTimeoutMs?: number): Promise<void>
 
   /**
    * @description Waits for local evaluation to be ready, with an optional timeout.

@@ -1,11 +1,12 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
+import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
-import type { IdentityCache } from './extensions/internal'
+import type { BoundedCache, IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
 import type { McpEventSink } from './extensions/sink'
 import type { LoggerFn } from './extensions/logger'
@@ -17,9 +18,59 @@ export type ErrorProperties = ErrorTracking.ErrorProperties
 /** A single parsed stack frame. Re-exported from `@posthog/core`. */
 export type StackFrame = ErrorTracking.StackFrame
 
+/**
+ * The MCP wire shapes we touch, declared structurally rather than imported from
+ * `@modelcontextprotocol/sdk`.
+ *
+ * Both SDK majors are **optional** peers — a v2-only consumer has no v1 SDK
+ * installed — so a type import of it in shipped `.d.ts` output is a `TS2307`
+ * for anyone type-checking without `skipLibCheck`. These are deliberately loose
+ * (open-ended, everything optional): they describe what we *read* off an SDK
+ * result, and an SDK-typed value assigns to them cleanly. What we hand back to
+ * the SDK is typed precisely instead — see {@link CompatibleTextToolResult}.
+ */
+export interface CompatibleToolResultLike {
+  content?: unknown[]
+  structuredContent?: JsonRecord
+  isError?: boolean
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** One entry of a `tools/list` response, as we read it. */
+export interface CompatibleToolDescriptorLike {
+  name: string
+  title?: string
+  description?: string
+  /** The advertised JSON Schema, as the analytics parameters are injected into it. */
+  inputSchema?: AnalyticsInjectableJsonSchema
+  outputSchema?: unknown
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** A `tools/list` response, as we read it. */
+export interface CompatibleToolsListLike {
+  tools: CompatibleToolDescriptorLike[]
+  nextCursor?: string
+  [key: string]: unknown
+}
+
+/**
+ * A text-only tool result *we* construct and a host may hand straight back to
+ * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
+ * `CallToolResult` — the direction that would silently break callers.
+ */
+export interface CompatibleTextToolResult {
+  content: { type: 'text'; text: string }[]
+  isError?: boolean
+}
+
 export interface MCPRequestParamsLike {
+  _meta?: JsonRecord
   arguments?: JsonRecord
   name?: string
+  uri?: string
   [key: string]: unknown
 }
 
@@ -44,6 +95,13 @@ export interface McpAnalytics {
 
 export interface MCPAnalyticsOptions {
   /**
+   * Exact server build identifier → `$mcp_server_build`. Use an immutable
+   * deployment value such as a Git commit SHA or container image digest.
+   * MCP does not advertise this value, so the host must supply it. The value
+   * must contain 1 to 256 characters.
+   */
+  serverBuild?: string
+  /**
    * Optional STDIO-safe log sink for SDK-internal warnings. Receives single string messages.
    * Defaults to a no-op since MCP STDIO transports cannot use console.
    */
@@ -51,12 +109,40 @@ export interface MCPAnalyticsOptions {
   /** Enable the `get_more_tools` virtual tool so agents can report missing functionality. */
   reportMissing?: boolean
   /**
+   * Inject the `send_feedback` virtual tool so agents can send feedback about
+   * this server to its developers — a missing capability (the priority
+   * category), a tool that failed or confused them, or praise. Calls to it emit
+   * `$mcp_feedback` (never a `$mcp_tool_call`). Off by default.
+   *
+   * `true` uses the defaults; the object form renames the tool, replaces its
+   * description, declares host-specific `extraProperties`, or wires an
+   * `onFeedback` handler that routes reports to a real backend.
+   *
+   * Covers what `reportMissing` covers (as `feedback_type: "missing_capability"`),
+   * so new integrations should enable only one of the two.
+   */
+  collectFeedback?: CollectFeedbackConfig
+  /**
    * Rename the `get_more_tools` virtual tool (the `reportMissing` feature).
    * Defaults to `get_more_tools`. Set once here so the tool is advertised and
    * detected under the same name.
    */
   missingCapabilityToolName?: string
-  /** Enables the `conversation_id` tool parameter + prompt-back loop. */
+  /**
+   * Enable session correlation for the MCP **2026-07-28** revision, which removed
+   * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
+   * server instance per HTTP request. With none of those left to anchor on, the only
+   * thing that can carry a session across calls is the agent itself.
+   *
+   * Turning this on injects a `conversation_id` parameter into every tool, mints one
+   * on the first call, asks the agent to echo it back, and derives `$session_id` from
+   * that handle — so calls correlate across reconnects, restarts, and per-request
+   * instances.
+   *
+   * On by default, and fully inert when disabled: no parameter is injected, no schema is
+   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
+   * before (the request's own session id, else this instance's).
+   */
   enableConversationId?: boolean
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
@@ -67,8 +153,22 @@ export interface MCPAnalyticsOptions {
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
+   * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
+   * takes precedence, with an injected `llm_model` parameter as the fallback.
+   * On by default; set to `false` to disable capture.
+   *
+   * MCP does not standardize model identity. Some clients expose it through
+   * vendor metadata; other harnesses inject it into the agent's system prompt
+   * so the agent can restate it. `$mcp_llm_model_source` records which path won.
+   * Both paths are unverified: use them for quality analytics, not billing or
+   * security. Missing, blank, and `"unknown"` values are dropped.
+   */
+  captureModel?: boolean | MCPAnalyticsModelOptions
+  /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
+   * A standalone `$identify` event is published once per session — at `initialize`, or
+   * when a long-lived server sees the identity appear or change — never per tool call.
    */
   identify?:
     | ((request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<UserIdentity | null>)
@@ -94,6 +194,31 @@ export interface MCPAnalyticsOptions {
    */
   beforeSend?: BeforeSendFn
   /**
+   * Decide which argument names `$mcp_input_keys` records on tool-call events.
+   * By default only names the tool's input schema declares are recorded; every
+   * other name becomes one `[redacted]` entry, because a name can carry private data.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * Return the alternative argument names accepted by one tool. The map is
+   * canonical name to aliases in the order the server tries them. Automatic
+   * instrumentation uses it for `$mcp_input_keys` and
+   * `$mcp_input_aliases_used`; it never changes the tool arguments.
+   */
+  resolveInputAliases?: (toolName: string) => InputAliasMap | undefined
+  /**
+   * Return the tool's input schema as your `tools/list` advertises it, before
+   * PostHog preparation, or `undefined` when the tool is unknown. Low-level servers
+   * use it on `tools/call` to resolve which analytics arguments the SDK owns
+   * without a prior `tools/list` on the same instance, so a server that builds a
+   * fresh instance per request strips them before the handler runs. Ownership
+   * follows the same rule as a served listing: a Zod schema is read the way the
+   * MCP SDK advertises it, and a host that lists its own JSON Schema returns that.
+   * Ownership learned from a listing on the instance wins. Ignored on a
+   * high-level `McpServer`, which reads its tool registry.
+   */
+  resolveOriginalTool?: (toolName: string) => { inputSchema?: unknown } | undefined
+  /**
    * Attach extra event properties on every auto-captured event. Spread into the PostHog
    * event properties as-is; values must be JSON-serializable.
    */
@@ -107,12 +232,92 @@ export interface MCPAnalyticsContextOptions {
   description?: string
 }
 
+export type FeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
+export type FeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
+
+/** The `collectFeedback` option: `true` for the defaults, or the object form. */
+export type CollectFeedbackConfig = boolean | CollectFeedbackOptions
+
+/**
+ * A host-declared input-schema fragment for one `send_feedback` extra property —
+ * plain JSON Schema, the same shape the MCP `tools/list` wire format uses.
+ */
+export interface FeedbackExtraPropertySchema {
+  type: string
+  description?: string
+  enum?: string[]
+  [key: string]: unknown
+}
+
+/** Object form of {@link CollectFeedbackConfig}. */
+export interface CollectFeedbackOptions {
+  /**
+   * Rename the `send_feedback` virtual tool. Set once so the tool is advertised
+   * and detected under the same name. Defaults to `send_feedback`.
+   */
+  toolName?: string
+  /** Replace the default tool description. */
+  description?: string
+  /**
+   * Host-specific fields merged into the tool's advertised input schema. Each
+   * declared key is captured as a `$mcp_feedback_<key>` event property (through
+   * the standard sanitize/truncate pipeline); arguments the agent invents beyond
+   * the schema are never captured. A key that collides with a core field or an
+   * SDK-injected argument throws at configuration time.
+   */
+  extraProperties?: Record<string, FeedbackExtraPropertySchema>
+  /** Keys of `extraProperties` to advertise as required. */
+  extraRequired?: string[]
+  /**
+   * Route each report to a real backend (`instrument()` path only — a custom
+   * dispatcher routes reports itself, see {@link PreparedToolCall.isFeedback}).
+   * Return a string to replace the default acknowledgement text. A throw is
+   * logged and falls back to the default reply; the `$mcp_feedback` event is
+   * captured either way. The returned string is captured as `$mcp_response`
+   * through the generic sanitize pipeline only — unlike `$mcp_feedback_summary`
+   * / `details`, it does not get structured-PII redaction, so avoid echoing
+   * the agent's raw report text back in it.
+   */
+  onFeedback?: (report: FeedbackReport) => MaybePromise<string | void>
+}
+
+/** One parsed `send_feedback` call, as handed to `onFeedback` and the dispatcher. */
+export interface FeedbackReport {
+  /** Invalid or missing values fall back to `other`. */
+  feedbackType: FeedbackType
+  /** One-sentence summary; empty string when the agent omitted it. */
+  summary: string
+  sentiment?: FeedbackSentiment
+  frictionPoints?: string
+  suggestedImprovement?: string
+  details?: string
+  /** The existing tool the feedback is about (`tool_name` argument). */
+  toolName?: string
+  taskCompleted?: boolean
+  /**
+   * Values of the declared `extraProperties` fields that match their declared
+   * `type`/`enum`. A value the agent sent with the wrong shape is left out
+   * (find it in `raw` if you need it), so these are safe to trust as declared.
+   */
+  extras: JsonRecord
+  /** The full raw arguments, for the handler only — never captured. */
+  raw: JsonRecord
+}
+
+export interface MCPAnalyticsModelOptions {
+  description?: string
+}
+
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
+export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
 
 export type ToolCallback =
-  | ((args: unknown, extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
-  | ((extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
+  | ((
+      args: unknown,
+      extra: CompatibleRequestHandlerExtra
+    ) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
+  | ((extra: CompatibleRequestHandlerExtra) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
 
 // RegisteredTool type that supports both MCP SDK 1.23- (callback) and 1.24+ (handler)
 export type RegisteredTool = {
@@ -120,6 +325,8 @@ export type RegisteredTool = {
   /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
   _meta?: Record<string, unknown>
   inputSchema?: unknown
+  /** Present when the tool was registered with a declared output schema. */
+  outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
@@ -129,16 +336,63 @@ export type RegisteredTool = {
  */
 export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogCaptureEvent | null | undefined>
 
+/**
+ * Decides whether one top-level argument name appears in `$mcp_input_keys`.
+ * `declared` is true when the server's input schema declares the name.
+ * Return `true` to record the name; any other result, or a throw, records `[redacted]`.
+ */
+export type ShouldRecordInputKeyFn = (key: string, details: { declared: boolean }) => boolean
+
+export interface ToolInputOptions {
+  /**
+   * Replace the default rule, which records only declared names. The SDK still
+   * drops names longer than 64 characters and records at most 20 names.
+   */
+  shouldRecordInputKey?: ShouldRecordInputKeyFn
+  /**
+   * The alternative argument names the server accepts, as canonical name to aliases in the
+   * order the server tries them, for example `{ id: ['experimentId'] }`. Must be owned by the
+   * server, never taken from the caller. Alias names count as declared in `$mcp_input_keys`,
+   * and `$mcp_input_aliases_used` records each alias the server needed, as `alias:canonical`.
+   */
+  inputAliases?: InputAliasMap
+}
+
+export type InputAliasMap = Readonly<Record<string, readonly string[]>>
+
 export interface Event {
   actorId?: string
   clientName?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. HTTP transports
+   * only. The only place a client's *surface* is distinguishable: one vendor
+   * ships many products under a single `clientName` (Anthropic's CLI, Agent SDK
+   * and VS Code extension all report `claude-code`), and only the User-Agent
+   * parenthetical tells them apart. Captured verbatim — surfaces are resolved to
+   * friendly labels at query time, never in this SDK.
+   */
+  clientUserAgent?: string
   clientVersion?: string
   conversationId?: string
   duration?: number
   error?: ErrorProperties | null
+  /**
+   * Coarse failure category → `$mcp_error_type`. An explicit, low-cardinality
+   * label the host can supply (e.g. `validation`, `permission`, `timeout`).
+   * When omitted on an errored call, it falls back to the thrown error's type
+   * (the `$exception_list` entry's `type`).
+   */
+  errorType?: string
   eventId?: string
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
+  /**
+   * The calling model id → `$mcp_llm_model`. Resolved from recognized client
+   * metadata first, then the SDK-injected `llm_model` argument; unverified.
+   */
+  llmModel?: string
+  /** How the model id was obtained → `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /**
    * Explicit PostHog event name. When set (via `capture(server, { event })`) it
    * overrides the built-in name derived from `eventType`, so callers can emit any
@@ -155,10 +409,17 @@ export interface Event {
   listedToolNames?: string[]
   parameters?: unknown
   properties?: JsonRecord | null
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Learned at
+   * `initialize` and carried onto every event for the session (see SessionInfo) —
+   * used to track spec adoption and to slice event metrics by spec version.
+   */
+  protocolVersion?: string
   resourceName?: string
   response?: unknown
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
   sessionId: string
@@ -167,16 +428,54 @@ export interface Event {
   toolDescription?: string
   userIntent?: string
   userIntentSource?: MCPAnalyticsIntentSource
+  /**
+   * Raw vendor client header (`x-anthropic-client`) → `$mcp_vendor_client`. HTTP
+   * transports only. A second, independent surface signal alongside
+   * {@link Event.clientUserAgent}; captured verbatim, never classified.
+   */
+  vendorClient?: string
 }
 
 /** A partially-built MCP event as it flows through the SDK before capture. */
 export type McpEvent = Partial<Event>
 
+/** HTTP request info the SDK's Streamable HTTP transports attach per request. */
+export interface CompatibleRequestInfoLike {
+  headers?: Record<string, string | string[] | undefined>
+  [key: string]: unknown
+}
+
+/**
+ * The HTTP request an MCP SDK v2 server attaches to the handler context, as a
+ * WHATWG `Request` — so `headers` answers to `.get()`, not to indexing.
+ */
+export interface CompatibleHttpRequestLike {
+  req?: { headers?: unknown; [key: string]: unknown }
+  [key: string]: unknown
+}
+
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
+  /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
+  requestInfo?: CompatibleRequestInfoLike
+  /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */
+  http?: CompatibleHttpRequestLike
+  /**
+   * MCP SDK v2's parsed request. It lifts the reserved `io.modelcontextprotocol/*`
+   * keys out of `params._meta` into `envelope`, so client identity is here rather
+   * than on the request by the time a handler runs.
+   */
+  mcpReq?: { envelope?: Record<string, unknown>; [key: string]: unknown }
   [key: string]: unknown
 }
+
+/**
+ * HTTP headers normalised to lowercase keys, as `getRequestHeaders` returns
+ * them — a plain bag, so a host's existing `headers['authorization']` keeps
+ * working when only the source of the headers changes.
+ */
+export type RequestHeaderBag = Record<string, string | string[]>
 
 export interface ServerClientInfoLike {
   name?: string
@@ -192,9 +491,17 @@ export interface HighLevelMCPServerLike {
   tool?(name: string, description: string, paramsSchema: unknown, cb: ToolCallback): void
 }
 
+/** The connected transport as exposed by the SDK's `Protocol.transport` getter. */
+export interface CompatibleTransportLike {
+  sessionId?: string
+  [key: string]: unknown
+}
+
 export interface MCPServerLike {
   _requestHandlers: Map<string, (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<unknown>>
   _serverInfo?: ServerClientInfoLike
+  /** Optional so older SDKs (and bare test doubles) still validate. */
+  transport?: CompatibleTransportLike
   getClientVersion(): ServerClientInfoLike | undefined
   setRequestHandler(
     schema: unknown,
@@ -228,23 +535,45 @@ export interface SessionInfo {
   identifyActorGivenId?: string
   identifyActorGroups?: Record<string, string>
   ipAddress?: string
+  /**
+   * Negotiated MCP protocol (spec) version, learned at `initialize` and carried
+   * forward for the session (across pods via the session token) → `$mcp_protocol_version`.
+   */
+  protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
+  serverBuild?: string
   serverName?: string
   serverVersion?: string
+}
+
+export interface AnalyticsParameterOwnership {
+  context: boolean
+  conversationId: boolean
+  llmModel: boolean
+  /**
+   * True when we declared `_mcp_instructions` on this tool's advertised output
+   * schema, so writing that key into `structuredContent` will validate. False
+   * for tools with no output schema, or one we could not extend.
+   */
+  outputInstructions: boolean
 }
 
 export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
+  /** Safe logger bound to this server; a no-op when no logger was configured. */
+  logger: LoggerFn
   lastActivity: Date
-  lastMcpSessionId?: string
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
-  sessionSource: 'generated' | 'mcp'
+  /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
+  sessionSource: 'generated' | 'mcp' | 'token'
+  toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
+  toolInputSchemas: BoundedCache<Map<string, unknown>>
 }
 
 export interface CaptureEventData {
@@ -271,13 +600,43 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Conversation handle → `$mcp_conversation_id`. For custom dispatchers,
+   * use the value returned by {@link PostHogMCP.prepareToolResult} so a newly
+   * minted handle is captured only when it reached the client.
+   */
+  conversationId?: string
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
+   * every capture for the session (like `sessionId`) so later events carry it too,
+   * not just the initialize event — the `PostHogMCP` client holds no per-session state.
+   */
+  protocolVersion?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. The
+   * `instrument()` path reads this off the transport automatically; a custom
+   * dispatcher has no `extra`, so pass `req.headers['user-agent']` yourself.
+   *
+   * Worth wiring up: it is the only signal that separates a vendor's surfaces
+   * (Anthropic's CLI, Agent SDK and VS Code extension all report
+   * `clientName: "claude-code"`, and only the User-Agent parenthetical —
+   * `(cli)` / `(sdk-ts)` / `(claude-vscode)` — tells them apart). Send it raw;
+   * PostHog resolves friendly product labels at query time.
+   */
+  clientUserAgent?: string
+  /**
+   * Raw vendor client header → `$mcp_vendor_client`. Anthropic's clients send
+   * `x-anthropic-client`; pass it as a second, independent surface signal
+   * alongside {@link McpCaptureCommon.clientUserAgent}. Sent verbatim.
+   */
+  vendorClient?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */
   groups?: Record<string, string>
   /** Extra event properties, spread onto the PostHog event verbatim. */
   properties?: JsonRecord
-  /** Event timestamp. Defaults to the time of the capture call. */
+  /** Event timestamp. Defaults to the capture time. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
 }
 
@@ -302,6 +661,13 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    * the host derived it. Defaults to `context_parameter` when an intent is set.
    */
   intentSource?: MCPAnalyticsIntentSource
+  /**
+   * The calling model id -> `$mcp_llm_model`. On the custom-dispatcher path,
+   * read it from {@link PostHogMCP.prepareToolCall}.
+   */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
@@ -317,6 +683,13 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    * synthesized from the tool name.
    */
   error?: unknown
+  /**
+   * Coarse failure category → `$mcp_error_type` (e.g. `validation`,
+   * `permission`, `timeout`, `rate_limited`). A low-cardinality label that lets
+   * the dashboard break failures down by reason without joining to `$exception`.
+   * When omitted on an error, the SDK falls back to the thrown error's type.
+   */
+  errorType?: string
 }
 
 /** Payload for {@link PostHogMCP.captureInitialize}. Emits `$mcp_initialize`. */
@@ -350,6 +723,8 @@ export interface ToolsListCaptureData extends McpCaptureCommon {
   isError?: boolean
   /** The thrown value when `isError` is true → fans out an `$exception` sibling. */
   error?: unknown
+  /** Coarse failure category → `$mcp_error_type`. Falls back to the thrown error's type. */
+  errorType?: string
 }
 
 /** Options for {@link PostHogMCP.prepareToolList}. */
@@ -366,23 +741,86 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
    */
   reportMissing?: boolean
+  /**
+   * Append the `send_feedback` virtual tool so agents can send feedback.
+   * Defaults to `false`, and requires the `PostHogMCP` constructor's
+   * `collectFeedback` option (the enable switch that also gates detection).
+   * When the agent calls it, route the call to
+   * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
+   */
+  collectFeedback?: boolean
+}
+
+/** Options for {@link PostHogMCP.prepareToolCall}. */
+export interface PrepareToolCallOptions {
+  /**
+   * The tool descriptor before PostHog preparation, from the host's own tool
+   * list (the SDK's virtual tools never exist there). Pass this on stateless or
+   * multi-replica servers so SDK argument ownership is resolved per request.
+   * Passing it also disambiguates a feedback-tool name collision: a real tool
+   * by that name is dispatched normally instead of being flagged as feedback.
+   */
+  originalTool?: { inputSchema?: unknown; outputSchema?: unknown }
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  requestMeta?: JsonRecord
+  /**
+   * A session id carried by the request or transport. A valid echoed
+   * `conversation_id` takes precedence. Otherwise this value prevents the SDK
+   * from minting a second session handle.
+   */
+  sessionId?: string
 }
 
 /**
  * Result of {@link PostHogMCP.prepareToolCall}: the intent pulled off the
- * incoming call, the arguments with the injected `context` removed (so your tool
- * handler and its schema validation never see it), and whether the call targeted
- * the `get_more_tools` virtual tool.
+ * incoming call, the arguments with SDK-owned analytics fields removed, and
+ * whether the call targeted the `get_more_tools` virtual tool.
  */
 export interface PreparedToolCall {
   /** The agent's stated intent (the `context` argument), if present. */
   intent?: string
   /** Where the intent came from. Always `context_parameter` here when set. */
   intentSource?: MCPAnalyticsIntentSource
-  /** The call arguments with the injected `context` key stripped out. */
+  /** The calling model id, when `captureModel` is enabled and a supported source provides it. */
+  llmModel?: string
+  /** How the model id was obtained. */
+  llmModelSource?: MCPAnalyticsModelSource
+  /** The call arguments with SDK-owned analytics keys removed. */
   args?: Record<string, unknown>
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /**
+   * The resolved conversation handle. Use the value from
+   * {@link PostHogMCP.prepareToolResult} for capture because result delivery can
+   * remove a newly minted handle from analytics.
+   */
+  conversationId?: string
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
+  /**
+   * True when `name` is the `send_feedback` virtual tool AND the constructor's
+   * `collectFeedback` option is set AND no `originalTool` was supplied. Always
+   * false without that opt-in — and a supplied `originalTool` proves a real
+   * application tool owns the name — so a real tool that happens to use the
+   * name is never shadowed.
+   */
+  isFeedback: boolean
+  /**
+   * The parsed feedback report, set only when {@link PreparedToolCall.isFeedback}
+   * is true. Pass it to {@link PostHogMCP.captureFeedback} and to your own
+   * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
+   */
+  feedbackReport?: FeedbackReport
+}
+
+/** Result of {@link PostHogMCP.prepareToolResult}. */
+export interface PreparedToolResult<TResult = unknown> {
+  /** The result to return to the MCP client. */
+  result: TResult
+  /** The resolved session id to use when capturing this call. */
+  sessionId?: string
+  /** The conversation handle to capture, if it reached the client. */
+  conversationId?: string
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -392,6 +830,23 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */
+export interface FeedbackCaptureData extends McpCaptureCommon {
+  /**
+   * The parsed report (from {@link PreparedToolCall.feedbackReport}) →
+   * `$mcp_feedback_*` properties, with the summary and details as `$mcp_intent`.
+   */
+  report: FeedbackReport
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
 }

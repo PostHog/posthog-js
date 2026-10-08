@@ -12,12 +12,12 @@ import { flushPromises } from './test-utils'
 import { version } from '../package.json'
 
 // Mock PostHog
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(() => {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false,
       }
     }),
@@ -40,6 +40,21 @@ const v3TokenUsage = (input: number, output: number, reasoning?: number) => ({
   outputTokens: { total: output, text: output - (reasoning ?? 0), reasoning: reasoning },
 })
 
+const settlePromptly = async <T>(promise: Promise<T>): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Operation did not settle promptly')), 250)
+  })
+
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
 // Create a mock V3 model (AI SDK 6)
 const createMockV3Model = (modelId: string): LanguageModelV3 => {
   const mockResponses = {
@@ -53,7 +68,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
     provider: 'openai',
     modelId: modelId,
     supportedUrls: {},
-    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
+    doGenerate: vi.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
       const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
@@ -71,7 +86,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
         warnings: [],
       }
     }),
-    doStream: jest.fn(),
+    doStream: vi.fn(),
   } as LanguageModelV3
 }
 
@@ -88,7 +103,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
     provider: 'openai',
     modelId: modelId,
     supportedUrls: {},
-    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+    doGenerate: vi.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
       const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
@@ -106,7 +121,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
         warnings: [],
       }
     }),
-    doStream: jest.fn(),
+    doStream: vi.fn(),
   } as LanguageModelV2
 }
 
@@ -152,8 +167,8 @@ const createMockStreamingModel = <T extends 'v2' | 'v3'>(
     provider: 'test-provider',
     modelId: 'test-streaming-model',
     supportedUrls: {},
-    doGenerate: jest.fn(),
-    doStream: jest.fn().mockImplementation(async () => {
+    doGenerate: vi.fn(),
+    doStream: vi.fn().mockImplementation(async () => {
       const stream = new ReadableStream({
         async start(controller) {
           for (const part of streamParts) {
@@ -177,8 +192,27 @@ describe('Vercel AI SDK - Dual Version Support', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    if (vi.isMockFunction(console.warn)) {
+      console.warn.mockRestore()
+    }
+  })
+
+  it('rejects AI SDK v7 models and points callers to the OpenTelemetry integration', () => {
+    const v4Model = {
+      specificationVersion: 'v4',
+      provider: 'openai',
+      modelId: 'gpt-test',
+    }
+
+    expect(() => Reflect.apply(withTracing, undefined, [v4Model, mockPostHogClient, {}])).toThrow(
+      'withTracing supports Vercel AI SDK v5 and v6 models only. Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.'
+    )
   })
 
   describe('V3 Model (AI SDK 6)', () => {
@@ -207,7 +241,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -220,13 +254,171 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_usage'].providerMetadata).toBeDefined()
     })
 
+    it('redacts short explicit-MIME files without changing Vercel provider payloads', async () => {
+      const binary = 'U0hPUlQgQklOQVJZ'
+      const providerResult = {
+        content: [{ type: 'file', data: binary, mediaType: 'image/png' }],
+        usage: v3TokenUsage(1, 1),
+        response: { modelId: 'image-model' },
+        providerMetadata: {},
+        finishReason: { unified: 'stop', raw: undefined },
+        warnings: [],
+      }
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: vi.fn().mockResolvedValue(providerResult),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: binary, mediaType: 'audio/wav' }],
+          },
+        ],
+      } as any
+
+      const result = await model.doGenerate(params)
+
+      expect(result).toBe(providerResult)
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(JSON.stringify(properties['$ai_input'])).not.toContain(binary)
+      expect(JSON.stringify(properties['$ai_output_choices'])).not.toContain(binary)
+      expect(JSON.stringify(properties)).toContain('[base64 audio/wav redacted]')
+      expect(JSON.stringify(properties)).toContain('[base64 image/png redacted]')
+    })
+
+    it('redacts binary content nested in tool results without changing Vercel provider payloads', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).not.toContain(binary)
+      expect(input).toContain('[base64 image/png redacted]')
+    })
+
+    it('preserves binary content nested in tool results when the client enables multimodal capture', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, clientWithMultimodal, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).toContain(binary)
+      expect(input).not.toContain('redacted')
+    })
+
+    it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
+      const binary = 'SU5QVVQgVVJMIERBVEE='
+      const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
+      const httpUrl = new URL('https://example.com/input.wav')
+      const baseModel = createMockV3Model('audio-model')
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              { type: 'file', data: dataUrl, mediaType: 'audio/wav' },
+              { type: 'file', data: httpUrl, mediaType: 'audio/wav' },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).not.toContain(binary)
+      expect(input).toContain('[base64 audio/wav redacted]')
+      expect(input).toContain(httpUrl.toString())
+    })
+
+    it('redacts data URL objects from output while preserving HTTP URL objects', async () => {
+      const binary = 'T1VUUFVUIFVSTCBEQVRB'
+      const dataUrl = new URL(`data:image/png;base64,${binary}`)
+      const httpUrl = new URL('https://example.com/output.png')
+      const providerResult = {
+        content: [
+          { type: 'file', data: dataUrl, mediaType: 'image/png' },
+          { type: 'file', data: httpUrl, mediaType: 'image/png' },
+        ],
+        usage: v3TokenUsage(1, 1),
+        response: { modelId: 'image-model' },
+        providerMetadata: {},
+        finishReason: { unified: 'stop', raw: undefined },
+        warnings: [],
+      }
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: vi.fn().mockResolvedValue(providerResult),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+
+      const result = await model.doGenerate({ prompt: [] })
+
+      expect(result).toBe(providerResult)
+      const output = JSON.stringify(
+        (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']
+      )
+      expect(output).not.toContain(binary)
+      expect(output).toContain('[base64 image/png redacted]')
+      expect(output).toContain(httpUrl.toString())
+    })
+
     it('should handle undefined content in tool-call-only responses', async () => {
       const baseModel: LanguageModelV3 = {
         specificationVersion: 'v3' as const,
         provider: 'openai',
         modelId: 'gpt-4o',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: undefined,
           text: '',
           usage: v3TokenUsage(10, 5),
@@ -235,7 +427,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -275,7 +467,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Time to first token should be present and be a number
       expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
@@ -315,7 +507,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Time to first token should be present and be a number
       expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
@@ -357,7 +549,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -385,7 +577,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4o',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [
             {
               type: 'tool-call',
@@ -400,7 +592,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: { unified: 'tool-calls' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -414,7 +606,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate(callOptions)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -457,7 +649,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -497,7 +689,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -519,9 +711,47 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     it.each([
       ['v2', createMockV2Model],
       ['v3', createMockV3Model],
+    ])('preserves the provider result when captureImmediate rejects in %s models', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4')
+      const providerResult = await (baseModel.doGenerate as any)({ prompt: [] })
+      baseModel.doGenerate = vi.fn().mockResolvedValue(providerResult) as any
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogCaptureImmediate: true,
+      })
+      const result = await (model.doGenerate as any)({ prompt: [] })
+
+      expect(result).toBe(providerResult)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('preserves the provider error when captureImmediate rejects in %s models', async (_version, createModel) => {
+      const providerError = new Error('provider failed')
+      const baseModel = createModel('gpt-4')
+      baseModel.doGenerate = vi.fn().mockRejectedValue(providerError) as any
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogCaptureImmediate: true,
+      })
+      const rejection = await (model.doGenerate as any)({ prompt: [] }).catch((error: unknown) => error)
+
+      expect(rejection).toBe(providerError)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
     ])('should handle errors in %s models', async (_version, createModel) => {
       const baseModel = createModel('gpt-4')
-      baseModel.doGenerate = jest.fn().mockRejectedValue(new Error('API Error'))
+      baseModel.doGenerate = vi.fn().mockRejectedValue(new Error('API Error'))
 
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
@@ -536,7 +766,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ).rejects.toThrow('API Error')
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties).toEqual(
         expect.objectContaining({
@@ -547,6 +777,278 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           $ai_provider: 'openai',
         })
       )
+    })
+
+    it.each(['v2', 'v3'] as const)(
+      'should capture in-band error chunks with partial output in %s streams',
+      async (version) => {
+        const streamError = new Error('provider error chunk')
+        const streamParts = [
+          { type: 'text-delta' as const, id: 'text-1', delta: 'partial response' },
+          { type: 'error' as const, error: streamError },
+        ]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-error-chunk`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const receivedParts: unknown[] = []
+        const reader = result.stream.getReader()
+        for (;;) {
+          const readResult = await reader.read()
+          if (readResult.done) {
+            break
+          }
+          receivedParts.push(readResult.value)
+        }
+
+        expect(receivedParts).toEqual(streamParts)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('provider error chunk'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should capture error finish reasons with partial output in %s streams',
+      async (version) => {
+        const finishPart =
+          version === 'v2'
+            ? {
+                type: 'finish' as const,
+                usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+                finishReason: 'error' as const,
+              }
+            : {
+                type: 'finish' as const,
+                usage: v3TokenUsage(4, 2),
+                finishReason: { unified: 'error' as const, raw: 'provider_error' },
+              }
+        const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'partial response' }, finishPart]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-error-finish`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const receivedParts: unknown[] = []
+        const reader = result.stream.getReader()
+        for (;;) {
+          const readResult = await reader.read()
+          if (readResult.done) {
+            break
+          }
+          receivedParts.push(readResult.value)
+        }
+
+        expect(receivedParts).toEqual(streamParts)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('stream finished with an error'),
+            $ai_stop_reason: 'error',
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should preserve source errors and capture partial output once in %s streams',
+      async (version) => {
+        const sourceError = new Error('source stream failed')
+        let pullCount = 0
+        const sourceStream = new ReadableStream({
+          pull(controller) {
+            if (pullCount++ === 0) {
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+            } else {
+              controller.error(sourceError)
+            }
+          },
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-source-error`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect(await reader.read()).toEqual({
+          done: false,
+          value: { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+        })
+        await expect(reader.read()).rejects.toBe(sourceError)
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('source stream failed'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should propagate cancellation and capture partial output once in %s streams',
+      async (version) => {
+        const cancelSource = vi.fn()
+        const sourceStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+          },
+          cancel: cancelSource,
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-cancel`,
+        })
+        const cancelReason = new Error('consumer cancelled')
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect((await reader.read()).done).toBe(false)
+        await reader.cancel(cancelReason)
+
+        expect(cancelSource).toHaveBeenCalledTimes(1)
+        expect(cancelSource).toHaveBeenCalledWith(cancelReason)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('consumer cancelled'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should close promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'complete response' }]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-completion`,
+          posthogCaptureImmediate: true,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = (
+          result.stream as ReadableStream<LanguageModelV2StreamPart | LanguageModelV3StreamPart>
+        ).getReader()
+        await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
+        await expect(settlePromptly(reader.read())).resolves.toEqual({ done: true, value: undefined })
+        await flushPromises()
+
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should reject reads promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const sourceError = new Error('source stream failed')
+        const sourceStream = new ReadableStream({
+          pull(controller) {
+            controller.error(sourceError)
+          },
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-source-error`,
+          posthogCaptureImmediate: true,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        await expect(settlePromptly(reader.read())).rejects.toBe(sourceError)
+        await flushPromises()
+
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should cancel promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const cancelSource = vi.fn()
+        const sourceStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+          },
+          cancel: cancelSource,
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-cancel`,
+          posthogCaptureImmediate: true,
+        })
+        const cancelReason = new Error('consumer cancelled')
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect((await reader.read()).done).toBe(false)
+        await expect(settlePromptly(reader.cancel(cancelReason))).resolves.toBeUndefined()
+        await flushPromises()
+
+        expect(cancelSource).toHaveBeenCalledTimes(1)
+        expect(cancelSource).toHaveBeenCalledWith(cancelReason)
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)('should not fail %s streams when immediate telemetry rejects', async (version) => {
+      const telemetryError = new Error('telemetry delivery failed')
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined as never)
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(telemetryError)
+      const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'unchanged' }]
+      const baseModel = createMockStreamingModel(version, streamParts as any)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: `test-${version}-telemetry-error`,
+        posthogCaptureImmediate: true,
+      })
+
+      const result = await model.doStream({ prompt: [] })
+      const reader = result.stream.getReader()
+      await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
+      await expect(reader.read()).resolves.toEqual({ done: true, value: undefined })
+      await flushPromises()
+
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+      expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', telemetryError)
     })
 
     it.each([
@@ -569,7 +1071,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(3)
 
-      const calls = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const calls = (mockPostHogClient.capture as vi.Mock).mock.calls
       calls.forEach((call) => {
         expect(call[0].properties.$ai_trace_id).toBe('test-sequential')
         expect(call[0].properties['$ai_lib']).toBe('posthog-ai')
@@ -581,7 +1083,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ['v3', createMockV3Model, v3TokenUsage(15, 5), { unified: 'stop' as const, raw: undefined }],
     ])('should track tools in %s models when provided', async (_version, createModel, usageFormat, finishReason) => {
       const baseModel = createModel('gpt-4')
-      baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
+      baseModel.doGenerate = vi.fn().mockImplementation(async () => ({
         text: 'Using tool',
         usage: usageFormat,
         content: [{ type: 'text', text: 'Using tool' }],
@@ -610,7 +1112,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_tools).toEqual(tools)
     })
@@ -629,7 +1131,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await simulateGenerateText({ model, prompt: 'What is 9 + 10?' })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
@@ -657,7 +1159,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         await model.doGenerate({ prompt: oversizedPrompt as any })
 
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
         const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
         expect(input.length).toBeGreaterThan(0)
@@ -668,6 +1170,180 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(JSON.stringify(input).length).toBeLessThan(210_000)
       }
     )
+
+    it('skips the oversized-prompt aggregate trim entirely when the client enables multimodal capture', async () => {
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('gpt-4')
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-trim-bypass',
+      })
+
+      // Same oversized prompt as the default-mode trim test above: well past MAX_OUTPUT_SIZE (200kb).
+      const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+      }))
+
+      await model.doGenerate({ prompt: oversizedPrompt as any })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+
+      const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+      expect(input).toHaveLength(oversizedPrompt.length)
+      expect(input.some((message) => message.role === 'posthog')).toBe(false)
+      expect(JSON.stringify(input).length).toBeGreaterThan(1_000_000)
+    })
+
+    it('skips truncation of oversized output when the client enables multimodal capture', async () => {
+      const oversizedText = 'y'.repeat(250_000)
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: oversizedText }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: vi.fn(),
+      }
+
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-truncation-skip',
+      })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const output = captureCall[0].properties.$ai_output_choices[0].content
+      expect(output).toBe(oversizedText)
+      expect(output).not.toContain('[truncated]')
+    })
+
+    it('truncates oversized output when the client does not enable multimodal capture', async () => {
+      const oversizedText = 'y'.repeat(250_000)
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: oversizedText }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: vi.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-truncation',
+      })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const output = captureCall[0].properties.$ai_output_choices[0].content
+      expect(output.length).toBeLessThan(oversizedText.length)
+      expect(output).toContain('... [truncated]')
+    })
+
+    it('preserves input and output file part base64 data when the client enables multimodal capture', async () => {
+      const base64Data = `data:image/png;base64,${'A'.repeat(2000)}`
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: vi.fn(),
+      }
+
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-multimodal-passthrough',
+      })
+
+      await model.doGenerate({
+        prompt: [
+          {
+            role: 'user' as const,
+            content: [{ type: 'file' as const, data: base64Data, mediaType: 'image/png' }],
+          },
+        ],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const inputFile = captureCall[0].properties.$ai_input[0].content[0]
+      const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
+
+      expect(inputFile.file).toBe(base64Data)
+      expect(outputFile.data).toBe(base64Data)
+    })
+
+    it('redacts input and output file part base64 data when the client does not enable multimodal capture', async () => {
+      const base64Data = `data:image/png;base64,${'A'.repeat(2000)}`
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: vi.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-multimodal-redacted',
+      })
+
+      await model.doGenerate({
+        prompt: [
+          {
+            role: 'user' as const,
+            content: [{ type: 'file' as const, data: base64Data, mediaType: 'image/png' }],
+          },
+        ],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      const inputFile = captureCall[0].properties.$ai_input[0].content[0]
+      const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
+
+      expect(inputFile.file).not.toBe(base64Data)
+      expect(inputFile.file).toContain('redacted')
+      expect(outputFile.data).not.toBe(base64Data)
+      expect(outputFile.data).toContain('redacted')
+    })
   })
 
   describe('Anthropic V3 cache token handling', () => {
@@ -692,7 +1368,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: modelId,
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             usage: v3TokenUsageWithCache(total, 50, cacheRead, cacheWrite),
@@ -707,7 +1383,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as LanguageModelV3
     }
 
@@ -718,7 +1394,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: modelId,
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             // V2 style: inputTokens is already separate from cache (for Anthropic native)
@@ -730,7 +1406,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as LanguageModelV2
     }
 
@@ -749,7 +1425,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -765,7 +1441,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             // For OpenAI, inputTokens already excludes cache in the SDK
@@ -780,7 +1456,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -794,7 +1470,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should NOT be adjusted for OpenAI - stays at 100 (the total)
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -815,7 +1491,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // V2 inputTokens should NOT be adjusted - stays at 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -846,8 +1522,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: 'claude-3-sonnet',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -880,7 +1556,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -945,7 +1621,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           provider,
           modelId,
           supportedUrls: {},
-          doGenerate: jest.fn().mockImplementation(async () => ({
+          doGenerate: vi.fn().mockImplementation(async () => ({
             text: 'Cached response',
             usage: { inputTokens, outputTokens },
             content: [{ type: 'text', text: 'Cached response' }],
@@ -954,7 +1630,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             finishReason: { unified: 'stop' as const, raw: undefined },
             warnings: [],
           })),
-          doStream: jest.fn(),
+          doStream: vi.fn(),
         }
 
         const model = withTracing(baseModel, mockPostHogClient, {
@@ -965,7 +1641,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         await simulateGenerateText({ model, prompt: 'Test non-anthropic-provider Claude cache' })
 
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         const properties = captureCall[0].properties
 
         expect(properties['$ai_input_tokens']).toBe(expectedInputTokens)
@@ -998,8 +1674,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'amazon-bedrock',
         modelId: 'global.anthropic.claude-opus-4-6-v1',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -1032,7 +1708,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1074,7 +1750,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       await flushPromises()
 
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
           role: 'assistant',
@@ -1086,6 +1762,39 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ])
       expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
+
+    // Agentic loops replay the previous assistant turn — reasoning included — as the
+    // next step's prompt, so the input mapper has to carry the thinking text too.
+    it.each(['v2', 'v3'] as const)(
+      'should map the reasoning text of an assistant turn in %s input',
+      async (version) => {
+        const baseModel = version === 'v3' ? createMockV3Model('test-model') : createMockV2Model('test-model')
+        const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+
+        await model.doGenerate({
+          prompt: [
+            { role: 'user', content: [{ type: 'text', text: 'What is 9 + 10?' }] },
+            {
+              role: 'assistant',
+              content: [
+                { type: 'reasoning', text: 'The user wants a sum: 9 + 10 = 19.' },
+                { type: 'text', text: '19' },
+              ],
+            },
+            { role: 'user', content: [{ type: 'text', text: 'And plus one?' }] },
+          ],
+        } as any)
+
+        const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+        expect(properties.$ai_input[1]).toEqual({
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants a sum: 9 + 10 = 19.' },
+            { type: 'text', text: '19' },
+          ],
+        })
+      }
+    )
   })
 
   describe('Prototype getter preservation', () => {
@@ -1106,7 +1815,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           return 'custom-value'
         }
 
-        doGenerate = jest.fn().mockResolvedValue({
+        doGenerate = vi.fn().mockResolvedValue({
           text: 'test',
           usage: { inputTokens: { total: 5 }, outputTokens: { total: 2 } },
           content: [{ type: 'text', text: 'test' }],
@@ -1116,7 +1825,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           warnings: [],
         })
 
-        doStream = jest.fn()
+        doStream = vi.fn()
       }
 
       const baseModel = new ModelWithGetters() as any
@@ -1149,7 +1858,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         modelId: 'gpt-4o',
         supportedUrls: {},
         config,
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'text', text: 'hi' }],
           usage: { inputTokens: 1, outputTokens: 1 },
           response: { modelId: 'gpt-4o' },
@@ -1157,12 +1866,12 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: 'stop' as const,
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as any
 
       const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
       await model.doGenerate({ prompt: [] } as any)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       return captureCall[0].properties
     }
 
@@ -1211,7 +1920,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       }
       await flushPromises()
 
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureCall[0].properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
     })
   })

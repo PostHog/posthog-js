@@ -1,4 +1,7 @@
-import { createMirror as createNodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  attachShadowRootSafely,
+  createMirror as createNodeMirror,
+} from '@posthog/rrweb-snapshot';
 import type { Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
 import type {
@@ -56,13 +59,10 @@ export class RRDocument extends BaseRRDocument {
   }
 
   createDocument(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _namespace: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _qualifiedName: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _doctype?: DocumentType | null,
-  ) {
+  ): RRDocument {
     return new RRDocument();
   }
 
@@ -70,7 +70,7 @@ export class RRDocument extends BaseRRDocument {
     qualifiedName: string,
     publicId: string,
     systemId: string,
-  ) {
+  ): BaseRRDocumentType {
     const documentTypeNode = new RRDocumentType(
       qualifiedName,
       publicId,
@@ -112,37 +112,37 @@ export class RRDocument extends BaseRRDocument {
     return element;
   }
 
-  createComment(data: string) {
+  createComment(data: string): BaseRRComment {
     const commentNode = new RRComment(data);
     commentNode.ownerDocument = this;
     return commentNode;
   }
 
-  createCDATASection(data: string) {
+  createCDATASection(data: string): BaseRRCDATASection {
     const sectionNode = new RRCDATASection(data);
     sectionNode.ownerDocument = this;
     return sectionNode;
   }
 
-  createTextNode(data: string) {
+  createTextNode(data: string): BaseRRText {
     const textNode = new RRText(data);
     textNode.ownerDocument = this;
     return textNode;
   }
 
-  destroyTree() {
+  destroyTree(): void {
     this.firstChild = null;
     this.lastChild = null;
     this.mirror.reset();
   }
 
-  open() {
+  open(): void {
     super.open();
     this._unserializedId = this.UNSERIALIZED_STARTING_ID;
   }
 }
 
-export const RRDocumentType = BaseRRDocumentType;
+export const RRDocumentType: typeof BaseRRDocumentType = BaseRRDocumentType;
 
 export class RRElement extends BaseRRElement {
   inputData: inputData | null = null;
@@ -179,13 +179,13 @@ export class RRIFrameElement extends RRElement {
   }
 }
 
-export const RRText = BaseRRText;
+export const RRText: typeof BaseRRText = BaseRRText;
 export type RRText = typeof RRText;
 
-export const RRComment = BaseRRComment;
+export const RRComment: typeof BaseRRComment = BaseRRComment;
 export type RRComment = typeof RRComment;
 
-export const RRCDATASection = BaseRRCDATASection;
+export const RRCDATASection: typeof BaseRRCDATASection = BaseRRCDATASection;
 export type RRCDATASection = typeof RRCDATASection;
 
 interface RRElementTagNameMap {
@@ -268,9 +268,12 @@ export function buildFromNode(
       rrNode = rrdom.createComment((node as Comment).textContent || '');
       break;
     // if node is a shadow root
-    case NodeType.DOCUMENT_FRAGMENT_NODE:
-      rrNode = (parentRRNode as IRRElement).attachShadow({ mode: 'open' });
+    case NodeType.DOCUMENT_FRAGMENT_NODE: {
+      const shadowHost = parentRRNode as IRRElement;
+      if (!attachShadowRootSafely(shadowHost)) return null;
+      rrNode = shadowHost.shadowRoot!;
       break;
+    }
     default:
       return null;
   }
@@ -299,7 +302,7 @@ export function buildFromDom(
   dom: Document,
   domMirror: NodeMirror = createNodeMirror(),
   rrdom: IRRDocument = new RRDocument(),
-) {
+): IRRDocument {
   function walk(node: Node, parentRRNode: IRRNode | null) {
     const rrNode = buildFromNode(node, rrdom, domMirror, parentRRNode);
     if (rrNode === null) return;
@@ -327,7 +330,6 @@ export function buildFromDom(
         node.nodeType === NodeType.ELEMENT_NODE &&
         (node as HTMLElement).shadowRoot
       )
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         walk((node as HTMLElement).shadowRoot!, rrNode);
       node.childNodes.forEach((childNode) => walk(childNode, rrNode));
     }
@@ -368,7 +370,7 @@ export class Mirror implements IMirror<RRNode> {
 
   // removes the node from idNodeMap
   // doesn't remove the node from nodeMetaMap
-  removeNodeFromMap(n: RRNode) {
+  removeNodeFromMap(n: RRNode): void {
     const id = this.getId(n);
     this.idNodeMap.delete(id);
 
@@ -384,13 +386,13 @@ export class Mirror implements IMirror<RRNode> {
     return this.nodeMetaMap.has(node);
   }
 
-  add(n: RRNode, meta: serializedNodeWithId) {
+  add(n: RRNode, meta: serializedNodeWithId): void {
     const id = meta.id;
     this.idNodeMap.set(id, n);
     this.nodeMetaMap.set(n, meta);
   }
 
-  replace(id: number, n: RRNode) {
+  replace(id: number, n: RRNode): void {
     const oldNode = this.getNode(id);
     if (oldNode) {
       const meta = this.nodeMetaMap.get(oldNode);
@@ -399,7 +401,7 @@ export class Mirror implements IMirror<RRNode> {
     this.idNodeMap.set(id, n);
   }
 
-  reset() {
+  reset(): void {
     this.idNodeMap = new Map();
     this.nodeMetaMap = new WeakMap();
   }
@@ -462,7 +464,7 @@ export function getDefaultSN(node: IRRNode, id: number): serializedNodeWithId {
  * @param mirror - a rrweb or rrdom Mirror
  * @returns printed string
  */
-export function printRRDom(rootNode: IRRNode, mirror: IMirror<IRRNode>) {
+export function printRRDom(rootNode: IRRNode, mirror: IMirror<IRRNode>): string {
   return walk(rootNode, mirror, '');
 }
 function walk(node: IRRNode, mirror: IMirror<IRRNode>, blankSpace: string) {

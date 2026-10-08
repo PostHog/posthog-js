@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { EventMessage, PostHog } from 'posthog-node'
 import { withPrivacyMode, getModelParams, toContentString } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
@@ -12,6 +12,17 @@ import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
+import { isObject } from '../typeGuards'
+import { responsesStopReason } from '../openai/utils'
+import { captureAiEvent } from '../captureAiEvent'
+
+// Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
+// LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
+// and future subclasses) exposes a prototype getter `is_bubble_up` that returns true, which the
+// LangGraph runtime itself uses to distinguish control flow from real failures. The getter reads
+// as undefined on ordinary Errors and works across duplicated LangGraph package copies.
+const isLangGraphControlFlow = (error: Error): boolean =>
+  (error as Error & { is_bubble_up?: boolean }).is_bubble_up === true
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -43,6 +54,16 @@ type RunMetadata = SpanMetadata | GenerationMetadata
 /** Storage for run metadata */
 type RunMetadataStorage = { [runId: string]: RunMetadata }
 
+export interface LangChainCallbackHandlerOptions {
+  client: PostHog
+  distinctId?: string | number
+  traceId?: string | number
+  properties?: Record<string, any>
+  privacyMode?: boolean
+  groups?: Record<string, any>
+  debug?: boolean
+}
+
 export class LangChainCallbackHandler extends BaseCallbackHandler {
   public name = 'PosthogCallbackHandler'
   private client: PostHog
@@ -56,15 +77,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   private runs: RunMetadataStorage = {}
   private parentTree: { [runId: string]: string } = {}
 
-  constructor(options: {
-    client: PostHog
-    distinctId?: string | number
-    traceId?: string | number
-    properties?: Record<string, any>
-    privacyMode?: boolean
-    groups?: Record<string, any>
-    debug?: boolean
-  }) {
+  constructor(options: LangChainCallbackHandlerOptions) {
     if (!options.client) {
       throw new Error('PostHog client is required')
     }
@@ -88,11 +101,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     metadata?: Record<string, unknown>,
     _runType?: string,
-    runName?: string
+    runName?: string,
+    extra?: Record<string, unknown>
   ): void {
     this._logDebugEvent('on_chain_start', runId, parentRunId, { inputs, tags })
     this._setParentOfRun(runId, parentRunId)
     this._setTraceOrSpanMetadata(chain, inputs, runId, parentRunId, metadata, tags, runName)
+    if (typeof extra?.posthogStartTime === 'number' && Number.isFinite(extra.posthogStartTime)) {
+      this.runs[runId].startTime = extra.posthogStartTime
+    }
   }
 
   public handleChainEnd(
@@ -315,7 +332,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       name: runName,
       input,
       startTime: Date.now(),
-    } as SpanMetadata
+    }
   }
 
   private _setLLMMetadata(
@@ -329,7 +346,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const runNameFound = this._getLangchainRunName(serialized, { extraParams, runName }) || 'generation'
     const generation: GenerationMetadata = {
       name: runNameFound,
-      input: sanitizeLangChain(messages),
+      input: sanitizeLangChain(messages, this.client),
       startTime: Date.now(),
     }
     if (extraParams) {
@@ -369,12 +386,20 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return this.traceId ? String(this.traceId) : this._findRootRun(runId)
   }
 
-  private _getParentRunId(traceId: string, _runId: string, parentRunId?: string): string | undefined {
+  protected _getParentRunId(traceId: string, _runId: string, parentRunId?: string): string | undefined {
     // Replace the parent-run if not found in our stored parent tree.
     if (parentRunId && !this.parentTree[parentRunId]) {
       return traceId
     }
     return parentRunId
+  }
+
+  private _safeCapture(message: EventMessage): void {
+    try {
+      captureAiEvent(this.client, message)
+    } catch {
+      // Telemetry delivery must never affect the LangChain callback lifecycle.
+    }
   }
 
   private _popRunAndCaptureTraceOrSpan(
@@ -383,6 +408,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     outputs: ChainValues | DocumentInterface[] | AgentFinish | Error | any
   ): void {
     const traceId = this._getTraceId(runId)
+    const isSpan = Boolean(parentRunId || this.parentTree[runId])
     this._popParentOfRun(runId)
     const run = this._popRunMetadata(runId)
     if (!run) {
@@ -393,7 +419,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       return
     }
     const actualParentRunId = this._getParentRunId(traceId, runId, parentRunId)
-    this._captureTraceOrSpan(traceId, runId, run as SpanMetadata, outputs, actualParentRunId)
+    this._captureTraceOrSpan(traceId, runId, run as SpanMetadata, outputs, isSpan, actualParentRunId)
   }
 
   private _captureTraceOrSpan(
@@ -401,15 +427,16 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     runId: string,
     run: SpanMetadata,
     outputs: ChainValues | DocumentInterface[] | AgentFinish | Error | any,
+    isSpan: boolean,
     parentRunId?: string
   ): void {
-    const eventName = parentRunId ? '$ai_span' : '$ai_trace'
+    const eventName = isSpan ? '$ai_span' : '$ai_trace'
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
       $ai_trace_id: traceId,
-      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, run.input),
+      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(run.input, this.client)),
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
@@ -424,12 +451,30 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      eventProperties['$ai_error'] = stringifyError(outputs)
-      eventProperties['$ai_is_error'] = true
+      if (isLangGraphControlFlow(outputs)) {
+        // GraphInterrupt carries the pending interrupts (e.g. the question posed to a human).
+        // Surface them under the same `__interrupt__` key LangGraph hands back to the caller,
+        // so an interrupted span stays distinguishable from a node that returned nothing.
+        const interrupts = (outputs as Error & { interrupts?: unknown }).interrupts
+        if (interrupts !== undefined) {
+          eventProperties['$ai_output_state'] = withPrivacyMode(
+            this.client,
+            this.privacyMode,
+            sanitizeLangChain({ __interrupt__: interrupts }, this.client)
+          )
+        }
+      } else {
+        eventProperties['$ai_error'] = stringifyError(outputs)
+        eventProperties['$ai_is_error'] = true
+      }
     } else if (outputs !== undefined) {
-      eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
+      eventProperties['$ai_output_state'] = withPrivacyMode(
+        this.client,
+        this.privacyMode,
+        sanitizeLangChain(outputs, this.client)
+      )
     }
-    this.client.capture({
+    this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
       event: eventName,
       properties: eventProperties,
@@ -462,21 +507,31 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     warnIfPostHogAiGateway(run.baseUrl)
+    // The served tier comes from the response; a requested tier can be refused.
+    let modelParams = run.modelParams
+    const servedTier = output instanceof Error ? undefined : this._extractServedServiceTier(output)
+    if (servedTier != null) {
+      modelParams = { ...modelParams, service_tier: servedTier }
+    }
+    const eventPropertiesServedTier = servedTier != null ? { $ai_service_tier: String(servedTier) } : {}
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
       $ai_trace_id: traceId,
       $ai_span_id: runId,
       $ai_span_name: run.name,
-      $ai_parent_id: parentRunId,
       $ai_provider: run.provider,
       $ai_model: run.model,
-      $ai_model_parameters: run.modelParams,
+      $ai_model_parameters: modelParams,
       $ai_input: withPrivacyMode(this.client, this.privacyMode, run.input),
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
       $ai_framework: 'langchain',
+      ...eventPropertiesServedTier,
+    }
+    if (parentRunId) {
+      eventProperties['$ai_parent_id'] = parentRunId
     }
 
     if (run.tools) {
@@ -499,6 +554,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       }
       if (additionalTokenData.cacheWriteInputTokens) {
         eventProperties['$ai_cache_creation_input_tokens'] = additionalTokenData.cacheWriteInputTokens
+      }
+      if (
+        additionalTokenData.cacheWrite5mInputTokens !== undefined &&
+        additionalTokenData.cacheWrite1hInputTokens !== undefined
+      ) {
+        eventProperties['$ai_cache_creation_5m_input_tokens'] = additionalTokenData.cacheWrite5mInputTokens
+        eventProperties['$ai_cache_creation_1h_input_tokens'] = additionalTokenData.cacheWrite1hInputTokens
       }
       if (additionalTokenData.reasoningTokens) {
         eventProperties['$ai_reasoning_tokens'] = additionalTokenData.reasoningTokens
@@ -545,7 +607,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
 
-    this.client.capture({
+    this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : traceId,
       event: '$ai_generation',
       properties: eventProperties,
@@ -562,10 +624,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   private _getLangchainRunName(serialized: any, ...args: any): string | undefined {
     if (args && args.length > 0) {
       for (const arg of args) {
-        if (arg && typeof arg === 'object' && 'name' in arg) {
-          return arg.name
-        } else if (arg && typeof arg === 'object' && 'runName' in arg) {
-          return arg.runName
+        // LangChain hands runName through as a bare string, not wrapped in an object
+        if (typeof arg === 'string' && arg) {
+          return arg
+        }
+        if (arg && typeof arg === 'object') {
+          if (arg.name) {
+            return arg.name
+          }
+          if (arg.runName) {
+            return arg.runName
+          }
         }
       }
     }
@@ -585,7 +654,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       id: toolCall.id,
       function: {
         name: toolCall.name,
-        arguments: JSON.stringify(toolCall.args),
+        arguments: toContentString(toolCall.args),
       },
     }))
   }
@@ -640,7 +709,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     // Sanitize the message content to redact base64 images
-    return sanitizeLangChain(messageDict) as Record<string, any>
+    return sanitizeLangChain(messageDict, this.client) as Record<string, any>
+  }
+
+  private _extractServedServiceTier(output: LLMResult): string | undefined {
+    const gen = output.generations?.[output.generations.length - 1]?.[0] as any
+    const fromResponsesAdapter = gen?.message?.response_metadata?.service_tier
+    const fromCompletionsAdapter = gen?.generationInfo?.service_tier
+    const tier = fromResponsesAdapter ?? fromCompletionsAdapter
+    return tier == null ? undefined : String(tier)
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {
@@ -652,31 +729,104 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       return undefined
     }
     const gen = lastGeneration[0]
+    const messageResponseMetadata = (gen as any).message?.response_metadata
+    const generationResponseMetadata = gen.generationInfo?.response_metadata
+    const stopReason =
+      messageResponseMetadata?.finish_reason ||
+      messageResponseMetadata?.stop_reason ||
+      gen.generationInfo?.finish_reason ||
+      generationResponseMetadata?.stop_reason ||
+      generationResponseMetadata?.finish_reason ||
+      gen.generationInfo?.stop_reason ||
+      // The Responses API reports no finish_reason: an incomplete run is named
+      // by what cut it short, and only terminal statuses count as stop reasons.
+      // Shared with the native OpenAI Responses wrapper.
+      responsesStopReason(messageResponseMetadata) ||
+      responsesStopReason(generationResponseMetadata)
 
-    // Check generationInfo for finish_reason (OpenAI format)
-    if (gen.generationInfo?.finish_reason) {
-      return String(gen.generationInfo.finish_reason)
-    }
-
-    // Check generationInfo for response_metadata.stop_reason (Anthropic format)
-    if (gen.generationInfo?.response_metadata?.stop_reason) {
-      return String(gen.generationInfo.response_metadata.stop_reason)
-    }
-
-    // Check message response_metadata for finish_reason (common LangChain format)
-    if (gen.generationInfo?.response_metadata?.finish_reason) {
-      return String(gen.generationInfo.response_metadata.finish_reason)
-    }
-
-    // Check for stop_reason directly in generationInfo
-    if (gen.generationInfo?.stop_reason) {
-      return String(gen.generationInfo.stop_reason)
-    }
-
-    return undefined
+    return stopReason != null ? String(stopReason) : undefined
   }
 
-  private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {
+  private _extractCacheCreationTtlBreakdown(
+    cacheCreation: unknown,
+    aggregateValues: unknown[]
+  ): [number, number] | undefined {
+    if (!isObject(cacheCreation)) {
+      return undefined
+    }
+
+    const { ephemeral_5m_input_tokens: cache5m, ephemeral_1h_input_tokens: cache1h } = cacheCreation
+    const providedValues = [cache5m, cache1h].filter((value) => value != null)
+    if (
+      providedValues.length === 0 ||
+      !providedValues.every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    ) {
+      return undefined
+    }
+
+    const breakdown: [number, number] = [
+      typeof cache5m === 'number' ? cache5m : 0,
+      typeof cache1h === 'number' ? cache1h : 0,
+    ]
+    const total = breakdown[0] + breakdown[1]
+    const validAggregates = aggregateValues.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
+    )
+    return total > 0 && !validAggregates.some((aggregate) => aggregate !== total) ? breakdown : undefined
+  }
+
+  private _extractBedrockCacheCreationTtlBreakdown(
+    cacheDetails: unknown,
+    aggregateValues: unknown[]
+  ): [number, number] | undefined {
+    if (!Array.isArray(cacheDetails)) {
+      return undefined
+    }
+
+    let cache5m = 0
+    let cache1h = 0
+
+    for (const detail of cacheDetails) {
+      if (!isObject(detail)) {
+        continue
+      }
+
+      const ttl = typeof detail.ttl === 'string' ? detail.ttl.toLowerCase() : undefined
+      const inputTokens = detail.inputTokens
+      if (
+        (ttl !== '5m' && ttl !== 't5m' && ttl !== '1h' && ttl !== 't1h') ||
+        typeof inputTokens !== 'number' ||
+        !Number.isFinite(inputTokens) ||
+        inputTokens < 0
+      ) {
+        continue
+      }
+
+      if (ttl === '5m' || ttl === 't5m') {
+        cache5m += inputTokens
+      } else {
+        cache1h += inputTokens
+      }
+    }
+
+    const total = cache5m + cache1h
+    const validAggregates = aggregateValues.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
+    )
+    if (total === 0 || validAggregates.some((aggregate) => aggregate !== total)) {
+      return undefined
+    }
+
+    return [cache5m, cache1h]
+  }
+
+  private _parseUsageModel(
+    usage: any,
+    provider?: string,
+    model?: string,
+    inputIncludesCacheTokens = true,
+    rawUsage?: any
+  ): [number, number, Record<string, any>] {
     const conversionList: Array<[string, 'input' | 'output']> = [
       ['promptTokens', 'input'],
       ['completionTokens', 'output'],
@@ -723,6 +873,33 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.cacheWriteInputTokens = usage.cache_creation_input_tokens
     } else if (usage.input_token_details?.cache_creation != null) {
       additionalTokenData.cacheWriteInputTokens = usage.input_token_details.cache_creation
+    }
+
+    const directCacheCreationAggregates = [
+      usage.cache_creation_input_tokens,
+      usage.input_token_details?.cache_creation,
+      usage.cacheWriteInputTokens,
+      rawUsage?.cache_creation_input_tokens,
+      rawUsage?.input_token_details?.cache_creation,
+      rawUsage?.cacheWriteInputTokens,
+      additionalTokenData.cacheWriteInputTokens,
+    ]
+    const cacheCreationTtl =
+      this._extractCacheCreationTtlBreakdown(usage.cache_creation, directCacheCreationAggregates) ??
+      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation, directCacheCreationAggregates) ??
+      this._extractBedrockCacheCreationTtlBreakdown(usage.cacheDetails, [
+        usage.cacheWriteInputTokens,
+        additionalTokenData.cacheWriteInputTokens,
+      ]) ??
+      this._extractBedrockCacheCreationTtlBreakdown(rawUsage?.cacheDetails, [
+        rawUsage?.cacheWriteInputTokens,
+        additionalTokenData.cacheWriteInputTokens,
+      ])
+    if (cacheCreationTtl) {
+      const [cacheWrite5mInputTokens, cacheWrite1hInputTokens] = cacheCreationTtl
+      additionalTokenData.cacheWrite5mInputTokens = cacheWrite5mInputTokens
+      additionalTokenData.cacheWrite1hInputTokens = cacheWrite1hInputTokens
+      additionalTokenData.cacheWriteInputTokens = cacheWrite5mInputTokens + cacheWrite1hInputTokens
     }
 
     // Check for reasoning tokens in various formats
@@ -790,7 +967,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       isAnthropic = true
     }
 
-    if (isAnthropic && parsedUsage.input) {
+    if (isAnthropic && inputIncludesCacheTokens && parsedUsage.input) {
       const cacheTokens =
         (additionalTokenData.cacheReadInputTokens || 0) + (additionalTokenData.cacheWriteInputTokens || 0)
       if (cacheTokens > 0) {
@@ -802,40 +979,86 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   }
 
   private parseUsage(response: LLMResult, provider?: string, model?: string): [number, number, Record<string, any>] {
-    let llmUsage: [number, number, Record<string, any>] = [0, 0, {}]
+    const isNonEmptyUsage = (usage: unknown): usage is Record<string, any> =>
+      isObject(usage) && Object.keys(usage).length > 0
+    const firstNonEmptyUsage = (...candidates: unknown[]): Record<string, any> | undefined =>
+      candidates.find(isNonEmptyUsage)
+
+    let normalizedGenerationUsage: any
+    let rawGenerationUsage: any
+    let fallbackGenerationUsage: any
+
+    for (const generation of response.generations ?? []) {
+      for (const genChunk of generation) {
+        const generationInfo = genChunk.generationInfo ?? {}
+        const message = 'message' in genChunk ? genChunk.message : undefined
+        const messageUsage =
+          message && typeof message === 'object' && 'usage_metadata' in message ? message.usage_metadata : undefined
+        normalizedGenerationUsage = firstNonEmptyUsage(
+          normalizedGenerationUsage,
+          messageUsage,
+          generationInfo.usage_metadata
+        )
+
+        const messageResponseMetadata =
+          message &&
+          typeof message === 'object' &&
+          'response_metadata' in message &&
+          isObject(message.response_metadata)
+            ? message.response_metadata
+            : undefined
+        const generationResponseMetadata = isObject(generationInfo.response_metadata)
+          ? generationInfo.response_metadata
+          : undefined
+        const messageStreamMetadata = isObject(messageResponseMetadata?.metadata)
+          ? messageResponseMetadata.metadata
+          : undefined
+        const generationStreamMetadata = isObject(generationResponseMetadata?.metadata)
+          ? generationResponseMetadata.metadata
+          : undefined
+        rawGenerationUsage = firstNonEmptyUsage(
+          rawGenerationUsage,
+          messageResponseMetadata?.usage,
+          messageStreamMetadata?.usage,
+          generationResponseMetadata?.usage,
+          generationStreamMetadata?.usage
+        )
+        fallbackGenerationUsage = firstNonEmptyUsage(
+          fallbackGenerationUsage,
+          messageResponseMetadata?.['amazon-bedrock-invocationMetrics'],
+          generationResponseMetadata?.['amazon-bedrock-invocationMetrics'],
+          generationInfo.usage_metadata
+        )
+      }
+    }
+
+    const isAnthropic = provider?.toLowerCase() === 'anthropic' || model?.toLowerCase().includes('anthropic') === true
+    if (isAnthropic && isNonEmptyUsage(normalizedGenerationUsage)) {
+      return this._parseUsageModel(normalizedGenerationUsage, provider, model, true, rawGenerationUsage)
+    }
+
     const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage']
 
     if (response.llmOutput != null) {
-      const key = llmUsageKeys.find((k) => response.llmOutput?.[k] != null)
-      if (key) {
-        llmUsage = this._parseUsageModel(response.llmOutput[key], provider, model)
-      }
-    }
-
-    // If top-level usage info was not found, try checking the generations.
-    if (llmUsage[0] === 0 && llmUsage[1] === 0 && response.generations) {
-      for (const generation of response.generations) {
-        for (const genChunk of generation) {
-          // Check other paths for usage information
-          if (genChunk.generationInfo?.usage_metadata) {
-            llmUsage = this._parseUsageModel(genChunk.generationInfo.usage_metadata, provider, model)
-            return llmUsage
-          }
-
-          const messageChunk = genChunk.generationInfo ?? {}
-          const responseMetadata = messageChunk.response_metadata ?? {}
-          const chunkUsage =
-            responseMetadata['usage'] ??
-            responseMetadata['amazon-bedrock-invocationMetrics'] ??
-            messageChunk.usage_metadata
-          if (chunkUsage) {
-            llmUsage = this._parseUsageModel(chunkUsage, provider, model)
-            return llmUsage
-          }
+      for (const key of llmUsageKeys) {
+        const llmUsage = response.llmOutput[key]
+        if (!isNonEmptyUsage(llmUsage)) {
+          continue
         }
+        return this._parseUsageModel(llmUsage, provider, model, key !== 'usage', llmUsage)
       }
     }
 
-    return llmUsage
+    if (isNonEmptyUsage(normalizedGenerationUsage)) {
+      return this._parseUsageModel(normalizedGenerationUsage, provider, model, true, rawGenerationUsage)
+    }
+    if (isNonEmptyUsage(rawGenerationUsage)) {
+      return this._parseUsageModel(rawGenerationUsage, provider, model, false, rawGenerationUsage)
+    }
+    if (isNonEmptyUsage(fallbackGenerationUsage)) {
+      return this._parseUsageModel(fallbackGenerationUsage, provider, model)
+    }
+
+    return [0, 0, {}]
   }
 }

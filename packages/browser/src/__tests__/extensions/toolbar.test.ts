@@ -2,9 +2,10 @@ import { Toolbar } from '../../extensions/toolbar'
 import { isString, isUndefined } from '@posthog/core'
 import { PostHog } from '../../posthog-core'
 import { ToolbarParams } from '../../types'
-import { assignableWindow, window } from '../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { RequestRouter } from '../../utils/request-router'
-import { TOOLBAR_ID } from '../../constants'
+import { TOOLBAR_ID } from '@posthog/browser-common/constants'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 const makeToolbarParams = (overrides: Partial<ToolbarParams>): ToolbarParams => ({
@@ -18,17 +19,19 @@ describe('Toolbar', () => {
     const toolbarParams = makeToolbarParams({})
 
     beforeEach(() => {
+        delete assignableWindow.ph_toolbar_state
+        window.localStorage.removeItem('_postHogToolbarParams')
         instance = createMockPostHog({
             config: createMockConfig({
                 api_host: 'http://api.example.com',
                 token: 'test_token',
             }),
-            set_config: jest.fn(),
+            set_config: vi.fn(),
         })
         instance.requestRouter = new RequestRouter(instance)
 
         assignableWindow.__PosthogExtensions__ = {
-            loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback()),
+            loadExternalDependency: vi.fn((_ph, _path: any, callback: any) => callback()),
         }
 
         toolbar = new Toolbar(instance)
@@ -38,7 +41,7 @@ describe('Toolbar', () => {
         if (document.getElementById(TOOLBAR_ID)) {
             document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
         }
-        assignableWindow.ph_load_toolbar = jest.fn(() => {
+        assignableWindow.ph_load_toolbar = vi.fn(() => {
             const mockToolbarElement = document.createElement('div')
             mockToolbarElement.setAttribute('id', TOOLBAR_ID)
             document.body.appendChild(mockToolbarElement)
@@ -47,11 +50,11 @@ describe('Toolbar', () => {
 
     describe('maybeLoadToolbar', () => {
         const localStorage = {
-            getItem: jest.fn(),
-            setItem: jest.fn(),
+            getItem: vi.fn(),
+            setItem: vi.fn(),
         }
         const storage = localStorage as unknown as Storage
-        const history = { replaceState: jest.fn() } as unknown as History
+        const history = { replaceState: vi.fn() } as unknown as History
 
         const defaultHashState = {
             action: 'ph_authorize',
@@ -97,7 +100,7 @@ describe('Toolbar', () => {
         beforeEach(() => {
             localStorage.getItem.mockImplementation(() => {})
 
-            jest.spyOn(toolbar, 'loadToolbar')
+            vi.spyOn(toolbar, 'loadToolbar')
         })
 
         it('should initialize the toolbar when the hash state contains action "ph_authorize"', () => {
@@ -172,7 +175,12 @@ describe('Toolbar', () => {
         })
 
         it('should load if not previously loaded', () => {
+            const loader = vi.mocked(assignableWindow.__PosthogExtensions__!.loadExternalDependency)
+            loader.mockImplementation(() => {})
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+            expect(loader).toHaveBeenCalledWith(instance, 'toolbar', expect.any(Function))
+            expect(assignableWindow.ph_load_toolbar).not.toHaveBeenCalled()
+            loader.mock.calls[0][2]()
             expect(assignableWindow.ph_load_toolbar).toHaveBeenCalledWith(
                 { ...toolbarParams, apiURL: 'http://api.example.com' },
                 instance

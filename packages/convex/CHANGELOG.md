@@ -1,5 +1,99 @@
 # @posthog/convex
 
+## 2.1.5
+
+### Patch Changes
+
+- [#4800](https://github.com/PostHog/posthog-js/pull/4800) [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect the definitions response's `property_matching_version` during local feature flag evaluation. Version 2 uses explicit boolean/string equality and per-member array matching, while missing or other versions retain service legacy matching (including empty-array truthiness). Preserve the version in Node definition caches and Convex persisted definitions, and propagate it through person, group, cohort and dependency evaluation without mixing snapshots during reloads. Existing numeric ambiguity fallback and SemVer parsing policies are unchanged.
+  (2026-09-21)
+- Updated dependencies [[`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431), [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7)]:
+  - @posthog/core@1.55.1
+  - posthog-node@5.52.5
+
+## 2.1.4
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+  - posthog-node@5.51.5
+
+## 2.1.3
+
+### Patch Changes
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+  - posthog-node@5.51.3
+
+## 2.1.2
+
+### Patch Changes
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084), [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - posthog-node@5.51.2
+  - @posthog/core@1.48.11
+
+## 2.1.1
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+  - posthog-node@5.49.2
+
+## 2.1.0
+
+### Minor Changes
+
+- [#4342](https://github.com/PostHog/posthog-js/pull/4342) [`fa3457f`](https://github.com/PostHog/posthog-js/commit/fa3457fcb21acf7bb1c9f217bd4b6445d763bb88) Thanks [@haacked](https://github.com/haacked)! - Support the `starts_with`, `not_starts_with`, `ends_with`, and `not_ends_with` property filter operators in feature flag local evaluation. Matching is case-insensitive and mirrors `icontains`, so flags using these operators no longer fall back to remote evaluation.
+  (2026-08-05)
+
+### Patch Changes
+
+- Updated dependencies [[`fa3457f`](https://github.com/PostHog/posthog-js/commit/fa3457fcb21acf7bb1c9f217bd4b6445d763bb88)]:
+  - posthog-node@5.48.0
+
+## 2.0.33
+
+### Patch Changes
+
+- [#4247](https://github.com/PostHog/posthog-js/pull/4247) [`3b2e68d`](https://github.com/PostHog/posthog-js/commit/3b2e68dc17f13f1d6f0ef70c76b5e184d977b877) Thanks [@marandaneto](https://github.com/marandaneto)! - Flush feature flag access events before remote evaluation actions return.
+  (2026-07-27)
+
+## 2.0.32
+
+### Patch Changes
+
+- [#4061](https://github.com/PostHog/posthog-js/pull/4061) [`cc01eea`](https://github.com/PostHog/posthog-js/commit/cc01eea218219b1f36145143c62586c66c459e84) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Gate the feature-flag local-evaluation refresh loop so it no longer runs on installs that don't use it. The self-rescheduling loop and its 5-minute supervisor now no-op unless `POSTHOG_PERSONAL_API_KEY` is set — event-only and remote-flag projects no longer incur ~3k/day skipped scheduled executions or the log churn they produced. Adds `POSTHOG_DISABLE_LOCAL_EVALUATION` as an explicit off-switch for projects that set a key but don't want the background poll. Behavior is unchanged when a key is configured.
+  (2026-07-03)
+
+## 2.0.31
+
+### Patch Changes
+
+- [#4021](https://github.com/PostHog/posthog-js/pull/4021) [`89d486c`](https://github.com/PostHog/posthog-js/commit/89d486c753fdded6e25021a32ef6ced3f89cfb37) Thanks [@richardsolomou](https://github.com/richardsolomou)! - Fix `POSTHOG_FLAGS_POLLING_INTERVAL_SECONDS` being ignored. The flag-refresh interval was read when the cron was registered, but Convex forwards component env vars only at runtime, so the value was always empty there and the cron was pinned to the 60s default. The refresh now runs as a self-rescheduling loop that reads the interval at runtime, with a supervisor cron that keeps the loop alive, so the configured interval is honoured.
+
+  Fixes [#3957](https://github.com/PostHog/posthog-js/issues/3957). (2026-07-01)
+
+## 2.0.30
+
+### Patch Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+  - posthog-node@5.39.0
+
 ## 2.0.29
 
 ### Patch Changes

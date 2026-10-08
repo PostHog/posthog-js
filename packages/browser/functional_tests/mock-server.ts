@@ -5,6 +5,7 @@ import { setupServer } from 'msw/node'
 import { RestContext } from 'msw'
 import { RestRequest } from 'msw'
 import { decompressSync, strFromU8 } from 'fflate'
+import { isArray } from '@posthog/core'
 
 // the request bodies in a store that we can inspect within tests.
 const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = {
@@ -13,17 +14,36 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = 
     '/flags/': [],
 }
 
-const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
+const capturedFlagsWireRequests: any[] = []
+const deferredFlagsResponses = new Map<string, Promise<void>>()
+
+export function deferNextFlagsResponse(token: string): () => void {
+    let release!: () => void
+    // This response barrier runs in the Node test server, not in legacy browsers.
+    // oxlint-disable-next-line compat/compat
+    deferredFlagsResponses.set(token, new Promise<void>((resolve) => (release = resolve)))
+    return () => {
+        deferredFlagsResponses.delete(token)
+        release()
+    }
+}
+
+const isGzipData = (data: Uint8Array): boolean => data[0] === 0x1f && data[1] === 0x8b
+
+const handleRequest = (group: string) => async (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
+    let bodyWrapper = '<unknown>'
 
     if (typeof body === 'string') {
         try {
             const b64Encoded = req.url.href.includes('compression=base64')
-            const gzipCompressed = req.url.href.includes('compression=gzip-js')
+            const data = new Uint8Array(req._body)
+            const gzipCompressed = isGzipData(data)
             if (b64Encoded) {
+                bodyWrapper = 'data=<base64>'
                 body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
             } else if (gzipCompressed) {
-                const data = new Uint8Array(req._body)
+                bodyWrapper = '<gzip>'
                 const decoded = strFromU8(decompressSync(data))
                 body = JSON.parse(decoded)
             } else {
@@ -34,7 +54,21 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
         }
     }
 
-    capturedRequests[group] = [...(capturedRequests[group] || []), body]
+    const requests = group === '/e/' ? (isArray(body) ? body : isArray(body.batch) ? body.batch : [body]) : [body]
+    capturedRequests[group] = [...(capturedRequests[group] || []), ...requests]
+
+    if (group === '/flags/') {
+        capturedFlagsWireRequests.push({
+            bodyWrapper,
+            compression: req.url.searchParams.get('compression'),
+            contentType: req.headers.get('content-type'),
+            decodedBody: body,
+            path: `${req.url.pathname}${req.url.search}`,
+        })
+        const deferredResponse = deferredFlagsResponses.get(body.token)
+        deferredFlagsResponses.delete(body.token)
+        await deferredResponse
+    }
 
     return res(ctx.json({}))
 }
@@ -68,6 +102,9 @@ export const getRequests = (token: string) => {
     }
 }
 
+export const getFlagsWireRequests = (token: string) =>
+    capturedFlagsWireRequests.filter((request) => request.decodedBody.token === token)
+
 export const resetRequests = (token: string) => {
     Object.assign(capturedRequests, {
         '/e/': (capturedRequests['/e/'] = capturedRequests['/e/'].filter(
@@ -80,4 +117,10 @@ export const resetRequests = (token: string) => {
             (request) => request.token !== token
         )),
     })
+
+    for (let index = capturedFlagsWireRequests.length - 1; index >= 0; index--) {
+        if (capturedFlagsWireRequests[index].decodedBody.token === token) {
+            capturedFlagsWireRequests.splice(index, 1)
+        }
+    }
 }

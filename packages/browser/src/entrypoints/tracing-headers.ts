@@ -1,6 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
-import { assignableWindow, window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray, isFunction, isNull, isUndefined } from '@posthog/core'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
@@ -45,7 +46,7 @@ const getRequestUrl = (url: URL | RequestInfo): string | undefined => {
             return url.url
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new URL(url instanceof URL ? url.toString() : String(url), window?.location?.href).toString()
     } catch {
         return undefined
@@ -77,7 +78,7 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
         return initWithHeaders
     }
 
-    const target = { headers } as RequestInit & Record<PropertyKey, unknown>
+    const target: RequestInit & Record<PropertyKey, unknown> = { headers }
 
     return new Proxy(target, {
         get(target, property) {
@@ -134,7 +135,7 @@ const addTracingHeaders = (
     let reqHostname: string
     try {
         // we don't need to support IE11 here
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         reqHostname = new URL(url).hostname
     } catch {
         // If the URL is invalid, we skip adding tracing headers
@@ -169,7 +170,7 @@ const patchFetch = (
     distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager
 ): (() => void) => {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
         return function (this: unknown, url: URL | RequestInfo, init?: RequestInit | undefined) {
@@ -183,7 +184,6 @@ const patchFetch = (
                         // For fetch(Request, init), construct a new Request so init overrides are applied and the
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
-                        // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
                         addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
                         fetchArgs = [req]
@@ -215,7 +215,7 @@ const patchXHR = (
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
         'open',
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // oxlint-disable-next-line typescript/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -226,7 +226,7 @@ const patchXHR = (
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // oxlint-disable-next-line typescript/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 

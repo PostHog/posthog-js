@@ -23,6 +23,17 @@ export const apiImplementationV4 = (flagsResponse: PostHogV2FlagsResponse | Erro
           })
     }
 
+    if ((url as any).includes('batch/')) {
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () =>
+          Promise.resolve({
+            status: 'ok',
+          }),
+      }) as any
+    }
+
     return Promise.resolve({
       status: 400,
       text: () => Promise.resolve('ok'),
@@ -125,9 +136,9 @@ export const waitForPromises = async (): Promise<void> => {
   await new Promise((resolve) => {
     // IMPORTANT: Only enable real timers for this promise - allows us to pass a short amount of ticks
     // whilst keeping any timers made during other promises as fake timers
-    jest.useRealTimers()
+    vi.useRealTimers()
     setTimeout(resolve, 10)
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 }
 

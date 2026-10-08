@@ -1,5 +1,576 @@
 # posthog-node
 
+## 5.55.0
+
+### Minor Changes
+
+- [#5140](https://github.com/PostHog/posthog-js/pull/5140) [`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow `featureFlagsPollingInterval: null` to disable automatic local flag polling while retaining initialization and manual refresh.
+  (2026-09-30)
+
+## 5.54.1
+
+### Patch Changes
+
+- [#4832](https://github.com/PostHog/posthog-js/pull/4832) [`ac479db`](https://github.com/PostHog/posthog-js/commit/ac479db0b3542ec9ec4ef991470be3450e2bad2e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Support snake_case feature flag cache payloads while preserving compatibility with camelCase providers and cached data.
+  (2026-09-25)
+
+## 5.54.0
+
+### Minor Changes
+
+- [#5099](https://github.com/PostHog/posthog-js/pull/5099) [`e3955f8`](https://github.com/PostHog/posthog-js/commit/e3955f894d583dcda1da41b7580b002db924e552) Thanks [@marandaneto](https://github.com/marandaneto)! - Expose feature flag evaluation reasons and preserve them in OpenFeature resolution metadata.
+  (2026-09-25)
+
+## 5.53.0
+
+### Minor Changes
+
+- [#5050](https://github.com/PostHog/posthog-js/pull/5050) [`31dd1ad`](https://github.com/PostHog/posthog-js/commit/31dd1adbe2fbf938902ec284e81b87622bf218cc) Thanks [@posthog](https://github.com/apps/posthog)! - Read a feature flag's evaluation runtime with `getFeatureFlagEvaluationRuntime(key)` and `getFeatureFlagKeysByEvaluationRuntime(runtime)`
+  (2026-09-23)
+
+## 5.52.6
+
+### Patch Changes
+
+- [#5078](https://github.com/PostHog/posthog-js/pull/5078) [`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1) Thanks [@rubychilds](https://github.com/rubychilds)! - Honor `filters.holdout` during local feature flag evaluation. A user in an experiment holdout now receives the `holdout-<id>` variant instead of being bucketed into a regular variant, matching how the server evaluates the same flag. The holdout is resolved before the release conditions, so a held-out user never reaches the flag's targeting — including when those conditions would have excluded them, so `isFeatureEnabled` can return true where it previously returned false. Experiments with an active holdout will see variant assignment change for the held-out share of traffic on upgrade, bringing locally evaluated assignments in line with server-evaluated ones.
+  (2026-09-23)
+- Updated dependencies [[`f4704ac`](https://github.com/PostHog/posthog-js/commit/f4704ac317abd11ff6a98d3ea375335e329676f1)]:
+  - @posthog/core@1.55.2
+
+## 5.52.5
+
+### Patch Changes
+
+- [#5018](https://github.com/PostHog/posthog-js/pull/5018) [`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop dropping long spans that end: `maxSpanAgeMs` now evicts spans only once `maxLiveSpans` is reached, so a span that runs past the age limit and then ends is exported, and its children are no longer orphaned.
+  (2026-09-21)
+
+- [#4800](https://github.com/PostHog/posthog-js/pull/4800) [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect the definitions response's `property_matching_version` during local feature flag evaluation. Version 2 uses explicit boolean/string equality and per-member array matching, while missing or other versions retain service legacy matching (including empty-array truthiness). Preserve the version in Node definition caches and Convex persisted definitions, and propagate it through person, group, cohort and dependency evaluation without mixing snapshots during reloads. Existing numeric ambiguity fallback and SemVer parsing policies are unchanged.
+  (2026-09-21)
+- Updated dependencies [[`9cd8ebd`](https://github.com/PostHog/posthog-js/commit/9cd8ebd0ce025a36af999a5f3e8f7fe647f85431), [`aad7464`](https://github.com/PostHog/posthog-js/commit/aad7464894ef8ebd57e293929af9917caf9f4df7)]:
+  - @posthog/core@1.55.1
+
+## 5.52.4
+
+### Patch Changes
+
+- [#4885](https://github.com/PostHog/posthog-js/pull/4885) [`39a8980`](https://github.com/PostHog/posthog-js/commit/39a89801877f684b599550ae2fc944fec347e042) Thanks [@decknamec](https://github.com/decknamec)! - Server-side feature flags now resolve in posthog-node and posthog-edge even when a proxy rewrites the request's `User-Agent`. Flags restricted to the `client` runtime now resolve to `undefined` in these SDKs, where a rewritten `User-Agent` previously let them through.
+  (2026-09-15)
+- Updated dependencies [[`39a8980`](https://github.com/PostHog/posthog-js/commit/39a89801877f684b599550ae2fc944fec347e042)]:
+  - @posthog/core@1.54.2
+
+## 5.52.3
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+
+## 5.52.2
+
+### Patch Changes
+
+- [#4951](https://github.com/PostHog/posthog-js/pull/4951) [`55c5142`](https://github.com/PostHog/posthog-js/commit/55c51429d964bdb8b5814dc052bcaeacd1416d56) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Express exception events reporting the initial response status instead of the final HTTP status.
+  (2026-09-14)
+
+## 5.52.1
+
+### Patch Changes
+
+- [#4908](https://github.com/PostHog/posthog-js/pull/4908) [`4a3c74b`](https://github.com/PostHog/posthog-js/commit/4a3c74bff482ad626e769ff8c8ad51353b0509cd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Child spans now share their parent's clock, so a child no longer appears to start before or end after its parent by up to a millisecond, or by more when the system clock is adjusted mid-trace.
+  (2026-09-11)
+- Updated dependencies [[`4a3c74b`](https://github.com/PostHog/posthog-js/commit/4a3c74bff482ad626e769ff8c8ad51353b0509cd)]:
+  - @posthog/core@1.53.1
+
+## 5.52.0
+
+### Minor Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add experimental distributed tracing to `posthog-node`: `startSpan`, `withSpan` and `getActiveSpan` record spans against a new `traces` client option. A service with tracing off still forwards an inbound `traceparent`, including from spans nested inside the one that received it, so a distributed trace is not severed. A `traceparent` may be passed as the one-element array `req.headersDistinct` gives. A `beforeSpanSend` hook sees every span before it is exported and may edit or drop it, and `maxAttributesPerSpan`, `maxEventsPerSpan`, `maxAttributeValueLength`, `maxLiveSpans` and `maxSpanAgeMs` bound what a single span and a single process may hold.
+  (2026-09-10)
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop a throwing getter in `metrics.resourceAttributes` from breaking every metrics export — the key is recorded as `[Unserializable]` instead.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honor `Retry-After` when the ingestion endpoint refuses a logs or metrics batch, instead of retrying on the SDK's own schedule alone. A refusal naming a longer wait extends the one being served, up to five minutes from when it started. Retry delays now carry jitter so clients refused together do not return together, and metrics backs off exponentially across consecutive failures rather than retrying on a fixed interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Logs and metrics now always send `service.name` and `telemetry.sdk.*`, even when a `resourceAttributes` value is too large to encode in full. Previously that value could crowd them out, and the records reached PostHog with no service attribution.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop sending logs and metrics batches over 10 MiB, or too large to serialize at all, instead of spending a request to discover the endpoint refuses them.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+
+## 5.51.8
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 5.51.7
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - @posthog/core@1.50.6
+
+## 5.51.6
+
+### Patch Changes
+
+- [#4719](https://github.com/PostHog/posthog-js/pull/4719) [`56148bd`](https://github.com/PostHog/posthog-js/commit/56148bd4557e0d0b62a36c01069ef0dd07a9ec57) Thanks [@github-actions](https://github.com/apps/github-actions)! - Expose exception capture methods through the `IPostHog` interface.
+  (2026-09-01)
+
+## 5.51.5
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+
+## 5.51.4
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+
+- [#4660](https://github.com/PostHog/posthog-js/pull/4660) [`dfc3b59`](https://github.com/PostHog/posthog-js/commit/dfc3b59af4edf2b661626041134c79700c514853) Thanks [@posthog](https://github.com/apps/posthog)! - Honor `evaluationContexts` during local evaluation — flags whose evaluation contexts don't overlap the configured list are no longer evaluated locally and resolve to `undefined`.
+  (2026-08-27)
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
+  - @posthog/core@1.49.1
+
+## 5.51.3
+
+### Patch Changes
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+
+## 5.51.2
+
+### Patch Changes
+
+- [#4639](https://github.com/PostHog/posthog-js/pull/4639) [`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle empty feature flag evaluation key scopes without running local or remote evaluation.
+  (2026-08-25)
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 5.51.1
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+- Updated dependencies [[`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09)]:
+  - @posthog/core@1.48.9
+
+## 5.51.0
+
+### Minor Changes
+
+- [#4564](https://github.com/PostHog/posthog-js/pull/4564) [`233ac88`](https://github.com/PostHog/posthog-js/commit/233ac88afd0168476178bda66d9f823a95bac068) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to remote evaluation when a requested flag is missing from loaded local definitions. This
+  changes scoped calls that previously omitted the flag without making a request. (2026-08-24)
+
+## 5.50.0
+
+### Minor Changes
+
+- [#4484](https://github.com/PostHog/posthog-js/pull/4484) [`557140e`](https://github.com/PostHog/posthog-js/commit/557140e4bb344eb22b5bbd1d324487b3fcef895e) Thanks [@posthog](https://github.com/apps/posthog)! - `FeatureFlagEvaluations.isEnabled()` now accepts an optional `defaultValue` option, returned whenever the flag has no value (missing key, not loaded, or a failed request). A flag with a present value — including `false` and variant strings — always wins over `defaultValue`. Purely additive; omitting the option preserves the existing `false`-on-miss behavior.
+  (2026-08-21)
+
+## 5.49.4
+
+### Patch Changes
+
+- [#4569](https://github.com/PostHog/posthog-js/pull/4569) [`00d22ea`](https://github.com/PostHog/posthog-js/commit/00d22ea71400190a0154d1a961b3f52652c50a1e) Thanks [@v11t](https://github.com/v11t)! - fix getFeatureFlagResult returning null variant instead of undefined when remotely evaluated
+  (2026-08-21)
+
+## 5.49.3
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/core@1.48.7
+
+## 5.49.2
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+
+## 5.49.1
+
+### Patch Changes
+
+- [#4521](https://github.com/PostHog/posthog-js/pull/4521) [`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf) Thanks [@marandaneto](https://github.com/marandaneto)! - Normalize capture timestamp overrides to equivalent UTC ISO strings in the browser and Node.js SDKs and shared core.
+  (2026-08-14)
+- Updated dependencies [[`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf)]:
+  - @posthog/core@1.48.1
+
+## 5.49.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+
+## 5.48.2
+
+### Patch Changes
+
+- [#4506](https://github.com/PostHog/posthog-js/pull/4506) [`a77115b`](https://github.com/PostHog/posthog-js/commit/a77115bbfdd9e89a8510ad2faf9e8327863c2a33) Thanks [@marandaneto](https://github.com/marandaneto)! - Log shutdown timeouts without rejecting, and correct the Node.js `shutdown()` return type to `Promise<void>`.
+  (2026-08-12)
+- Updated dependencies [[`a77115b`](https://github.com/PostHog/posthog-js/commit/a77115bbfdd9e89a8510ad2faf9e8327863c2a33)]:
+  - @posthog/core@1.47.1
+
+## 5.48.1
+
+### Patch Changes
+
+- [#4346](https://github.com/PostHog/posthog-js/pull/4346) [`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc) Thanks [@marandaneto](https://github.com/marandaneto)! - Enforce configured request timeouts while consuming Capture V1 response bodies.
+  (2026-08-06)
+
+- [#4423](https://github.com/PostHog/posthog-js/pull/4423) [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Use Node's zlib gzip implementation for Node SDK payloads to avoid sustained memory growth from frequent Web Streams compression.
+  (2026-08-06)
+- Updated dependencies [[`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - @posthog/core@1.46.9
+
+## 5.48.0
+
+### Minor Changes
+
+- [#4342](https://github.com/PostHog/posthog-js/pull/4342) [`fa3457f`](https://github.com/PostHog/posthog-js/commit/fa3457fcb21acf7bb1c9f217bd4b6445d763bb88) Thanks [@haacked](https://github.com/haacked)! - Support the `starts_with`, `not_starts_with`, `ends_with`, and `not_ends_with` property filter operators in feature flag local evaluation. Matching is case-insensitive and mirrors `icontains`, so flags using these operators no longer fall back to remote evaluation.
+  (2026-08-05)
+
+## 5.47.11
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+- Updated dependencies [[`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e)]:
+  - @posthog/core@1.46.8
+
+## 5.47.10
+
+### Patch Changes
+
+- [#4287](https://github.com/PostHog/posthog-js/pull/4287) [`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep `$referring_domain` and canonical `utm_*`/campaign parameters on minimal `$feature_flag_called` events. Previously the minimal allowlist stripped every campaign parameter, so a flag-called event landing first in a session could set the session's UTM attribution and channel type to NULL in web analytics.
+  (2026-08-04)
+- Updated dependencies [[`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7)]:
+  - @posthog/core@1.46.7
+
+## 5.47.9
+
+### Patch Changes
+
+- [#4350](https://github.com/PostHog/posthog-js/pull/4350) [`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `enableExceptionAutocapture` suppressing Node's default crash on unhandled promise rejections; fatal rejections in `strict` or `warn-with-error-code` mode and rejections handled by another `unhandledRejection` listener are no longer captured.
+  (2026-08-04)
+
+## 5.47.8
+
+### Patch Changes
+
+- [#4348](https://github.com/PostHog/posthog-js/pull/4348) [`d4ffb83`](https://github.com/PostHog/posthog-js/commit/d4ffb83a1bebeb99edc8e9452a674c146c22f033) Thanks [@marandaneto](https://github.com/marandaneto)! - Schedule local feature flag polls after each request settles.
+  (2026-08-04)
+- Updated dependencies [[`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8)]:
+  - @posthog/core@1.46.6
+
+## 5.47.7
+
+### Patch Changes
+
+- [#4352](https://github.com/PostHog/posthog-js/pull/4352) [`1cf9c6d`](https://github.com/PostHog/posthog-js/commit/1cf9c6d555b3a774bfa0bd109de290656e64d662) Thanks [@marandaneto](https://github.com/marandaneto)! - Bound stack source context reads and skip non-regular or oversized files.
+  (2026-08-03)
+
+## 5.47.6
+
+### Patch Changes
+
+- [#4381](https://github.com/PostHog/posthog-js/pull/4381) [`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear completed lifecycle timeout handles so successful shutdowns do not leave timers running.
+  (2026-08-03)
+- Updated dependencies [[`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8)]:
+  - @posthog/core@1.46.4
+
+## 5.47.5
+
+### Patch Changes
+
+- [#4155](https://github.com/PostHog/posthog-js/pull/4155) [`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7) Thanks [@ATKasem](https://github.com/ATKasem)! - fix: `personProperties` and `groupProperties` on the feature flag methods are no longer typed as `Record<string, string>`, so numeric and boolean values type-check without a cast. Local evaluation already handled them — `matchProperty` takes `Record<string, any>` and compares numerically for `gt`/`gte`/`lt`/`lte` — only the public types disagreed. These now use the shared `Properties` type (`personProperties?: Properties`, `groupProperties?: Record<string, Properties>`), matching `setPersonPropertiesForFlags`/`setGroupPropertiesForFlags` so the `any` can be narrowed later. Types only, no runtime change.
+  (2026-08-03)
+- Updated dependencies [[`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7)]:
+  - @posthog/core@1.46.3
+
+## 5.47.4
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+
+## 5.47.3
+
+### Patch Changes
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply the feature flag definition request timeout while consuming the response body.
+  (2026-07-31)
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep the feature flag definition request timeout active until the request settles.
+  (2026-07-31)
+
+## 5.47.2
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+- Updated dependencies [[`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f)]:
+  - @posthog/core@1.46.1
+
+## 5.47.1
+
+### Patch Changes
+
+- [#4351](https://github.com/PostHog/posthog-js/pull/4351) [`15aad20`](https://github.com/PostHog/posthog-js/commit/15aad20f31cfd04318a88a808d2befd6a9f0f7a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate NestJS request context per Observable subscription.
+  (2026-07-31)
+
+## 5.47.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
+### Patch Changes
+
+- Updated dependencies [[`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5)]:
+  - @posthog/core@1.46.0
+
+## 5.46.1
+
+### Patch Changes
+
+- [#4234](https://github.com/PostHog/posthog-js/pull/4234) [`6c8fde0`](https://github.com/PostHog/posthog-js/commit/6c8fde02691d7f4aae257b6d7b0753e72d946ccb) Thanks [@hpouillot](https://github.com/hpouillot)! - Normalize V8 Promise combinator stack frames so input indexes are not treated as source filenames.
+  (2026-07-23)
+- Updated dependencies [[`6c8fde0`](https://github.com/PostHog/posthog-js/commit/6c8fde02691d7f4aae257b6d7b0753e72d946ccb)]:
+  - @posthog/core@1.45.1
+
+## 5.46.0
+
+### Minor Changes
+
+- [#4172](https://github.com/PostHog/posthog-js/pull/4172) [`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443) Thanks [@haacked](https://github.com/haacked)! - send minimal `$feature_flag_called` events when the server enables it
+
+  When the v2 `/flags` response carries `minimalFlagCalledEvents: true` (or, for posthog-node local evaluation, the flag-definitions payload carries `minimal_flag_called_events: true`) and the evaluated flag is not linked to an experiment (`$feature_flag_has_experiment === false`), `$feature_flag_called` events are rebuilt from a strict allowlist of flag-evaluation, processing-control, and SDK-identity properties. Super properties, `$set`/`$set_once`, the `$feature/<key>` enumeration, `$active_feature_flags`, and the context envelope are stripped. Any missing signal (no gate on the response, bootstrapped or locally injected flags, `has_experiment` unknown) falls back to the full event, and experiment-linked flags always send the full envelope. The gate is stored alongside the cached flags (posthog-js persistence, posthog-node poller state) and is server-controlled, with no SDK-side configuration. `before_send` runs after the filter and may re-add stripped properties. (2026-07-20)
+
+### Patch Changes
+
+- Updated dependencies [[`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443)]:
+  - @posthog/core@1.44.0
+
+## 5.45.2
+
+### Patch Changes
+
+- [#4168](https://github.com/PostHog/posthog-js/pull/4168) [`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid Next.js Edge runtime warnings for native compression and fatal error handling.
+  (2026-07-16)
+- Updated dependencies [[`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17)]:
+  - @posthog/core@1.43.1
+
+## 5.45.1
+
+### Patch Changes
+
+- [#4164](https://github.com/PostHog/posthog-js/pull/4164) [`9eb2b28`](https://github.com/PostHog/posthog-js/commit/9eb2b28c55b47379005b273d8a0baba6f87c7730) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix the default Node.js event flush interval at 5 seconds.
+  (2026-07-16)
+
+## 5.45.0
+
+### Minor Changes
+
+- [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
+
+  `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+
+### Patch Changes
+
+- Updated dependencies [[`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110)]:
+  - @posthog/core@1.43.0
+
+## 5.44.0
+
+### Minor Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Raise the default `maxQueueSize` from 1000 to 10000. Backend workloads are more likely to burst-enqueue events synchronously ahead of a flush than browser/mobile clients, so the previous default risked silently dropping events under bursty load. An explicit `maxQueueSize` option still overrides this default.
+  (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276)]:
+  - @posthog/core@1.42.1
+
+## 5.43.0
+
+### Minor Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog("phc_...", {
+    metrics: { serviceName: "billing-worker" },
+  });
+  client.metrics.count("invoices.processed", 1, {
+    attributes: { plan: "pro" },
+  });
+  client.metrics.gauge("queue.depth", 42);
+  client.metrics.histogram("job.duration", 187, { unit: "ms" });
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc)]:
+  - @posthog/core@1.42.0
+
+## 5.42.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Expose the error tracking rate-limiter config via the new `exceptionRateLimiterRefillRate` and `exceptionRateLimiterBucketSize` options. Burst protection is scoped per exception type (each distinct `$exception` type gets its own token bucket, with no aggregate cap across types), so these let customers with high-cardinality exception types tune the per-type allowance.
+  (2026-07-14)
+
+### Patch Changes
+
+- Updated dependencies [[`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9)]:
+  - @posthog/core@1.41.0
+
+## 5.41.0
+
+### Minor Changes
+
+- [#4105](https://github.com/PostHog/posthog-js/pull/4105) [`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Add opt-in Capture V1 support. Set the `POSTHOG_CAPTURE_MODE=v1` environment variable to submit analytics events to the Capture V1 endpoint (`/i/v1/analytics/events`) instead of the legacy `/batch/` endpoint, on both the batched and immediate send paths. The default remains `v0`, so existing behavior is unchanged unless you opt in. Opt-in is env-var-only during the transition (no public option), so nothing on the API surface has to be removed when v1 later becomes the default.
+
+  Capture V1 uses Bearer auth, lifts legacy `$`-sentinel properties into a typed `options` object, and does per-event partial retry with exponential backoff clamped against `Retry-After`. Dropped and undelivered events are surfaced on the client `error` channel as a `CaptureV1Error`. `$ai_*` events continue to use the legacy submitter for now, regardless of the capture mode.
+
+  In `v1` mode, `$ai_*` events are routed to an isolated in-memory queue and flushed independently of the Capture V1 queue, so the two transports never share a batch and a failure on one cannot re-send events already accepted on the other. Each queue keeps its own retry/durability semantics: the legacy queue re-queues on network failure (retrying on later flushes), while the V1 queue exhausts the sender's own attempt budget per cycle and then surfaces the failure rather than re-queuing. (2026-07-11)
+
+### Patch Changes
+
+- Updated dependencies [[`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2)]:
+  - @posthog/core@1.40.2
+
+## 5.40.0
+
+### Minor Changes
+
+- [#4060](https://github.com/PostHog/posthog-js/pull/4060) [`0b49a4c`](https://github.com/PostHog/posthog-js/commit/0b49a4cc6e76285b6164a4a3e596049bb5b5d4ae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `secretKey` config as the canonical alias for the deprecated `personalApiKey` (accepts a Personal API Key or Project Secret API Key).
+  (2026-07-07)
+
+## 5.39.4
+
+### Patch Changes
+
+- [#4047](https://github.com/PostHog/posthog-js/pull/4047) [`0c11747`](https://github.com/PostHog/posthog-js/commit/0c11747de9ca10a48f840fff1814c33c71742736) Thanks [@marandaneto](https://github.com/marandaneto)! - Stop duplicating `distinct_id` inside `/flags` person properties.
+  (2026-07-02)
+- Updated dependencies [[`5e7e132`](https://github.com/PostHog/posthog-js/commit/5e7e132757682e4f91d40601506b635f346c7b67)]:
+  - @posthog/core@1.39.5
+
+## 5.39.3
+
+### Patch Changes
+
+- [#4055](https://github.com/PostHog/posthog-js/pull/4055) [`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry `/flags` requests that receive HTTP 502 or 504 responses across SDKs that use the shared core flags client.
+  (2026-07-02)
+- Updated dependencies [[`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0)]:
+  - @posthog/core@1.39.4
+
+## 5.39.2
+
+### Patch Changes
+
+- [#4028](https://github.com/PostHog/posthog-js/pull/4028) [`a664b81`](https://github.com/PostHog/posthog-js/commit/a664b815dd074c8eed87830904fa182306d07e6b) Thanks [@marandaneto](https://github.com/marandaneto)! - Make Node `flush()` wait for pending asynchronous SDK work before draining the event queue, so events produced by helpers like `captureException()` are not missed. Pending work rejections no longer prevent queued events from flushing.
+  (2026-07-01)
+- Updated dependencies [[`a664b81`](https://github.com/PostHog/posthog-js/commit/a664b815dd074c8eed87830904fa182306d07e6b)]:
+  - @posthog/core@1.39.3
+
+## 5.39.1
+
+### Patch Changes
+
+- [#4029](https://github.com/PostHog/posthog-js/pull/4029) [`b36b1cc`](https://github.com/PostHog/posthog-js/commit/b36b1cc2bf771bc944a304c9523d0991a31a5fbd) Thanks [@marandaneto](https://github.com/marandaneto)! - Call `before_send` for identify, group identify, and alias events.
+  (2026-06-30)
+
+- [#4027](https://github.com/PostHog/posthog-js/pull/4027) [`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely serialize event batches with circular property references instead of crashing during flush.
+  (2026-06-30)
+- Updated dependencies [[`ab118d2`](https://github.com/PostHog/posthog-js/commit/ab118d278856e5f995229ab476987fcac936a25a)]:
+  - @posthog/core@1.39.2
+
+## 5.39.0
+
+### Minor Changes
+
+- [#4006](https://github.com/PostHog/posthog-js/pull/4006) [`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `groupIdentifyImmediate()` to await the network request when identifying a group, mirroring `captureImmediate`/`identifyImmediate`/`aliasImmediate`. Useful in edge/serverless environments where the background queue may not flush. The Convex integration now uses it directly instead of routing `$groupidentify` through `captureImmediate`.
+  (2026-06-30)
+
+### Patch Changes
+
+- Updated dependencies [[`0063128`](https://github.com/PostHog/posthog-js/commit/0063128fc443158e44c9b6bab623420fc04d8c4c)]:
+  - @posthog/core@1.39.0
+
+## 5.38.8
+
+### Patch Changes
+
+- [#3974](https://github.com/PostHog/posthog-js/pull/3974) [`08b404b`](https://github.com/PostHog/posthog-js/commit/08b404b5cd5506041df0ecc512ea9d950a3387e7) Thanks [@mjfaga](https://github.com/mjfaga)! - Fix local evaluation ignoring the `in`/`not_in` operator on cohort-based flag conditions. "Not in
+  cohort" was evaluated as "in cohort", inverting cohort-exclusion flags. Now applies the operator to
+  the cohort membership result. (2026-06-29)
+
+## 5.38.7
+
+### Patch Changes
+
+- [#3961](https://github.com/PostHog/posthog-js/pull/3961) [`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry feature flag requests after transient network errors only. The feature flag request retry count defaults to 1 and can be set to 0 to disable retries.
+  (2026-06-29)
+- Updated dependencies [[`619a25c`](https://github.com/PostHog/posthog-js/commit/619a25ce5d4aa5a5f82724863facff4e0029e44b)]:
+  - @posthog/core@1.38.1
+
 ## 5.38.6
 
 ### Patch Changes
@@ -467,11 +1038,13 @@
 - [#3476](https://github.com/PostHog/posthog-js/pull/3476) [`f8bc02f`](https://github.com/PostHog/posthog-js/commit/f8bc02f946b51f27f55f97351ca8d81a1fa54e9d) Thanks [@dmarticus](https://github.com/dmarticus)! - Add `evaluateFlags()` and a new `flags` option on `capture()` so a single `/flags` request powers both flag branching and event enrichment per incoming request:
 
   ```ts
-  const flags = await posthog.evaluateFlags(distinctId, { personProperties: { plan: 'enterprise' } })
-  if (flags.isEnabled('new-dashboard')) {
-    renderNewDashboard()
+  const flags = await posthog.evaluateFlags(distinctId, {
+    personProperties: { plan: "enterprise" },
+  });
+  if (flags.isEnabled("new-dashboard")) {
+    renderNewDashboard();
   }
-  posthog.capture({ distinctId, event: 'page_viewed', flags })
+  posthog.capture({ distinctId, event: "page_viewed", flags });
   ```
 
   The returned `FeatureFlagEvaluations` snapshot exposes `isEnabled()`, `getFlag()`, `getFlagPayload()` for branching, plus `onlyAccessed()` and `only([keys])` for filtering which flags get attached to a captured event. Pass `flagKeys: [...]` to `evaluateFlags()` to scope the underlying `/flags` request itself. `captureException()` / `captureExceptionImmediate()` accept a `flags` argument so `$exception` events carry the same flag context as the rest of your request's events.
@@ -1186,10 +1759,10 @@
   Users can now configure the SDK with an `evaluationEnvironments` option:
 
   ```typescript
-  const client = new PostHog('api-key', {
-    host: 'https://app.posthog.com',
-    evaluationEnvironments: ['production', 'backend', 'api'],
-  })
+  const client = new PostHog("api-key", {
+    host: "https://app.posthog.com",
+    evaluationEnvironments: ["production", "backend", "api"],
+  });
   ```
 
   When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated.
@@ -1339,9 +1912,9 @@ Modified `sendFeatureFlags` to be type `boolean | SendFeatureFlagsOptions`, (whi
 
 ```ts
 export interface SendFeatureFlagsOptions {
-  onlyEvaluateLocally?: boolean
-  personProperties?: Record<string, any>
-  groupProperties?: Record<string, Record<string, any>>
+  onlyEvaluateLocally?: boolean;
+  personProperties?: Record<string, any>;
+  groupProperties?: Record<string, Record<string, any>>;
 }
 ```
 
@@ -1351,18 +1924,18 @@ Now, you can make calls like this
 
 ```ts
 posthog.captureImmediate({
-  distinctId: 'user123',
-  event: 'test event',
+  distinctId: "user123",
+  event: "test event",
   sendFeatureFlags: {
     onlyEvaluateLocally: true,
     personProperties: {
-      plan: 'premium',
+      plan: "premium",
     },
   },
   properties: {
-    foo: 'bar',
+    foo: "bar",
   },
-})
+});
 ```
 
 or simply
@@ -1725,7 +2298,7 @@ To restore previous behaviour, you can set the default to False like so:
 const posthog = new PostHog(PH_API_KEY, {
   host: PH_HOST,
   disableGeoip: false,
-})
+});
 ```
 
 ## 2.6.0 - 2023-03-14

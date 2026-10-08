@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { document as _document } from '../../utils/globals'
+import { document as _document } from '@posthog/browser-common/utils/globals'
 import { ProductTourManager } from './product-tours'
 
 export { ProductTourManager } from './product-tours'

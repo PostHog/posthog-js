@@ -1,6 +1,7 @@
 import type { LogCaptureOptions } from '@posthog/types'
 import type { ResolvedPostHogLogsConfig } from '@posthog/core'
-import { isUndefined } from '@posthog/core'
+import { detectOS, isUndefined, osResourceAttributes } from '@posthog/core'
+import { navigator } from '@posthog/browser-common/utils/globals'
 
 const DEFAULT_FLUSH_INTERVAL_MS = 3000
 const DEFAULT_MAX_BUFFER_SIZE = 100
@@ -8,6 +9,27 @@ const DEFAULT_MAX_LOGS_PER_INTERVAL = 1000
 // Console runs uncapped, so this buffer depth is its only drop protection.
 const DEFAULT_CONSOLE_MAX_QUEUE_SIZE = 2048
 const DEFAULT_MAX_BATCH_RECORDS_PER_POST = 100
+
+/**
+ * Browser resource attribute defaults. Identifies the visitor's OS so logs can
+ * be filtered by platform (e.g. "only errors on Windows" in the PostHog UI).
+ * User-supplied `resourceAttributes` merges last so these stay overridable.
+ *
+ * `detectOS` returns empty strings for a user agent it can't place, and there is
+ * no `navigator` in an SSR or worker-like context — either way the key is
+ * omitted rather than emitted empty, and resolution never throws.
+ */
+function defaultResourceAttributes(): Record<string, string> {
+    let osName = ''
+    let osVersion = ''
+    try {
+        const userAgent = navigator?.userAgent
+        if (userAgent) {
+            ;[osName, osVersion] = detectOS(userAgent)
+        }
+    } catch {}
+    return osResourceAttributes(osName, osVersion)
+}
 
 /**
  * Resolves the public `logs` config into the shape core `PostHogLogs` consumes.
@@ -31,7 +53,7 @@ export function resolveLogsConfig(
         ? Math.max(maxBufferSize, DEFAULT_CONSOLE_MAX_QUEUE_SIZE)
         : Math.max(maxBufferSize, maxLogsPerInterval)
     // OTLP keys in `resourceAttributes` take precedence over the named config fields.
-    const resourceAttributes = config?.resourceAttributes
+    const resourceAttributes = { ...defaultResourceAttributes(), ...config?.resourceAttributes }
     return {
         serviceName:
             (resourceAttributes?.['service.name'] as string | undefined) ??

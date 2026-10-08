@@ -1,10 +1,16 @@
-import { LOAD_EXT_NOT_FOUND, SURVEYS, SURVEYS_LOADED_AT } from './constants'
+import type { ApiResponse, Client, DeepReadonly, Disposable, Extension, SendRequestInit } from '@posthog/browser-common'
+import { document } from '@posthog/browser-common/utils/globals'
+import { continueWith } from '@posthog/browser-common/utils/promise-utils'
+import { isBoolean, isNullish, isUndefined, isNumber } from '@posthog/core'
 
-const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
-const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
-import { SurveyManager } from './extensions/surveys'
-import type { Extension } from './extensions/types'
-import { PostHog } from './posthog-core'
+import {
+    LOAD_EXT_NOT_FOUND,
+    SURVEYS,
+    SURVEYS_CACHE_TTL_MS,
+    SURVEYS_LOADED_AT,
+    SURVEYS_REFRESH_BACKOFF_MS,
+} from './constants'
+import type { SurveyManager } from './extensions/surveys'
 import {
     DisplaySurveyOptions,
     DisplaySurveyType,
@@ -12,67 +18,153 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
-import { Properties, RemoteConfig } from './types'
-import { assignableWindow, document } from './utils/globals'
-import { SurveyEventReceiver } from './utils/survey-event-receiver'
+import type { SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
+import { SurveysExtension } from './extension-tokens'
+import { Properties, RemoteConfigResult } from './types'
+import type { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
+    setSurveySeenOnLocalStorage,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
+    SURVEY_CAPTURING_DISABLED,
 } from './utils/survey-utils'
-import { isNullish, isUndefined, isArray } from '@posthog/core'
+
+const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
+const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
+
+export type SurveyFetchResult = {
+    surveys: Survey[]
+    context?: { isLoaded: boolean; error?: string }
+}
+
+type SurveysClientState = Pick<Client, 'projectToken' | 'kv'>
+
+type ActiveMatchingSurveySubscription = {
+    callback: SurveyCallback
+    active: boolean
+    revision: number
+    lastResult?: string
+}
 
 export class PostHogSurveys implements Extension {
+    readonly name = SurveysExtension
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
     // or false if the surveys feature is disabled in the project settings
-    private _isSurveysEnabled?: boolean = undefined
-    public _surveyEventReceiver: SurveyEventReceiver | null
+    private _isSurveysEnabled?: boolean
+    public _surveyEventReceiver: SurveyEventReceiver | null = null
     private _surveyManager: SurveyManager | null = null
-    private _isInitializingSurveys: boolean = false
+    private _isInitializingSurveys = false
+    private _surveyInitializationFailed = false
     private _surveyCallbacks: SurveyCallback[] = []
+    private _activeMatchingSurveyCallbacks: ActiveMatchingSurveySubscription[] = []
+    private _activeMatchingSurveyConditionsUnsubscribe?: () => void
     // Promise for in-flight survey fetch - allows multiple callers to await the same request
-    private _getSurveysInFlightPromise: Promise<{
-        surveys: Survey[]
-        context: { isLoaded: boolean; error?: string }
-    }> | null = null
+    private _getSurveysInFlightPromise: Promise<SurveyFetchResult> | null = null
+    // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
+    // turn the ~1s display poll into a per-poll request storm.
+    private _lastSurveyRefreshFailedAt: number | null = null
+    private _client?: Client
+    private _initializingClient?: Client
+    private _remoteConfigSubscription?: Disposable
+    private _disposed = false
+    private _renderTimeouts = new Set<ReturnType<typeof setTimeout>>()
+    constructor(
+        private readonly _configSource: SurveysConfigSource,
+        private readonly _initialClientState?: SurveysClientState
+    ) {}
 
-    private get _config() {
-        return this._instance.config
+    setup(client: Client): void | Promise<void> {
+        if (this._disposed) {
+            return
+        }
+        this._initializingClient = client
+        return continueWith(client.kv.initialize(), () => {
+            if (this._initializingClient !== client || this._disposed) {
+                return
+            }
+            this._initializingClient = undefined
+            this._client = client
+            const subscription = client.onRemoteConfig(this.onRemoteConfig)
+            if (this._disposed) {
+                subscription.dispose()
+                return
+            }
+            this._remoteConfigSubscription = subscription
+            this.loadIfEnabled()
+        })
     }
 
-    constructor(private readonly _instance: PostHog) {
-        // we set this to undefined here because we need the persistence storage for this type
-        // but that's not initialized until loadIfEnabled is called.
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._initializingClient = undefined
+        this._client = undefined
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._surveyEventReceiver?.dispose()
         this._surveyEventReceiver = null
+        this._surveyManager?.dispose?.()
+        this._surveyManager = null
+        this._surveyCallbacks = []
+        this._activeMatchingSurveyCallbacks.forEach((subscription) => {
+            subscription.active = false
+        })
+        this._activeMatchingSurveyCallbacks = []
+        this._activeMatchingSurveyConditionsUnsubscribe?.()
+        this._activeMatchingSurveyConditionsUnsubscribe = undefined
+        this._getSurveysInFlightPromise = null
+        this._renderTimeouts.forEach((timeout) => clearTimeout(timeout))
+        this._renderTimeouts.clear()
+    }
+
+    private get _config() {
+        return this._configSource.get()
     }
 
     initialize() {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig = (result: DeepReadonly<RemoteConfigResult>): void => {
+        if (this._disposed) {
+            return
+        }
         // only load surveys if they are enabled and there are surveys to load
-        if (this._config.disable_surveys) {
+        if (this._config.disableSurveys) {
             return
         }
 
-        const surveys = response['surveys']
+        if (!result.ok) {
+            this._surveyInitializationFailed = true
+            this._notifyActiveMatchingSurveyCallbacks({
+                isLoaded: false,
+                error: 'Remote config unavailable. Not loading surveys.',
+            })
+            return logger.warn('Remote config unavailable. Not loading surveys.')
+        }
+
+        const surveys = result.config['surveys']
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
-        const isArrayResponse = isArray(surveys)
-        this._isSurveysEnabled = isArrayResponse ? surveys.length > 0 : surveys
+        this._isSurveysEnabled = isBoolean(surveys) ? surveys : surveys.length > 0
         logger.info(`flags response received, isSurveysEnabled: ${this._isSurveysEnabled}`)
         this.loadIfEnabled()
     }
 
     reset(): void {
+        // Outside the try: when localStorage throws, the extension's in-memory copy is the only
+        // record of the answers, and it must not outlive the respondent's session.
+        this._surveyManager?.clearInMemoryInProgressSurveyState?.()
         try {
             // Drop in-memory event/action activations too; they aren't in persistence (which
             // reset() has already cleared), so without this an armed-but-unshown survey would
@@ -91,9 +183,14 @@ export class PostHogSurveys implements Extension {
         } catch {
             // localStorage is not always available (e.g. in cross-origin iframes); resetting survey state is best-effort.
         }
+        this._notifyActiveMatchingSurveyCallbacks()
     }
 
     loadIfEnabled() {
+        if (this._disposed || !this._client) {
+            return
+        }
+        const config = this._config
         // Initial guard clauses
         if (this._surveyManager) {
             return
@@ -102,36 +199,38 @@ export class PostHogSurveys implements Extension {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-        if (this._config.disable_surveys) {
+        if (config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return
         }
-        if (this._config.cookieless_mode && this._instance.consent.isOptedOut()) {
+        if (config.cookielessMode && this._configSource.isOptedOut()) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
 
-        const phExtensions = assignableWindow?.__PosthogExtensions__
+        const phExtensions = this._configSource.getExtensions()
         if (!phExtensions) {
-            logger.error('PostHog Extensions not found.')
+            this._handleSurveyLoadError('PostHog Extensions not found.')
             return
         }
 
         // waiting for remote config to load
         // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
-        if (isUndefined(this._isSurveysEnabled) && !this._config.advanced_enable_surveys) {
+        if (isUndefined(this._isSurveysEnabled) && !config.advancedEnableSurveys) {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._config.advanced_enable_surveys
+        const isSurveysEnabled = this._isSurveysEnabled || config.advancedEnableSurveys
 
         this._isInitializingSurveys = true
+        this._surveyInitializationFailed = false
 
         try {
             const generateSurveys = phExtensions.generateSurveys
             if (generateSurveys) {
                 // Surveys code is already loaded
                 this._completeSurveyInitialization(generateSurveys, isSurveysEnabled)
+                this._isInitializingSurveys = false
                 return
             }
 
@@ -140,41 +239,61 @@ export class PostHogSurveys implements Extension {
             if (!loadExternalDependency) {
                 // Cannot load surveys code
                 this._handleSurveyLoadError(LOAD_EXT_NOT_FOUND)
+                this._isInitializingSurveys = false
                 return
             }
 
-            // If we reach here, we need to load the dependency
-            loadExternalDependency(this._instance, 'surveys', (err) => {
-                if (err || !phExtensions.generateSurveys) {
-                    this._handleSurveyLoadError('Could not load surveys script', err)
-                } else {
-                    // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(phExtensions.generateSurveys, isSurveysEnabled)
+            // Keep the initialization guard active until the dependency callback completes.
+            loadExternalDependency((err) => {
+                try {
+                    if (this._disposed) {
+                        return
+                    }
+                    const loadedExtensions = this._configSource.getExtensions()
+                    if (err || !loadedExtensions?.generateSurveys) {
+                        this._handleSurveyLoadError('Could not load surveys script', err)
+                    } else {
+                        // Need to get the function reference again inside the callback
+                        this._completeSurveyInitialization(loadedExtensions.generateSurveys, isSurveysEnabled)
+                    }
+                } finally {
+                    this._isInitializingSurveys = false
                 }
             })
         } catch (e) {
+            this._isInitializingSurveys = false
             this._handleSurveyLoadError('Error initializing surveys', e)
             throw e
-        } finally {
-            // Ensure the flag is always reset
-            this._isInitializingSurveys = false
         }
     }
 
     /** Helper to finalize survey initialization */
     private _completeSurveyInitialization(
-        generateSurveysFn: (instance: PostHog, isSurveysEnabled: boolean) => any,
+        generateSurveysFn: NonNullable<SurveysExtensionHost['generateSurveys']>,
         isSurveysEnabled: boolean
     ): void {
-        this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
+        if (this._disposed) {
+            return
+        }
+        this._surveyManager = generateSurveysFn(isSurveysEnabled)
+        this._surveyEventReceiver = this._configSource.createEventReceiver(this._notifyActiveMatchingSurveyCallbacks)
+        const cachedSurveys = (this._client ?? this._initialClientState)?.kv.get<Survey[]>(SURVEYS)
+        if (cachedSurveys) {
+            this._registerEventOrActionBasedSurveys(cachedSurveys)
+        }
         logger.info('Surveys loaded successfully')
+        // Establish the subscription's initial value before existing load callbacks can capture
+        // events and cause activation transitions.
+        this._startActiveMatchingSurveyConditions()
+        this._notifyActiveMatchingSurveyCallbacks()
         this._notifySurveyCallbacks({ isLoaded: true })
     }
 
     /** Helper to handle errors during survey loading */
     private _handleSurveyLoadError(message: string, error?: any): void {
+        this._surveyInitializationFailed = true
         logger.error(message, error)
+        this._notifyActiveMatchingSurveyCallbacks({ isLoaded: false, error: message })
         this._notifySurveyCallbacks({ isLoaded: false, error: message })
     }
 
@@ -212,75 +331,165 @@ export class PostHogSurveys implements Extension {
         }
     }
 
-    getSurveys(callback: SurveyCallback, forceReload = false) {
-        // In case we manage to load the surveys script, but config says not to load surveys
-        // then we shouldn't return survey data
-        if (this._config.disable_surveys) {
+    getSurveys(callback: SurveyCallback, forceReload = false): void {
+        const client = this._client ?? this._initialClientState
+        if (!client || this._disposed) {
+            return
+        }
+        if (this._config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return callback([])
         }
 
-        const existingSurveys = this._instance.get_property(SURVEYS)
-        if (existingSurveys && !forceReload) {
-            return callback(existingSurveys, {
-                isLoaded: true,
-            })
-        }
-
-        // If a fetch is already in progress and Promise is available, reuse that promise
-        // In browsers without Promise (IE11), we skip this optimization and just make concurrent requests
-        if (typeof Promise !== 'undefined' && this._getSurveysInFlightPromise) {
-            this._getSurveysInFlightPromise.then(({ surveys, context }) => callback(surveys, context))
+        const surveys = client.kv.get<Survey[]>(SURVEYS)
+        if (surveys && !forceReload) {
+            callback(surveys, { isLoaded: true })
+            if (this._shouldBackgroundRefreshSurveys()) {
+                this.getSurveys(() => {}, true)
+            }
             return
         }
 
-        // Create a new promise for this fetch that other callers can reuse
-        // We need to assign the promise before starting the request, because
-        // in tests (and potentially in some edge cases) the callback may fire synchronously
-        let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
-        if (typeof Promise !== 'undefined') {
-            this._getSurveysInFlightPromise = new Promise((resolve) => {
-                resolvePromise = resolve
-            })
+        if (this._getSurveysInFlightPromise) {
+            void this._getSurveysInFlightPromise
+                .then(({ surveys, context }) => {
+                    if (!this._disposed) {
+                        callback(surveys, context)
+                    }
+                })
+                .catch((error) => logger.error('Error in survey callback', error))
+            return
         }
 
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
+        const request = this._sendSurveysRequest('/api/surveys/', {
             method: 'GET',
-            timeout: this._config.surveys_request_timeout_ms,
-            callback: (response) => {
-                this._getSurveysInFlightPromise = null
-
-                const statusCode = response.statusCode
-                if (statusCode !== 200 || !response.json) {
-                    const error = `Surveys API could not be loaded, status: ${statusCode}`
-                    logger.error(error)
-                    const context = { isLoaded: false, error }
-                    callback([], context)
-                    resolvePromise?.({ surveys: [], context })
-                    return
+            query: { token: client.projectToken },
+            sentAt: 'query',
+            timeoutMs: this._config.requestTimeoutMs,
+        }).then(
+            (response) => {
+                try {
+                    return this._handleSurveyResponse(client, response)
+                } catch (error) {
+                    logger.error('Error processing surveys response', error)
+                    return this._handleSurveyResponse(client, { statusCode: 0, error })
                 }
-                const surveys = response.json.surveys || []
-
-                const eventOrActionBasedSurveys = surveys.filter(
-                    (survey: Survey) =>
-                        isSurveyRunning(survey) &&
-                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                )
-
-                if (eventOrActionBasedSurveys.length > 0) {
-                    this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                }
-
-                // Stamp when these definitions were fetched so the split-storage
-                // loader can tell a fresher main-blob write-back from a stale
-                // `__surveys` entry (the survey analogue of $feature_flag_evaluated_at).
-                this._instance.persistence?.register({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
-                const context = { isLoaded: true }
-                callback(surveys, context)
-                resolvePromise?.({ surveys, context })
             },
-        })
+            (error) => this._handleSurveyResponse(client, { statusCode: 0, error })
+        )
+        this._getSurveysInFlightPromise = request
+
+        const clearInFlight = (): void => {
+            if (this._getSurveysInFlightPromise === request) {
+                this._getSurveysInFlightPromise = null
+            }
+        }
+        void request
+            .then((result) => {
+                clearInFlight()
+                if (!this._disposed) {
+                    // The cache and receiver definitions are now current, and the request is no
+                    // longer in flight. Notify even when a background refresh had a no-op caller.
+                    // Deliver errors directly so a failed refresh cannot recursively start a fetch.
+                    this._notifyActiveMatchingSurveyCallbacks(result.context)
+                    callback(result.surveys, result.context)
+                }
+            }, clearInFlight)
+            .catch((error) => logger.error('Error in survey callback', error))
+    }
+
+    protected _sendSurveysRequest(path: string, init: SendRequestInit): Promise<ApiResponse> {
+        const client = this._client
+        if (!client) {
+            return new Promise((resolve) => resolve({ statusCode: 0, error: new Error(SURVEY_NOT_LOADED) }))
+        }
+        return client.sendRequest(path, init)
+    }
+
+    private _handleSurveyResponse(client: SurveysClientState, response: ApiResponse): SurveyFetchResult {
+        if (this._disposed) {
+            return { surveys: [], context: { isLoaded: false, error: SURVEY_NOT_LOADED } }
+        }
+
+        const statusCode = response.statusCode
+        if (statusCode !== 200 || !response.json) {
+            const error = `Surveys API could not be loaded, status: ${statusCode}`
+            if (statusCode !== 0) {
+                logger.error(error)
+            } else if (!response.error) {
+                logger.warn(error)
+            }
+            this._lastSurveyRefreshFailedAt = Date.now()
+            return { surveys: [], context: { isLoaded: false, error } }
+        }
+
+        this._lastSurveyRefreshFailedAt = null
+        const surveys = (response.json as { surveys?: Survey[] }).surveys || []
+
+        // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
+        // main-blob write-back from a stale `__surveys` entry.
+        client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
+        this._registerEventOrActionBasedSurveys(surveys)
+        return { surveys, context: { isLoaded: true } }
+    }
+
+    private _registerEventOrActionBasedSurveys(surveys: Survey[]): void {
+        const eventOrActionBasedSurveys = surveys.filter(
+            (survey) =>
+                isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+        )
+        // Survey API responses and the cached definition set are complete snapshots. Replacing the
+        // receiver registry removes triggers that were deleted or changed by a definitions refresh.
+        this._surveyEventReceiver?.replace(eventOrActionBasedSurveys)
+    }
+
+    /**
+     * Whether to kick off a background refresh of the cached definitions: the cache is stale, no
+     * fetch is already in flight, and we're not backing off after a recent failure.
+     */
+    private _shouldBackgroundRefreshSurveys(): boolean {
+        return this._isSurveyCacheStale() && !this._getSurveysInFlightPromise && !this._isSurveyRefreshBackingOff()
+    }
+
+    /**
+     * Whether the cached `$surveys` definitions have aged past their TTL. Returns false when no
+     * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
+     */
+    private _isSurveyCacheStale(): boolean {
+        const surveysLoadedAt = (this._client ?? this._initialClientState)?.kv.get(SURVEYS_LOADED_AT)
+        return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
+    }
+
+    private _isSurveyRefreshBackingOff(): boolean {
+        return (
+            isNumber(this._lastSurveyRefreshFailedAt) &&
+            Date.now() - this._lastSurveyRefreshFailedAt < SURVEYS_REFRESH_BACKOFF_MS
+        )
+    }
+
+    /**
+     * Marks a survey as seen for the current device, mirroring the local state the SDK records
+     * when it shows or sends a survey itself.
+     *
+     * Use this when you display surveys through your own backend/integration (so the SDK never
+     * captures the `survey shown`/`sent`/`dismissed` events) and still want PostHog's display
+     * logic to honour the "already seen" and wait-period checks on subsequent page loads.
+     *
+     * Note: surveys configured to repeat (`schedule: 'always'` or event `repeatedActivation`)
+     * intentionally bypass the seen check, so marking them as seen will not stop them showing.
+     *
+     * @param surveyId The ID of the survey to mark as seen.
+     * @param options Optional settings. `iteration` is the survey's current iteration number, if any.
+     */
+    markSurveyAsSeen(surveyId: string, options?: { iteration?: number | null }): void {
+        const survey = { id: surveyId, current_iteration: options?.iteration ?? null }
+        setSurveySeenOnLocalStorage(survey)
+        try {
+            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        } catch {
+            // localStorage is not always available (e.g. in cross-origin iframes); best-effort only.
+        }
+        this._notifyActiveMatchingSurveyCallbacks()
     }
 
     /** Helper method to notify all registered callbacks */
@@ -305,6 +514,90 @@ export class PostHogSurveys implements Extension {
         return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
     }
 
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        if (this._disposed) {
+            return () => {}
+        }
+        const subscription: ActiveMatchingSurveySubscription = { callback, active: true, revision: 0 }
+        this._activeMatchingSurveyCallbacks.push(subscription)
+        this._startActiveMatchingSurveyConditions()
+        const cached = (this._client ?? this._initialClientState)?.kv.get<Survey[]>(SURVEYS)
+        const unavailable =
+            this._config.disableSurveys ||
+            (!this._surveyManager && this._surveyInitializationFailed && !this._isInitializingSurveys) ||
+            (!cached && !isNullish(this._lastSurveyRefreshFailedAt) && !this._getSurveysInFlightPromise)
+        if (unavailable) {
+            // Report current availability, not an error that happened before registration.
+            this._notifyActiveMatchingSurveyCallback(subscription, { isLoaded: false })
+        } else if (this._surveyManager) {
+            this._notifyActiveMatchingSurveyCallback(subscription)
+        }
+        return () => {
+            subscription.active = false
+            this._activeMatchingSurveyCallbacks = this._activeMatchingSurveyCallbacks.filter(
+                (current) => current !== subscription
+            )
+            if (this._activeMatchingSurveyCallbacks.length === 0) {
+                this._activeMatchingSurveyConditionsUnsubscribe?.()
+                this._activeMatchingSurveyConditionsUnsubscribe = undefined
+            }
+        }
+    }
+
+    private _startActiveMatchingSurveyConditions(): void {
+        if (this._surveyManager && this._activeMatchingSurveyCallbacks.length > 0) {
+            this._activeMatchingSurveyConditionsUnsubscribe ??= this._configSource.onMatchingConditionsChanged?.(
+                this._notifyActiveMatchingSurveyCallbacks
+            )
+        }
+    }
+
+    private _notifyActiveMatchingSurveyCallback(
+        subscription: ActiveMatchingSurveySubscription,
+        context?: { isLoaded: boolean; error?: string }
+    ): void {
+        if (this._disposed || !subscription.active) {
+            return
+        }
+        const revision = ++subscription.revision
+        const deliver: SurveyCallback = (surveys) => {
+            // Removing an entry from the registry cannot cancel an already queued callback.
+            // Also discard evaluations superseded by a refresh or a re-entrant capture.
+            if (this._disposed || !subscription.active || revision !== subscription.revision) {
+                return
+            }
+            try {
+                const resultContext = context ?? { isLoaded: true }
+                // Compare the matching definitions and load state, not just activation IDs.
+                // A changed URL, flag or definition can change eligibility without re-arming.
+                const result = JSON.stringify([surveys, resultContext])
+                if (result === subscription.lastResult) {
+                    return
+                }
+                subscription.lastResult = result
+                subscription.callback(surveys, resultContext)
+            } catch (error) {
+                // This guard runs at delivery time, including after an asynchronous fetch.
+                logger.error('Error in active matching surveys callback', error)
+            }
+        }
+        try {
+            if (context && !context.isLoaded) {
+                deliver([])
+            } else {
+                this.getActiveMatchingSurveys(deliver)
+            }
+        } catch (error) {
+            logger.error('Error in active matching surveys callback', error)
+        }
+    }
+
+    private _notifyActiveMatchingSurveyCallbacks = (context?: { isLoaded: boolean; error?: string }): void => {
+        this._activeMatchingSurveyCallbacks
+            .slice()
+            .forEach((subscription) => this._notifyActiveMatchingSurveyCallback(subscription, context))
+    }
+
     private _getSurveyById(surveyId: string): Survey | null {
         let survey: Survey | null = null
         this.getSurveys((surveys) => {
@@ -324,12 +617,26 @@ export class PostHogSurveys implements Extension {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
+    private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (!this._configSource.isCapturing()) {
+            return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
+        }
+        if (isNullish(this._surveyManager)) {
+            return { eligible: false, reason: SURVEY_NOT_LOADED }
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        return this._surveyManager.checkSurveyRenderability(survey)
+    }
+
     canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: SURVEY_NOT_LOADED }
         }
-        const eligibility = this._checkSurveyEligibility(surveyId)
+        const eligibility = this._checkSurveyRenderability(surveyId)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -345,14 +652,14 @@ export class PostHogSurveys implements Extension {
             })
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise<SurveyRenderReason>((resolve) => {
             this.getSurveys((surveys) => {
                 const survey = surveys.find((x) => x.id === surveyId) ?? null
                 if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
                 } else {
-                    const eligibility = this._checkSurveyEligibility(survey)
+                    const eligibility = this._checkSurveyRenderability(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
@@ -360,6 +667,9 @@ export class PostHogSurveys implements Extension {
     }
 
     renderSurvey(surveyId: string | Survey, selector: string, properties?: Properties) {
+        if (!this._configSource.isCapturing()) {
+            return
+        }
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -382,19 +692,27 @@ export class PostHogSurveys implements Extension {
             logger.info(
                 `Rendering survey ${survey.id} with delay of ${survey.appearance.surveyPopupDelaySeconds} seconds`
             )
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
+                this._renderTimeouts.delete(timeout)
+                if (this._disposed || !this._configSource.isCapturing()) {
+                    return
+                }
                 logger.info(
                     `Rendering survey ${survey.id} with delay of ${survey.appearance?.surveyPopupDelaySeconds} seconds`
                 )
                 this._surveyManager?.renderSurvey(survey, elem, properties)
                 logger.info(`Survey ${survey.id} rendered`)
             }, survey.appearance.surveyPopupDelaySeconds * 1000)
+            this._renderTimeouts.add(timeout)
             return
         }
         this._surveyManager.renderSurvey(survey, elem, properties)
     }
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
+        if (!this._configSource.isCapturing()) {
+            return
+        }
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -418,9 +736,11 @@ export class PostHogSurveys implements Extension {
             logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
         }
         if (options.ignoreConditions === false) {
-            const canRender = this.canRenderSurvey(survey)
-            if (!canRender.visible) {
-                logger.warn('Survey is not eligible to be displayed: ', canRender.disabledReason)
+            // Explicit display goes through eligibility only, not renderability: the event/action
+            // trigger state lives in memory and is irrelevant when the caller asks to show the survey.
+            const eligibility = this._checkSurveyEligibility(survey)
+            if (!eligibility.eligible) {
+                logger.warn('Survey is not eligible to be displayed: ', eligibility.reason)
                 return
             }
         }
@@ -440,6 +760,6 @@ export class PostHogSurveys implements Extension {
     }
 
     handlePageUnload(): void {
-        this._surveyManager?.handlePageUnload()
+        this._surveyManager?.handlePageUnload?.()
     }
 }

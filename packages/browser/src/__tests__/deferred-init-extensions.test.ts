@@ -1,18 +1,22 @@
-import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
-import { RemoteConfig } from '../types'
+import { createPosthogInstance, createRemoteConfig } from './helpers/posthog-instance'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression, RemoteConfig, RemoteConfigResult } from '../types'
+import type { Client } from '@posthog/browser-common'
+import { PostHog } from '../posthog-core'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: orig.document.body,
             get referrer() {
                 return mockReferrerGetter()
@@ -31,22 +35,23 @@ jest.mock('../utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('deferred extension initialization', () => {
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     describe('race condition handling', () => {
         it('should store pending remote config when it arrives before extensions initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -56,10 +61,10 @@ describe('deferred extension initialization', () => {
             })
 
             // Simulate remote config arriving synchronously before extensions init
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // The config should be stored in _pendingRemoteConfig
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
 
             // Wait for extensions to initialize (time-sliced, may take multiple ticks)
             await new Promise((resolve) => setTimeout(resolve, 200))
@@ -70,11 +75,40 @@ describe('deferred extension initialization', () => {
             expect(posthog.autocapture).toBeDefined()
         })
 
+        it('does not start autocapture before setup when set_config runs between deferred tasks', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                advanced_disable_flags: true,
+                autocapture: true,
+                capture_pageview: false,
+                disable_session_recording: true,
+            })
+            const initTasks: Array<() => void> = []
+            const processInitTaskQueue = vi
+                .spyOn(posthog as any, '_processInitTaskQueue')
+                .mockImplementation((queue: Array<() => void>) => initTasks.push(...queue))
+
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            const autocapture = posthog.autocapture!
+            expect(autocapture['_client']).toBeUndefined()
+
+            posthog.set_config({ autocapture: true })
+
+            expect(autocapture['_initialized']).toBe(false)
+
+            initTasks.forEach((task) => task())
+
+            expect(autocapture['_client']).toBe(posthog._getBrowserClientAdapter())
+            expect(autocapture['_initialized']).toBe(true)
+
+            processInitTaskQueue.mockRestore()
+            await posthog.shutdown()
+        })
+
         it('should handle remote config arriving after extensions initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
@@ -86,18 +120,21 @@ describe('deferred extension initialization', () => {
             // Wait for extensions to initialize first
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // Now send remote config after extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
-
-            // Config should be stored
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            const delivered: RemoteConfigResult[] = []
+            const subscription = posthog
+                ._getBrowserClientAdapter()
+                .onRemoteConfig((result) => delivered.push(result as RemoteConfigResult))
+            delivered.length = 0
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
+            expect(delivered).toEqual([{ ok: true, config: remoteConfig }])
+            subscription.dispose()
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
+            await posthog.shutdown()
         })
 
         it('should not store pending config when deferred init is disabled', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: false, // sync init
@@ -107,37 +144,84 @@ describe('deferred extension initialization', () => {
             })
 
             // With sync init, extensions are already ready, no need to store config
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Config should NOT be stored when deferred init is disabled
             expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
         })
 
+        it('delivers pending remote config to shared surveys exactly once', async () => {
+            const savedDefaults = PostHog.__defaultExtensionClasses
+            PostHog.__defaultExtensionClasses = {}
+            const received: RemoteConfigResult[] = []
+            class TestSurveys {
+                readonly name = 'surveys'
+
+                setup(client: Client): void {
+                    client.onRemoteConfig((result) => received.push(result as RemoteConfigResult))
+                }
+            }
+
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    __extensionClasses: { surveys: TestSurveys as any },
+                    advanced_disable_decide: false,
+                    capture_pageview: false,
+                    disable_session_recording: true,
+                })
+                const result = { ok: true, config: { surveys: true, marker: 'shared-surveys' } as any } as const
+
+                posthog._onRemoteConfig(result)
+                await new Promise((resolve) => setTimeout(resolve, 200))
+
+                expect(
+                    received.filter((entry) => entry.ok && (entry.config as any).marker === 'shared-surveys')
+                ).toEqual([result])
+            } finally {
+                PostHog.__defaultExtensionClasses = savedDefaults
+            }
+        })
+
         it('should replay pending remote config to extensions when they initialize', async () => {
             const token = uuidv7()
-            const remoteConfig: RemoteConfig = {
-                supportedCompression: ['gzip'],
-            } as RemoteConfig
+            const remoteConfig: RemoteConfig = createRemoteConfig({ supportedCompression: [Compression.GZipJS] })
+            const legacyRemoteConfigs: RemoteConfigResult[] = []
+            class TestAutocapture {
+                initialize(): void {}
+
+                onRemoteConfig(result: RemoteConfigResult): void {
+                    legacyRemoteConfigs.push(result)
+                }
+            }
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
 
-            // Call _onRemoteConfig before extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            const sharedRemoteConfigs: RemoteConfigResult[] = []
+            posthog
+                ._getBrowserClientAdapter()
+                .onRemoteConfig((result) => sharedRemoteConfigs.push(result as RemoteConfigResult))
+            const initialSharedRemoteConfigCount = sharedRemoteConfigs.length
 
-            // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
+            // Call _onRemoteConfig before extensions are ready
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
+            expect(legacyRemoteConfigs).toEqual([])
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            // Legacy extensions receive the post-initialization replay, while shared listeners
+            // receive each remote config outcome only once.
+            expect(legacyRemoteConfigs).toEqual([{ ok: true, config: remoteConfig }])
+            expect(sharedRemoteConfigs).toHaveLength(initialSharedRemoteConfigCount + 1)
+            expect(sharedRemoteConfigs.at(-1)).toEqual({ ok: true, config: remoteConfig })
             // Extensions should be initialized, proving the replay worked
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
@@ -159,6 +243,7 @@ describe('deferred extension initialization', () => {
         })
 
         it('should defer extension initialization when flag is enabled', async () => {
+            vi.useFakeTimers()
             const token = uuidv7()
 
             const posthog = await createPosthogInstance(token, {
@@ -166,15 +251,57 @@ describe('deferred extension initialization', () => {
                 capture_pageview: false,
             })
 
-            // Extensions should not be initialized yet
-            // (They might be undefined or null depending on when test runs)
-
-            // Wait for deferred init to complete
-            await new Promise((resolve) => setTimeout(resolve, 200))
-
-            // Now extensions should be initialized
+            expect(posthog.sessionRecording).toBeUndefined()
+            expect(posthog.autocapture).toBeUndefined()
+            await vi.advanceTimersByTimeAsync(200)
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
+            await posthog.shutdown()
+        })
+
+        it('does not set up autocapture after shutdown', async () => {
+            const setup = vi.fn()
+            class TestAutocapture {
+                readonly name = 'autocapture'
+                setup = setup
+            }
+
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
+                capture_pageview: false,
+            })
+            await posthog.shutdown()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            expect(setup).not.toHaveBeenCalled()
+        })
+
+        it('disposes logs created after shutdown', async () => {
+            const savedDefaults = PostHog.__defaultExtensionClasses
+            PostHog.__defaultExtensionClasses = {}
+            const setup = vi.fn()
+            const dispose = vi.fn()
+            class TestLogs {
+                readonly name = 'logs'
+                setup = setup
+                dispose = dispose
+            }
+
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    __extensionClasses: { logs: TestLogs as any },
+                    capture_pageview: false,
+                })
+                await posthog.shutdown()
+                await new Promise((resolve) => setTimeout(resolve, 20))
+
+                expect(setup).not.toHaveBeenCalled()
+                expect(dispose).toHaveBeenCalledTimes(1)
+            } finally {
+                PostHog.__defaultExtensionClasses = savedDefaults
+            }
         })
     })
 })

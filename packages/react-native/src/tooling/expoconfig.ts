@@ -2,16 +2,72 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
-const { withAppBuildGradle, withProjectBuildGradle, withXcodeProject } = require('@expo/config-plugins')
+const fs = require('fs')
+const path = require('path')
+
+const {
+  AndroidConfig,
+  withAppBuildGradle,
+  withBaseMod,
+  withDangerousMod,
+  withGradleProperties,
+  withXcodeProject,
+} = require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
-// crash stack traces can be deobfuscated.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.2.0'
+// crash stack traces can be deobfuscated. The injected version has to read every gradle
+// property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
+// version that reads posthog.dotenvFile. 1.6.0 is the first version that ignores
+// posthog.releaseMode with a deprecation warning, so the R8 mapping always binds to the release.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.6.0'
+// 1.5.0 is the first version with the `posthog { uploadNativeSymbols }` extension. A project
+// prebuilt by an older posthog-react-native keeps its older classpath, so it gets bumped.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION = [1, 5]
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
 
 const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
+const POSTHOG_ANDROID_FORCE_PROPERTY = 'posthogReactNativeForce'
+
+const POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.hermesReleaseMode'
+
+/**
+ * How the release a build belongs to gets associated with the exceptions it reports. This steers
+ * the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to the release
+ * their build creates.
+ *
+ * `event`, the default, uploads the maps release-independent and lets each event resolve its own
+ * release from the app version and namespace the SDK already sends. `symbol-set` stamps the release
+ * onto the uploaded maps instead, and an exception inherits the release of the maps its frames
+ * resolved against.
+ */
+export type PostHogReleaseMode = 'symbol-set' | 'event'
+
+// Exported so a test can hold the copies in posthog-xcode.sh, posthog.gradle and the generated
+// dSYM phase to this list, because nothing else fails when they drift.
+export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
+
+// Empty/whitespace-only values (easy to produce from templated app.config values) count as unset
+// and fall through to the next source. A configured mode is written into the bundle phase, and that
+// beats POSTHOG_RELEASE_MODE at build time, so this reads the variable rather than leaving an Expo
+// build with no way to opt out. Undefined means nothing configured a mode: the prebuild then writes
+// nothing, and the build scripts apply the event default themselves, which they can soften to a
+// bound upload when the installed posthog-cli predates the flag. An unrecognized value stops the
+// prebuild rather than falling back, so a typo cannot silently leave a build binding its maps to a
+// release it meant to keep independent.
+export function resolveReleaseModeProp(releaseMode?: string, environmentMode?: string): PostHogReleaseMode | undefined {
+  const trimmed = releaseMode?.trim() || environmentMode?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  if (!POSTHOG_RELEASE_MODES.includes(trimmed as PostHogReleaseMode)) {
+    throw new Error(
+      `[posthog-react-native] releaseMode must be one of ${POSTHOG_RELEASE_MODES.join(', ')}, was '${trimmed}'`
+    )
+  }
+  return trimmed as PostHogReleaseMode
+}
 
 export function buildAndroidSkipOnConflictGradleLine(skipOnConflict: boolean): string | null {
   if (!skipOnConflict) {
@@ -20,7 +76,17 @@ export function buildAndroidSkipOnConflictGradleLine(skipOnConflict: boolean): s
   return `project.ext.${POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY} = true`
 }
 
-const withAndroidPlugin = (config: any, skipOnConflict = false) => {
+export function buildAndroidForceGradleLine(force: boolean): string | null {
+  if (!force) {
+    return null
+  }
+  return `project.ext.${POSTHOG_ANDROID_FORCE_PROPERTY} = true`
+}
+
+const androidConflictPropertyPattern = (property: string): RegExp =>
+  new RegExp(`^project\\.ext\\.${property}\\s*=\\s*(true|false)\\n?`, 'm')
+
+const withAndroidPlugin = (config: any, skipOnConflict = false, force = false) => {
   return withAppBuildGradle(config, (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure PostHog in the app gradle because the build.gradle is not groovy')
@@ -28,17 +94,19 @@ const withAndroidPlugin = (config: any, skipOnConflict = false) => {
 
     const buildGradle = config.modResults.contents
     const applyFrom = `apply from: new File(${resolvePostHogReactNativePackageJsonPath})`
-    const skipOnConflictLine = buildAndroidSkipOnConflictGradleLine(skipOnConflict)
-    const applyBlock = skipOnConflictLine ? `${skipOnConflictLine}\n${applyFrom}` : applyFrom
-    const skipOnConflictPattern = new RegExp(
-      `^project\\.ext\\.${POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY}\\s*=\\s*(true|false)\\n?`,
-      'm'
-    )
+    const conflictLines = [buildAndroidSkipOnConflictGradleLine(skipOnConflict), buildAndroidForceGradleLine(force)]
+      .filter((line): line is string => line !== null)
+      .join('\n')
+    const applyBlock = conflictLines ? `${conflictLines}\n${applyFrom}` : applyFrom
+    const conflictPatterns = [
+      androidConflictPropertyPattern(POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY),
+      androidConflictPropertyPattern(POSTHOG_ANDROID_FORCE_PROPERTY),
+    ]
 
     if (buildGradle.includes(applyFrom)) {
-      let contents = buildGradle.replace(skipOnConflictPattern, '')
-      if (skipOnConflictLine) {
-        contents = contents.replace(applyFrom, `${skipOnConflictLine}\n${applyFrom}`)
+      let contents = conflictPatterns.reduce((gradle, pattern) => gradle.replace(pattern, ''), buildGradle)
+      if (conflictLines) {
+        contents = contents.replace(applyFrom, `${conflictLines}\n${applyFrom}`)
       }
       config.modResults.contents = contents
       return config
@@ -82,7 +150,7 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   classpathPresent: boolean
 } {
   if (projectBuildGradle.includes('posthog-android-gradle-plugin')) {
-    return { contents: projectBuildGradle, classpathPresent: true }
+    return { contents: bumpPostHogAndroidGradlePluginClasspath(projectBuildGradle), classpathPresent: true }
   }
 
   const classpathLine = `        classpath("com.posthog:posthog-android-gradle-plugin:${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}")`
@@ -110,6 +178,25 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   }
 }
 
+// Only a literal version older than the native-symbols one is bumped; newer or
+// variable-driven versions are the app's own choice, so those only get a warning.
+function bumpPostHogAndroidGradlePluginClasspath(projectBuildGradle: string): string {
+  const [minMajor, minMinor] = POSTHOG_ANDROID_GRADLE_PLUGIN_NATIVE_SYMBOLS_VERSION
+  if (!/com\.posthog:posthog-android-gradle-plugin:\d+\.\d+\.\d+/.test(projectBuildGradle)) {
+    console.warn(
+      'PostHog: Could not read the com.posthog:posthog-android-gradle-plugin version in the project build.gradle. ' +
+        `uploadNativeSymbols needs ${minMajor}.${minMinor}.0 or later, or the build fails.`
+    )
+  }
+  return projectBuildGradle.replace(
+    /(com\.posthog:posthog-android-gradle-plugin:)(\d+)\.(\d+)\.\d+/g,
+    (match: string, prefix: string, major: string, minor: string) => {
+      const older = Number(major) < minMajor || (Number(major) === minMajor && Number(minor) < minMinor)
+      return older ? `${prefix}${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}` : match
+    }
+  )
+}
+
 // Applies the com.posthog.android plugin in the app module. Idempotent.
 export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string {
   if (/apply plugin: ["']com\.posthog\.android["']/.test(appBuildGradle)) {
@@ -134,46 +221,479 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
   return appBuildGradle
 }
 
-const withAndroidNativeSymbolsPlugin = (config: any) => {
-  // Couple the classpath and `apply plugin`: applying without the classpath breaks the build.
-  // Expo compiles projectBuildGradle before appBuildGradle, so this flag is set before it's read.
-  let classpathPresent = false
+const POSTHOG_NATIVE_SYMBOLS_MARKER = 'posthog-native-symbols'
+const POSTHOG_NATIVE_SYMBOLS_BEGIN = `// @generated begin ${POSTHOG_NATIVE_SYMBOLS_MARKER} - posthog-react-native (DO NOT MODIFY)`
+const POSTHOG_NATIVE_SYMBOLS_END = `// @generated end ${POSTHOG_NATIVE_SYMBOLS_MARKER}`
 
-  config = withProjectBuildGradle(config, (config: any) => {
+// Owns only the line break before it (CRLF-tolerant), so removal restores the original file.
+const POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN = new RegExp(
+  `\\r?\\n[ \\t]*${escapeRegExp(POSTHOG_NATIVE_SYMBOLS_BEGIN)}[\\s\\S]*?${escapeRegExp(
+    POSTHOG_NATIVE_SYMBOLS_END
+  )}[ \\t]*`,
+  'g'
+)
+
+// Strips the managed block, so turning uploadNativeSymbols off stops the `.so` (and source) upload.
+export function removePostHogAndroidNativeSymbolsExtension(appBuildGradle: string): string {
+  return appBuildGradle.replace(POSTHOG_NATIVE_SYMBOLS_BLOCK_PATTERN, '')
+}
+
+// Enables the com.posthog.android `.so` debug-symbol upload for NDK crashes, right after the
+// plugin's apply line. Replaces its own managed block, so a changed includeSource is picked up.
+export function setPostHogAndroidNativeSymbolsExtension(appBuildGradle: string, includeSource: boolean): string {
+  const contents = removePostHogAndroidNativeSymbolsExtension(appBuildGradle)
+  const applyPattern = /^([ \t]*apply plugin: ["']com\.posthog\.android["'].*)$/m
+  if (!applyPattern.test(contents)) {
+    return appBuildGradle
+  }
+  const block = [
+    POSTHOG_NATIVE_SYMBOLS_BEGIN,
+    'posthog {',
+    '    uploadNativeSymbols = true',
+    `    includeNativeSymbolSources = ${includeSource}`,
+    '}',
+    POSTHOG_NATIVE_SYMBOLS_END,
+  ].join('\n')
+  return contents.replace(applyPattern, `$1\n${block}`)
+}
+
+// Expo's standard mods run their action before the previously registered action. This wrapper
+// deliberately runs its action after the rest of the project Gradle mod chain, so it can safely
+// coordinate the project classpath and app plugin edits without relying on mod-key order.
+const withFinalizedProjectBuildGradle = (config: any, action: (config: any) => any) => {
+  return withBaseMod(config, {
+    platform: 'android',
+    mod: 'projectBuildGradle',
+    skipEmptyMod: false,
+    async action(config: any) {
+      const { nextMod, ...modRequest } = config.modRequest
+      const results = await nextMod({ ...config, modRequest })
+      return action(results)
+    },
+  })
+}
+
+const withAndroidNativeSymbolsPlugin = (config: any, includeSource: boolean) => {
+  return withFinalizedProjectBuildGradle(config, async (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
       return config
     }
-    const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
-    config.modResults.contents = result.contents
-    classpathPresent = result.classpathPresent
-    return config
-  })
 
-  return withAppBuildGradle(config, (config: any) => {
-    if (config.modResults.language !== 'groovy') {
+    const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
+    if (result.contents !== config.modResults.contents) {
+      // Persist the classpath before applying the app plugin so a failed second write cannot
+      // leave an apply line without its matching classpath.
+      await fs.promises.writeFile(config.modResults.path, result.contents)
+      config.modResults.contents = result.contents
+    }
+    if (!result.classpathPresent) {
+      // No classpath (or no buildscript dependencies block) → applying would break the build.
+      return config
+    }
+
+    const appBuildGradle = await AndroidConfig.Paths.getAppBuildGradleAsync(config.modRequest.projectRoot)
+    if (appBuildGradle.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the app build.gradle is not groovy')
       return config
     }
-    if (!classpathPresent) {
-      // No classpath (kts, or no buildscript dependencies block) → applying would break the build.
-      return config
+
+    const contents = setPostHogAndroidNativeSymbolsExtension(
+      applyPostHogAndroidGradlePlugin(appBuildGradle.contents),
+      includeSource
+    )
+    if (contents !== appBuildGradle.contents) {
+      await fs.promises.writeFile(appBuildGradle.path, contents)
     }
-    config.modResults.contents = applyPostHogAndroidGradlePlugin(config.modResults.contents)
     return config
   })
 }
 
+const withoutAndroidNativeSymbolsExtension = (config: any) => {
+  return withAppBuildGradle(config, (config: any) => {
+    if (config.modResults.language === 'groovy') {
+      config.modResults.contents = removePostHogAndroidNativeSymbolsExtension(config.modResults.contents)
+    }
+    return config
+  })
+}
+
+const POSTHOG_NEW_INTENT_MARKER = 'posthog-new-intent'
+const POSTHOG_NEW_INTENT_BEGIN = `// @generated begin ${POSTHOG_NEW_INTENT_MARKER} - posthog-react-native (DO NOT MODIFY)`
+const POSTHOG_NEW_INTENT_END = `// @generated end ${POSTHOG_NEW_INTENT_MARKER}`
+
+// `android.content.Intent` is spelled out to keep the block self-contained: adding an import is a
+// second, riskier edit, and the templates we patch do not already import Intent.
+const NEW_INTENT_DOC = `  /**
+   * Records the intent that reopened the app so getIntent() stays correct.
+   *
+   * Works around a React Native defect that drops notification taps and deep links arriving while
+   * the React context is still starting. Managed by the posthog-react-native Expo config plugin;
+   * remove it with { patchMainActivityNewIntent: false } in app.json.
+   * https://posthog.com/docs/workflows/push-notifications/react-native
+   */`
+
+const NEW_INTENT_KOTLIN_BODY = `  override fun onNewIntent(intent: android.content.Intent) {
+    setIntent(intent)
+    super.onNewIntent(intent)
+  }`
+
+const NEW_INTENT_JAVA_BODY = `  @Override
+  public void onNewIntent(android.content.Intent intent) {
+    setIntent(intent);
+    super.onNewIntent(intent);
+  }`
+
+function newIntentOverrideBlock(language: string): string {
+  const body = language === 'java' ? NEW_INTENT_JAVA_BODY : NEW_INTENT_KOTLIN_BODY
+  return `\n  ${POSTHOG_NEW_INTENT_BEGIN}\n${NEW_INTENT_DOC}\n${body}\n  ${POSTHOG_NEW_INTENT_END}\n`
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Lazy body match so two blocks (only reachable from a hand-edited file) are removed separately
+// rather than swallowing everything between them. The `\r?` on both ends keeps the block removable
+// after an editor or a Windows checkout has normalized the file to CRLF.
+const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
+  `\\r?\\n?[ \\t]*${escapeRegExp(POSTHOG_NEW_INTENT_BEGIN)}[\\s\\S]*?${escapeRegExp(
+    POSTHOG_NEW_INTENT_END
+  )}[ \\t]*\\r?\\n`,
+  'g'
+)
+
+// Index just past the string or character literal opening at `start`, or -1 when it never closes.
+// Covers `"..."` and `'...'` with backslash escapes (which end at a newline in both languages),
+// `"""..."""` raw strings and text blocks, and Kotlin `${...}` templates, whose contents are code
+// that may nest further literals.
+function literalEnd(s: string, start: number, language: string): number {
+  const quote = s[start]
+  const raw = quote === '"' && s.startsWith('"""', start)
+  let i = start + (raw ? 3 : 1)
+  while (i < s.length) {
+    const c = s[i]
+    if (raw) {
+      if (s.startsWith('"""', i)) {
+        // Kotlin closes on the last three of a longer run of quotes.
+        while (s[i] === '"') {
+          i++
+        }
+        return i
+      }
+    } else if (c === '\n') {
+      return -1
+    } else if (c === quote) {
+      return i + 1
+    }
+    if (c === '\\' && (!raw || language === 'java')) {
+      i += 2
+      continue
+    }
+    if (language === 'kt' && quote === '"' && c === '$' && s[i + 1] === '{') {
+      const close = matchingBraceIndexInSource(s, i + 1, language)
+      if (close === -1) {
+        return -1
+      }
+      i = close + 1
+      continue
+    }
+    i++
+  }
+  return -1
+}
+
+// Index of the `}` matching the `{` at openBraceIndex in Kotlin or Java source, or -1 if
+// unbalanced. Braces inside literals and comments are not structural: a `"}"` field before an
+// existing onNewIntent must not end the class early, which would hide that override from the
+// scoped check below and make us insert a duplicate the file no longer compiles with.
+function matchingBraceIndexInSource(s: string, openBraceIndex: number, language: string): number {
+  let depth = 0
+  let i = openBraceIndex
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '/' && s[i + 1] === '/') {
+      const end = s.indexOf('\n', i)
+      i = end === -1 ? s.length : end
+      continue
+    }
+    if (c === '/' && s[i + 1] === '*') {
+      // Kotlin nests block comments, Java does not: taking the first `*/` in Kotlin would end the
+      // comment early and let a commented-out `}` close the class, hiding a real override below it.
+      let depthOfComment = 1
+      i += 2
+      while (i < s.length && depthOfComment > 0) {
+        if (language === 'kt' && s[i] === '/' && s[i + 1] === '*') {
+          depthOfComment++
+          i += 2
+          continue
+        }
+        if (s[i] === '*' && s[i + 1] === '/') {
+          depthOfComment--
+          i += 2
+          continue
+        }
+        i++
+      }
+      if (depthOfComment > 0) {
+        return -1
+      }
+      continue
+    }
+    if (c === '"' || c === "'") {
+      const end = literalEnd(s, i, language)
+      if (end === -1) {
+        return -1
+      }
+      i = end
+      continue
+    }
+    if (c === '{') {
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0) {
+        return i
+      }
+    }
+    i++
+  }
+  return -1
+}
+
+// A copy of `source` with the inside of every comment and string/char literal replaced by spaces,
+// keeping length and line breaks so indexes still line up with the original. One pass, so the class
+// declaration, the brace scan and the existing-override check all agree on what is code: a
+// commented-out `class MainActivity`, a `"}"` field, or an `onNewIntent` inside a comment are all
+// invisible to every one of them. Kotlin nests block comments and Java does not.
+function maskCommentsAndLiterals(source: string, language: string): string {
+  const out = source.split('')
+  const blank = (from: number, to: number) => {
+    for (let j = from; j < to && j < out.length; j++) {
+      if (out[j] !== '\n') {
+        out[j] = ' '
+      }
+    }
+  }
+
+  let i = 0
+  while (i < source.length) {
+    const c = source[i]
+    if (c === '/' && source[i + 1] === '/') {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? source.length : end
+      blank(i, stop)
+      i = stop
+      continue
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      let depth = 1
+      let j = i + 2
+      while (j < source.length && depth > 0) {
+        if (language === 'kt' && source[j] === '/' && source[j + 1] === '*') {
+          depth++
+          j += 2
+          continue
+        }
+        if (source[j] === '*' && source[j + 1] === '/') {
+          depth--
+          j += 2
+          continue
+        }
+        j++
+      }
+      blank(i, j)
+      i = j
+      continue
+    }
+    if (c === '"' || c === "'") {
+      const end = literalEnd(source, i, language)
+      if (end === -1) {
+        // Unterminated literal: blank the rest so nothing after it reads as code.
+        blank(i, source.length)
+        return out.join('')
+      }
+      blank(i, end)
+      i = end
+      continue
+    }
+    i++
+  }
+  return out.join('')
+}
+
+// The span of MainActivity's body, or undefined when the file does not look like the templates we
+// patch: a supertype list is all we expect between the class name and the opening brace.
+function mainActivityBody(contents: string, language: string): { open: number; close: number } | undefined {
+  const code = maskCommentsAndLiterals(contents, language)
+  const declaration = /\bclass\s+MainActivity\b/.exec(code)
+  if (!declaration) {
+    return undefined
+  }
+  const searchFrom = declaration.index + declaration[0].length
+  const open = code.indexOf('{', searchFrom)
+  if (open === -1 || !/^[^;{}]*$/.test(code.slice(searchFrom, open))) {
+    return undefined
+  }
+  // Unbalanced braces mean we cannot tell where the body ends, so the file is not ours to edit.
+  let depth = 0
+  let close = -1
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '{') {
+      depth++
+    } else if (code[i] === '}') {
+      depth--
+      if (depth === 0) {
+        close = i
+        break
+      }
+    }
+  }
+  return close === -1 ? undefined : { open, close }
+}
+
+/**
+ * Adds (or, when disabled, removes) the managed `onNewIntent` override in MainActivity.
+ *
+ * Idempotent: the block is delimited by generated markers and rewritten in place, so repeated
+ * prebuilds never stack copies. An app that already overrides `onNewIntent` keeps its own — a
+ * second override would not compile, and the one-line `setIntent(intent)` belongs at the top of
+ * theirs instead.
+ */
+export function updateMainActivityNewIntentOverride(contents: string, language: string, enabled: boolean): string {
+  const withoutManagedBlock = contents.replace(POSTHOG_NEW_INTENT_BLOCK_PATTERN, '')
+  if (!enabled) {
+    return withoutManagedBlock
+  }
+
+  const body = mainActivityBody(withoutManagedBlock, language)
+  if (!body) {
+    console.warn(
+      '[posthog-react-native] Could not find the MainActivity class body; skipping the onNewIntent ' +
+        'override. Notification taps delivered while the React context is starting will be lost.'
+    )
+    return withoutManagedBlock
+  }
+
+  // Scoped to MainActivity's own body, and matching a declaration rather than the bare token: an
+  // onNewIntent on a helper class in the same file, or named in a comment or a string, must not
+  // turn the fix off — but every real override of it in either language matches.
+  const codeOnly = maskCommentsAndLiterals(withoutManagedBlock, language)
+  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(codeOnly.slice(body.open, body.close))) {
+    console.warn(
+      '[posthog-react-native] MainActivity already overrides onNewIntent; leaving it alone. ' +
+        'Add `setIntent(intent)` as its first statement so a notification tap that arrives before ' +
+        'the React context is ready is not lost, or set `{ patchMainActivityNewIntent: false }` ' +
+        'on the plugin to silence this.'
+    )
+    return withoutManagedBlock
+  }
+
+  return (
+    withoutManagedBlock.slice(0, body.open + 1) +
+    newIntentOverrideBlock(language) +
+    withoutManagedBlock.slice(body.open + 1)
+  )
+}
+
+// Expo's own `mainActivity` mod resolves the file with a glob over android/app/src/main/java only,
+// and asserts, so registering it turns sources under src/main/kotlin — or no MainActivity at all —
+// into a hard prebuild failure whose message never mentions PostHog. Look the file up ourselves
+// instead. Dangerous mods run before the standard android chain, so another plugin's
+// withMainActivity still reads (and re-writes) our edit.
+const MAIN_ACTIVITY_SOURCE_ROOTS = ['android/app/src/main/java', 'android/app/src/main/kotlin']
+
+function findMainActivityPath(projectRoot: string): string | undefined {
+  const walk = (dir: string): string | undefined => {
+    if (!fs.existsSync(dir)) {
+      return undefined
+    }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const candidate = path.join(dir, entry.name)
+      if (!entry.isDirectory()) {
+        if (/^MainActivity\.(kt|java)$/.test(entry.name)) {
+          return candidate
+        }
+        continue
+      }
+      const hit = walk(candidate)
+      if (hit) {
+        return hit
+      }
+    }
+    return undefined
+  }
+
+  for (const sourceRoot of MAIN_ACTIVITY_SOURCE_ROOTS) {
+    const hit = walk(path.join(projectRoot, sourceRoot))
+    if (hit) {
+      return hit
+    }
+  }
+  return undefined
+}
+
+const withMainActivityNewIntent = (config: any, enabled: boolean) => {
+  return withDangerousMod(config, [
+    'android',
+    async (config: any) => {
+      const mainActivityPath = findMainActivityPath(config.modRequest.projectRoot)
+      if (!mainActivityPath) {
+        console.warn(
+          '[posthog-react-native] Could not find MainActivity under android/app/src/main/{java,kotlin}; ' +
+            'skipping the onNewIntent override. Notification taps delivered while the React context is ' +
+            'starting will be lost.'
+        )
+        return config
+      }
+
+      const contents = await fs.promises.readFile(mainActivityPath, 'utf8')
+      const updated = updateMainActivityNewIntentOverride(
+        contents,
+        mainActivityPath.endsWith('.java') ? 'java' : 'kt',
+        enabled
+      )
+      if (updated !== contents) {
+        await fs.promises.writeFile(mainActivityPath, updated)
+      }
+      // Only when the block is new, so a re-run of an already-patched project stays quiet.
+      if (!contents.includes(POSTHOG_NEW_INTENT_BEGIN) && updated.includes(POSTHOG_NEW_INTENT_BEGIN)) {
+        console.warn(
+          `[posthog-react-native] Added an onNewIntent override to ${path.relative(
+            config.modRequest.projectRoot,
+            mainActivityPath
+          )} so a notification tap that arrives before the React context is ready is not lost. ` +
+            'Set `{ patchMainActivityNewIntent: false }` on the plugin in app.json to opt out.'
+        )
+      }
+      return config
+    },
+  ])
+}
+
 type BuildPhase = { shellScript: string }
 
-export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflict = false): void {
+export function modifyExistingXcodeBuildScript(
+  script: BuildPhase | undefined,
+  skipOnConflict = false,
+  releaseMode?: PostHogReleaseMode,
+  force = false
+): void {
+  if (!script?.shellScript) {
+    console.warn(
+      "[posthog-react-native] Could not find the 'Bundle React Native code and images' build phase; " +
+        'skipping sourcemap upload setup.'
+    )
+    return
+  }
+
   if (!script.shellScript.match(/(packager|scripts)\/react-native-xcode\.sh\b/)) {
     return
   }
 
   if (script.shellScript.includes('posthog-xcode.sh')) {
-    const code = JSON.parse(script.shellScript)
-    script.shellScript = JSON.stringify(updatePostHogSkipOnConflictArg(code, skipOnConflict))
+    const code = migrateLegacyPostHogWrapperInvocation(JSON.parse(script.shellScript))
+    script.shellScript = JSON.stringify(updatePostHogBundlePhaseExports(code, skipOnConflict, releaseMode, force))
     return
   }
 
@@ -182,43 +702,104 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflic
   }
 
   const code = JSON.parse(script.shellScript)
-  script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict))
-}
-
-const POSTHOG_REACT_NATIVE_XCODE_PATH =
-  "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
-
-const REACT_NATIVE_XCODE_LINE =
-  /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)(?:\/bin\/sh\s+)?([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
-
-function updatePostHogSkipOnConflictArg(script: string, skipOnConflict: boolean): string {
-  const skipArg = '--posthog-skip-on-conflict --'
-  const withoutSkipArg = script.replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
-  if (!skipOnConflict) {
-    return withoutSkipArg
-  }
-  return withoutSkipArg.replace(`${POSTHOG_REACT_NATIVE_XCODE_PATH} `, `${POSTHOG_REACT_NATIVE_XCODE_PATH} ${skipArg} `)
-}
-
-export function addPostHogWithBundledScriptsToBundleShellScript(script: string, skipOnConflict = false): string {
-  const postHogArgs = skipOnConflict ? '--posthog-skip-on-conflict -- ' : ''
-
-  // Capture the full RN script invocation. Expo uses a backtick-wrapped
-  // node --print command, so matching only up to react-native-xcode.sh cuts the
-  // command substitution in half and leaves the generated shell invalid.
-  return script.replace(
-    REACT_NATIVE_XCODE_LINE,
-    (_match: string, indent: string, rnCommand: string) =>
-      `${indent}/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${postHogArgs}${rnCommand}`
+  script.shellScript = JSON.stringify(
+    addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict, releaseMode, force)
   )
 }
 
+// Invoked directly so another wrapper receives this script—not /bin/sh—as $1.
+// package.json declares it as a bin target so package managers preserve its executable bit.
+const POSTHOG_REACT_NATIVE_XCODE_PATH =
+  "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
+
+const POSTHOG_SKIP_ON_CONFLICT_EXPORT = 'export POSTHOG_SKIP_ON_CONFLICT=1'
+const POSTHOG_FORCE_EXPORT = 'export POSTHOG_FORCE=1'
+const POSTHOG_RELEASE_MODE_EXPORT_PREFIX = 'export POSTHOG_RELEASE_MODE='
+
+// Exported before the wrapped command so posthog-xcode.sh — and any outer wrapper that re-invokes
+// it — sees them. posthog-cli reads POSTHOG_RELEASE_MODE itself, so one export covers the hermes
+// clone and upload alike.
+function buildBundlePhaseExports(skipOnConflict: boolean, releaseMode?: PostHogReleaseMode, force = false): string[] {
+  const exports: string[] = []
+  if (skipOnConflict) {
+    exports.push(POSTHOG_SKIP_ON_CONFLICT_EXPORT)
+  }
+  if (force) {
+    exports.push(POSTHOG_FORCE_EXPORT)
+  }
+  if (releaseMode) {
+    exports.push(`${POSTHOG_RELEASE_MODE_EXPORT_PREFIX}${releaseMode}`)
+  }
+  return exports
+}
+
+const REACT_NATIVE_XCODE_LINE =
+  /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
+
+function migrateLegacyPostHogWrapperInvocation(script: string): string {
+  return script.replace(`/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH}`, POSTHOG_REACT_NATIVE_XCODE_PATH)
+}
+
+// Rewrites the managed exports on an already-wrapped bundle phase, so changing an option in
+// app.json takes effect without a clean prebuild.
+function updatePostHogBundlePhaseExports(
+  script: string,
+  skipOnConflict: boolean,
+  releaseMode?: PostHogReleaseMode,
+  force = false
+): string {
+  const skipArg = '--posthog-skip-on-conflict --'
+  const lines = script
+    .replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
+    .split('\n')
+    .filter((line) => line.trim() !== POSTHOG_SKIP_ON_CONFLICT_EXPORT)
+    .filter((line) => line.trim() !== POSTHOG_FORCE_EXPORT)
+    .filter((line) => !line.trim().startsWith(POSTHOG_RELEASE_MODE_EXPORT_PREFIX))
+
+  const exports = buildBundlePhaseExports(skipOnConflict, releaseMode, force)
+  if (exports.length > 0) {
+    const commandIndex = lines.findIndex((line) => line.includes(POSTHOG_REACT_NATIVE_XCODE_PATH))
+    if (commandIndex !== -1) {
+      const indent = lines[commandIndex].match(/^[ \t]*/)?.[0] ?? ''
+      lines.splice(commandIndex, 0, ...exports.map((line) => `${indent}${line}`))
+    }
+  }
+
+  return lines.join('\n')
+}
+
+export function addPostHogWithBundledScriptsToBundleShellScript(
+  script: string,
+  skipOnConflict = false,
+  releaseMode?: PostHogReleaseMode,
+  force = false
+): string {
+  // Capture the full RN script invocation. Expo uses a backtick-wrapped
+  // node --print command, so matching only up to react-native-xcode.sh cuts the
+  // command substitution in half and leaves the generated shell invalid.
+  return script.replace(REACT_NATIVE_XCODE_LINE, (_match: string, indent: string, rnCommand: string) => {
+    const exports = buildBundlePhaseExports(skipOnConflict, releaseMode, force)
+      .map((line) => `${indent}${line}\n`)
+      .join('')
+    return `${exports}${indent}${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnCommand}`
+  })
+}
+
 const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
+const POSTHOG_DSYM_INPUT_PATH =
+  '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"'
 
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-export function buildDsymUploadShellScript(includeSource = false): string {
+export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false, force = false): string {
+  return composeDsymUploadShellScript(includeSource, skipOnConflict, force)
+}
+
+// The phase as SDKs without release-mode support wrote it: the same script with no release-mode
+// block. isPluginGeneratedDsymUploadBuildPhase compares against this exact text, so a change here
+// makes the plugin stop recognizing the phases it wrote before, and stop refreshing them.
+function composeDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean, force: boolean): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -228,6 +809,20 @@ export function buildDsymUploadShellScript(includeSource = false): string {
     lines.push(
       '# Also upload native source files for source-code context around crashes.',
       'export POSTHOG_INCLUDE_SOURCE=1'
+    )
+  }
+
+  if (skipOnConflict) {
+    lines.push(
+      '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+      'export POSTHOG_SKIP_ON_CONFLICT=1'
+    )
+  }
+
+  if (force) {
+    lines.push(
+      '# Overwrite dSYMs that already exist in PostHog with different content instead of failing the build.',
+      'export POSTHOG_FORCE=1'
     )
   }
 
@@ -246,18 +841,121 @@ export function buildDsymUploadShellScript(includeSource = false): string {
   return lines.join('\n')
 }
 
-// Appends a Run Script build phase that uploads dSYMs. Idempotent; appended last so it
-// runs after the dSYM bundle is produced.
-export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false): void {
+// The release-mode block exactly as 4.64.0 through 4.66.x wrote it into the dSYM phase. Its
+// POSTHOG_NO_RELEASE_BIND export still steers the posthog-ios this plugin pins, so a phase carrying
+// the block must stay recognized and get rewritten to the block-free script. Verbatim on purpose.
+function legacyDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
+  return [
+    releaseMode
+      ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
+      : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+}
+
+// The phase as the release-mode era wrote it: the current script with the mode block ahead of the
+// upload lines. Derived from composeDsymUploadShellScript, so the shared lines stay a compatibility
+// contract: a change to them needs the old text kept as a variant, or these phases go unrecognized.
+// The verbatim fixtures in expoconfig.spec.ts hold this derivation to the published 4.66.3 text.
+function buildLegacyReleaseModeDsymUploadShellScript(
+  includeSource: boolean,
+  skipOnConflict: boolean,
+  releaseMode?: PostHogReleaseMode
+): string {
+  // 4.64.0 through 4.66.x predate the force option, so no phase of this era carries POSTHOG_FORCE.
+  const lines = composeDsymUploadShellScript(includeSource, skipOnConflict, false).split('\n')
+  const uploadIndex = lines.findIndex((line) => line.startsWith('PODS_SCRIPT='))
+  lines.splice(uploadIndex, 0, ...legacyDsymReleaseModeLines(releaseMode))
+  return lines.join('\n')
+}
+
+// xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
+// refreshes must match or the stored pbxproj representation churns.
+function encodePbxShellScript(script: string): string {
+  return '"' + script.replace(/"/g, '\\"') + '"'
+}
+
+// Undoes any quoted pbxproj encoding of shellScript. Handles both the literal-newline
+// form xcode's addBuildPhase writes and the \n-escaped form Xcode itself writes, so a
+// pristine phase is recognized regardless of which tool last serialized the project.
+function decodePbxShellScript(stored: string): string {
+  if (!stored.startsWith('"') || !stored.endsWith('"')) {
+    return stored
+  }
+  return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
+}
+
+function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
+  if (typeof phase?.shellScript !== 'string') {
+    return false
+  }
+  const stored = decodePbxShellScript(phase.shellScript)
+  return [false, true].some((source) =>
+    [false, true].some(
+      (skip) =>
+        [false, true].some((force) => stored === buildDsymUploadShellScript(source, skip, force)) ||
+        [undefined, ...POSTHOG_RELEASE_MODES].some(
+          (mode) => stored === buildLegacyReleaseModeDsymUploadShellScript(source, skip, mode)
+        )
+    )
+  )
+}
+
+export function moveDsymUploadBuildPhaseToEnd(xcodeProject: any): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
-  if (existing) {
+  if (!isPluginGeneratedDsymUploadBuildPhase(existing)) {
     return
   }
 
-  xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
-    shellPath: '/bin/sh',
-    shellScript: buildDsymUploadShellScript(includeSource),
-  })
+  const buildPhases = xcodeProject.getFirstTarget?.().firstTarget?.buildPhases
+  if (Array.isArray(buildPhases)) {
+    const phaseIndex = buildPhases.findIndex((phase: any) => phase.comment === POSTHOG_DSYM_BUILD_PHASE_NAME)
+    if (phaseIndex !== -1 && phaseIndex !== buildPhases.length - 1) {
+      buildPhases.push(...buildPhases.splice(phaseIndex, 1))
+    }
+  }
+}
+
+// Keeps the upload phase last and declares the main DWARF as an input, matching the native iOS
+// setup guide. Both are required: the input makes Xcode wait for dSYM generation, while placing
+// the phase after extension embedding avoids dependency cycles in apps with app extensions.
+// Re-runs refresh only a still-plugin-generated phase, also one an older SDK wrote, so user
+// customizations remain untouched.
+export function addDsymUploadBuildPhase(
+  xcodeProject: any,
+  includeSource = false,
+  skipOnConflict = false,
+  force = false
+): void {
+  const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
+  if (existing) {
+    if (isPluginGeneratedDsymUploadBuildPhase(existing)) {
+      existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict, force))
+      existing.inputPaths = Array.from(
+        new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
+      )
+    }
+  } else {
+    xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
+      inputPaths: [POSTHOG_DSYM_INPUT_PATH],
+      shellPath: '/bin/sh',
+      shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict, force),
+    })
+  }
+
+  moveDsymUploadBuildPhaseToEnd(xcodeProject)
 }
 
 export function disableUserScriptSandboxing(xcodeProject: any): void {
@@ -271,6 +969,109 @@ export function disableUserScriptSandboxing(xcodeProject: any): void {
       configuration.buildSettings.ENABLE_USER_SCRIPT_SANDBOXING = '"NO"'
     }
   }
+}
+
+const POSTHOG_DOTENV_BUILD_SETTING = 'POSTHOG_CLI_DOTENV_FILE'
+const POSTHOG_DOTENV_GRADLE_PROPERTY = 'posthog.dotenvFile'
+
+// Strips a leading ./ so relative props join cleanly onto their per-platform prefix.
+function normalizeDotenvFileProp(dotenvFile: string): string {
+  return dotenvFile.replace(/^\.\//, '')
+}
+
+// Empty/whitespace-only values (easy to produce from templated app.config values)
+// count as unset — mirrors the trim guard in posthog.gradle.
+export function resolveDotenvFileProp(dotenvFile?: string): string | undefined {
+  const trimmed = dotenvFile?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+// Posix root or a Windows drive prefix — enough without pulling in `path`,
+// whose isAbsolute is platform-bound while prebuild can run anywhere.
+function isAbsoluteDotenvPath(dotenvFile: string): boolean {
+  return dotenvFile.startsWith('/') || /^[A-Za-z]:[\\/]/.test(dotenvFile)
+}
+
+// pbxproj stores build-setting values quoted; escape so paths with quotes or
+// backslashes survive serialization. $(SRCROOT) is the generated ios/ dir, so
+// project-root-relative props live one level up.
+export function buildIosDotenvFileBuildSetting(dotenvFile: string): string {
+  const value = isAbsoluteDotenvPath(dotenvFile) ? dotenvFile : `$(SRCROOT)/../${normalizeDotenvFileProp(dotenvFile)}`
+  return '"' + value.replace(/(["\\])/g, '\\$1') + '"'
+}
+
+// Xcode exports build settings as env vars to every Run Script phase, so one
+// setting feeds both the bundle-phase hermes upload and the dSYM upload phase;
+// posthog-cli (>= 0.8.4) reads POSTHOG_CLI_DOTENV_FILE itself, no script
+// changes needed. Removing the prop removes the setting again so changes take
+// effect without a clean prebuild.
+export function applyDotenvFileBuildSetting(xcodeProject: any, dotenvFile?: string): void {
+  const configurations = xcodeProject.pbxXCBuildConfigurationSection()
+  for (const key in configurations) {
+    const configuration = configurations[key]
+    if (configuration && configuration.buildSettings) {
+      if (dotenvFile) {
+        configuration.buildSettings[POSTHOG_DOTENV_BUILD_SETTING] = buildIosDotenvFileBuildSetting(dotenvFile)
+      } else {
+        delete configuration.buildSettings[POSTHOG_DOTENV_BUILD_SETTING]
+      }
+    }
+  }
+}
+
+type GradlePropertiesItem = { type: string; key?: string; value?: string }
+
+// gradle.properties lives in android/, so a project-root-relative prop becomes ../<path>.
+export function buildAndroidDotenvFileGradleValue(dotenvFile: string): string {
+  return isAbsoluteDotenvPath(dotenvFile) ? dotenvFile : `../${normalizeDotenvFileProp(dotenvFile)}`
+}
+
+// Managed posthog.dotenvFile entry in android/gradle.properties, consumed by
+// both gradle hooks (the SDK's posthog.gradle hermes upload and the
+// com.posthog.android mapping upload). Added when the prop is set, removed
+// when it isn't.
+export function updateDotenvFileGradleProperties(
+  properties: GradlePropertiesItem[],
+  dotenvFile?: string
+): GradlePropertiesItem[] {
+  const rest = properties.filter((item) => !(item.type === 'property' && item.key === POSTHOG_DOTENV_GRADLE_PROPERTY))
+  if (!dotenvFile) {
+    return rest
+  }
+  rest.push({
+    type: 'property',
+    key: POSTHOG_DOTENV_GRADLE_PROPERTY,
+    value: buildAndroidDotenvFileGradleValue(dotenvFile),
+  })
+  return rest
+}
+
+// Managed posthog.hermesReleaseMode entry in android/gradle.properties, read by the SDK's
+// posthog.gradle hermes upload. The key is deliberately not posthog.releaseMode:
+// com.posthog.android below 1.6.0 reads that one for the R8 mapping upload, and the mode must not
+// reach it. A posthog.releaseMode entry is deprecated user-owned config, so the prebuild leaves it
+// alone. posthog.gradle reads it as a fallback with a warning, and com.posthog.android 1.6.0
+// warns about it and ignores it.
+export function updateHermesReleaseModeGradleProperties(
+  properties: GradlePropertiesItem[],
+  releaseMode?: PostHogReleaseMode
+): GradlePropertiesItem[] {
+  const rest = properties.filter(
+    (item) => !(item.type === 'property' && item.key === POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY)
+  )
+  if (!releaseMode) {
+    return rest
+  }
+  rest.push({ type: 'property', key: POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY, value: releaseMode })
+  return rest
+}
+
+const withPostHogGradleProperties = (config: any, dotenvFile?: string, releaseMode?: PostHogReleaseMode) => {
+  return withGradleProperties(config, (config: any) => {
+    config.modResults = updateDotenvFileGradleProperties(config.modResults, dotenvFile)
+    config.modResults = updateHermesReleaseModeGradleProperties(config.modResults, releaseMode)
+    return config
+  })
 }
 
 type PostHogPluginProps = {
@@ -298,29 +1099,128 @@ type PostHogPluginProps = {
    *  - iOS: a build phase that runs posthog-ios's `upload-symbols.sh`
    *    (`posthog-cli dsym upload`).
    *  - Android: the official `com.posthog.android` Gradle plugin, which uploads
-   *    ProGuard/R8 mapping files and injects the matching map-id into the app.
+   *    ProGuard/R8 mapping files and injects the matching map-id into the app, and
+   *    uploads native (`.so`) debug symbols for NDK crashes (`uploadNativeSymbols`).
    *
    * Pass `{ includeSource: true }` to also upload native source files so PostHog
-   * can show source-code context around native crashes. This is **iOS only** —
-   * the Android proguard upload has no source-inclusion equivalent, so the flag
-   * is ignored there. Note it uploads your source code to PostHog, hence opt-in.
+   * can show source-code context around native crashes (on Android, C/C++ sources via
+   * `includeNativeSymbolSources`). Note it uploads your source code to PostHog, hence opt-in.
    *
-   * Default: false. Pair this with `errorTracking.autocapture.nativeCrashes` at
-   * runtime — without uploaded symbols, native stack traces won't be symbolicated.
+   * Default: false. Pair this with `errorTracking.autocapture.nativeCrashes` (and
+   * `androidNdkCrashes` for Android NDK crashes) at runtime — without uploaded
+   * symbols, native stack traces won't be symbolicated.
    * Requires `posthog-cli` to be available and authenticated during release builds.
    */
   uploadNativeSymbols?: boolean | { includeSource?: boolean }
 
   /**
-   * Whether to append `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android.
+   * Whether to skip uploads whose content already exists in PostHog instead of failing the build.
+   *
+   * Appends `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android. When
+   * `uploadNativeSymbols` is enabled, also sets `POSTHOG_SKIP_ON_CONFLICT=1` in the iOS dSYM
+   * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
+   * to `posthog-cli dsym upload` on posthog-ios >= 3.64.7 (with posthog-cli >= 0.7.12) and
+   * ignores it on older versions, where dSYM conflicts keep failing the build.
+   *
+   * Mutually exclusive with `force`: posthog-cli rejects the two flags together, so enabling
+   * both stops the prebuild.
    *
    * Default: false.
    */
   skipOnConflict?: boolean
+
+  /**
+   * Whether to overwrite uploads whose content already exists in PostHog instead of failing the
+   * build.
+   *
+   * Appends `--force` to `posthog-cli hermes upload` on iOS and Android. When
+   * `uploadNativeSymbols` is enabled, also sets `POSTHOG_FORCE=1` in the iOS dSYM upload build
+   * phase; posthog-ios's `upload-symbols.sh` forwards it as `--force` to `posthog-cli dsym upload`
+   * on versions that read the variable and ignores it on older ones, where dSYM conflicts keep
+   * failing the build. `uploadNativeSymbols: { includeSource: true }` already overwrites dSYMs.
+   *
+   * Mutually exclusive with `skipOnConflict`: posthog-cli rejects the two flags together, so
+   * enabling both stops the prebuild.
+   *
+   * Default: false.
+   */
+  force?: boolean
+
+  /**
+   * Path to a dotenv file with POSTHOG_CLI_* credentials (API key, project id,
+   * optional host), relative to the project root — or absolute.
+   *
+   * The path reaches every upload hook as POSTHOG_CLI_DOTENV_FILE: on iOS as a
+   * build setting (Xcode exports it to the bundle and dSYM script phases), on
+   * Android as a `posthog.dotenvFile` entry in android/gradle.properties read
+   * by the SDK's `posthog.gradle` hermes upload and, on gradle plugin >= 1.4.0,
+   * by the `com.posthog.android` mapping upload. Process env always wins inside
+   * the CLI; a missing file is a warning, not a build failure.
+   *
+   * Requires posthog-cli >= 0.8.4 — older CLIs ignore the variable and fall
+   * back to their other credential sources. With `disableSandboxing: false`,
+   * Xcode's script sandbox can block reading the file, which is a hard CLI
+   * error (an unreadable-but-present file does not fall through).
+   */
+  dotenvFile?: string
+
+  /**
+   * How the release a build belongs to gets associated with the exceptions it reports.
+   *
+   * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
+   * the release their build creates. The R8 half of that needs the `com.posthog.android` gradle
+   * plugin 1.6.0, which ignores the deprecated `posthog.releaseMode` key. A fresh prebuild injects
+   * that version. With `uploadNativeSymbols` on, an existing literal classpath older than 1.5.0 is
+   * bumped to 1.6.0. Any other older line, whether 1.5.x, older with `uploadNativeSymbols` off, or
+   * variable-driven, is kept: bump it by hand or prebuild with `--clean`.
+   *
+   * `event` (the default; still EXPERIMENTAL while the rollout settles) uploads the maps
+   * release-independent, and each event resolves its own release from the `$app_namespace` /
+   * `$app_version` / `$app_build` the SDK sends. Use it when two releases can ship identical
+   * JavaScript: the map id comes from content, so in `symbol-set` mode both releases report
+   * whichever one uploaded first.
+   *
+   * Event mode's release link depends on those coordinates reaching each exception. The SDK reads
+   * them from the optional `expo-application` or `react-native-device-info` module, and a plain
+   * `customAppProperties` object replaces the defaults rather than merging. An install with neither
+   * module — or a `customAppProperties` that drops the keys — still symbolicates, but its JavaScript
+   * exceptions carry no release. Keep a metadata module (or those keys) to attribute event-mode
+   * exceptions to a release; `symbol-set` instead stamps the release onto the uploaded maps from the
+   * build settings and does not need them.
+   *
+   * When this prop is absent, the prebuild reads `POSTHOG_RELEASE_MODE`; set the variable before
+   * you run the prebuild. A configured mode is written into the build files and beats the variable
+   * at build time. With neither configured, the prebuild writes nothing, the build scripts apply
+   * the `event` default at build time, and `POSTHOG_RELEASE_MODE` also still works there.
+   *
+   * Event mode needs posthog-cli >= 0.16.0, which carries `--release-mode` on the `hermes`
+   * commands. A configured `event` fails the build on an older one and names the upgrade. The
+   * unconfigured default softens instead: the build warns and uploads the maps bound to the
+   * release, as it did before the default changed. That floor lives in posthog-xcode.sh and
+   * posthog.gradle: update them and this line together.
+   */
+  releaseMode?: PostHogReleaseMode
+
+  /**
+   * Whether to give Android's `MainActivity` an `onNewIntent` override that calls
+   * `setIntent(intent)` before delegating to React Native.
+   *
+   * Works around a React Native defect. When Android reopens an app whose process it had killed
+   * while the task stayed in recents, the tap arrives before the React context is ready and is then
+   * invisible to the whole process — PostHog captures no `$push_notification_opened`, Firebase
+   * Messaging's `getInitialNotification()` returns null, and deep links are lost. Recording the
+   * intent first makes `getIntent()` correct for every library in the app.
+   *
+   * Default: true. The plugin leaves a `MainActivity` that already overrides `onNewIntent`
+   * untouched and warns instead — add `setIntent(intent)` as the first statement of your own
+   * override. Set to false to skip the injection entirely (and remove one a previous prebuild
+   * wrote); bare React Native apps that do not run `expo prebuild` need the same override by hand.
+   */
+  patchMainActivityNewIntent?: boolean
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
-// flat shape. `includeSource` is iOS-only and ignored on Android.
+// flat shape.
 export function resolveNativeSymbolUpload(prop: PostHogPluginProps['uploadNativeSymbols']): {
   enabled: boolean
   includeSource: boolean
@@ -334,8 +1234,25 @@ export function resolveNativeSymbolUpload(prop: PostHogPluginProps['uploadNative
   return { enabled: false, includeSource: false }
 }
 
+// Expo's standard mods run their action before the previously registered action. This wrapper
+// deliberately runs its action after the rest of the Xcode mod chain, so later config plugins
+// cannot leave a newly created extension-embedding phase after the PostHog upload phase.
+const withFinalizedXcodeProject = (config: any, action: (config: any) => any) => {
+  return withBaseMod(config, {
+    platform: 'ios',
+    mod: 'xcodeproj',
+    async action(config: any) {
+      const { nextMod, ...modRequest } = config.modRequest
+      const results = await nextMod({ ...config, modRequest })
+      return action(results)
+    },
+  })
+}
+
 const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
-  return withXcodeProject(config, (config: any) => {
+  const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
+
+  config = withXcodeProject(config, (config: any) => {
     const xcodeProject = config.modResults
 
     const bundleReactNativePhase = xcodeProject.pbxItemByComment(
@@ -343,12 +1260,23 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
       'PBXShellScriptBuildPhase'
     )
 
-    modifyExistingXcodeBuildScript(bundleReactNativePhase, props.skipOnConflict === true)
+    modifyExistingXcodeBuildScript(
+      bundleReactNativePhase,
+      props.skipOnConflict === true,
+      props.releaseMode,
+      props.force === true
+    )
 
-    const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
     if (nativeSymbols.enabled) {
-      addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource)
+      addDsymUploadBuildPhase(
+        xcodeProject,
+        nativeSymbols.includeSource,
+        props.skipOnConflict === true,
+        props.force === true
+      )
     }
+
+    applyDotenvFileBuildSetting(xcodeProject, props.dotenvFile)
 
     if (props.disableSandboxing !== false) {
       disableUserScriptSandboxing(xcodeProject)
@@ -363,14 +1291,38 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 
     return config
   })
+
+  if (nativeSymbols.enabled) {
+    config = withFinalizedXcodeProject(config, (config: any) => {
+      moveDsymUploadBuildPhaseToEnd(config.modResults)
+      return config
+    })
+  }
+
+  return config
 }
 
-const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
-  config = withAndroidPlugin(config, props.skipOnConflict === true)
-  // includeSource is iOS-only, so on Android we only care whether upload is enabled.
-  if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
-    config = withAndroidNativeSymbolsPlugin(config)
+const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
+  // posthog-cli declares --skip-on-conflict and --force mutually exclusive. Stop the prebuild
+  // rather than writing build files the build then fails on.
+  if (rawProps.skipOnConflict === true && rawProps.force === true) {
+    throw new Error(
+      '[posthog-react-native] skipOnConflict and force cannot both be enabled: posthog-cli accepts only one of --skip-on-conflict and --force'
+    )
   }
+  const props = {
+    ...rawProps,
+    dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
+    releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
+  }
+  const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
+  config = nativeSymbols.enabled
+    ? withAndroidNativeSymbolsPlugin(config, nativeSymbols.includeSource)
+    : withoutAndroidNativeSymbolsExtension(config)
+  config = withAndroidPlugin(config, props.skipOnConflict === true, props.force === true)
+  // Runs unconditionally so removing the prop also removes the managed entry.
+  config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
+  config = withMainActivityNewIntent(config, props.patchMainActivityNewIntent !== false)
   return withIosPlugin(config, props)
 }
 
@@ -386,7 +1338,20 @@ module.exports.addPostHogWithBundledScriptsToBundleShellScript = addPostHogWithB
 module.exports.disableUserScriptSandboxing = disableUserScriptSandboxing
 module.exports.buildDsymUploadShellScript = buildDsymUploadShellScript
 module.exports.addDsymUploadBuildPhase = addDsymUploadBuildPhase
+module.exports.moveDsymUploadBuildPhaseToEnd = moveDsymUploadBuildPhaseToEnd
 module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
 module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
+module.exports.buildAndroidForceGradleLine = buildAndroidForceGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
+module.exports.setPostHogAndroidNativeSymbolsExtension = setPostHogAndroidNativeSymbolsExtension
+module.exports.removePostHogAndroidNativeSymbolsExtension = removePostHogAndroidNativeSymbolsExtension
+module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting
+module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
+module.exports.resolveDotenvFileProp = resolveDotenvFileProp
+module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleValue
+module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties
+module.exports.POSTHOG_RELEASE_MODES = POSTHOG_RELEASE_MODES
+module.exports.resolveReleaseModeProp = resolveReleaseModeProp
+module.exports.updateHermesReleaseModeGradleProperties = updateHermesReleaseModeGradleProperties
+module.exports.updateMainActivityNewIntentOverride = updateMainActivityNewIntentOverride

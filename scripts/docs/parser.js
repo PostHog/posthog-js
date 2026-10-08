@@ -3,6 +3,7 @@ const documentation = require('./documentation');
 const examples = require('./examples');
 const methods = require('./methods');
 const types = require('./types');
+const { createTypeResolver } = require('./type-resolver');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
 
@@ -93,9 +94,10 @@ const composeOutput = (posthogClass, functions, types, config) => ({
 const generateApiSpecs = (config) => {
     const apiPackage = loadApiPackage(config.apiJsonPath);
     const posthogClass = findPostHogClass(apiPackage, config.parentClass);
-    
+    const typeResolver = config.dtsEntryPath ? createTypeResolver(config.dtsEntryPath) : null;
+
     const resolvedTypes = types
-        .resolveTypeDefinitions(apiPackage)
+        .resolveTypeDefinitions(apiPackage, typeResolver)
         .map(type => enhanceTypeWithExample(type, config));
     
     const methods = filterPublicMethods(posthogClass, config.parentClass);

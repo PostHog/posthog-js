@@ -1,5 +1,6 @@
 {
     "name": "react-ts-esbuild",
+    "packageManager": "pnpm@11.7.0",
     "private": true,
     "version": "0.0.0",
     "type": "module",

@@ -2,16 +2,17 @@
 import '../../entrypoints/default-extensions'
 
 import { PostHog, init_as_module } from '../../posthog-core'
-import { PostHogConfig } from '../../types'
+import { PostHogConfig, RemoteConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 export const createPosthogInstance = async (
     // Use a random UUID for the token, such that we don't have to worry
     // about collisions between test cases.
     token: string = uuidv7(),
-    config: Partial<PostHogConfig> = {}
+    config: Partial<PostHogConfig> = {},
+    remoteConfig: Partial<RemoteConfig> = {}
 ): Promise<PostHog> => {
     // We need to create a new instance of the library for each test, to ensure
     // that they are isolated from each other. The way the library is currently
@@ -22,12 +23,11 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: {},
+            config: createRemoteConfig({ autocapture_opt_out: false, ...remoteConfig }),
             siteApps: [],
         },
-    } as any
+    }
 
-    // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
         posthog.init(
             token,
@@ -47,12 +47,30 @@ export const createPosthogInstance = async (
                 loaded: (p) => {
                     config.loaded?.(p)
 
-                    resolve(p as PostHog)
+                    resolve(requirePostHogInstance(p))
                 },
             },
             'test-' + token
         )
     )
+}
+
+export function createRemoteConfig(overrides: Partial<RemoteConfig> = {}): RemoteConfig {
+    return {
+        supportedCompression: [],
+        toolbarParams: {},
+        toolbarVersion: 'toolbar',
+        isAuthenticated: false,
+        siteApps: [],
+        ...overrides,
+    }
+}
+
+export function requirePostHogInstance(instance: unknown): PostHog {
+    if (!(instance instanceof PostHog)) {
+        throw new Error('Expected a real PostHog instance')
+    }
+    return instance
 }
 
 const posthog = init_as_module()
@@ -65,8 +83,11 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
             api_host: 'https://test.com',
         } as PostHogConfig,
         get_distinct_id: () => 'test-distinct-id',
-        capture: jest.fn(),
-        _send_request: jest.fn(),
+        capture: vi.fn(),
+        is_capturing: vi.fn(() => true),
+        reloadFeatureFlags: vi.fn(),
+        _send_request: vi.fn(),
+        onFeatureFlags: vi.fn().mockReturnValue(() => {}),
         ...overrides,
     }) as PostHog
 
@@ -79,7 +100,7 @@ export const createMockConfig = (overrides: Partial<PostHogConfig> = {}): PostHo
 
 export const createMockPersistence = (overrides: Partial<PostHogPersistence> = {}): PostHogPersistence =>
     ({
-        register: jest.fn(),
+        register: vi.fn(),
         props: {},
         ...overrides,
     }) as PostHogPersistence

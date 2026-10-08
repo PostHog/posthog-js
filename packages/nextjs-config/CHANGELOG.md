@@ -1,5 +1,61 @@
 # @posthog/nextjs-config
 
+## 1.11.1
+
+### Patch Changes
+
+- [#4768](https://github.com/PostHog/posthog-js/pull/4768) [`09c6b93`](https://github.com/PostHog/posthog-js/commit/09c6b93a4a6d18beda445f56a874d84e5b8b397b) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete webpack server source maps after upload without leaving them in Next.js deployment traces.
+  (2026-09-04)
+
+## 1.11.0
+
+### Minor Changes
+
+- [#4705](https://github.com/PostHog/posthog-js/pull/4705) [`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Change the default `sourcemaps.releaseMode` to `event`: set `sourcemaps.releaseMode: 'symbol-set'`, or `POSTHOG_RELEASE_MODE=symbol-set`, to keep binding uploaded symbol sets to a release. The `@posthog/plugin-utils` bump is major, so an installed plugin keeps the old default until the plugin itself is upgraded.
+
+  `event` mode requires a posthog-cli with `release resolve` and `--release-mode`, and `posthog-js` 1.409.0, `posthog-node` 5.47.0, or `@posthog/core` 1.46.0 at runtime. An older CLI fails a rollup build and skips the upload on webpack and Next.js. An older SDK reports no release on exceptions. (2026-09-02)
+
+### Patch Changes
+
+- [#4737](https://github.com/PostHog/posthog-js/pull/4737) [`c589ab8`](https://github.com/PostHog/posthog-js/commit/c589ab8f5f06df627bbd0e1899aebd17839be310) Thanks [@cat-ph](https://github.com/cat-ph)! - Bump `@posthog/cli` to `~0.16.2`, which fixes a race in `sourcemap process`: inject and upload used to walk the directory roots separately, so a bundler still writing into the output directory mid-run (e.g. Turbopack's background filesystem-cache flush on Next.js 16.3+) could hand upload a chunk inject never stamped and abort the build with "Chunk ID not found". The CLI now uploads exactly the pairs it injected, and `--delete-after` cleanup skips files that vanished or changed after upload instead of failing the build.
+  (2026-09-02)
+- Updated dependencies [[`c589ab8`](https://github.com/PostHog/posthog-js/commit/c589ab8f5f06df627bbd0e1899aebd17839be310), [`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2)]:
+  - @posthog/webpack-plugin@1.7.0
+  - @posthog/plugin-utils@2.0.0
+
+## 1.10.0
+
+### Minor Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Add experimental `sourcemaps.releaseMode: 'event'` to the webpack plugin and Next.js config. In event mode posthog-cli resolves the release once and injects its id into every chunk on disk, so exceptions report their release directly instead of it being bound to the uploaded symbol sets, and chunk ids are content-derived so a rebuild of unchanged code reuses the symbol set already uploaded. On webpack >= 5.104 the plugin also turns on webpack's own debug ids, which the CLI adopts as chunk ids, so one id identifies a chunk across the whole toolchain. The option defaults to the `POSTHOG_RELEASE_MODE` environment variable and then to `symbol-set`, which behaves exactly as before. Event mode needs a posthog-cli with the `release resolve` command.
+  (2026-08-24)
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+- Updated dependencies [[`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee), [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee)]:
+  - @posthog/webpack-plugin@1.6.0
+
+## 1.9.70
+
+### Patch Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.13.0`, which ships the `release resolve` command the rollup plugin's event release mode spawns.
+  (2026-08-19)
+- Updated dependencies [[`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c), [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c)]:
+  - @posthog/webpack-plugin@1.5.28
+  - @posthog/plugin-utils@1.2.0
+
+## 1.9.69
+
+### Patch Changes
+
+- [#4516](https://github.com/PostHog/posthog-js/pull/4516) [`1c5bf6f`](https://github.com/PostHog/posthog-js/commit/1c5bf6fecb1edf49b0cb813d7ee63f2b47ba063e) Thanks [@marandaneto](https://github.com/marandaneto)! - Bump `@posthog/cli` to `~0.11.1`.
+  (2026-08-13)
+- Updated dependencies [[`1c5bf6f`](https://github.com/PostHog/posthog-js/commit/1c5bf6fecb1edf49b0cb813d7ee63f2b47ba063e)]:
+  - @posthog/webpack-plugin@1.5.27
+
 ## 1.9.68
 
 ### Patch Changes

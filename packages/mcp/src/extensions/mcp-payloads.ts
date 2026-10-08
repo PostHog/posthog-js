@@ -1,14 +1,22 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
+
+import {
+  redactPii,
+  sanitizeCapturedValue as sanitizeCoreCapturedValue,
+  sanitizeFreeText as sanitizeCoreFreeText,
+  sanitizeFreeTextValue as sanitizeCoreFreeTextValue,
+  type TextSanitizationOptions,
+} from '@posthog/core'
+import { MAX_STRING_LENGTH, TRUNCATION_SUFFIX } from './truncation'
 
 const CONTEXT_ARGUMENT_NAME = 'context'
-const REDACTED_VALUE = '[redacted]'
-const BASE64_PATTERN = /^[A-Za-z0-9+/\n\r]+=*$/
-const SIZE_GATE = 10_240
-const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
-const SENSITIVE_KEY_PATTERN =
-  /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
+const SANITIZATION_OPTIONS: TextSanitizationOptions = {
+  maxStringLength: MAX_STRING_LENGTH,
+  truncationSuffix: TRUNCATION_SUFFIX,
+}
 
 type JsonRecord = Record<string, unknown>
 
@@ -16,43 +24,18 @@ function isRecord(value: unknown): value is JsonRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function shouldRedactKey(key: string): boolean {
-  return SENSITIVE_KEY_PATTERN.test(key)
-}
+export { redactPii }
 
-function sanitizeString(value: string): string {
-  if (value.length >= SIZE_GATE && BASE64_PATTERN.test(value)) {
-    return '[binary data redacted - not supported by PostHog MCP analytics]'
-  }
-  return value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+export function sanitizeFreeText(value: string): string {
+  return sanitizeCoreFreeText(value, SANITIZATION_OPTIONS)
 }
 
 export function sanitizeCapturedValue(value: unknown): unknown {
-  if (value == null) {
-    return value
-  }
+  return sanitizeCoreCapturedValue(value, SANITIZATION_OPTIONS)
+}
 
-  if (typeof value === 'string') {
-    return sanitizeString(value)
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(sanitizeCapturedValue)
-  }
-
-  if (value instanceof Date) {
-    return value
-  }
-
-  if (typeof value !== 'object') {
-    return value
-  }
-
-  const result: JsonRecord = {}
-  for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeCapturedValue(nestedValue)
-  }
-  return result
+export function sanitizeFreeTextValue(value: unknown): unknown {
+  return sanitizeCoreFreeTextValue(value, SANITIZATION_OPTIONS)
 }
 
 function buildCapturedMcpArguments(argumentsValue: unknown): unknown {

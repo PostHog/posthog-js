@@ -1,4 +1,14 @@
-import { record as rrwebRecord, wasMaxDepthReached, resetMaxDepthState } from '@posthog/rrweb-record'
+import {
+    record as rrwebRecord,
+    wasMaxDepthReached,
+    resetMaxDepthState,
+    getLastSnapshotCost,
+    getMutationCost,
+    getDeferredStylesheetStats,
+    getDiscardedDurationSamples,
+    getObserverInitFailures,
+    resetSnapshotCostState,
+} from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
 import { assignableWindow } from '../utils/globals'
 import { getRecordNetworkPlugin } from '../extensions/replay/external/network-plugin'
@@ -11,7 +21,14 @@ assignableWindow.__PosthogExtensions__.rrweb = {
     version: 'v2',
     wasMaxDepthReached,
     resetMaxDepthState,
+    getLastSnapshotCost,
+    getMutationCost,
+    getDeferredStylesheetStats,
+    getDiscardedDurationSamples,
+    getObserverInitFailures,
+    resetSnapshotCostState,
 }
-assignableWindow.__PosthogExtensions__.initSessionRecording = (ph) => new LazyLoadedSessionRecording(ph)
+assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>
+    new LazyLoadedSessionRecording(ph, documentWasEverVisible)
 
 export default rrwebRecord

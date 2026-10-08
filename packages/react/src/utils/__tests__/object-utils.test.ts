@@ -34,7 +34,7 @@ describe('object-utils', () => {
             [true, circularArray1, [circularArray1]],
             [true, f1, f1],
             [false, f1, f2],
-        ])('returns %s for %s and %s', (expected, obj1, obj2) => {
+        ])('returns the expected result', (expected, obj1, obj2) => {
             expect(isDeepEqual(obj1, obj2)).toBe(expected)
             expect(isDeepEqual(obj2, obj1)).toBe(expected)
         })

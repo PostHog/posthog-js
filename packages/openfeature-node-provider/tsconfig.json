@@ -1,0 +1,12 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "skipLibCheck": true,
+    "lib": ["ES2023"]
+  },
+  "include": ["./src/**/*", "rslib.config.ts"]
+}

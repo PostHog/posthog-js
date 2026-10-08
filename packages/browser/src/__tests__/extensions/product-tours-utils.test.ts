@@ -1,5 +1,7 @@
+import type { Mock as VitestMock } from 'vitest'
 import {
     calculateTooltipPosition,
+    getStepHtml,
     getSpotlightStyle,
     renderTipTapContent,
     normalizeUrl,
@@ -31,7 +33,7 @@ describe('getProductTourStylesheet', () => {
         {
             name: 'runs the stylesheet through prepare_external_dependency_stylesheet',
             setup: () => {
-                const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
+                const prepareExternalDependencyStylesheet = vi.fn((stylesheet: HTMLStyleElement) => {
                     stylesheet.setAttribute('nonce', 'test-nonce')
                     return stylesheet
                 })
@@ -49,7 +51,7 @@ describe('getProductTourStylesheet', () => {
         {
             name: 'returns null when prepare_external_dependency_stylesheet returns null',
             setup: () => {
-                const prepareExternalDependencyStylesheet = jest.fn(() => null)
+                const prepareExternalDependencyStylesheet = vi.fn(() => null)
                 return {
                     posthog: {
                         config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
@@ -64,7 +66,7 @@ describe('getProductTourStylesheet', () => {
     ])('$name', ({ setup, expectedHookCalls, expectedNonce, expectedStylesheet }) => {
         const { posthog, prepareExternalDependencyStylesheet } = setup() as {
             posthog?: PostHog
-            prepareExternalDependencyStylesheet?: jest.Mock
+            prepareExternalDependencyStylesheet?: VitestMock
         }
 
         const stylesheet = getProductTourStylesheet(posthog)
@@ -123,11 +125,14 @@ describe('calculateTooltipPosition', () => {
     })
 
     it('clamps tooltip to viewport and calculates arrow offset', () => {
-        const targetRect = { top: 300, bottom: 350, left: 10, right: 60, width: 50, height: 50 } as DOMRect
+        const targetRect = { top: 0, bottom: 50, left: 10, right: 60, width: 50, height: 50 } as DOMRect
         const result = calculateTooltipPosition(targetRect, tooltipDimensions)
 
         expect(result.position).toBe('right')
         expect(typeof result.arrowOffset).toBe('number')
+        expect(result.top).toBe(108)
+        expect(result.left).toBe(72)
+        expect(result.arrowOffset).toBe(-83)
     })
 })
 
@@ -240,6 +245,27 @@ describe('renderTipTapContent', () => {
             ],
         }
         expect(renderTipTapContent(content)).toBe('<p>First paragraph</p><p>Second paragraph</p>')
+    })
+})
+
+describe('getStepHtml', () => {
+    it('sanitizes HTML rendered from legacy TipTap content', () => {
+        const step: ProductTourStep = {
+            id: 'legacy-content-step',
+            type: 'modal',
+            progressionTrigger: 'button',
+            content: {
+                type: 'heading',
+                attrs: { level: '1><img src=x onerror=alert(document.cookie)><h1' },
+                content: [{ type: 'text', text: 'Test' }],
+            },
+        }
+
+        const html = getStepHtml(step)
+
+        expect(html).toContain('Test')
+        expect(html).not.toContain('onerror')
+        expect(html).not.toContain('alert')
     })
 })
 

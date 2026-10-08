@@ -80,7 +80,7 @@ export class PosthogPage {
             testName: this.testInfos.title,
             testBranchName: BRANCH_NAME,
             testRunId: RUN_ID,
-            testBrowser: BROWSER,
+            testBrowser: this.testInfos.project.metadata.testBrowser || BROWSER,
         }
         const storeHandle = await this.page.createFunctionHandle((evt: CaptureResult) => {
             this.events.addEvent(evt)

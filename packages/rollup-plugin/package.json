@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.4.7",
+    "version": "1.6.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -15,11 +15,13 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "build": "rslib build",
         "clean": "rimraf dist",
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
-        "test:unit": "jest --passWithNoTests",
+        "lint": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs'",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs' --fix",
+        "test:unit": "vitest run --passWithNoTests",
+        "test:functional": "node --test test/*.test.mjs",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -30,7 +32,8 @@
     ],
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/plugin-utils": "workspace:^"
+        "@posthog/plugin-utils": "workspace:^",
+        "magic-string": "^0.30.17"
     },
     "peerDependencies": {
         "rollup": ">= 4.0.0"
@@ -38,8 +41,10 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
-        "rollup": "~4.53.2"
+        "rollup": "~4.53.2",
+        "vite": "^8.0.16",
+        "@vitest/coverage-v8": "catalog:",
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
     }
 }

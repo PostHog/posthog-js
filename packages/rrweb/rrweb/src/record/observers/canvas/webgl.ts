@@ -1,5 +1,6 @@
 import {
   type blockClass,
+  type CanvasArg,
   CanvasContext,
   type canvasManagerMutationCallback,
   type canvasMutationWithType,
@@ -51,17 +52,26 @@ function patchGLPrototype(
             const result = original.apply(this, args);
             saveWebGLVar(result, win, this);
             if (
+              !!this.canvas &&
               'tagName' in this.canvas &&
               !isBlocked(this.canvas, blockClass, blockSelector, true)
             ) {
-              const recordArgs = serializeArgs(args, win, this, dataURLOptions);
-              const mutation: canvasMutationWithType = {
-                type,
-                property: prop,
-                args: recordArgs,
-              };
-              // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
-              cb(this.canvas, mutation);
+              let recordArgs: CanvasArg[] | undefined;
+              try {
+                recordArgs = serializeArgs(args, win, this, dataURLOptions);
+              } catch {
+                // this runs inside the page's own call, so an argument such as
+                // a tainted canvas must not throw into it. Skip the mutation
+              }
+              if (recordArgs) {
+                const mutation: canvasMutationWithType = {
+                  type,
+                  property: prop,
+                  args: recordArgs,
+                };
+                // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
+                cb(this.canvas, mutation);
+              }
             }
 
             return result;
@@ -72,14 +82,18 @@ function patchGLPrototype(
     } catch {
       const hookHandler = hookSetter<typeof prototype>(prototype, prop, {
         set(v) {
-          // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          cb(this.canvas as HTMLCanvasElement, {
-            type,
-            property: prop,
-            args: [v],
-            setter: true,
-          });
+          if (
+            !!this.canvas &&
+            'tagName' in this.canvas &&
+            !isBlocked(this.canvas, blockClass, blockSelector, true)
+          ) {
+            cb(this.canvas, {
+              type,
+              property: prop,
+              args: [v],
+              setter: true,
+            });
+          }
         },
       });
       handlers.push(hookHandler);

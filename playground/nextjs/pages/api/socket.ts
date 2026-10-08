@@ -22,7 +22,6 @@ export default function handler(req: NextApiRequest, res: CustomNextApiResponse)
         res.socket.server.io = io
 
         io.on('connection', (socket) => {
-            // eslint-disable-next-line no-console
             console.log('User connected', socket.id)
 
             socket.on('send chat message', (msg) => {
@@ -30,7 +29,6 @@ export default function handler(req: NextApiRequest, res: CustomNextApiResponse)
             })
 
             socket.on('disconnect', () => {
-                // eslint-disable-next-line no-console
                 console.log('User disconnected', socket.id)
             })
         })

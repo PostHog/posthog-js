@@ -1,0 +1,18 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "trailingComma": "es5",
+    "tabWidth": 4,
+    "semi": false,
+    "singleQuote": true,
+    "quoteProps": "preserve",
+    "printWidth": 120,
+    "sortPackageJson": false,
+    "ignorePatterns": [
+        "lib",
+        "**/*.min.js",
+        "**/_generated/**",
+        "packages/react-native/src/version.ts",
+        "packages/core/src/vendor/*",
+        "**/references/*.json"
+    ]
+}

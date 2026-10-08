@@ -26,12 +26,12 @@ import {
     isUndefined,
     isObject,
 } from '@posthog/core'
-import { isDocument } from '../../../utils/type-utils'
-import { createLogger } from '../../../utils/logger'
-import { formDataToQuery } from '../../../utils/request-utils'
+import { isDocument } from '@posthog/browser-common/utils/type-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -60,29 +60,86 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
-    // if we are only observing timings then we could have a single observer for all types, with buffer true,
-    // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
-    // will deal with those.
-    // so we have a block which captures requests from before fetch/xhr is wrapped
-    // these are marked `isInitial` so playback can display them differently if needed
-    // they will never have method/status/headers/body because they are pre-wrapping that provides that
+const noopHandler: listenerHandler = () => {
+    //
+}
+
+// a partial navigation entry is readable before load and the observer delivers it again once complete.
+// readiness turns `complete` before the load event fires, so only a non-zero `loadEventEnd` is final
+function isCompletedNavigationTiming(win: IWindow, entry: PerformanceEntry): entry is PerformanceNavigationTiming {
+    return isNavigationTiming(entry) && win.document?.readyState === 'complete' && entry.loadEventEnd > 0
+}
+
+// an `entryTypes` observation never delivers an entry that completed before it started
+function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
+    if (win.document?.readyState !== 'complete') {
+        return []
+    }
+    return win.performance
+        .getEntriesByType('navigation')
+        .filter((entry): entry is PerformanceNavigationTiming => isCompletedNavigationTiming(win, entry))
+}
+
+// if we are only observing timings then we could have a single observer for all types, with buffer true,
+// but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
+// will deal with those.
+// so we have a block which captures requests from before fetch/xhr is wrapped
+// these are marked `isInitial` so playback can display them differently if needed
+// they will never have method/status/headers/body because they are pre-wrapping that provides that
+// resource entries stay behind `recordInitialRequests`, the navigation entry is the document load
+// timing the waterfall is built from, so it is read whenever navigation is observed at all
+function initialEntries(win: IWindow, options: Required<NetworkRecordOptions>): ObservedPerformanceEntry[] {
     if (options.recordInitialRequests) {
-        const initialPerformanceEntries = win.performance
+        return win.performance
             .getEntries()
             .filter(
                 (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
+                    isCompletedNavigationTiming(win, entry) ||
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
+    }
+    return options.performanceEntryTypeToObserve.includes('navigation') ? completedNavigationEntries(win) : []
+}
+
+// undefined means this frame cannot observe performance entries, so the caller can tell
+// "nothing to tear down" apart from "nothing started here"
+function initPerformanceObserver(
+    cb: networkCallback,
+    win: IWindow,
+    options: Required<NetworkRecordOptions>
+): listenerHandler | undefined {
+    // Masking errors are isolated per record. Guard initial entry collection/preparation too:
+    // rrweb tears down all registered observers if plugin initialization throws.
+    try {
         cb({
-            requests: initialPerformanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
+            requests: initialEntries(win, options).flatMap((entry) =>
+                prepareRequest(win, {
+                    entry,
+                    method: undefined,
+                    status: undefined,
+                    networkRequest: {},
+                    isInitial: true,
+                })
             ),
             isInitial: true,
         })
+    } catch (e) {
+        logger.error('Failed to capture initial performance entries for network capture', e)
     }
-    const observer = new win.PerformanceObserver((entries) => {
+    // some frames have no PerformanceObserver, or one without the static list of entry types,
+    // so live network capture is not available there
+    const performanceObserverClass = win.PerformanceObserver as typeof PerformanceObserver | undefined
+    const supportedEntryTypes = performanceObserverClass?.supportedEntryTypes
+    if (!performanceObserverClass || !isArray(supportedEntryTypes)) {
+        return undefined
+    }
+    const entryTypes = supportedEntryTypes.filter((x) => options.performanceEntryTypeToObserve.includes(x))
+    if (!entryTypes.length) {
+        // observe() throws when it is given no valid entry type
+        return undefined
+    }
+
+    const observer = new performanceObserverClass((entries) => {
         // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
         // as the wrapped functions will do that. Otherwise, this filter becomes a noop
         // because we do want to record them here
@@ -102,15 +159,10 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
 
         cb({
             requests: performanceEntries.flatMap((entry) =>
-                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {} })
+                prepareRequest(win, { entry, method: undefined, status: undefined, networkRequest: {} })
             ),
         })
     })
-    // compat checked earlier
-    // eslint-disable-next-line compat/compat
-    const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) =>
-        options.performanceEntryTypeToObserve.includes(x)
-    )
     // initial records are gathered above, so we don't need to observe and buffer each type separately
     observer.observe({ entryTypes })
     return () => {
@@ -287,7 +339,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // oxlint-disable-next-line typescript/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -298,114 +350,122 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // oxlint-disable-next-line typescript/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
-                // check IE earlier than this, we only initialize if Request is present
-                // eslint-disable-next-line compat/compat
-                const req = new Request(url)
-                const networkRequest: Partial<CapturedNetworkRequest> = {}
-                let start: number | undefined
-                let end: number | undefined
+                // All of the capture instrumentation below runs _before_ we delegate to the original
+                // `open`. If any of it throws (e.g. `new Request(url)` rejecting a URL/method the host
+                // application would have handled), we must not let that exception escape into the host's
+                // `xhr.open()` call and misattribute a failure to session replay. Wrap it so that if
+                // instrumentation fails we degrade gracefully and the original request still proceeds.
+                try {
+                    // check IE earlier than this, we only initialize if Request is present
+                    const req = new Request(url)
+                    const networkRequest: Partial<CapturedNetworkRequest> = {}
+                    let start: number | undefined
+                    let end: number | undefined
 
-                const requestHeaders: Headers = {}
-                const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
-                xhr.setRequestHeader = (header: string, value: string) => {
-                    requestHeaders[header] = value
-                    return originalSetRequestHeader(header, value)
-                }
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-
-                const originalSend = xhr.send.bind(xhr)
-                xhr.send = (body) => {
-                    if (
-                        shouldRecordBody({
-                            type: 'request',
-                            headers: requestHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                    const requestHeaders: Headers = {}
+                    const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
+                    xhr.setRequestHeader = (header: string, value: string) => {
+                        requestHeaders[header] = value
+                        return originalSetRequestHeader(header, value)
                     }
-                    start = win.performance.now()
-                    return originalSend(body)
-                }
-
-                // Cleanup function to remove all event listeners and prevent memory leaks
-                const cleanup = () => {
-                    xhr.removeEventListener('readystatechange', readyStateListener)
-                    xhr.removeEventListener('error', cleanup)
-                    xhr.removeEventListener('abort', cleanup)
-                    xhr.removeEventListener('timeout', cleanup)
-                }
-
-                const readyStateListener = () => {
-                    if (xhr.readyState !== xhr.DONE) {
-                        return
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
                     }
 
-                    // Clean up all listeners immediately when done to prevent memory leaks
-                    cleanup()
-
-                    end = win.performance.now()
-                    const responseHeaders: Headers = {}
-                    const rawHeaders = xhr.getAllResponseHeaders()
-                    const headers = rawHeaders.trim().split(/[\r\n]+/)
-                    headers.forEach((line) => {
-                        const parts = line.split(': ')
-                        const header = parts.shift()
-                        const value = parts.join(': ')
-                        if (header) {
-                            responseHeaders[header] = value
-                        }
-                    })
-                    if (recordResponseHeaders) {
-                        networkRequest.responseHeaders = responseHeaders
-                    }
-                    if (
-                        shouldRecordBody({
-                            type: 'response',
-                            headers: responseHeaders,
-                            url,
-                            recordBody: options.recordBody,
-                        })
-                    ) {
-                        networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
-                    }
-                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
-                        .then((entry) => {
-                            const requests = prepareRequest({
-                                entry,
-                                method: method,
-                                status: xhr?.status,
-                                networkRequest,
-                                start,
-                                end,
-                                url: url.toString(),
-                                initiatorType: 'xmlhttprequest',
+                    const originalSend = xhr.send.bind(xhr)
+                    xhr.send = (body) => {
+                        if (
+                            shouldRecordBody({
+                                type: 'request',
+                                headers: requestHeaders,
+                                url,
+                                recordBody: options.recordBody,
                             })
-                            cb({ requests })
-                        })
-                        .catch(() => {
-                            //
-                        })
-                }
+                        ) {
+                            networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
+                        }
+                        start = win.performance.now()
+                        return originalSend(body)
+                    }
 
-                // This is very tricky code, and making it passive won't bring many performance benefits,
-                // so let's ignore the rule here.
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('readystatechange', readyStateListener)
-                // Also clean up on error, abort, and timeout to prevent memory leaks
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('error', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('abort', cleanup)
-                // eslint-disable-next-line posthog-js/no-add-event-listener
-                xhr.addEventListener('timeout', cleanup)
+                    // Cleanup function to remove all event listeners and prevent memory leaks
+                    const cleanup = () => {
+                        xhr.removeEventListener('readystatechange', readyStateListener)
+                        xhr.removeEventListener('error', cleanup)
+                        xhr.removeEventListener('abort', cleanup)
+                        xhr.removeEventListener('timeout', cleanup)
+                    }
+
+                    const readyStateListener = () => {
+                        if (xhr.readyState !== xhr.DONE) {
+                            return
+                        }
+
+                        // Clean up all listeners immediately when done to prevent memory leaks
+                        cleanup()
+
+                        end = win.performance.now()
+                        const responseHeaders: Headers = {}
+                        const rawHeaders = xhr.getAllResponseHeaders()
+                        const headers = rawHeaders.trim().split(/[\r\n]+/)
+                        headers.forEach((line) => {
+                            const parts = line.split(': ')
+                            const header = parts.shift()
+                            const value = parts.join(': ')
+                            if (header) {
+                                responseHeaders[header] = value
+                            }
+                        })
+                        if (recordResponseHeaders) {
+                            networkRequest.responseHeaders = responseHeaders
+                        }
+                        if (
+                            shouldRecordBody({
+                                type: 'response',
+                                headers: responseHeaders,
+                                url,
+                                recordBody: options.recordBody,
+                            })
+                        ) {
+                            networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
+                        }
+                        getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
+                            .then((entry) => {
+                                const requests = prepareRequest(win, {
+                                    entry,
+                                    method: method,
+                                    status: xhr?.status,
+                                    networkRequest,
+                                    start,
+                                    end,
+                                    url: url.toString(),
+                                    initiatorType: 'xmlhttprequest',
+                                })
+                                cb({ requests })
+                            })
+                            .catch(() => {
+                                //
+                            })
+                    }
+
+                    // This is very tricky code, and making it passive won't bring many performance benefits,
+                    // so let's ignore the rule here.
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('readystatechange', readyStateListener)
+                    // Also clean up on error, abort, and timeout to prevent memory leaks
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('error', cleanup)
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('abort', cleanup)
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    xhr.addEventListener('timeout', cleanup)
+                } catch (e) {
+                    logger.error('Failed to instrument XHR for network capture', e)
+                }
 
                 originalOpen.call(xhr, method, url.toString(), async, username, password)
             }
@@ -424,43 +484,48 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
     !isNull(event) && (event.entryType === 'navigation' || event.entryType === 'resource')
 
-function prepareRequest({
-    entry,
-    method,
-    status,
-    networkRequest,
-    isInitial,
-    start,
-    end,
-    url,
-    initiatorType,
-}: {
-    entry: PerformanceResourceTiming | null
-    method: string | undefined
-    status: number | undefined
-    networkRequest: Partial<CapturedNetworkRequest>
-    isInitial?: boolean
-    start?: number
-    end?: number
-    // if there is no performance observer entry, we still need to know the url
-    url?: string
-    // if there is no performance observer entry, we can provide the initiatorType
-    initiatorType?: string
-}): CapturedNetworkRequest[] {
+// entry times count from the recorded frame's time origin, so the epoch base must come from that frame's clock
+function prepareRequest(
+    win: IWindow,
+    {
+        entry,
+        method,
+        status,
+        networkRequest,
+        isInitial,
+        start,
+        end,
+        url,
+        initiatorType,
+    }: {
+        entry: PerformanceResourceTiming | null
+        method: string | undefined
+        status: number | undefined
+        networkRequest: Partial<CapturedNetworkRequest>
+        isInitial?: boolean
+        start?: number
+        end?: number
+        // if there is no performance observer entry, we still need to know the url
+        url?: string
+        // if there is no performance observer entry, we can provide the initiatorType
+        initiatorType?: string
+    }
+): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
 
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
-    // eslint-disable-next-line compat/compat
-    const timeOrigin = Math.floor(Date.now() - performance.now())
+    const timeOrigin = Math.floor(Date.now() - win.performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
     // use timeOrigin if we really can't gather a start time
     const timestamp = Math.floor(timeOrigin + (start || 0))
 
-    const entryJSON = entry ? entry.toJSON() : { name: url }
+    // toJSON() keeps browser objects such as PerformanceServerTiming,
+    // and postMessage from a cross-origin iframe cannot clone them
+    const entryJSON = entry ? JSON.parse(JSON.stringify(entry.toJSON())) : { name: url }
 
     const requests: CapturedNetworkRequest[] = [
         {
@@ -581,7 +646,7 @@ export function _readBody(r: Request | Response, options: NetworkRecordOptions):
 
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     return new Promise((resolve) => {
         const timeout = setTimeout(() => resolve(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
         try {
@@ -613,14 +678,14 @@ function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
 // limit, so a very large body is never fully buffered. Like _tryReadBody it only ever reads a
 // clone (never the stream the page consumes) and is guaranteed to resolve, never reject.
 export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number): Promise<string> {
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     return new Promise((resolve) => {
         let settled = false
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
 
         function cancel(): void {
             try {
-                void reader?.cancel()
+                void reader?.cancel().catch(() => {})
             } catch {
                 // the reader may already be released; nothing to clean up
             }
@@ -752,39 +817,54 @@ function initFetchObserver(
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
-            // check IE earlier than this, we only initialize if Request is present
-            // eslint-disable-next-line compat/compat
-            const req = new Request(url, init)
+            // Constructing the capture Request happens _before_ we delegate to the original fetch, so
+            // if it throws (e.g. a URL/method the host application would have handled) we must not let
+            // that exception escape and misattribute a failure to session replay. Degrade gracefully and
+            // let the original request still proceed.
+            let req: Request
+            try {
+                // check IE earlier than this, we only initialize if Request is present
+                req = new Request(url, init)
+            } catch (e) {
+                logger.error('Failed to instrument fetch for network capture', e)
+                return originalFetch(url, init)
+            }
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
             let start: number | undefined
             let end: number | undefined
 
             try {
-                const requestHeaders: Headers = {}
-                req.headers.forEach((value: string, header: string | number) => {
-                    requestHeaders[header] = value
-                })
-                if (recordRequestHeaders) {
-                    networkRequest.requestHeaders = requestHeaders
-                }
-                // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
-                // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
-                const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
-                if (
-                    !requestBodyIsReadableStream &&
-                    shouldRecordBody({
-                        type: 'request',
-                        headers: requestHeaders,
-                        url,
-                        recordBody: options.recordBody,
+                // Recording the request headers/body must never prevent the host's fetch from running,
+                // so failures here are swallowed and we fall through to the original request below.
+                try {
+                    const requestHeaders: Headers = {}
+                    req.headers.forEach((value: string, header: string | number) => {
+                        requestHeaders[header] = value
                     })
-                ) {
-                    networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    if (recordRequestHeaders) {
+                        networkRequest.requestHeaders = requestHeaders
+                    }
+                    // Check the caller-supplied body, not req.body: Request normalizes all non-null bodies
+                    // to a ReadableStream, but only an original ReadableStream would be locked by req.clone().text().
+                    const requestBodyIsReadableStream = isReadableStreamBody(init?.body)
+                    if (
+                        !requestBodyIsReadableStream &&
+                        shouldRecordBody({
+                            type: 'request',
+                            headers: requestHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch request for network capture', e)
                 }
 
                 start = win.performance.now()
@@ -795,29 +875,33 @@ function initFetchObserver(
                 res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
-                const responseHeaders: Headers = {}
-                res.headers.forEach((value: string, header: string | number) => {
-                    responseHeaders[header] = value
-                })
-                if (recordResponseHeaders) {
-                    networkRequest.responseHeaders = responseHeaders
-                }
-                if (
-                    shouldRecordBody({
-                        type: 'response',
-                        headers: responseHeaders,
-                        url,
-                        recordBody: options.recordBody,
+                try {
+                    const responseHeaders: Headers = {}
+                    res.headers.forEach((value: string, header: string | number) => {
+                        responseHeaders[header] = value
                     })
-                ) {
-                    networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                    if (recordResponseHeaders) {
+                        networkRequest.responseHeaders = responseHeaders
+                    }
+                    if (
+                        shouldRecordBody({
+                            type: 'response',
+                            headers: responseHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch response for network capture', e)
                 }
 
                 return res
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
-                        const requests = prepareRequest({
+                        const requests = prepareRequest(win, {
                             entry,
                             method: req.method,
                             status: res?.status,
@@ -864,10 +948,45 @@ function initNetworkObserver(
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
     ) as Required<NetworkRecordOptions>
 
+    let active = true
+    let maskingFailureLogged = false
     const cb: networkCallback = (data) => {
+        // Body reads and timing lookups can finish after this observer is replaced.
+        if (!active) {
+            return
+        }
         const requests: CapturedNetworkRequest[] = []
+        let parentRequestDropped = false
         data.requests.forEach((request) => {
-            const maskedRequest = networkOptions.maskRequestFn(request)
+            const isServerTiming = request.entryType === 'serverTiming'
+
+            // Server timings are emitted immediately after their resource or navigation entry.
+            // If a parent is dropped (i.e. a PostHog ingestion request), derived timings must too or an endless capture loop ensues.
+            if (isServerTiming && parentRequestDropped) {
+                return
+            }
+
+            let maskedRequest: CapturedNetworkRequest | null | undefined
+            try {
+                maskedRequest = networkOptions.maskRequestFn(request)
+            } catch {
+                if (!maskingFailureLogged) {
+                    maskingFailureLogged = true
+                    logger.warn(
+                        'Network capture masking callback failed; dropping the record. Further masking failures will not be logged for this observer.'
+                    )
+                }
+                if (!isServerTiming) {
+                    parentRequestDropped = true
+                }
+                return
+            }
+            if (!isServerTiming) {
+                // A null-filtered initial parent is replaced by a strict URL-less fallback so replay keeps its
+                // required timing metadata. Treat that fallback as dropped for derived server timings, which
+                // can still contain customer-controlled names and durations.
+                parentRequestDropped = !maskedRequest || isInitialMaskFallback(maskedRequest)
+            }
             if (maskedRequest) {
                 requests.push(maskedRequest)
             }
@@ -880,15 +999,25 @@ function initNetworkObserver(
     const performanceObserver = initPerformanceObserver(cb, win, networkOptions)
 
     // only wrap fetch and xhr if headers or body are being recorded
+    const wrapsNetworkPrimitives = networkOptions.recordHeaders || networkOptions.recordBody
+
+    // initialisedHandler is shared by every frame being recorded, so a frame that captures
+    // nothing must leave it for a frame that can, or one degraded frame silences the page
+    if (!performanceObserver && !wrapsNetworkPrimitives) {
+        active = false
+        return noopHandler
+    }
+
     let xhrObserver: listenerHandler = () => {}
     let fetchObserver: listenerHandler = () => {}
-    if (networkOptions.recordHeaders || networkOptions.recordBody) {
+    if (wrapsNetworkPrimitives) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
 
     initialisedHandler = () => {
-        performanceObserver()
+        active = false
+        performanceObserver?.()
         xhrObserver()
         fetchObserver()
         initialisedHandler = null
@@ -901,7 +1030,7 @@ function initNetworkObserver(
 export const NETWORK_PLUGIN_NAME = 'rrweb/network@1'
 
 // TODO how should this be typed?
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// oxlint-disable-next-line typescript/ban-ts-comment
 // @ts-ignore
 export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordPlugin = (options) => {
     return {

@@ -23,8 +23,9 @@ import {
   getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { redactBase64DataUrl } from '../sanitization'
+import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
 import { isObject, isString } from '../typeGuards'
+import { isFullAiCaptureEnabled, type FullAiCaptureGate } from '../captureAiEvent'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -40,6 +41,13 @@ function isV3Model(model: LanguageModel): model is LanguageModelV3 {
 
 function isV2Model(model: LanguageModel): model is LanguageModelV2 {
   return model.specificationVersion === 'v2'
+}
+
+function getSpecificationVersion(model: unknown): unknown {
+  if (typeof model === 'object' && model !== null && 'specificationVersion' in model) {
+    return model.specificationVersion
+  }
+  return undefined
 }
 
 interface ClientOptions {
@@ -72,6 +80,18 @@ type OutputContentItem =
   | { type: 'file'; name: string; mediaType: string; data: string }
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
+const redactFileData = (data: unknown, mediaType?: string, client?: FullAiCaptureGate): string | undefined => {
+  if (data instanceof URL) {
+    return isFullAiCaptureEnabled(client)
+      ? data.toString()
+      : redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
+  }
+  if (isString(data)) {
+    return isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mediaType)
+  }
+  return undefined
+}
+
 const mapVercelParams = (params: any): Record<string, any> => {
   return {
     temperature: params.temperature,
@@ -84,7 +104,7 @@ const mapVercelParams = (params: any): Record<string, any> => {
   }
 }
 
-const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
+const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGate): PostHogInput[] => {
   // Map and truncate individual content
   const inputs: PostHogInput[] = messages.map((message) => {
     let content: any
@@ -94,7 +114,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
       content = [
         {
           type: 'text',
-          text: truncate(toContentString(message.content)),
+          text: truncate(toContentString(message.content), client),
         },
       ]
     } else {
@@ -104,22 +124,11 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           if (c.type === 'text') {
             return {
               type: 'text',
-              text: truncate(c.text),
+              text: truncate(c.text, client),
             }
           } else if (c.type === 'file') {
-            // For file type, check if it's a data URL and redact if needed
-            let fileData: string
-
-            const contentData: unknown = c.data
-
-            if (contentData instanceof URL) {
-              fileData = contentData.toString()
-            } else if (isString(contentData)) {
-              // Redact base64 data URLs and raw base64 to prevent oversized events
-              fileData = redactBase64DataUrl(contentData)
-            } else {
-              fileData = 'raw files not supported'
-            }
+            // Redact base64 data URLs and raw base64 to prevent oversized events
+            const fileData = redactFileData(c.data, c.mediaType, client) ?? 'raw files not supported'
 
             return {
               type: 'file',
@@ -129,7 +138,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           } else if (c.type === 'reasoning') {
             return {
               type: 'reasoning',
-              text: truncate(c.reasoning),
+              text: truncate(c.text, client),
             }
           } else if (c.type === 'tool-call') {
             return {
@@ -143,7 +152,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
               type: 'tool-result',
               toolCallId: c.toolCallId,
               toolName: c.toolName,
-              output: c.output,
+              output: sanitizeVercel(c.output, client),
               isError: c.isError,
             }
           }
@@ -157,7 +166,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
         content = [
           {
             type: 'text',
-            text: truncate(toContentString(message.content)),
+            text: truncate(toContentString(message.content), client),
           },
         ]
       }
@@ -168,6 +177,12 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
       content,
     }
   })
+
+  // Full AI capture means no truncation of any kind; the aggregate trim below exists
+  // only to keep the default-mode payload under MAX_OUTPUT_SIZE.
+  if (isFullAiCaptureEnabled(client)) {
+    return inputs
+  }
 
   try {
     // Trim the inputs array until its serialized JSON size fits within MAX_OUTPUT_SIZE.
@@ -203,10 +218,10 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
+const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureGate): PostHogInput[] => {
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
-      return { type: 'text', text: truncate(item.text) }
+      return { type: 'text', text: truncate(item.text, client) }
     }
     if (item.type === 'tool-call') {
       const toolCall = item as { input?: unknown; args?: unknown; arguments?: unknown }
@@ -216,27 +231,25 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
         id: item.toolCallId,
         function: {
           name: item.toolName,
-          arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
+          arguments: toContentString(rawArgs),
         },
       }
     }
     if (item.type === 'reasoning') {
-      return { type: 'reasoning', text: truncate(item.text) }
+      return { type: 'reasoning', text: truncate(item.text, client) }
     }
     if (item.type === 'file') {
       // Handle files similar to input mapping - avoid large base64 data
-      let fileData: string
-      if (item.data instanceof URL) {
-        fileData = item.data.toString()
-      } else if (typeof item.data === 'string') {
-        fileData = redactBase64DataUrl(item.data)
+      let fileData = redactFileData(item.data, item.mediaType, client) ?? `[binary ${item.mediaType} file]`
 
-        // If not redacted and still large, replace with size indicator
-        if (fileData === item.data && item.data.length > 1000) {
-          fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
-        }
-      } else {
-        fileData = `[binary ${item.mediaType} file]`
+      // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
+      if (
+        !isFullAiCaptureEnabled(client) &&
+        typeof item.data === 'string' &&
+        fileData === item.data &&
+        item.data.length > 1000
+      ) {
+        fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
       }
 
       return {
@@ -256,7 +269,7 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
       }
     }
     // Fallback for unknown types - try to extract text if possible
-    return { type: 'text', text: truncate(JSON.stringify(item)) }
+    return { type: 'text', text: truncate(JSON.stringify(item), client) }
   })
 
   if (content.length > 0) {
@@ -270,7 +283,7 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
   // otherwise stringify and truncate
   try {
     const jsonOutput = JSON.stringify(result)
-    return [{ content: truncate(jsonOutput), role: 'assistant' }]
+    return [{ content: truncate(jsonOutput, client), role: 'assistant' }]
   } catch {
     console.error('Error stringifying output')
     return []
@@ -460,6 +473,14 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
   phClient: PostHog,
   options: ClientOptions
 ): T => {
+  const specificationVersion = getSpecificationVersion(model)
+  if (specificationVersion !== 'v2' && specificationVersion !== 'v3') {
+    throw new Error(
+      `[PostHog AI] withTracing supports Vercel AI SDK v5 and v6 models only. ` +
+        `Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.`
+    )
+  }
+
   const traceId = options.posthogTraceId ?? uuidv4()
   const mergedOptions = {
     ...options,
@@ -504,7 +525,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
           // result.content is undefined when the model returns only tool calls with no text output
-          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
+          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient)
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
           const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, result.usage)
@@ -556,7 +577,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: content,
             latency,
             baseURL,
@@ -574,15 +597,14 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: model.provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            usage: {},
             error: error,
             tools: availableTools,
           })
@@ -628,94 +650,110 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
           }
         >()
 
+        const captureStreamGeneration = async (
+          captureOptions: Parameters<typeof captureAiGeneration>[1]
+        ): Promise<void> => {
+          try {
+            await captureAiGeneration(phClient, captureOptions)
+          } catch (error: unknown) {
+            // Telemetry must never change the provider stream's behavior.
+            console.warn('[PostHog AI] Failed to capture Vercel stream telemetry:', error)
+          }
+        }
+
         try {
           const { stream, ...rest } = await model.doStream(params as any)
-          const transformStream = new TransformStream<LanguageModelStreamPart, LanguageModelStreamPart>({
-            transform(chunk, controller) {
-              // Handle streaming patterns - compatible with both V2 and V3
-              if (chunk.type === 'text-delta') {
-                if (firstTokenTime === undefined) {
-                  firstTokenTime = Date.now()
-                }
-                generatedText += chunk.delta
+          const reader = stream.getReader()
+          let inBandError: unknown
+          let hasInBandError = false
+          let finalizationPromise: Promise<void> | undefined
+
+          const observeChunk = (chunk: LanguageModelStreamPart): void => {
+            // Handle streaming patterns - compatible with both V2 and V3
+            if (chunk.type === 'text-delta') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
               }
-              if (chunk.type === 'reasoning-delta') {
-                if (firstTokenTime === undefined) {
-                  firstTokenTime = Date.now()
-                }
-                reasoningText += chunk.delta
+              generatedText += chunk.delta
+            }
+            if (chunk.type === 'reasoning-delta') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
+              }
+              reasoningText += chunk.delta
+            }
+
+            // Handle tool call chunks
+            if (chunk.type === 'tool-input-start') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
+              }
+              toolCallsInProgress.set(chunk.id, {
+                toolCallId: chunk.id,
+                toolName: chunk.toolName,
+                input: '',
+              })
+            }
+            if (chunk.type === 'tool-input-delta') {
+              const toolCall = toolCallsInProgress.get(chunk.id)
+              if (toolCall) {
+                toolCall.input += chunk.delta
+              }
+            }
+            if (chunk.type === 'tool-call') {
+              if (firstTokenTime === undefined) {
+                firstTokenTime = Date.now()
+              }
+              toolCallsInProgress.set(chunk.toolCallId, {
+                toolCallId: chunk.toolCallId,
+                toolName: chunk.toolName,
+                input: chunk.input,
+              })
+            }
+
+            if (chunk.type === 'error') {
+              hasInBandError = true
+              inBandError = chunk.error
+            }
+
+            if (chunk.type === 'finish') {
+              providerMetadata = chunk.providerMetadata
+              const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
+              const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, chunkUsage)
+              usage = {
+                inputTokens: extractTokenCount(chunk.usage?.inputTokens),
+                outputTokens: extractTokenCount(chunk.usage?.outputTokens),
+                reasoningTokens: extractReasoningTokens(chunkUsage),
+                cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
+                ...additionalTokenValues,
               }
 
-              // Handle tool call chunks
-              if (chunk.type === 'tool-input-start') {
-                if (firstTokenTime === undefined) {
-                  firstTokenTime = Date.now()
-                }
-                // Initialize a new tool call
-                toolCallsInProgress.set(chunk.id, {
-                  toolCallId: chunk.id,
-                  toolName: chunk.toolName,
-                  input: '',
-                })
+              // Extract finish reason - V2 returns a string, V3 returns an object with .unified
+              const rawFinishReason = chunk.finishReason
+              if (typeof rawFinishReason === 'string') {
+                stopReason = rawFinishReason
+              } else if (rawFinishReason && typeof rawFinishReason === 'object' && 'unified' in rawFinishReason) {
+                stopReason = String(rawFinishReason.unified)
               }
-              if (chunk.type === 'tool-input-delta') {
-                // Accumulate tool call arguments
-                const toolCall = toolCallsInProgress.get(chunk.id)
-                if (toolCall) {
-                  toolCall.input += chunk.delta
-                }
-              }
-              if (chunk.type === 'tool-input-end') {
-                // Tool call is complete, keep it in the map for final processing
-              }
-              if (chunk.type === 'tool-call') {
-                if (firstTokenTime === undefined) {
-                  firstTokenTime = Date.now()
-                }
-                // Direct tool call chunk (complete tool call)
-                toolCallsInProgress.set(chunk.toolCallId, {
-                  toolCallId: chunk.toolCallId,
-                  toolName: chunk.toolName,
-                  input: chunk.input,
-                })
-              }
+            }
+          }
 
-              if (chunk.type === 'finish') {
-                providerMetadata = chunk.providerMetadata
-                const chunkUsage = (chunk.usage as Record<string, unknown>) || {}
-                const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, chunkUsage)
-                usage = {
-                  inputTokens: extractTokenCount(chunk.usage?.inputTokens),
-                  outputTokens: extractTokenCount(chunk.usage?.outputTokens),
-                  reasoningTokens: extractReasoningTokens(chunkUsage),
-                  cacheReadInputTokens: extractCacheReadTokens(chunkUsage),
-                  ...additionalTokenValues,
-                }
+          const finalize = (terminalError?: unknown, isError = false): Promise<void> => {
+            if (finalizationPromise) {
+              return finalizationPromise
+            }
 
-                // Extract finish reason - V2 returns a string, V3 returns an object with .unified
-                const rawFinishReason = chunk.finishReason
-                if (typeof rawFinishReason === 'string') {
-                  stopReason = rawFinishReason
-                } else if (rawFinishReason && typeof rawFinishReason === 'object' && 'unified' in rawFinishReason) {
-                  stopReason = String(rawFinishReason.unified)
-                }
-              }
-              controller.enqueue(chunk)
-            },
-
-            flush: async () => {
+            finalizationPromise = (async () => {
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              // Build content array similar to mapVercelOutput structure
               const content: OutputContentItem[] = []
               if (reasoningText) {
-                content.push({ type: 'reasoning', text: truncate(reasoningText) })
+                content.push({ type: 'reasoning', text: truncate(reasoningText, phClient) })
               }
               if (generatedText) {
-                content.push({ type: 'text', text: truncate(generatedText) })
+                content.push({ type: 'text', text: truncate(generatedText, phClient) })
               }
 
-              // Add completed tool calls to content
               for (const toolCall of toolCallsInProgress.values()) {
                 if (toolCall.toolName) {
                   content.push({
@@ -729,7 +767,6 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 }
               }
 
-              // Structure output like mapVercelOutput does
               const output =
                 content.length > 0
                   ? [
@@ -741,52 +778,97 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                   : []
 
               const webSearchCount = extractWebSearchCount(providerMetadata, usage)
-
-              // Update usage with web search count and raw metadata
               const finalUsage = {
                 ...usage,
                 webSearchCount,
                 rawUsage: { usage, providerMetadata },
               }
-
               adjustAnthropicV3CacheTokens(model, modelId, provider, finalUsage)
 
-              await captureAiGeneration(phClient, {
+              const finishError =
+                stopReason === 'error' ? new Error('Vercel AI SDK stream finished with an error') : undefined
+              const error = isError
+                ? (terminalError ?? new Error('Vercel AI SDK stream failed'))
+                : hasInBandError
+                  ? (inBandError ?? new Error('Vercel AI SDK stream emitted an error chunk'))
+                  : finishError
+
+              await captureStreamGeneration({
                 ...baseOptions,
                 model: modelId,
                 provider: provider,
-                input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-                output: output,
+                input: mergedOptions.posthogPrivacyMode
+                  ? ''
+                  : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+                output,
                 latency,
                 timeToFirstToken,
                 baseURL,
                 modelParameters: getModelParams(mergedParams as any),
-                httpStatus: 200,
+                httpStatus: error ? undefined : 200,
                 usage: finalUsage,
                 stopReason,
+                error,
                 tools: availableTools,
               })
+            })().catch((error: unknown) => {
+              // Building telemetry must not change the provider stream's behavior.
+              console.warn('[PostHog AI] Failed to capture Vercel stream telemetry:', error)
+            })
+
+            return finalizationPromise
+          }
+
+          const instrumentedStream = new ReadableStream<LanguageModelStreamPart>(
+            {
+              async pull(controller) {
+                let result: ReadableStreamReadResult<LanguageModelStreamPart>
+                try {
+                  result = await reader.read()
+                } catch (error: unknown) {
+                  void finalize(error, true)
+                  controller.error(error)
+                  return
+                }
+
+                if (result.done) {
+                  controller.close()
+                  void finalize()
+                  return
+                }
+
+                try {
+                  observeChunk(result.value)
+                } catch {
+                  // Instrumentation must not alter or suppress provider chunks.
+                }
+                controller.enqueue(result.value)
+              },
+              cancel(reason) {
+                void finalize(reason ?? new Error('Vercel AI SDK stream was cancelled'), true)
+                return reader.cancel(reason)
+              },
             },
-          })
+            { highWaterMark: 0 }
+          )
 
           return {
-            stream: stream.pipeThrough(transformStream),
+            stream: instrumentedStream,
             ...rest,
           }
         } catch (error: unknown) {
-          await captureAiGeneration(phClient, {
+          await captureStreamGeneration({
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            usage: {},
             error: error,
             tools: availableTools,
           })

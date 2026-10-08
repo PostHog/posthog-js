@@ -1,23 +1,25 @@
 {
     "compilerOptions": {
+        "outDir": "./dist",
         "noImplicitAny": true,
         "strictNullChecks": true,
         "noUnusedParameters": false,
         "noUnusedLocals": true,
         "skipLibCheck": true,
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "importHelpers": true,
         "removeComments": true,
         "sourceMap": true,
         "declaration": false,
         "noEmitOnError": true,
-        "target": "es5",
+        "target": "ES2015",
         "module": "es2015",
         "esModuleInterop": true,
         "experimentalDecorators": true,
         "lib": ["es2015", "dom"],
         "jsx": "react",
-        "allowJs": true
+        "allowJs": true,
+        "types": ["vitest/globals", "node"]
     },
     "include": ["src/**/*"],
     "exclude": ["node_modules"]

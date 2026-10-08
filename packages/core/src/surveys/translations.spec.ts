@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals'
+import { describe, expect, it, vi } from 'vitest'
 import {
   applySurveyTranslation,
   detectSurveyLanguage,
@@ -81,7 +81,7 @@ describe('survey translations', () => {
     })
 
     it('does not log language detection by default', () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
       try {
         expect(detectSurveyLanguage({ locale: 'en-US' })).toBe('en-US')
@@ -93,12 +93,12 @@ describe('survey translations', () => {
 
     it('logs language detection through a provided logger', () => {
       const logger: Logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        critical: jest.fn(),
-        createLogger: jest.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+        createLogger: vi.fn(),
       }
 
       expect(detectSurveyLanguage({ locale: 'en-US' }, logger)).toBe('en-US')
@@ -157,6 +157,32 @@ describe('survey translations', () => {
 
       expect(result.survey.appearance?.submitButtonText).toBe('Envoyer')
       expect(result.survey.appearance?.backButtonText).toBe('Retour')
+      expect(result.matchedKey).toBe('fr')
+    })
+
+    it('applies translations for the intro screen fields', () => {
+      const survey = createBaseSurvey()
+      survey.appearance = {
+        ...survey.appearance,
+        displayIntroScreen: true,
+        introScreenHeader: 'Welcome!',
+        introScreenDescription: 'Two quick questions.',
+        introScreenButtonText: 'Get started',
+      }
+      survey.translations = {
+        fr: {
+          introScreenHeader: 'Bienvenue !',
+          introScreenDescription: 'Deux questions rapides.',
+          introScreenButtonText: 'Commencer',
+        },
+      }
+
+      const result = applySurveyTranslation(survey, 'fr')
+
+      expect(result.survey.appearance?.introScreenHeader).toBe('Bienvenue !')
+      expect(result.survey.appearance?.introScreenDescription).toBe('Deux questions rapides.')
+      expect(result.survey.appearance?.introScreenButtonText).toBe('Commencer')
+      expect(result.survey.appearance?.displayIntroScreen).toBe(true)
       expect(result.matchedKey).toBe('fr')
     })
 

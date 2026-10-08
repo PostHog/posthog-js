@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import {
@@ -8,9 +10,9 @@ import {
 } from '@/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, waitForPromises } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -19,7 +21,7 @@ const posthogImmediateResolveOptions: PostHogOptions = {
 describe('local evaluation', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     // ensure clean shutdown & no test interdependencies
@@ -86,11 +88,258 @@ describe('local evaluation', () => {
           latestBuildVersionMajor: undefined,
           latestBuildVersionMinor: undefined,
           latestBuildVersionPatch: undefined,
-        } as unknown as Record<string, string>,
+        },
       })
     ).toEqual(false)
 
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('evaluates numeric person properties with comparison operators', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Beta Feature',
+          key: 'numeric-person-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                variant: null,
+                properties: [
+                  {
+                    key: 'age',
+                    type: 'person',
+                    value: 21,
+                    operator: 'gt',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 30 },
+      })
+    ).toEqual(true)
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 18 },
+      })
+    ).toEqual(false)
+
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('locally evaluates person distinct_id conditions without sending it in remote person properties', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Distinct ID Feature',
+          key: 'distinct-id-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'distinct_id', type: 'person', value: 'some-distinct-id', operator: 'exact' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlag('distinct-id-flag', 'some-distinct-id')).toEqual(true)
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
+  describe('holdouts', () => {
+    // Mirrors the server: a holdout is resolved before the release conditions, so a held-out
+    // value is excluded from the flag's targeting rather than bucketed into a variant.
+    const holdoutFlag = (exclusionPercentage?: number, rolloutPercentage = 100): any => ({
+      flags: [
+        {
+          id: 1,
+          name: 'Experiment Flag',
+          key: 'experiment-flag',
+          active: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: rolloutPercentage }],
+            multivariate: {
+              variants: [
+                { key: 'control', rollout_percentage: 50 },
+                { key: 'test', rollout_percentage: 50 },
+              ],
+            },
+            ...(exclusionPercentage === undefined
+              ? {}
+              : { holdout: { id: 727, exclusion_percentage: exclusionPercentage } }),
+          },
+        },
+      ],
+    })
+
+    const newPosthog = (): PostHog =>
+      new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+    const distinctIds = Array.from({ length: 20 }, (_, index) => `user_${index + 1}`)
+
+    it('excludes every distinct id at 100%', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(100) }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 5)) {
+        expect(await posthog.getFeatureFlag('experiment-flag', distinctId)).toEqual('holdout-727')
+      }
+    })
+
+    it('excludes nobody at 0%', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(0) }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 5)) {
+        expect(['control', 'test']).toContain(await posthog.getFeatureFlag('experiment-flag', distinctId))
+      }
+    })
+
+    it('is resolved before the release conditions', async () => {
+      // The flag releases to nobody, so without the holdout this returns false.
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(100, 0) }))
+      posthog = newPosthog()
+
+      expect(await posthog.getFeatureFlag('experiment-flag', 'user_1')).toEqual('holdout-727')
+    })
+
+    // A holdout we cannot interpret must fall through to normal evaluation. The damaging
+    // reading is the opposite one: a NaN percentage makes every hash comparison false, which
+    // silently holds out 100% of traffic on a flag the server evaluates normally.
+    it.each([
+      ['a null id', { id: null, exclusion_percentage: 100 }],
+      ['a null percentage', { id: 727, exclusion_percentage: null }],
+      ['a non-numeric percentage', { id: 727, exclusion_percentage: 'ten' }],
+      ['a missing percentage', { id: 727 }],
+    ])('ignores a holdout with %s', async (_, holdout) => {
+      const flags = holdoutFlag(100)
+      flags.flags[0].filters.holdout = holdout
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      posthog = newPosthog()
+
+      for (const distinctId of distinctIds.slice(0, 3)) {
+        expect(['control', 'test']).toContain(await posthog.getFeatureFlag('experiment-flag', distinctId))
+      }
+    })
+
+    it('buckets a group-aggregated flag by the group key, not the distinct id', async () => {
+      // The server hashes holdouts with the flag-level aggregation, so a group flag holds out
+      // whole groups. The ids below are chosen so that hashing the distinct id instead fails in
+      // both directions: at 30%, company_6 is held out and user_1 is not, while user_5 is held
+      // out and company_1 is not.
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                name: 'Group Experiment Flag',
+                key: 'group-experiment-flag',
+                active: true,
+                filters: {
+                  aggregation_group_type_index: 0,
+                  groups: [{ properties: [], rollout_percentage: 100 }],
+                  multivariate: {
+                    variants: [
+                      { key: 'control', rollout_percentage: 50 },
+                      { key: 'test', rollout_percentage: 50 },
+                    ],
+                  },
+                  holdout: { id: 727, exclusion_percentage: 30 },
+                },
+              },
+            ],
+            group_type_mapping: { '0': 'company' },
+          },
+        })
+      )
+      posthog = newPosthog()
+
+      const evaluate = (distinctId: string, company: string): Promise<any> =>
+        posthog.getFeatureFlag('group-experiment-flag', distinctId, { groups: { company } })
+
+      // Held-out group, distinct id that is not held out on its own.
+      expect(await evaluate('user_1', 'company_6')).toEqual('holdout-727')
+      // Non-held-out group, distinct id that would be held out on its own.
+      expect(['control', 'test']).toContain(await evaluate('user_5', 'company_1'))
+      // Two people in the same group land in the same arm.
+      expect(await evaluate('user_5', 'company_6')).toEqual('holdout-727')
+    })
+
+    it('buckets the same people the server does', async () => {
+      // The server hashes `holdout-<distinct_id>`. Pinning the membership set guards the string
+      // construction: reusing the flag rollout hash, which joins with a dot, still looks uniform
+      // and deterministic while holding out different people.
+      const exclusionPercentage = 20
+      // Hashed independently of the SDK, so this asserts parity with the server rather than
+      // with our own implementation of it.
+      // Written as a parsed literal because the hex form is not exactly representable as a
+      // double, which the linter rejects. Same value the SDK divides by.
+      const longScale = parseInt('fffffffffffffff', 16)
+      const serverHash = (prefix: string, distinctId: string): number =>
+        parseInt(createHash('sha1').update(`${prefix}${distinctId}`).digest('hex').slice(0, 15), 16) / longScale
+
+      const expected: string[] = []
+      const dotJoined: string[] = []
+      for (const distinctId of distinctIds) {
+        if (serverHash('holdout-', distinctId) <= exclusionPercentage / 100) {
+          expected.push(distinctId)
+        }
+        if (serverHash('holdout.', distinctId) <= exclusionPercentage / 100) {
+          dotJoined.push(distinctId)
+        }
+      }
+      // Guard the guard: if these ever coincide the test would pass with the bug present.
+      expect(expected).not.toEqual(dotJoined)
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: holdoutFlag(exclusionPercentage) }))
+      posthog = newPosthog()
+
+      const heldOut: string[] = []
+      for (const distinctId of distinctIds) {
+        if ((await posthog.getFeatureFlag('experiment-flag', distinctId)) === 'holdout-727') {
+          heldOut.push(distinctId)
+        }
+      }
+
+      expect(heldOut).toEqual(expected)
+    })
   })
 
   describe('early exit', () => {
@@ -169,6 +418,44 @@ describe('local evaluation', () => {
 
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
+
+    it.each(['is_set', 'is_not_set'])(
+      'preserves remote fallback after an inconclusive %s condition',
+      async (operator) => {
+        const flags: any = {
+          flags: [
+            {
+              id: 1,
+              name: 'Early Exit Presence Feature',
+              key: 'early-exit-presence-flag',
+              active: true,
+              filters: {
+                early_exit: true,
+                groups: [
+                  {
+                    properties: [{ key: 'plan', operator, value: '', type: 'person' }],
+                    rollout_percentage: 100,
+                  },
+                  { properties: [], rollout_percentage: 0 },
+                ],
+              },
+            },
+          ],
+        }
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: flags,
+            decideFlags: { 'early-exit-presence-flag': 'server-fallback' },
+          })
+        )
+        posthog = newPosthog()
+
+        expect(await posthog.getFeatureFlag('early-exit-presence-flag', 'some-distinct-id')).toEqual('server-fallback')
+
+        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+      }
+    )
 
     it('does not early exit when a group fails on a property filter rather than rollout', async () => {
       // First group fails on its property (region mismatch), not rollout — so even with early_exit
@@ -523,7 +810,7 @@ describe('local evaluation', () => {
           bucketing_identifier: null,
           active: true,
           filters: {
-            groups: [{ properties: [], rollout_percentage: 100 }],
+            groups: [{ properties: [], rollout_percentage: 50 }],
           },
         },
         {
@@ -533,7 +820,7 @@ describe('local evaluation', () => {
           bucketing_identifier: '',
           active: true,
           filters: {
-            groups: [{ properties: [], rollout_percentage: 100 }],
+            groups: [{ properties: [], rollout_percentage: 50 }],
           },
         },
       ],
@@ -547,8 +834,10 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    expect(await posthog.getFeatureFlag('null-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
-    expect(await posthog.getFeatureFlag('empty-bucketing-identifier-flag', 'some-distinct-id')).toEqual(true)
+    for (const key of ['null-bucketing-identifier-flag', 'empty-bucketing-identifier-flag']) {
+      expect(await posthog.getFeatureFlag(key, 'user-2')).toBe(true)
+      expect(await posthog.getFeatureFlag(key, 'user-0')).toBe(false)
+    }
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
@@ -772,13 +1061,13 @@ describe('local evaluation', () => {
           distinct_id: 'some-distinct-id_outside_rollout?',
           groups: {},
           person_properties: {
-            distinct_id: 'some-distinct-id_outside_rollout?',
             region: 'USA',
             email: 'a@b.com',
           },
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
+          evaluation_runtime: 'server',
         }),
       })
     )
@@ -795,10 +1084,11 @@ describe('local evaluation', () => {
           token: 'TEST_API_KEY',
           distinct_id: 'some-distinct-id',
           groups: {},
-          person_properties: { distinct_id: 'some-distinct-id', doesnt_matter: '1' },
+          person_properties: { doesnt_matter: '1' },
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
+          evaluation_runtime: 'server',
         }),
       })
     )
@@ -1751,6 +2041,89 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
+  it("computes 'not in' cohort conditions locally (negated cohort membership)", async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exclude Team',
+          key: 'exclude-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'not_in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+        {
+          id: 2,
+          name: 'Include Team',
+          key: 'include-team',
+          active: true,
+          rollout_percentage: 100,
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'id', value: 98, type: 'cohort', operator: 'in' }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '98': {
+          type: 'OR',
+          values: [{ key: 'email', operator: 'regex', value: '.*@example\\.com$', type: 'person' }],
+        },
+      },
+    }
+    mockedFetch.mockImplementation(
+      apiImplementation({
+        localFlags: flags,
+        decideFlags: {},
+      })
+    )
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // In the cohort + `not_in` => excluded => OFF. (Pre-fix this incorrectly returned `true`.)
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(false)
+    // Not in the cohort + `not_in` => ON.
+    expect(
+      await posthog.getFeatureFlag('exclude-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(true)
+
+    // `in` keeps working: in the cohort => ON, not in the cohort => OFF.
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'team@example.com' },
+      })
+    ).toEqual(true)
+    expect(
+      await posthog.getFeatureFlag('include-team', 'some-distinct-id', {
+        personProperties: { email: 'outsider@example.org' },
+      })
+    ).toEqual(false)
+
+    // All evaluated locally; the /flags (decide) API must not be consulted.
+    expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+  })
+
   it('gets feature flag with variant overrides', async () => {
     const flags = {
       flags: [
@@ -2313,7 +2686,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2333,7 +2706,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2369,7 +2742,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2536,7 +2909,7 @@ describe('local evaluation', () => {
           filters: {
             groups: [
               {
-                properties: [],
+                properties: [{ key: 'id', value: 999, type: 'cohort' }],
                 rollout_percentage: 100,
                 variant: 'variant-a',
               },
@@ -2574,7 +2947,7 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
-  it('resolves is_not_set locally without forcing inconclusive', async () => {
+  it('treats an omitted is_not_set property as inconclusive locally', async () => {
     const flags = {
       flags: [
         {
@@ -2602,11 +2975,17 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Key absent → property is_not_set is true → flag matches.
-    expect(await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: {} })).toEqual(true)
-    // Key present → property IS set → flag does not match.
     expect(
-      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: { email: 'a@b.com' } })
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', {
+        personProperties: {},
+        onlyEvaluateLocally: true,
+      })
+    ).toBeUndefined()
+    expect(
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', {
+        personProperties: { email: 'a@b.com' },
+        onlyEvaluateLocally: true,
+      })
     ).toEqual(false)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
@@ -2704,7 +3083,7 @@ describe('local evaluation', () => {
           filters: {
             groups: [
               {
-                properties: [{ key: 'plan', value: 'pro', operator: 'exact', type: 'person' }],
+                properties: [{ key: 'subscription', value: 'paid', operator: 'exact', type: 'person' }],
                 rollout_percentage: 100,
               },
             ],
@@ -2745,17 +3124,319 @@ describe('local evaluation', () => {
 
     expect(
       await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
-        personProperties: { plan: 'pro' },
+        personProperties: { plan: 'pro', subscription: 'paid' },
         onlyEvaluateLocally: true,
       })
     ).toBe(true)
 
     expect(
       await posthog.getFeatureFlag('cohort-flag-dep', 'some-distinct-id', {
-        personProperties: { plan: 'free' },
+        personProperties: { plan: 'pro', subscription: 'free' },
         onlyEvaluateLocally: true,
       })
     ).toBe(false)
+  })
+})
+
+describe('evaluation runtime', () => {
+  let posthog: PostHog
+
+  const flags = {
+    flags: [
+      { id: 1, key: 'shared-copy', active: true, evaluation_runtime: 'all' },
+      { id: 2, key: 'web-banner', active: true, evaluation_runtime: 'client' },
+      { id: 3, key: 'batch-job', active: true, evaluation_runtime: 'server' },
+      { id: 4, key: 'unset-flag', active: true, evaluation_runtime: null },
+      { id: 5, key: 'legacy-flag', active: true },
+    ],
+  }
+
+  beforeEach(async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+    await posthog.reloadFeatureFlags()
+  })
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  it.each([
+    ['shared-copy', 'all'],
+    ['web-banner', 'client'],
+    ['batch-job', 'server'],
+    // A definition without a runtime reports the default PostHog applies.
+    ['unset-flag', 'all'],
+    ['legacy-flag', 'all'],
+  ])('reports the runtime of %s as %s', (key, expected) => {
+    expect(posthog.getFeatureFlagEvaluationRuntime(key)).toEqual(expected)
+  })
+
+  it('reports undefined for a flag it has no definition for', () => {
+    expect(posthog.getFeatureFlagEvaluationRuntime('no-such-flag')).toBeUndefined()
+  })
+
+  it.each([
+    ['client', ['shared-copy', 'web-banner', 'unset-flag', 'legacy-flag']],
+    ['server', ['shared-copy', 'batch-job', 'unset-flag', 'legacy-flag']],
+    ['all', ['shared-copy', 'web-banner', 'batch-job', 'unset-flag', 'legacy-flag']],
+  ] as const)('lists the keys the %s runtime can evaluate', (runtime, expected) => {
+    expect(posthog.getFeatureFlagKeysByEvaluationRuntime(runtime)).toEqual(expected)
+  })
+
+  it('reports nothing when local evaluation is not configured', async () => {
+    const remoteOnly = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(remoteOnly.getFeatureFlagEvaluationRuntime('web-banner')).toBeUndefined()
+    expect(remoteOnly.getFeatureFlagKeysByEvaluationRuntime('client')).toEqual([])
+
+    await remoteOnly.shutdown()
+  })
+})
+
+describe('local evaluation with evaluation contexts', () => {
+  let posthog: PostHog
+
+  vi.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  const flags = {
+    flags: [
+      {
+        id: 1,
+        name: 'Untagged Feature',
+        key: 'untagged-flag',
+        active: true,
+        evaluation_contexts: [],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 2,
+        name: 'Backend Feature',
+        key: 'backend-flag',
+        active: true,
+        evaluation_contexts: ['backend', 'api'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 3,
+        name: 'Frontend Feature',
+        key: 'frontend-flag',
+        active: true,
+        evaluation_contexts: ['frontend'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+    ],
+  }
+
+  it('keeps untagged and matching flags, drops non-matching flags', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+    })
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('evaluates every flag when no evaluation contexts are set', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+      'frontend-flag': true,
+    })
+  })
+
+  it('supports the deprecated evaluationEnvironments option', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationEnvironments: ['frontend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'frontend-flag': true,
+    })
+  })
+
+  it('reads the legacy evaluation_tags field from older servers', async () => {
+    // Servers older than the field rename report contexts under `evaluation_tags`.
+    const legacyFlags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Untagged Feature',
+          key: 'untagged-flag',
+          active: true,
+          evaluation_tags: [],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+        {
+          id: 2,
+          name: 'Backend Feature',
+          key: 'backend-flag',
+          active: true,
+          evaluation_tags: ['backend', 'api'],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+        {
+          id: 3,
+          name: 'Frontend Feature',
+          key: 'frontend-flag',
+          active: true,
+          evaluation_tags: ['frontend'],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: legacyFlags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+    })
+  })
+
+  // A kept flag can depend on one dropped by context filtering. The remote evaluator pre-seeds
+  // filtered-out flags as false, so a dependency must resolve to a definite value here too rather
+  // than throw "Missing flag dependency" (which would strand the flag at undefined in strict mode).
+  const dependencyFlags = {
+    flags: [
+      {
+        id: 1,
+        name: 'Frontend Feature',
+        key: 'frontend-flag',
+        active: true,
+        evaluation_contexts: ['frontend'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 2,
+        name: 'Depends on frontend flag being false',
+        key: 'depends-expects-false',
+        active: true,
+        evaluation_contexts: ['backend'],
+        filters: {
+          groups: [
+            {
+              properties: [{ key: 'frontend-flag', value: false, type: 'flag', dependency_chain: ['frontend-flag'] }],
+              rollout_percentage: 100,
+            },
+          ],
+        },
+      },
+      {
+        id: 3,
+        name: 'Depends on frontend flag being true',
+        key: 'depends-expects-true',
+        active: true,
+        evaluation_contexts: ['backend'],
+        filters: {
+          groups: [
+            {
+              properties: [{ key: 'frontend-flag', value: true, type: 'flag', dependency_chain: ['frontend-flag'] }],
+              rollout_percentage: 100,
+            },
+          ],
+        },
+      },
+    ],
+  }
+
+  it('treats a context-filtered dependency as false in strict local evaluation', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: dependencyFlags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // frontend-flag is dropped, so its dependents resolve against a seeded `false` value.
+    expect(await posthog.getFeatureFlag('depends-expects-false', 'distinct-id', { onlyEvaluateLocally: true })).toBe(
+      true
+    )
+    expect(await posthog.getFeatureFlag('depends-expects-true', 'distinct-id', { onlyEvaluateLocally: true })).toBe(
+      false
+    )
+  })
+
+  it('still throws for a dependency that was never in the definitions payload', async () => {
+    const flagsMissingDep = {
+      flags: [
+        {
+          id: 1,
+          name: 'Depends on an absent flag',
+          key: 'depends-on-missing',
+          active: true,
+          evaluation_contexts: ['backend'],
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'never-sent', value: true, type: 'flag', dependency_chain: ['never-sent'] }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flagsMissingDep }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // A genuinely absent dependency stays inconclusive, so the flag resolves to undefined.
+    expect(
+      await posthog.getFeatureFlag('depends-on-missing', 'distinct-id', { onlyEvaluateLocally: true })
+    ).toBeUndefined()
   })
 })
 
@@ -2801,36 +3482,37 @@ describe('getFeatureFlag', () => {
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       ...posthogImmediateResolveOptions,
     })
-    let capturedMessage: any
-    posthog.on('capture', (message) => {
-      capturedMessage = message
-    })
+    try {
+      const captured = new Promise<any>((resolve) => posthog.on('capture', resolve))
 
-    expect(
-      await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', {
-        personProperties: {
-          region: 'USA',
-        } as unknown as Record<string, string>,
+      expect(
+        await posthog.getFeatureFlag('complex-flag', 'some-distinct-id', {
+          personProperties: {
+            region: 'USA',
+          } as unknown as Record<string, string>,
+        })
+      ).toEqual(true)
+
+      const capturedMessage = await captured
+
+      expect(capturedMessage).toMatchObject({
+        distinct_id: 'some-distinct-id',
+        event: '$feature_flag_called',
+        properties: {
+          '$feature/complex-flag': true,
+          $feature_flag: 'complex-flag',
+          $feature_flag_response: true,
+          $lib: posthog.getLibraryId(),
+          $lib_version: posthog.getLibraryVersion(),
+          locally_evaluated: true,
+        },
       })
-    ).toEqual(true)
 
-    await waitForPromises()
-
-    expect(capturedMessage).toMatchObject({
-      distinct_id: 'some-distinct-id',
-      event: '$feature_flag_called',
-      properties: {
-        '$feature/complex-flag': true,
-        $feature_flag: 'complex-flag',
-        $feature_flag_response: true,
-        $lib: posthog.getLibraryId(),
-        $lib_version: posthog.getLibraryVersion(),
-        locally_evaluated: true,
-      },
-    })
-
-    expect(capturedMessage.properties).not.toHaveProperty('$active_feature_flags')
-    expect(capturedMessage.properties).not.toHaveProperty('$feature/simple-flag')
+      expect(capturedMessage.properties).not.toHaveProperty('$active_feature_flags')
+      expect(capturedMessage.properties).not.toHaveProperty('$feature/simple-flag')
+    } finally {
+      await posthog.shutdown()
+    }
   })
 
   it('should include $feature_flag_id and $feature_flag_reason for locally evaluated flags', async () => {
@@ -2877,7 +3559,7 @@ describe('getFeatureFlag', () => {
 })
 
 describe('match properties', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   it('with operator exact', () => {
     const property_a = { key: 'key', value: 'value' }
@@ -2966,6 +3648,89 @@ describe('match properties', () => {
     expect(matchProperty(property_b, { key: 'val3' })).toBe(true)
 
     expect(matchProperty(property_b, { key: 'three' })).toBe(false)
+  })
+
+  it('with operator starts_with', () => {
+    const property_a = { key: 'key', value: 'Val', operator: 'starts_with' }
+
+    expect(matchProperty(property_a, { key: 'value' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'VALUE' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'vaLue4' })).toBe(true)
+
+    expect(matchProperty(property_a, { key: 'prevalue' })).toBe(false)
+    expect(matchProperty(property_a, { key: 'Alakazam' })).toBe(false)
+    expect(matchProperty(property_a, { key: 123 })).toBe(false)
+
+    expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
+
+    const property_b = { key: 'key', value: '3', operator: 'starts_with' }
+
+    expect(matchProperty(property_b, { key: '3' })).toBe(true)
+    expect(matchProperty(property_b, { key: 323 })).toBe(true)
+
+    expect(matchProperty(property_b, { key: 123 })).toBe(false)
+    expect(matchProperty(property_b, { key: 'val3' })).toBe(false)
+
+    const property_c = { key: 'key', value: 'Val', operator: 'not_starts_with' }
+
+    expect(matchProperty(property_c, { key: 'value' })).toBe(false)
+    expect(matchProperty(property_c, { key: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(property_c, { key: 'prevalue' })).toBe(true)
+    expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+
+    expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
+
+    // The null guard fires before operator dispatch, so the not_ variant is not a pure
+    // negation here — both directions return false, matching icontains.
+    expect(matchProperty(property_a, { key: null })).toBe(false)
+    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: undefined })).toBe(false)
+  })
+
+  it('with operator ends_with', () => {
+    const property_a = { key: 'key', value: 'lUe', operator: 'ends_with' }
+
+    expect(matchProperty(property_a, { key: 'value' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'VALUE' })).toBe(true)
+    expect(matchProperty(property_a, { key: '343tfvalue' })).toBe(true)
+
+    expect(matchProperty(property_a, { key: 'value2' })).toBe(false)
+    expect(matchProperty(property_a, { key: 'Alakazam' })).toBe(false)
+    expect(matchProperty(property_a, { key: 123 })).toBe(false)
+
+    expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
+
+    const property_b = { key: 'key', value: '3', operator: 'ends_with' }
+
+    expect(matchProperty(property_b, { key: '3' })).toBe(true)
+    expect(matchProperty(property_b, { key: 323 })).toBe(true)
+    expect(matchProperty(property_b, { key: 13 })).toBe(true)
+
+    expect(matchProperty(property_b, { key: 321 })).toBe(false)
+    expect(matchProperty(property_b, { key: '3val' })).toBe(false)
+
+    const property_c = { key: 'key', value: 'lUe', operator: 'not_ends_with' }
+
+    expect(matchProperty(property_c, { key: 'value' })).toBe(false)
+    expect(matchProperty(property_c, { key: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(property_c, { key: 'value2' })).toBe(true)
+    expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+
+    expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
+
+    // The null guard fires before operator dispatch, so the not_ variant is not a pure
+    // negation here — both directions return false, matching icontains.
+    expect(matchProperty(property_a, { key: null })).toBe(false)
+    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: undefined })).toBe(false)
   })
 
   it('with operator regex', () => {
@@ -3151,14 +3916,14 @@ describe('match properties', () => {
     ['is_date_after', '1y', '2021-04-30 00:00:00 GMT', false],
     ['is_date_after', '1y', '2021-03-01 12:13:00 GMT', false],
   ])('with relative date operators: %s, %s, %s', (operator, value, date, expectation) => {
-    jest.setSystemTime(new Date('2022-05-01'))
+    vi.setSystemTime(new Date('2022-05-01'))
     expect(matchProperty({ key: 'key', value, operator }, { key: date })).toBe(expectation)
 
     return
   })
 
   it('with relative date operators handles invalid keys', () => {
-    jest.setSystemTime(new Date('2022-05-01'))
+    vi.setSystemTime(new Date('2022-05-01'))
 
     // # can't be an invalid string
     expect(() => matchProperty({ key: 'key', value: '1d', operator: 'is_date_before' }, { key: 'abcdef' })).toThrow(
@@ -3327,44 +4092,26 @@ describe('match properties', () => {
     })
   })
 
-  describe('is_not_set', () => {
-    it('returns true when the property is absent', () => {
-      expect(matchProperty({ key: 'missing', value: 'whatever', operator: 'is_not_set' }, {})).toBe(true)
+  describe('presence operators', () => {
+    it.each([
+      ['null', null],
+      ['undefined', undefined],
+      ['false', false],
+      ['zero', 0],
+      ['empty string', ''],
+      ['empty array', []],
+      ['empty object', {}],
+    ])('treats present %s as set', (_, value) => {
+      expect(matchProperty({ key: 'key', value: '', operator: 'is_set' }, { key: value })).toBe(true)
+      expect(matchProperty({ key: 'key', value: '', operator: 'is_not_set' }, { key: value })).toBe(false)
     })
 
-    it('returns false when the property is present', () => {
-      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: 'pro' })).toBe(false)
-    })
-
-    it('treats a null-valued property as still set (returns false)', () => {
-      // `null` counts as present in propertyValues; only genuinely missing keys read as "not set".
-      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: null })).toBe(false)
+    it.each(['is_set', 'is_not_set'])('%s is inconclusive when the property is omitted', (operator) => {
+      expect(() => matchProperty({ key: 'key', value: '', operator }, {})).toThrow(InconclusiveMatchError)
     })
 
     it('still throws InconclusiveMatchError when key is absent for other operators', () => {
-      expect(() => matchProperty({ key: 'k', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
-    })
-  })
-
-  describe('is_set with null/undefined values', () => {
-    // Pre-fix, `NULL_VALUES_ALLOWED_OPERATORS = ['is_not']` excluded `is_set`, so the null guard
-    // returned false (and warned) before the switch could reach the `case 'is_set'` branch.
-    // `is_set` is about key presence, not value.
-    it('returns true when the property value is null', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
-    })
-
-    it('returns true when the property value is undefined but the key is present', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: undefined })).toBe(true)
-    })
-
-    it('returns true for a normal value', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
-    })
-
-    it('throws InconclusiveMatchError when the key is absent', () => {
-      // Key not in propertyValues — we cant tell locally whether the server has it.
-      expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+      expect(() => matchProperty({ key: 'key', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
     })
   })
 })
@@ -3815,9 +4562,9 @@ describe('semver operators', () => {
 })
 
 describe('relative date parsing', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
   beforeEach(() => {
-    jest.setSystemTime(new Date('2020-01-01T12:01:20.134Z'))
+    vi.setSystemTime(new Date('2020-01-01T12:01:20.134Z'))
   })
 
   it('invalid input', () => {
@@ -3886,7 +4633,7 @@ describe('relative date parsing', () => {
     expect(relativeDateParseForFeatureFlagMatching('1y')).toEqual(new Date('2019-01-01T12:01:20.134Z'))
     expect(relativeDateParseForFeatureFlagMatching('12m')).toEqual(relativeDateParseForFeatureFlagMatching('1y'))
 
-    jest.setSystemTime(new Date('2020-04-03T00:00:00Z'))
+    vi.setSystemTime(new Date('2020-04-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('1m')).toEqual(new Date('2020-03-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('2m')).toEqual(new Date('2020-02-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('4m')).toEqual(new Date('2019-12-03T00:00:00Z'))
@@ -3914,13 +4661,13 @@ describe('consistency tests', () => {
   // # They ensure that the server and library hash calculations are in sync.
 
   let posthog: PostHog
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     await posthog.shutdown()
   })
 
-  it('is consistent for simple flags', () => {
+  it('is consistent for simple flags', async () => {
     const flags = {
       flags: [
         {
@@ -4946,11 +5693,11 @@ describe('consistency tests', () => {
       true,
     ]
 
-    results.forEach(async (result, index) => {
+    for (const [index, result] of results.entries()) {
       const distinctId = `distinct_id_${index}`
       const value = await posthog.isFeatureEnabled('simple-flag', distinctId)
-      expect(value).toBe(result)
-    })
+      expect(value, distinctId).toBe(result)
+    }
   })
 
   it('is consistent for multivariate flags', async () => {
@@ -5988,21 +6735,32 @@ describe('consistency tests', () => {
       'first-variant',
     ]
 
-    results.forEach(async (result, index) => {
+    for (const [index, result] of results.entries()) {
       const distinctId = `distinct_id_${index}`
       const value = await posthog.getFeatureFlag('multivariate-flag', distinctId)
-      expect(value).toBe(result)
-    })
+      expect(value, distinctId).toBe(result)
+    }
   })
 })
 
 describe('quota limiting', () => {
   it('should clear local flags when quota limited', async () => {
-    const consoleSpy = jest.spyOn(console, 'warn')
-
+    const consoleSpy = vi.spyOn(console, 'warn')
     mockedFetch.mockImplementation(
       apiImplementation({
-        localFlagsStatus: 402,
+        localFlags: {
+          flags: [
+            {
+              id: 1,
+              key: 'quota-flag',
+              active: true,
+              filters: {
+                groups: [{ properties: [], rollout_percentage: 100 }],
+                payloads: { true: 'quota-payload' },
+              },
+            },
+          ],
+        },
       })
     )
 
@@ -6012,30 +6770,40 @@ describe('quota limiting', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Enable debug mode to see the messages
-    posthog.debug(true)
+    try {
+      posthog.debug(true)
+      await posthog.reloadFeatureFlags()
+      expect(await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+        featureFlags: { 'quota-flag': true },
+        featureFlagPayloads: { 'quota-flag': 'quota-payload' },
+      })
 
-    // Force a reload and wait for it to complete
-    await posthog.reloadFeatureFlags()
+      mockedFetch.mockImplementation(apiImplementation({ localFlagsStatus: 402 }))
+      await posthog.reloadFeatureFlags()
 
-    // locally evaluate the flags
-    const res = await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })
-
-    // expect the flags to be cleared and for the debug message to be logged
-    expect(res.featureFlags).toEqual({})
-    expect(res.featureFlagPayloads).toEqual({})
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all local flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
-    )
-
-    consoleSpy.mockRestore()
+      expect(await posthog.getAllFlagsAndPayloads('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+        featureFlags: {},
+        featureFlagPayloads: {},
+      })
+      expect(await posthog.getFeatureFlag('quota-flag', 'distinct-id', { onlyEvaluateLocally: true })).toBeUndefined()
+      expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[FEATURE FLAGS] Feature flags quota limit exceeded - unsetting all local flags. Learn more about billing limits at https://posthog.com/docs/billing/limits-alerts'
+      )
+    } finally {
+      try {
+        await posthog.shutdown()
+      } finally {
+        consoleSpy.mockRestore()
+      }
+    }
   })
 })
 
 describe('fetch context handling', () => {
   it('should call fetch without bound context to avoid illegal invocation errors in edge environments', async () => {
     let fetchContext: any
-    const mockFetch = jest.fn(function (this: any, ..._args: unknown[]) {
+    const mockFetch = vi.fn(function (this: any, ..._args: unknown[]) {
       fetchContext = this
       return Promise.resolve(
         new Response(
@@ -6054,19 +6822,238 @@ describe('fetch context handling', () => {
       ...posthogImmediateResolveOptions,
     })
 
+    try {
+      await posthog.reloadFeatureFlags()
+      expect(mockFetch).toHaveBeenCalled()
+      expect(fetchContext).toBeUndefined()
+    } finally {
+      await posthog.shutdown()
+    }
+  })
+})
+
+describe('feature flag definition request timeout', () => {
+  let posthog: PostHog
+
+  vi.useFakeTimers()
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await posthog.shutdown()
+    vi.useFakeTimers()
+  })
+
+  const successfulFlagDefinitions = {
+    flags: [
+      {
+        id: 1,
+        key: 'body-timeout-flag',
+        active: true,
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+    ],
+    group_type_mapping: {},
+    cohorts: {},
+  }
+
+  it('aborts a stalled 200 response body without pinning reload, local evaluation, or polling', async () => {
+    const signals: AbortSignal[] = []
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
+      const signal = options.signal
+      if (!signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+      signals.push(signal)
+
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        text: () => Promise.resolve(''),
+        json: () => {
+          if (signals.length === 3) {
+            return Promise.resolve(successfulFlagDefinitions)
+          }
+
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted')
+              error.name = 'AbortError'
+              reject(error)
+            })
+          })
+        },
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 100,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const reloadPromise = posthog.reloadFeatureFlags()
+    expect(signals).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(signals[0].aborted).toBe(true)
+    await expect(reloadPromise).resolves.toBeUndefined()
+
+    const evaluationPromise = posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(signals).toHaveLength(2)
+
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(signals[1].aborted).toBe(true)
+    await expect(evaluationPromise).resolves.toBeUndefined()
+
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(fetchDefinitions).toHaveBeenCalledTimes(3)
+    await expect(
+      posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).resolves.toBe(true)
+  })
+
+  it('allows a slow 200 response body to complete before the deadline and clears its timer', async () => {
+    let signal: AbortSignal | undefined
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
+      signal = options.signal
+      if (!signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        text: () => Promise.resolve(''),
+        json: () =>
+          new Promise((resolve, reject) => {
+            const bodyTimer = setTimeout(() => resolve(successfulFlagDefinitions), 5)
+            signal?.addEventListener('abort', () => {
+              clearTimeout(bodyTimer)
+              const error = new Error('The operation was aborted')
+              error.name = 'AbortError'
+              reject(error)
+            })
+          }),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const reloadPromise = posthog.reloadFeatureFlags()
+    await vi.advanceTimersByTimeAsync(5)
+
+    await expect(reloadPromise).resolves.toBeUndefined()
+    expect(signal?.aborted).toBe(false)
+    await expect(
+      posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).resolves.toBe(true)
+
+    await vi.advanceTimersByTimeAsync(5)
+
+    expect(signal?.aborted).toBe(false)
+  })
+
+  it('clears the request timer after consuming a 200 response as text and preserves its body', async () => {
+    const signals: AbortSignal[] = []
+    const body = { cancel: vi.fn() } as unknown as ReadableStream<Uint8Array>
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
+      if (!options.signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+      signals.push(options.signal)
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        body,
+        text: () => Promise.resolve('response body'),
+        json: () => Promise.resolve(successfulFlagDefinitions),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
     await posthog.reloadFeatureFlags()
-    expect(mockFetch).toHaveBeenCalled()
-    expect(fetchContext).toBeUndefined()
+    expect(fetchDefinitions).toHaveBeenCalledTimes(1)
+
+    const response = await (posthog as any).featureFlagsPoller._requestFeatureFlagDefinitions()
+
+    expect(fetchDefinitions).toHaveBeenCalledTimes(2)
+    expect(signals[1]).not.toBe(signals[0])
+    expect(response.body).toBe(body)
+    await expect(response.text()).resolves.toBe('response body')
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(signals[1].aborted).toBe(false)
+  })
+
+  it.each([304, 500])('clears the request timer for a %i response without consuming its body', async (status) => {
+    let signal: AbortSignal | undefined
+    const json = vi.fn()
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
+      signal = options.signal
+      return Promise.resolve({
+        status,
+        headers: { get: () => (status === 304 ? 'etag' : null) },
+        text: () => Promise.resolve(''),
+        json,
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(json).not.toHaveBeenCalled()
+    expect(signal?.aborted).toBe(false)
   })
 })
 
 describe('ETag support for local evaluation polling', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
+    vi.useRealTimers()
     await posthog.shutdown()
+    vi.useFakeTimers()
   })
 
   it('stores ETag from response and sends it on subsequent requests', async () => {
@@ -6078,7 +7065,7 @@ describe('ETag support for local evaluation polling', () => {
 
     // Track all fetch calls
     const fetchCalls: { url: string; options: any }[] = []
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return Promise.resolve({
         status: 200,
@@ -6097,15 +7084,14 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Trigger a reload
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Second call should have If-None-Match header with the ETag
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"abc123"')
@@ -6130,7 +7116,7 @@ describe('ETag support for local evaluation polling', () => {
     // Track all fetch calls to verify headers
     const fetchCalls: { url: string; options: any }[] = []
     let callCount = 0
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       callCount++
       if (callCount === 1) {
@@ -6163,26 +7149,23 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial load
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call should not have If-None-Match header
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
-    // Verify flags were loaded
-    const flag1 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag1).toBe(true)
+    // Verify flags were loaded locally
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Trigger a reload (should get 304)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // Verify the request that triggered 304 included the If-None-Match header
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"test-etag"')
 
-    // Verify flags are still available after 304
-    const flag2 = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag2).toBe(true)
+    // Verify flags are still available locally after 304
+    expect((posthog as any).featureFlagsPoller.featureFlagsByKey['test-flag']?.active).toBe(true)
 
     // Verify fetch was called twice
     expect(mockFetch).toHaveBeenCalledTimes(2)
@@ -6190,7 +7173,7 @@ describe('ETag support for local evaluation polling', () => {
 
   it('updates ETag when flags change', async () => {
     let callCount = 0
-    const mockFetch = jest.fn(() => {
+    const mockFetch = vi.fn(() => {
       callCount++
       return Promise.resolve({
         status: 200,
@@ -6208,7 +7191,7 @@ describe('ETag support for local evaluation polling', () => {
     })
 
     const fetchCalls: { url: string; options: any }[] = []
-    const wrappedFetch = jest.fn((url: string, options: any) => {
+    const wrappedFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return mockFetch()
     })
@@ -6220,25 +7203,24 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call - no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
   })
 
   it('clears ETag when server stops sending it', async () => {
     let callCount = 0
-    const mockFetch = jest.fn(() => {
+    const mockFetch = vi.fn(() => {
       callCount++
       return Promise.resolve({
         status: 200,
@@ -6257,7 +7239,7 @@ describe('ETag support for local evaluation polling', () => {
     })
 
     const fetchCalls: { url: string; options: any }[] = []
-    const wrappedFetch = jest.fn((url: string, options: any) => {
+    const wrappedFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return mockFetch()
     })
@@ -6269,86 +7251,78 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // Second call should have the ETag from first response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"initial-etag"')
 
     // Third call should not have ETag (server stopped sending it)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBeUndefined()
   })
 
   it('resets backoff on 304 response', async () => {
-    let callCount = 0
-    const mockFetch = jest.fn(() => {
-      callCount++
-      if (callCount === 1) {
-        // First call: return full response
-        return Promise.resolve({
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () =>
-            Promise.resolve({
-              flags: [
-                {
-                  id: 1,
-                  key: 'test-flag',
-                  active: true,
-                  filters: {
-                    groups: [{ rollout_percentage: 100 }],
-                  },
-                },
-              ],
-              group_type_mapping: {},
-              cohorts: {},
-            }),
-          headers: {
-            get: (name: string) => (name === 'ETag' ? '"test-etag"' : null),
-          },
-        })
-      } else {
-        // Subsequent calls: return 304
-        return Promise.resolve({
-          status: 304,
-          text: () => Promise.resolve(''),
-          json: () => Promise.reject(new Error('No body on 304')),
-          headers: {
-            get: () => null,
-          },
-        })
-      }
+    const mockFetch = vi.fn(() => {
+      const call = mockFetch.mock.calls.length
+      const status = call === 2 || call === 5 ? 401 : call === 1 ? 200 : 304
+      return Promise.resolve({
+        status,
+        text: () => Promise.resolve(''),
+        json: () =>
+          Promise.resolve({
+            flags: [
+              {
+                id: 1,
+                key: 'test-flag',
+                active: true,
+                filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+              },
+            ],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: { get: () => '"test-etag"' },
+      })
     })
 
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      sendFeatureFlagEvent: false,
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
-
-    // Multiple 304 responses should not cause any issues
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
-    await posthog.reloadFeatureFlags()
-    await waitForPromises()
-
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
     expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(await posthog.getFeatureFlag('test-flag', 'user', { onlyEvaluateLocally: true })).toBe(true)
 
-    // Flags should still work
-    const flag = await posthog.getFeatureFlag('test-flag', 'user-1')
-    expect(flag).toBe(true)
+    // Recovery restores the base cadence; another failure starts at the first backoff step.
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(6)
   })
 
   it('updates ETag when server sends new ETag with 304 response', async () => {
     let callCount = 0
     const fetchCalls: { url: string; options: any }[] = []
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       callCount++
       if (callCount === 1) {
@@ -6396,39 +7370,187 @@ describe('ETag support for local evaluation polling', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    // Wait deterministically for the constructor-started load to finish.
+    await posthog.reloadFeatureFlags()
 
     // First call has no ETag
     expect(fetchCalls[0].options.headers['If-None-Match']).toBeUndefined()
 
     // Second call uses initial ETag
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[1].options.headers['If-None-Match']).toBe('"etag-v1"')
 
     // Third call should use the updated ETag from the 304 response
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
     expect(fetchCalls[2].options.headers['If-None-Match']).toBe('"etag-v2"')
+  })
+})
+
+describe('local evaluation poll scheduling', () => {
+  let posthog: PostHog
+
+  vi.useFakeTimers()
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await posthog.shutdown(100).catch(() => undefined)
+    vi.useFakeTimers()
+  })
+
+  it('loads and manually refreshes local definitions without scheduling polls when the interval is null', async () => {
+    let enabled = true
+    const mockFetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({
+        flags: [{ id: 1, key: 'manual-flag', active: enabled, filters: { groups: [{}] } }],
+        group_type_mapping: {},
+        cohorts: {},
+      }),
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Join the initial load started by the constructor.
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(true)
+
+    enabled = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps on-demand error backoff without scheduling polls when the interval is null', async () => {
+    const mockFetch = vi.fn(async () => ({
+      status: 429,
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+    posthog.on('error', () => undefined)
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    await posthog.getFeatureFlag('manual-flag', 'user', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('schedules the next poll after a slow fetch completes', async () => {
+    let resolveFetch!: (response: any) => void
+    const deferredFetch = new Promise<any>((resolve) => {
+      resolveFetch = resolve
+    })
+    const mockFetch = vi.fn(() => deferredFetch)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const initialLoad = posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    resolveFetch({
+      status: 200,
+      json: () => Promise.resolve({ flags: [], group_type_mapping: {}, cohorts: {} }),
+      headers: { get: () => null },
+    })
+    await initialLoad
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not schedule another poll when stopped during a slow fetch', async () => {
+    let resolveFetch!: (response: any) => void
+    const deferredFetch = new Promise<any>((resolve) => {
+      resolveFetch = resolve
+    })
+    const mockFetch = vi.fn(() => deferredFetch)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const initialLoad = posthog.reloadFeatureFlags()
+    await posthog.featureFlagsPoller?.stopPoller()
+
+    resolveFetch({
+      status: 200,
+      json: () => Promise.resolve({ flags: [], group_type_mapping: {}, cohorts: {} }),
+      headers: { get: () => null },
+    })
+    await initialLoad
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('error handling and backoff', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    await posthog.shutdown()
+    vi.useRealTimers()
+    await posthog.shutdown(100).catch(() => undefined)
+    vi.useFakeTimers()
   })
 
   /**
    * Helper to create a mock fetch that returns a specific status code for flag requests.
    * Returns 200 for all other endpoints.
    */
-  function createMockFetch(statusCode: number, onFlagFetch?: () => void): jest.Mock & { callCount: number } {
+  function createMockFetch(statusCode: number, onFlagFetch?: () => void): vi.Mock & { callCount: number } {
     let callCount = 0
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         callCount++
         onFlagFetch?.()
@@ -6448,7 +7570,7 @@ describe('error handling and backoff', () => {
         text: () => Promise.resolve('ok'),
         json: () => Promise.resolve({ status: 'ok' }),
       })
-    }) as jest.Mock & { callCount: number }
+    }) as vi.Mock & { callCount: number }
 
     Object.defineProperty(mockFetch, 'callCount', {
       get: () => callCount,
@@ -6456,6 +7578,27 @@ describe('error handling and backoff', () => {
 
     return mockFetch
   }
+
+  it.each([401, 403, 429])('should schedule the next poll using updated backoff after %i', async (statusCode) => {
+    const mockFetch = createMockFetch(statusCode)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch.callCount).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch.callCount).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch.callCount).toBe(2)
+  })
 
   it('should block on-demand fetches during backoff period after 401', async () => {
     const mockFetch = createMockFetch(401)
@@ -6468,16 +7611,13 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-3')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-3', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -6493,14 +7633,12 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
@@ -6516,29 +7654,22 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
     // On-demand fetches should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     expect(mockFetch.callCount).toBe(1)
   })
 
   it('should allow on-demand fetches after backoff period expires', async () => {
-    // Use real timers for this test to avoid jest.useFakeTimers() resetting Date.now mock
-    jest.useRealTimers()
-
     let fetchCallCount = 0
     // Track time to simulate time passing
     let mockTime = Date.now()
-    const originalDateNow = Date.now
-    Date.now = () => mockTime
 
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep triggering backoff
@@ -6566,40 +7697,33 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for initial fetch with a short delay
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1)
 
     // On-demand fetch should be blocked during backoff
-    await posthog.getFeatureFlag('test-flag', 'user-1')
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1)
 
     // Advance mock time past the exponential backoff period
     // After first 401: backOffCount=1, interval = min(60000, 1000 * 2^1) = 2000ms
     mockTime += 2001
+    vi.setSystemTime(mockTime)
 
     // Now on-demand fetch should be allowed (backoff expired based on Date.now())
-    await posthog.getFeatureFlag('test-flag', 'user-2')
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
 
     // fetchCallCount should be 2 (on-demand fetch was allowed after backoff expired)
     expect(fetchCallCount).toBe(2)
-
-    // Restore Date.now and fake timers
-    Date.now = originalDateNow
-    jest.useFakeTimers()
   })
 
   it('should increase backoff intervals exponentially (2s → 4s → 8s)', async () => {
     // Verifies exponential backoff: interval = min(60s, baseInterval * 2^backoffCount)
     // With baseInterval=1000ms: 2000ms → 4000ms → 8000ms
-    jest.useRealTimers()
 
     let fetchCallCount = 0
     let mockTime = Date.now()
-    const originalDateNow = Date.now
-    Date.now = () => mockTime
 
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         return Promise.resolve({
@@ -6620,73 +7744,61 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await new Promise((r) => setTimeout(r, 50))
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch, backoff = 2s
 
     // Advance past 2s backoff, trigger second error
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    vi.setSystemTime(mockTime)
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // backoff now = 4s
 
     // 2s is NOT enough anymore
     mockTime += 2001
-    await posthog.getFeatureFlag('test', 'user')
+    vi.setSystemTime(mockTime)
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
 
     // 4s total is enough
     mockTime += 2000
-    await posthog.getFeatureFlag('test', 'user')
+    vi.setSystemTime(mockTime)
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // backoff now = 8s
 
     // 4s is NOT enough anymore
     mockTime += 4001
-    await posthog.getFeatureFlag('test', 'user')
+    vi.setSystemTime(mockTime)
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(3) // Still blocked
 
     // 8s total is enough
     mockTime += 4000
-    await posthog.getFeatureFlag('test', 'user')
+    vi.setSystemTime(mockTime)
+    await posthog.getFeatureFlag('test', 'user', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(4) // Exponential backoff verified!
-
-    Date.now = originalDateNow
-    jest.useFakeTimers()
   })
 
   it('should clear backoff after successful response', async () => {
-    let fetchCallCount = 0
-    const mockFetch = jest.fn((url: string) => {
-      if ((url as string).includes('flags/definitions')) {
-        fetchCallCount++
-        if (fetchCallCount === 1) {
-          // First fetch: return 401 to trigger backoff
-          return Promise.resolve({
-            status: 401,
-            text: () => Promise.resolve('Unauthorized'),
-            json: () => Promise.resolve({ error: 'Invalid API key' }),
-            headers: {
-              get: () => null,
-            },
-          })
-        } else {
-          // Subsequent fetches: return 200 success
-          return Promise.resolve({
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                flags: [{ id: 1, key: 'test-flag', active: true, filters: { groups: [] } }],
-                group_type_mapping: {},
-                cohorts: {},
-              }),
-            headers: {
-              get: () => null,
-            },
-          })
-        }
-      }
+    const mockFetch = vi.fn(() => {
+      const call = mockFetch.mock.calls.length
+      const status = call === 2 || call === 5 ? 401 : 200
       return Promise.resolve({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
+        status,
+        text: () => Promise.resolve(''),
+        json: () =>
+          Promise.resolve({
+            flags: [
+              {
+                id: 1,
+                key: 'test-flag',
+                active: true,
+                filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+              },
+            ],
+            group_type_mapping: {},
+            cohorts: {},
+          }),
+        headers: { get: () => '"test-etag"' },
       })
     })
 
@@ -6694,31 +7806,37 @@ describe('error handling and backoff', () => {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
       fetch: mockFetch,
-      featureFlagsPollingInterval: 30000,
+      featureFlagsPollingInterval: 1000,
+      sendFeatureFlagEvent: false,
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
-    expect(fetchCallCount).toBe(1) // Initial 401
-
-    // Use reloadFeatureFlags to trigger a retry (uses forceReload=true, bypasses backoff)
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
-    expect(fetchCallCount).toBe(2) // Retry succeeded with 200
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(await posthog.getFeatureFlag('test-flag', 'user', { onlyEvaluateLocally: true })).toBe(true)
 
-    // Now on-demand fetch should work immediately (backoff cleared by 200 response)
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
-
-    // The getFeatureFlag call should not trigger another fetch because
-    // loadedSuccessfullyOnce is now true (flags loaded successfully)
-    // This verifies the backoff was cleared and normal operation resumed
-    expect(fetchCallCount).toBe(2)
+    // Recovery restores the base cadence; another failure starts at the first backoff step.
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(6)
   })
 
   it('should allow reloadFeatureFlags() to bypass backoff', async () => {
     let fetchCallCount = 0
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep backoff active
@@ -6746,37 +7864,34 @@ describe('error handling and backoff', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await waitForPromises()
+    await posthog.reloadFeatureFlags()
     expect(fetchCallCount).toBe(1) // Initial fetch
 
     // On-demand fetch should be blocked
-    await posthog.getFeatureFlag('test-flag', 'user-1')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-1', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(1) // Still blocked
 
     // reloadFeatureFlags uses forceReload=true internally, should bypass backoff
     await posthog.reloadFeatureFlags()
-    await waitForPromises()
 
     // reloadFeatureFlags should have bypassed backoff and made a new fetch
     expect(fetchCallCount).toBe(2)
 
     // On-demand fetch should still be blocked (new backoff started after 401)
-    await posthog.getFeatureFlag('test-flag', 'user-2')
-    await waitForPromises()
+    await posthog.getFeatureFlag('test-flag', 'user-2', { onlyEvaluateLocally: true })
     expect(fetchCallCount).toBe(2) // Still blocked
   })
 })
 
 describe('experience continuity warning', () => {
   let posthog: PostHog
-  let warnSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(async () => {
@@ -6817,7 +7932,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience continuity'))
@@ -6847,7 +7962,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).not.toHaveBeenCalled()
   })
@@ -6885,7 +8000,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-1'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-2'))
@@ -6916,22 +8031,67 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
     expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not warn about continuity flags excluded by evaluation context', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Included Continuity Flag',
+          key: 'included-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          evaluation_contexts: ['backend'],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+        {
+          id: 2,
+          name: 'Excluded Continuity Flag',
+          key: 'excluded-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          evaluation_contexts: ['frontend'],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+
+    // Only the kept flag is evaluated locally, so only it should appear in the warning.
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('included-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 flag(s)'))
+    // The context-excluded flag never takes the server-fallback path here, so it must not be named.
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('excluded-cont-flag'))
   })
 })
 
 describe('strictLocalEvaluation option', () => {
   let posthog: PostHog
-  let warnSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(async () => {
@@ -6964,7 +8124,7 @@ describe('strictLocalEvaluation option', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Reset mock to track decide calls
     mockedFetch.mockClear()
@@ -7010,7 +8170,7 @@ describe('strictLocalEvaluation option', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
     mockedFetch.mockClear()
 
     // Override per-call to allow server fallback
@@ -7052,7 +8212,7 @@ describe('strictLocalEvaluation option', () => {
     })
 
     // Wait for flags to load
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Verify flag definitions loaded timestamp is available
     const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
@@ -7062,7 +8222,7 @@ describe('strictLocalEvaluation option', () => {
 
     // Test that locally evaluated flags include evaluation timestamps
     const capturedEvents: any[] = []
-    posthog.capture = jest.fn().mockImplementation((event) => {
+    posthog.capture = vi.fn().mockImplementation((event) => {
       capturedEvents.push(event)
     })
 
@@ -7082,7 +8242,7 @@ describe('strictLocalEvaluation option', () => {
     expect(event.properties.$feature_flag_evaluated_at).toBeLessThanOrEqual(afterCall)
   })
 
-  it('tracks flag definitions loaded timestamp', async () => {
+  it('updates flag definitions loaded timestamp after a successful reload', async () => {
     const flags = {
       flags: [
         {
@@ -7102,25 +8262,33 @@ describe('strictLocalEvaluation option', () => {
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       personalApiKey: 'TEST_PERSONAL_API_KEY',
-      sendFeatureFlagEvent: true, // Explicitly enable feature flag events
       ...posthogImmediateResolveOptions,
     })
 
-    // Wait for flags to load
-    await jest.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
 
     // Check that flag definitions loaded timestamp is available
     const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
     expect(flagDefinitionsLoadedAt).toBeDefined()
     expect(typeof flagDefinitionsLoadedAt).toBe('number')
     expect(flagDefinitionsLoadedAt).toBeGreaterThan(0)
+
+    const originalTime = Date.now()
+    const reloadedAt = originalTime + 1000
+    try {
+      vi.setSystemTime(reloadedAt)
+      await posthog.reloadFeatureFlags()
+      expect(posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()).toBe(reloadedAt)
+    } finally {
+      vi.setSystemTime(originalTime)
+    }
   })
 })
 
 describe('mixed targeting local evaluation', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     await posthog.shutdown()
@@ -7227,8 +8395,6 @@ describe('mixed targeting local evaluation', () => {
   })
 
   it('rollout uses group bucketing for group conditions and distinct_id for person conditions', async () => {
-    // A group condition with low rollout on one group key and high rollout on a person condition.
-    // The group condition should hash on the group key, not the distinct_id.
     const flag = {
       id: 1,
       name: 'Rollout Flag',
@@ -7239,8 +8405,13 @@ describe('mixed targeting local evaluation', () => {
         groups: [
           {
             aggregation_group_type_index: 0,
-            properties: [],
-            rollout_percentage: 100,
+            properties: [{ key: 'target', operator: 'exact', value: 'group', type: 'group', group_type_index: 0 }],
+            rollout_percentage: 50,
+          },
+          {
+            aggregation_group_type_index: null,
+            properties: [{ key: 'target', operator: 'exact', value: 'person', type: 'person' }],
+            rollout_percentage: 50,
           },
         ],
       },
@@ -7257,14 +8428,25 @@ describe('mixed targeting local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // With rollout 100%, matches deterministically regardless of hashing — but calling with the group
-    // passed should resolve locally, proving the group bucketing path is taken.
-    expect(
-      await posthog.getFeatureFlag('rollout-flag', 'any-distinct-id', {
-        groups: { company: 'acme' },
-        groupProperties: { company: {} },
-      })
-    ).toEqual(true)
+    for (const [distinctId, groupKey, groupExpected, personExpected] of [
+      ['user-0', 'user-1', true, false],
+      ['user-1', 'user-0', false, true],
+    ] as const) {
+      expect(
+        await posthog.getFeatureFlag('rollout-flag', distinctId, {
+          groups: { company: groupKey },
+          groupProperties: { company: { target: 'group' } },
+          personProperties: { target: 'neither' },
+        })
+      ).toBe(groupExpected)
+      expect(
+        await posthog.getFeatureFlag('rollout-flag', distinctId, {
+          groups: { company: groupKey },
+          groupProperties: { company: { target: 'neither' } },
+          personProperties: { target: 'person' },
+        })
+      ).toBe(personExpected)
+    }
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 })

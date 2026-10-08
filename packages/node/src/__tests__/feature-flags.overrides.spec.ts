@@ -2,9 +2,9 @@ import { PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import { apiImplementation, waitForPromises } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -13,7 +13,7 @@ const posthogImmediateResolveOptions: PostHogOptions = {
 describe('overrideFeatureFlags', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
@@ -102,15 +102,17 @@ describe('overrideFeatureFlags', () => {
 
       await waitForPromises()
 
-      // Set overrides
-      posthog.overrideFeatureFlags({ 'test-flag': true })
+      posthog.overrideFeatureFlags({
+        flags: { 'test-flag': true },
+        payloads: { 'test-flag': { discount: 20 } },
+      })
       expect(await posthog.getFeatureFlag('test-flag', 'user-123')).toBe(true)
+      expect(await posthog.getFeatureFlagPayload('test-flag', 'user-123')).toEqual({ discount: 20 })
 
-      // Clear overrides
       posthog.overrideFeatureFlags(false)
 
-      // Should return undefined (no flag exists)
-      expect(await posthog.getFeatureFlag('test-flag', 'user-123')).toBe(undefined)
+      expect(await posthog.getFeatureFlag('test-flag', 'user-123')).toBeUndefined()
+      expect(await posthog.getFeatureFlagPayload('test-flag', 'user-123')).toBeUndefined()
     })
 
     it('should handle falsy override values correctly', async () => {
@@ -131,7 +133,23 @@ describe('overrideFeatureFlags', () => {
     })
 
     it('should return undefined when flag is overridden to undefined (simulates missing flag)', async () => {
-      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          localFlags: {
+            flags: [
+              {
+                id: 1,
+                key: 'undefined-flag',
+                active: true,
+                filters: {
+                  groups: [{ rollout_percentage: 100 }],
+                  payloads: { true: '{"discount": 15}' },
+                },
+              },
+            ],
+          },
+        })
+      )
 
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
@@ -141,7 +159,9 @@ describe('overrideFeatureFlags', () => {
 
       await waitForPromises()
 
-      // Override with undefined should return undefined (simulates flag doesn't exist)
+      expect(await posthog.getFeatureFlag('undefined-flag', 'user-123')).toBe(true)
+      expect(await posthog.getFeatureFlagPayload('undefined-flag', 'user-123')).toEqual({ discount: 15 })
+
       posthog.overrideFeatureFlags({ 'undefined-flag': undefined as any })
 
       expect(await posthog.getFeatureFlag('undefined-flag', 'user-123')).toBeUndefined()

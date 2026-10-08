@@ -1,28 +1,53 @@
-/* eslint-disable compat/compat */
 /// <reference lib="dom" />
+import type { Mock as VitestMock, Mocked as VitestMocked, SpyInstance as VitestSpyInstance } from 'vitest'
 
-import { TextDecoder } from 'util'
-import { extendURLParams, request } from '../request'
+import { gunzipSync } from 'node:zlib'
+import { runInNewContext } from 'node:vm'
+import { createPosthogInstance } from './helpers/posthog-instance'
+import * as fflate from 'fflate'
+import { extendURLParams, isPostHogXHR, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
+import { logger } from '@posthog/browser-common/utils/logger'
 
-jest.mock('../utils/globals', () => ({
-    ...jest.requireActual('../utils/globals'),
-    fetch: jest.fn(),
-    XMLHttpRequest: jest.fn(),
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    fetch: vi.fn(),
+    XMLHttpRequest: vi.fn(),
     navigator: {
-        sendBeacon: jest.fn(),
+        sendBeacon: vi.fn(),
     },
+    AbortController: globalThis.AbortController,
+    CompressionStream: undefined,
 }))
 
-import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import { fetch, XMLHttpRequest, navigator } from '@posthog/browser-common/utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web', JS_SDK_VERSION: '1.23.45' }))
+vi.mock('../config', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../config')>()),
+    DEBUG: false,
+    LIB_VERSION: '1.23.45',
+    LIB_NAME: 'web',
+}))
 
 const flushPromises = async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await new Promise((res) => setTimeout(res, 0))
-    jest.useRealTimers()
+    vi.useRealTimers()
+}
+
+const readBlobAsText = (blob: Blob): Promise<string> => {
+    vi.useRealTimers()
+    return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsText(blob)
+    })
+}
+
+const requireStringBody = (body: unknown): string => {
+    if (typeof body !== 'string') throw new Error('Expected a JSON string body')
+    return body
 }
 
 const invalidGzipBody = () => new Uint8Array([0, 1, 2]).buffer
@@ -37,44 +62,51 @@ const arrayOfBodyData = (n: number) => {
 const veryLargeBodyData = arrayOfBodyData(8024)
 
 describe('request', () => {
-    const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
-    const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
-    const mockedNavigator: jest.Mocked<typeof navigator> = navigator as jest.Mocked<typeof navigator>
-    let mockedXHR = {
-        open: jest.fn(),
-        setRequestHeader: jest.fn(),
-        onreadystatechange: jest.fn(),
-        send: jest.fn(),
-        readyState: 4,
-        responseText: JSON.stringify('something here'),
-        status: 200,
-        withCredentials: false,
+    const mockedFetch = vi.mocked(fetch!)
+    const mockedXMLHttpRequest = vi.mocked(XMLHttpRequest!)
+    const mockedNavigator: VitestMocked<typeof navigator> = navigator as VitestMocked<typeof navigator>
+    class MockXHR extends globalThis.XMLHttpRequest {
+        private _responseStatus = 200
+        private _responseBody = JSON.stringify('something here')
+        override open = vi.fn<
+            [method: string, url: string | URL, async?: boolean, username?: string, password?: string],
+            void
+        >()
+        override setRequestHeader = vi.fn<Parameters<XMLHttpRequest['setRequestHeader']>, void>()
+        override send = vi.fn<Parameters<XMLHttpRequest['send']>, void>()
+        override get readyState() {
+            return 4
+        }
+        override get status() {
+            return this._responseStatus
+        }
+        set status(value: number) {
+            this._responseStatus = value
+        }
+        override get responseText() {
+            return this._responseBody
+        }
+        set responseText(value: string) {
+            this._responseBody = value
+        }
     }
+    let mockedXHR = new MockXHR()
 
     const now = 1700000000000
 
-    const mockCallback = jest.fn()
+    const mockCallback = vi.fn()
     let createRequest: (overrides?: Partial<RequestWithOptions>) => RequestWithOptions
     let transport: RequestWithOptions['transport']
 
     beforeEach(() => {
-        mockedXHR = {
-            open: jest.fn(),
-            setRequestHeader: jest.fn(),
-            onreadystatechange: jest.fn(),
-            send: jest.fn(),
-            readyState: 4,
-            responseText: JSON.stringify('something here'),
-            status: 200,
-            withCredentials: false,
-        }
+        mockedXHR = new MockXHR()
         mockedXMLHttpRequest.mockImplementation(() => mockedXHR)
 
-        jest.useFakeTimers()
-        jest.setSystemTime(now)
+        vi.useFakeTimers()
+        vi.setSystemTime(now)
 
         createRequest = (overrides) => ({
-            url: 'https://any.posthog-instance.com?ver=1.23.45',
+            url: 'https://any.posthog-instance.com',
             data: undefined,
             headers: {},
             callback: mockCallback,
@@ -87,6 +119,55 @@ describe('request', () => {
         beforeEach(() => {
             transport = 'XHR'
         })
+        it.each(['same-realm', 'cross-realm'])(
+            'preserves %s Error properties in an ordinary capture request',
+            async (realm) => {
+                const instance = await createPosthogInstance(uuidv7(), {
+                    api_transport: 'XHR',
+                    disable_compression: true,
+                    capture_pageview: false,
+                    before_send: (event) => event,
+                    properties_string_max_length: 20,
+                })
+                mockedXHR.send.mockClear()
+                const cause =
+                    realm === 'cross-realm'
+                        ? (runInNewContext('new TypeError("a long root cause message to truncate")') as Error)
+                        : new TypeError('a long root cause message to truncate')
+                const error = Object.assign(
+                    new AggregateError([cause, 'other reason'], 'aggregate', { cause: 'root reason' }),
+                    { code: 'E_TEST' }
+                )
+                const expectedCause = {
+                    name: cause.name,
+                    message: cause.message.slice(0, 20),
+                    stack: cause.stack?.slice(0, 20),
+                }
+
+                instance.capture('ordinary event', { nested: [{ error }] })
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                const {
+                    batch: [body],
+                } = JSON.parse((mockedXHR.send.mock.calls[0] as unknown[])[0] as string)
+                expect(body.event).toBe('ordinary event')
+                expect(body.properties.nested).toEqual([
+                    {
+                        error: {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack?.slice(0, 20),
+                            code: 'E_TEST',
+                            cause: 'root reason',
+                            errors: [expectedCause, 'other reason'],
+                        },
+                    },
+                ])
+                expect(cause.message).toBe('a long root cause message to truncate')
+                expect(Object.keys(error)).toEqual(['code'])
+            }
+        )
+
         it('performs the request with default params', () => {
             request(
                 createRequest({
@@ -96,13 +177,27 @@ describe('request', () => {
                     },
                 })
             )
-            expect(mockedXHR.open).toHaveBeenCalledWith(
-                'GET',
-                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
-                true
-            )
+            expect(mockedXHR.open).toHaveBeenCalledWith('GET', 'https://any.posthog-instance.com/', true)
 
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
+        })
+
+        it('marks the XHR as its own so page-level observers can skip it', () => {
+            request(createRequest({}))
+
+            expect(isPostHogXHR(mockedXHR)).toBe(true)
+            expect(isPostHogXHR({} as XMLHttpRequest)).toBe(false)
+        })
+
+        it('loads in a browser without WeakSet, such as IE11', async () => {
+            vi.stubGlobal('WeakSet', undefined)
+            vi.resetModules()
+            try {
+                await expect(import('../request')).resolves.toBeDefined()
+            } finally {
+                vi.unstubAllGlobals()
+                vi.resetModules()
+            }
         })
 
         it('calls the on callback handler when successful', async () => {
@@ -116,17 +211,22 @@ describe('request', () => {
             })
         })
 
-        it('calls the callback even if json parsing fails', () => {
-            //cannot use an auto-mock from jest as the code checks if onError is a Function
-            request(createRequest())
-            mockedXHR.status = 502
-            mockedXHR.responseText = '{wat'
-            mockedXHR.onreadystatechange?.({} as Event)
-            expect(mockCallback).toHaveBeenCalledWith({
-                statusCode: 502,
-                json: undefined,
-                text: '{wat',
-            })
+        it.each([200, 502])('completes once with malformed JSON at status %i', (statusCode) => {
+            const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+            try {
+                request(createRequest())
+                mockedXHR.status = statusCode
+                mockedXHR.responseText = '{wat'
+                mockedXHR.onreadystatechange?.({} as Event)
+                expect(mockCallback).toHaveBeenCalledWith({
+                    statusCode,
+                    json: undefined,
+                    text: '{wat',
+                })
+                expect(mockCallback).toHaveBeenCalledTimes(1)
+            } finally {
+                parseError.mockRestore()
+            }
         })
 
         it('does not set XHR credentials', () => {
@@ -136,8 +236,8 @@ describe('request', () => {
 
         it('reports JSON serialization failures through the callback instead of throwing', () => {
             const error = new RangeError('Invalid string length')
-            const callback = jest.fn()
-            const stringifySpy = jest.spyOn(JSON, 'stringify').mockImplementation(() => {
+            const callback = vi.fn()
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
                 throw error
             })
 
@@ -164,10 +264,7 @@ describe('request', () => {
         beforeEach(() => {
             transport = 'fetch'
             mockedFetch.mockImplementation(() => {
-                return Promise.resolve({
-                    status: 200,
-                    text: () => Promise.resolve('{ "a": 1 }'),
-                }) as any
+                return Promise.resolve(new Response('{ "a": 1 }', { status: 200 }))
             })
         })
 
@@ -183,14 +280,220 @@ describe('request', () => {
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
             expect(mockedFetch).toHaveBeenCalledWith(
-                `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`,
+                `https://any.posthog-instance.com`,
                 expect.objectContaining({
                     body: undefined,
                     headers: new Headers(),
                     keepalive: false,
                     method: 'GET',
+                    referrerPolicy: 'strict-origin',
                 })
             )
+        })
+
+        it('uses the fetch captured at load, so a wrapper installed on window.fetch never sees it', () => {
+            const windowFetch = vi.fn()
+            vi.stubGlobal('fetch', windowFetch)
+
+            request(createRequest({}))
+
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
+            expect(windowFetch).not.toHaveBeenCalled()
+            vi.unstubAllGlobals()
+        })
+
+        it('adds the cache-busting parameter only when requested', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/api/surveys/',
+                    method: 'GET',
+                    timestampMode: 'query',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/api/surveys/?_=1700000000000')
+        })
+
+        it.each([
+            ['/e/', 'https://any.posthog-instance.com/e/'],
+            ['/i/v0/e/', 'https://any.posthog-instance.com/i/v0/e/'],
+            ['/batch/', 'https://any.posthog-instance.com/batch/'],
+            ['/capture/', 'https://any.posthog-instance.com/capture/'],
+            ['/track/', 'https://any.posthog-instance.com/track/'],
+            ['/engage/', 'https://any.posthog-instance.com/engage/'],
+        ])('adds sent_at to the capture body for analytics endpoint %s', (path, expectedUrl) => {
+            const event = { event: 'test event', properties: { token: 'testtoken' } }
+            request(
+                createRequest({
+                    url: `https://any.posthog-instance.com${path}`,
+                    method: 'POST',
+                    data: event,
+                    timestampMode: 'capture-body',
+                })
+            )
+
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe(expectedUrl)
+            expect(requestedUrl).not.toContain('sent_at=')
+            expect(requestedUrl).not.toContain('_=')
+            expect(JSON.parse(requireStringBody(requestOptions.body))).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('puts batched analytics events in one sent_at body envelope', () => {
+            const events = [
+                { event: 'first event', properties: { token: 'testtoken' } },
+                { event: 'second event', properties: { token: 'testtoken' } },
+            ]
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/',
+                    method: 'POST',
+                    data: events,
+                    timestampMode: 'capture-body',
+                })
+            )
+
+            expect(JSON.parse(requireStringBody(mockedFetch.mock.calls[0][1].body))).toEqual({
+                api_key: 'testtoken',
+                batch: events,
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('uses a top-level event token in the capture body envelope', () => {
+            const event = { event: 'test event', token: 'testtoken' }
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/',
+                    method: 'POST',
+                    data: event,
+                    timestampMode: 'capture-body',
+                })
+            )
+
+            expect(JSON.parse(requireStringBody(mockedFetch.mock.calls[0][1].body))).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('adds sent_at to an unbatched session recording body', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/ingest/s/',
+                    method: 'POST',
+                    data: { event: '$snapshot' },
+                    timestampMode: 'body',
+                })
+            )
+
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
+            expect(JSON.parse(requireStringBody(requestOptions.body))).toEqual({
+                event: '$snapshot',
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('adds the same sent_at to every recording in a batched session recording body', () => {
+            const toISOString = vi
+                .spyOn(Date.prototype, 'toISOString')
+                .mockReturnValueOnce('2023-11-14T22:13:20.000Z')
+                .mockReturnValue('2023-11-14T22:13:21.000Z')
+
+            try {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/ingest/s/',
+                        method: 'POST',
+                        data: [{ event: '$snapshot' }, { event: '$snapshot' }],
+                        timestampMode: 'body',
+                    })
+                )
+
+                const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
+                expect(JSON.parse(requireStringBody(requestOptions.body))).toEqual([
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                ])
+                expect(toISOString).toHaveBeenCalledTimes(1)
+            } finally {
+                toISOString.mockRestore()
+            }
+        })
+
+        it('preserves caller-provided query parameters', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
+                    method: 'POST',
+                    data: { event: 'test event', properties: { token: 'testtoken' } },
+                    timestampMode: 'capture-body',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar')
+        })
+
+        it('adds sent_at to the body of POST feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'POST',
+                    data: { token: 'testtoken', distinct_id: 'user-1' },
+                    timestampMode: 'body',
+                })
+            )
+
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/flags/?v=2')
+            expect(JSON.parse(requireStringBody(requestOptions.body))).toEqual({
+                token: 'testtoken',
+                distinct_id: 'user-1',
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('does not add sent_at to GET feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'GET',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/flags/?v=2')
+        })
+
+        it.each([
+            [
+                'does not add a compression query param for gzip requests',
+                'https://any.posthog-instance.com',
+                'https://any.posthog-instance.com',
+            ],
+            [
+                'removes an existing compression query param for gzip requests',
+                'https://any.posthog-instance.com?compression=gzip-js',
+                'https://any.posthog-instance.com',
+            ],
+        ])('%s', (_label, url, expectedUrl) => {
+            request(
+                createRequest({
+                    url,
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { foo: 'bar' },
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe(expectedUrl)
         })
 
         it('calls the callback handler when successful', async () => {
@@ -205,26 +508,26 @@ describe('request', () => {
             })
         })
 
-        it('calls the callback even if json parsing fails', async () => {
-            mockedFetch.mockImplementation(
-                () =>
-                    Promise.resolve({
-                        status: 502,
-                        text: () => Promise.resolve('oh no!'),
-                    }) as any
-            )
+        it.each([200, 502])('completes once with malformed JSON at status %i', async (statusCode) => {
+            const parseError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+            try {
+                mockedFetch.mockImplementation(() => Promise.resolve(new Response('oh no!', { status: statusCode })))
 
-            request(createRequest())
-            await flushPromises()
+                request(createRequest())
+                await flushPromises()
 
-            //cannot use an auto-mock from jest as the code checks if onError is a Function
-            expect(mockedFetch).toHaveBeenCalledTimes(1)
+                //cannot use an auto-mock from vi as the code checks if onError is a Function
+                expect(mockedFetch).toHaveBeenCalledTimes(1)
 
-            expect(mockCallback).toHaveBeenCalledWith({
-                statusCode: 502,
-                json: undefined,
-                text: 'oh no!',
-            })
+                expect(mockCallback).toHaveBeenCalledWith({
+                    statusCode,
+                    json: undefined,
+                    text: 'oh no!',
+                })
+                expect(mockCallback).toHaveBeenCalledTimes(1)
+            } finally {
+                parseError.mockRestore()
+            }
         })
 
         const invalidPreEncodedGzipRequest = (overrides?: Partial<RequestWithOptions>) =>
@@ -239,6 +542,34 @@ describe('request', () => {
                 },
                 ...overrides,
             } as any)
+
+        it('falls back to JSON if gzip encoding throws before fetch send', async () => {
+            const error = new Error('gzip failed')
+            const gzipSpy = vi.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                throw error
+            })
+
+            try {
+                request(
+                    createRequest({
+                        method: 'POST',
+                        compression: Compression.GZipJS,
+                        data: { foo: 'bar' },
+                    })
+                )
+
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.not.stringContaining('compression=gzip-js'),
+                    expect.objectContaining({
+                        body: '{"foo":"bar"}',
+                    })
+                )
+                expect((mockedFetch.mock.calls[0][1].headers as Headers).get('Content-Type')).toBe('application/json')
+                expect(mockCallback).not.toHaveBeenCalledWith({ statusCode: 0, error })
+            } finally {
+                gzipSpy.mockRestore()
+            }
+        })
 
         it.each([
             [
@@ -262,22 +593,21 @@ describe('request', () => {
                 },
             ],
             [
+                // beacons cannot fall back to JSON: application/json requires a CORS
+                // preflight, which never completes during page unload
                 'sendBeacon',
                 { transport: 'sendBeacon' as const, url: 'https://any.posthog-instance.com/' },
                 async () => {
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                    expect(blob.type).toBe('application/json')
-                    const result = await new Promise<string>((resolve) => {
-                        const reader = new FileReader()
-                        reader.onload = () => resolve(reader.result as string)
-                        reader.readAsText(blob)
-                    })
-                    expect(result).toBe('{"foo":"bar"}')
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                    const result = await readBlobAsText(blob)
+                    expect(result).toBe('data=eyJmb28iOiJiYXIifQ%3D%3D')
                 },
             ],
         ])(
-            'falls back to JSON if a pre-encoded gzip body is not actually gzip before %s send',
+            'falls back to a non-gzip encoding if a pre-encoded gzip body is not actually gzip before %s send',
             async (_name, overrides, assertTransport) => {
                 request(invalidPreEncodedGzipRequest(overrides))
                 await assertTransport()
@@ -286,33 +616,303 @@ describe('request', () => {
 
         it('aborts with an identifiable reason on timeout and reports it via the callback', async () => {
             let capturedSignal: AbortSignal | undefined
-            mockedFetch.mockImplementation((_url: string, opts: any) => {
+            let capturedAbortReason: Error | undefined
+            const originalAbort = globalThis.AbortController.prototype.abort
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(function (
+                this: AbortController,
+                reason?: unknown
+            ) {
+                capturedAbortReason = reason as Error
+                return originalAbort.call(this, reason)
+            })
+            mockedFetch.mockImplementation((_url, opts) => {
                 capturedSignal = opts.signal
                 return new Promise((_resolve, reject) => {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
-                    opts.signal?.addEventListener('abort', () => reject(opts.signal.reason))
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(capturedAbortReason))
                 })
             })
 
-            const callback = jest.fn()
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
             request(createRequest({ callback, timeout: 8000 }))
 
-            jest.advanceTimersByTime(8000)
+            vi.advanceTimersByTime(8000)
             await flushPromises()
 
             expect(capturedSignal?.aborted).toBe(true)
 
-            const reason = capturedSignal?.reason
+            const reason = capturedSignal?.reason ?? capturedAbortReason
             // keeps name AbortError so existing timeout handling (e.g. feature flag timeout detection) keeps working
             expect(reason.name).toBe('AbortError')
             // ...but with a descriptive message so it is never a reason-less "signal is aborted without reason"
             expect(reason.message).toBe('PostHog request timed out after 8000ms')
-
             expect(callback).toHaveBeenCalledTimes(1)
             const response = callback.mock.calls[0][0]
             expect(response.statusCode).toBe(0)
             expect(response.error.name).toBe('AbortError')
             expect(response.error.message).toBe('PostHog request timed out after 8000ms')
+
+            // Our own timeout is expected (the queue retries), so it is logged at warn, not error -
+            // which also keeps it out of error tracking's console-error capture.
+            expect(warnSpy).toHaveBeenCalledWith(reason)
+            expect(errorSpy).not.toHaveBeenCalled()
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it('logs our own timeout at warn even when the browser does not propagate the abort reason', async () => {
+            // Some browsers reject the fetch with a generic native `AbortError` DOMException instead
+            // of the reason we passed to `controller.abort(...)`, so detection must not rely on the
+            // reason reaching the rejection - only on `timedOut` + `name === 'AbortError'`.
+            const nativeAbortError = new Error('The operation was aborted.')
+            nativeAbortError.name = 'AbortError'
+            mockedFetch.mockImplementation((_url, opts) => {
+                return new Promise((_resolve, reject) => {
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(nativeAbortError))
+                })
+            })
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(warnSpy).toHaveBeenCalledWith(nativeAbortError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: nativeAbortError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs a genuine abort/network error at error, not warn, when we did not time out', async () => {
+            // An `AbortError` we did not cause (e.g. the host app aborted, or the page unloaded)
+            // must still be logged at error - `timedOut` is false so it is not treated as our timeout.
+            const foreignAbortError = new Error('The operation was aborted.')
+            foreignAbortError.name = 'AbortError'
+            mockedFetch.mockImplementation(() => Promise.reject(foreignAbortError))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            await flushPromises()
+
+            expect(errorSpy).toHaveBeenCalledWith(foreignAbortError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: foreignAbortError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('contains a throw from a patched abort() instead of letting it escape our timer', async () => {
+            // A third-party fetch wrapper can replace `AbortController.prototype.abort` and throw
+            // out of it, which lands inside our timeout callback and would otherwise surface as an
+            // uncaught error with a posthog-js frame on top. (An `abort` listener attached natively
+            // to the signal we pass cannot produce this: `dispatchEvent` reports a listener's
+            // exception to the global error handler instead of propagating it out of `abort()`, so
+            // no guard of ours can contain that one.)
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw listenerError
+            })
+            mockedFetch.mockImplementation(() => new Promise(() => {}))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            expect(() => vi.advanceTimersByTime(8000)).not.toThrow()
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+            expect(warnSpy).toHaveBeenCalledWith(listenerError)
+            expect(errorSpy).not.toHaveBeenCalled()
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it('reports only once when a throwing patched abort() is followed by the fetch rejection', async () => {
+            // The abort can take effect and the patched `abort()` still throw, so the fetch rejects
+            // afterwards too. The request queue must see one failure, not two.
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const originalAbort = globalThis.AbortController.prototype.abort
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(function (
+                this: AbortController,
+                reason?: unknown
+            ) {
+                originalAbort.call(this, reason)
+                throw listenerError
+            })
+            mockedFetch.mockImplementation((_url, opts) => {
+                return new Promise((_resolve, reject) => {
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+                })
+            })
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+
+            warnSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it('reports only once when a throwing patched abort() leaves the fetch alive to succeed', async () => {
+            // A patched `abort()` can throw *before* it aborts the signal, which leaves the fetch
+            // running after our timeout has already reported a failure. The late response must be
+            // dropped: the request queue has queued a retry for that failure, and a success
+            // callback on top of it would give one request two contradictory outcomes.
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw listenerError
+            })
+            let resolveFetch: (response: Response) => void = () => {}
+            mockedFetch.mockImplementation(() => new Promise((resolve) => (resolveFetch = resolve)))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+
+            resolveFetch(new Response('{ "a": 1 }', { status: 200 }))
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+
+            warnSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it.each([
+            ['Failed to fetch', 'Failed to fetch'],
+            ['Firefox NetworkError', 'NetworkError when attempting to fetch resource.'],
+            ['Safari Load failed', 'Load failed'],
+        ])('logs a benign network-level TypeError (%s) at warn, not error', async (_label, message) => {
+            // A network-layer failure (ad blocker, dropped connection, CORS, page teardown)
+            // rejects with a generic `TypeError`. The request queue retries it, so it is
+            // expected noise and logs at `warn`, not `error`.
+            const networkError = new TypeError(message)
+            mockedFetch.mockImplementation(() => Promise.reject(networkError))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(warnSpy).toHaveBeenCalledWith(networkError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs a genuine unexpected error at error, not warn', async () => {
+            // A `TypeError` whose message is not a known network-failure phrase, or any other
+            // unexpected error, is a real bug and must stay on the error path.
+            const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
+            mockedFetch.mockImplementation(() => Promise.reject(genuineError))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(errorSpy).toHaveBeenCalledWith(genuineError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: genuineError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('does not let a synchronously-throwing monkey-patched fetch escape as an unhandled exception', () => {
+            // Some third-party scripts (e.g. a Shopify storefront listener) wrap `window.fetch` in a
+            // shim that throws *synchronously* instead of returning a rejected promise. Because we can
+            // call `_fetch` synchronously inside the host app's stack (web experiments via
+            // `onFeatureFlags`), that throw would otherwise propagate out of `request(...)` and get
+            // captured by error tracking. It must be routed through the same handling as an async
+            // rejection: classified as a benign network error, logged at warn, and reported via the
+            // callback so the queue retries.
+            const networkError = new TypeError('Failed to fetch')
+            mockedFetch.mockImplementation(() => {
+                throw networkError
+            })
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            expect(() => request(createRequest({ callback }))).not.toThrow()
+
+            expect(warnSpy).toHaveBeenCalledWith(networkError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('routes a synchronous non-network throw through the error path without escaping', () => {
+            const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
+            mockedFetch.mockImplementation(() => {
+                throw genuineError
+            })
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            expect(() => request(createRequest({ callback }))).not.toThrow()
+
+            expect(errorSpy).toHaveBeenCalledWith(genuineError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: genuineError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
         })
 
         it('supports nextOptions parameter', async () => {
@@ -328,46 +928,43 @@ describe('request', () => {
                 expect.objectContaining({
                     cache: 'force-cache',
                     next: { revalidate: 0, tags: ['test'] },
+                    referrerPolicy: 'strict-origin',
                 })
+            )
+        })
+
+        it('preserves runtime fetchOptions precedence over the default referrer policy', () => {
+            // Extra runtime fields already pass through, even though referrerPolicy is not a public config option.
+            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'no-referrer' }
+            request(createRequest({ fetchOptions }))
+
+            expect(mockedFetch.mock.calls[0][1]).toEqual(
+                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'no-referrer' })
             )
         })
 
         describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
             it.each([
                 ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],
-                [
-                    'always keepalive with small gzip POST',
-                    'POST',
-                    'small',
-                    Compression.GZipJS,
-                    true,
-                    '&compression=gzip-js',
-                ],
+                ['always keepalive with small gzip POST', 'POST', 'small', Compression.GZipJS, true, ''],
                 [
                     'always keepalive with small base64 POST',
                     'POST',
                     'small',
                     Compression.Base64,
                     true,
-                    '&compression=base64',
+                    '?compression=base64',
                 ],
-                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&compression=gzip-js'],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
-                [
-                    'never keepalive with large GZIP POST',
-                    'POST',
-                    veryLargeBodyData,
-                    Compression.GZipJS,
-                    false,
-                    '&compression=gzip-js',
-                ],
+                ['never keepalive with large GZIP POST', 'POST', veryLargeBodyData, Compression.GZipJS, false, ''],
                 [
                     'never keepalive with large base64 POST',
                     'POST',
                     veryLargeBodyData,
                     Compression.Base64,
                     false,
-                    '&compression=base64',
+                    '?compression=base64',
                 ],
             ])(
                 `uses keep alive: %s`,
@@ -390,11 +987,12 @@ describe('request', () => {
                         })
                     )
                     expect(mockedFetch).toHaveBeenCalledWith(
-                        `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
+                        `https://any.posthog-instance.com${expectedURLParams}`,
                         expect.objectContaining({
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
                             method,
+                            referrerPolicy: 'strict-origin',
                         })
                     )
                 }
@@ -407,7 +1005,10 @@ describe('request', () => {
                         disableTransport: ['sendBeacon'],
                     })
                 )
-                expect(mockedFetch).toHaveBeenCalled()
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.anything(),
+                    expect.objectContaining({ referrerPolicy: 'strict-origin' })
+                )
             })
         })
 
@@ -512,19 +1113,68 @@ describe('request', () => {
                 )
                 expect(mockedXHR.send).toHaveBeenCalledTimes(1)
                 expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(ArrayBuffer)
-                // Decode and check the ArrayBuffer content
+                const bytes = new Uint8Array(mockedXHR.send.mock.calls[0][0] as ArrayBuffer)
+                expect(JSON.parse(gunzipSync(bytes).toString('utf8'))).toEqual({ foo: 'bar' })
+                expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'text/plain')
+            })
 
-                const res = new TextDecoder().decode(mockedXHR.send.mock.calls[0][0] as ArrayBuffer)
+            it.each(['name', 'message', 'stack'] as const)(
+                'sends the full batch when an additional Error has an unreadable %s',
+                (detail) => {
+                    const error = Object.assign(new Error('additional'), { code: 'E_TEST' })
+                    error.stack = 'safe stack'
+                    const expected: Record<string, unknown> = {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack,
+                        code: error.code,
+                    }
+                    delete expected[detail]
+                    Object.defineProperty(error, detail, {
+                        enumerable: false,
+                        get() {
+                            throw new Error(`unreadable ${detail}`)
+                        },
+                    })
 
-                expect(res).toMatchInlineSnapshot(`
-                "�      �VJ��W�RJJ,R� ��+�
-                   "
-            `)
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: '$exception', properties: { error, kept: true } },
+                                { event: 'sibling event', properties: { kept: true } },
+                            ],
+                        })
+                    )
 
-                expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
-                    'Content-Type',
-                    'application/x-www-form-urlencoded'
+                    expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                    expect(JSON.parse(requireStringBody(mockedXHR.send.mock.calls[0][0]))).toEqual([
+                        { event: '$exception', properties: { error: expected, kept: true } },
+                        { event: 'sibling event', properties: { kept: true } },
+                    ])
+                    expect(mockCallback).not.toHaveBeenCalled()
+                }
+            )
+
+            it('sends sibling events when a circular Error uses the existing safe fallback', () => {
+                const error = new Error('circular error')
+                Object.assign(error, { self: error })
+
+                request(
+                    createRequest({
+                        method: 'POST',
+                        data: [{ event: '$exception', properties: { error } }, { event: 'sibling event' }],
+                    })
                 )
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                expect(JSON.parse(requireStringBody(mockedXHR.send.mock.calls[0][0]))).toEqual([
+                    {
+                        event: '$exception',
+                        properties: { error: { name: error.name, message: error.message, stack: error.stack } },
+                    },
+                    { event: 'sibling event' },
+                ])
             })
 
             it('converts bigint properties to string without throwing', () => {
@@ -544,6 +1194,53 @@ describe('request', () => {
                     'application/x-www-form-urlencoded'
                 )
             })
+
+            it('does not throw on circular references and serializes them as [Circular]', () => {
+                const circular: any = { foo: 'bar' }
+                circular.self = circular
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: circular,
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar","self":"[Circular]"}"`)
+            })
+
+            it('does not throw when a property is a circular DOM node (e.g. a React fiber back-reference)', () => {
+                // Mimics a DOM element that retains a React fiber which points back at the element —
+                // exactly what makes plain JSON.stringify throw "Converting circular structure to JSON".
+                const el: any = { tagName: 'A', nodeType: 1 }
+                el.__reactFiber = { stateNode: el }
+                expect(() =>
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            data: { $el: el },
+                        })
+                    )
+                ).not.toThrow()
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+            })
+
+            it('keeps shared-but-acyclic references while replacing only true cycles', () => {
+                const shared = { n: 1 }
+                const data: any = { a: shared, b: shared }
+                data.self = data // the only real cycle
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data,
+                    })
+                )
+                const body = JSON.parse(mockedXHR.send.mock.calls[0][0] as string)
+                expect(body.a).toEqual({ n: 1 })
+                expect(body.b).toEqual({ n: 1 })
+                expect(body.self).toBe('[Circular]')
+            })
         })
 
         describe('sendBeacon', () => {
@@ -551,7 +1248,7 @@ describe('request', () => {
                 transport = 'sendBeacon'
             })
 
-            it("should encode data to a string and send it as a blob if it's a POST request", async () => {
+            it('base64-encodes uncompressed POST data so the content type stays CORS-simple', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
@@ -561,19 +1258,15 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
+                    'https://any.posthog-instance.com/?compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                expect(blob.type).toBe('application/json')
+                expect(blob.type).toBe('application/x-www-form-urlencoded')
 
-                const reader = new FileReader()
-                const result = await new Promise((resolve) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(blob)
-                })
+                const result = await readBlobAsText(blob)
 
-                expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+                expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             })
 
             it('should respect base64 compression', async () => {
@@ -587,17 +1280,13 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
+                    'https://any.posthog-instance.com/?compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                 expect(blob.type).toBe('application/x-www-form-urlencoded')
 
-                const reader = new FileReader()
-                const result = await new Promise((resolve) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(blob)
-                })
+                const result = await readBlobAsText(blob)
 
                 expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             })
@@ -613,21 +1302,188 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js',
+                    'https://any.posthog-instance.com/',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                 expect(blob.type).toBe('text/plain')
-                const result = await new Promise<string>((resolve) => {
+                vi.useRealTimers()
+                const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
                     const reader = new FileReader()
-                    reader.onload = () => resolve(reader.result as string)
-                    reader.readAsText(blob)
+                    reader.onload = () => resolve(reader.result as ArrayBuffer)
+                    reader.onerror = () => reject(reader.error)
+                    reader.readAsArrayBuffer(blob)
+                })
+                expect(JSON.parse(gunzipSync(new Uint8Array(bytes)).toString('utf8'))).toEqual({ foo: 'bar' })
+            })
+
+            it('falls back to base64 if gzip encoding throws before the beacon send', () => {
+                const gzipSpy = vi.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                    throw new Error('gzip failed')
                 })
 
-                expect(result).toMatchInlineSnapshot(`
-                "�      �VJ��W�RJJ,R� ��+�
-                   "
-            `)
+                try {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            compression: Compression.GZipJS,
+                            data: { foo: 'bar' },
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
+                    const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                } finally {
+                    gzipSpy.mockRestore()
+                }
+            })
+
+            describe('quota rejection (sendBeacon returns false)', () => {
+                const bigEvent = (i: number) => ({
+                    event: 'big',
+                    i,
+                    payload: 'x'.repeat(8 * 1024),
+                    properties: { token: 'testtoken' },
+                })
+                let warnSpy: VitestSpyInstance
+
+                beforeEach(() => {
+                    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+                    mockedFetch.mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })))
+                })
+
+                afterEach(() => {
+                    warnSpy.mockRestore()
+                })
+
+                it('splits a rejected sent_at body envelope in half and re-sends each piece', async () => {
+                    mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                            timestampMode: 'capture-body',
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(3)
+                    const [full, firstHalf, secondHalf] = mockedNavigator!.sendBeacon.mock.calls.map(
+                        (c) => (c[1] as Blob).size
+                    )
+                    expect(firstHalf).toBeLessThan(full)
+                    expect(secondHalf).toBeLessThan(full)
+
+                    const splitBodies = await Promise.all(
+                        mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
+                            const text = await readBlobAsText(call[1] as Blob)
+                            return JSON.parse(
+                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
+                            )
+                        })
+                    )
+                    expect(splitBodies).toEqual([
+                        {
+                            api_key: 'testtoken',
+                            batch: [bigEvent(1), bigEvent(2)],
+                            sent_at: '2023-11-14T22:13:20.000Z',
+                        },
+                        {
+                            api_key: 'testtoken',
+                            batch: [bigEvent(3), bigEvent(4)],
+                            sent_at: '2023-11-14T22:13:20.000Z',
+                        },
+                    ])
+                    expect(mockedFetch).not.toHaveBeenCalled()
+                })
+
+                it('adds sent_at to each split recording request body', async () => {
+                    mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                            timestampMode: 'body',
+                        })
+                    )
+
+                    const splitBodies = await Promise.all(
+                        mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
+                            const text = await readBlobAsText(call[1] as Blob)
+                            return JSON.parse(
+                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
+                            )
+                        })
+                    )
+                    expect(splitBodies).toEqual([
+                        [
+                            { ...bigEvent(1), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(2), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
+                        [
+                            { ...bigEvent(3), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(4), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
+                    ])
+                    expect(mockedFetch).not.toHaveBeenCalled()
+                })
+
+                it('splits recursively and falls back to fetch for single events that still do not fit', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                        })
+                    )
+
+                    // 1 full + 2 halves + 4 singles
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(7)
+                    expect(mockedFetch).toHaveBeenCalledTimes(4)
+                    expect(warnSpy).toHaveBeenCalledTimes(4)
+                    for (const call of mockedFetch.mock.calls) {
+                        expect(call[1].keepalive).toBe(false)
+                        expect(call[1].referrerPolicy).toBe('strict-origin')
+                    }
+                })
+
+                it('does not split a rejected small batch, the quota is already exhausted', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: 'small', i: 1 },
+                                { event: 'small', i: 2 },
+                            ],
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('strict-origin')
+                })
+            })
+
+            it('warns instead of throwing when the beacon call itself throws', () => {
+                const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+                mockedNavigator!.sendBeacon.mockImplementation(() => {
+                    throw new Error('boom')
+                })
+
+                try {
+                    expect(() => request(createRequest({ method: 'POST', data: { foo: 'bar' } }))).not.toThrow()
+                    expect(warnSpy).toHaveBeenCalledWith('Beacon send failed', expect.any(Error))
+                } finally {
+                    warnSpy.mockRestore()
+                }
             })
 
             it('should not call sendBeacon when body is undefined', () => {
@@ -643,7 +1499,10 @@ describe('request', () => {
             })
 
             it.each([
-                ['no compression', undefined, 'application/json'],
+                // Every content type here must be CORS-simple: a preflight cannot complete while
+                // the page unloads, so a preflighted beacon (e.g. application/json) is silently
+                // dropped by the browser on cross-origin hosts and its events are lost.
+                ['no compression', undefined, 'application/x-www-form-urlencoded'],
                 ['base64 compression', Compression.Base64, 'application/x-www-form-urlencoded'],
                 ['gzip compression', Compression.GZipJS, 'text/plain'],
             ])(
@@ -674,35 +1533,35 @@ describe('request', () => {
     describe('native async gzip retry flow', () => {
         let isolatedRequestModule: any
         let isolatedCompression: typeof Compression
-        let mockedIsolatedFetch: jest.Mock
-        let mockedIsolatedGzipCompress: jest.Mock
+        let mockedIsolatedFetch: VitestMock
+        let mockedIsolatedGzipCompress: VitestMock
 
         beforeEach(async () => {
-            jest.resetModules()
-            jest.clearAllMocks()
-            jest.useFakeTimers()
-            jest.setSystemTime(now)
+            vi.resetModules()
+            vi.clearAllMocks()
+            vi.useFakeTimers()
+            vi.setSystemTime(now)
 
-            mockedIsolatedFetch = jest.fn(() =>
+            mockedIsolatedFetch = vi.fn(() =>
                 Promise.resolve({
                     status: 200,
                     text: () => Promise.resolve('{ "a": 1 }'),
                 })
             )
-            mockedIsolatedGzipCompress = jest.fn()
+            mockedIsolatedGzipCompress = vi.fn()
 
-            jest.doMock('../utils/globals', () => ({
-                ...jest.requireActual('../utils/globals'),
+            vi.doMock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
                 fetch: mockedIsolatedFetch,
-                XMLHttpRequest: jest.fn(),
+                XMLHttpRequest: vi.fn(),
                 navigator: {
-                    sendBeacon: jest.fn(),
+                    sendBeacon: vi.fn(),
                 },
-                CompressionStream: jest.fn(),
+                CompressionStream: vi.fn(),
             }))
 
-            jest.doMock('@posthog/core', () => ({
-                ...jest.requireActual('@posthog/core'),
+            vi.doMock('@posthog/core', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/core')>()),
                 gzipCompress: mockedIsolatedGzipCompress,
                 isNativeAsyncGzipError: (error: unknown) =>
                     error &&
@@ -715,33 +1574,108 @@ describe('request', () => {
             isolatedCompression = (await import('../types')).Compression
         })
 
-        it('retries uncompressed and disables native async gzip after NotReadableError', async () => {
-            mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
+        it.each([true, false, undefined])('respects preferSyncCompression: %p before starting fetch', async (sync) => {
+            mockedIsolatedGzipCompress.mockReturnValue(new Promise(() => {}))
+            const data = { event: 'test event', properties: { token: 'testtoken' } }
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
-                data: { foo: 'bar' },
+                url: 'https://any.posthog-instance.com/e/',
+                data,
+                method: 'POST',
+                transport: 'fetch',
+                compression: isolatedCompression.GZipJS,
+                preferSyncCompression: sync,
+            })
+
+            if (sync) {
+                expect(mockedIsolatedGzipCompress).not.toHaveBeenCalled()
+                expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+                const options = mockedIsolatedFetch.mock.calls[0][1]
+                expect(options.keepalive).toBe(true)
+                expect(options.headers.get('Content-Type')).toBe('text/plain')
+                expect(JSON.parse(fflate.strFromU8(fflate.gunzipSync(new Uint8Array(options.body))))).toEqual(data)
+            } else {
+                expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+                expect(mockedIsolatedFetch).not.toHaveBeenCalled()
+            }
+
+            await flushPromises()
+        })
+
+        it.each([false, true])('reports transport errors with preferSyncCompression: %p', async (sync) => {
+            // A patched global can throw before _fetch reaches its own try/catch.
+            // Both compression paths must report the failure instead of throwing.
+            const networkError = new TypeError('Failed to fetch')
+            const OriginalHeaders = globalThis.Headers
+            // @ts-expect-error simulating a third-party monkey-patch of the global constructor
+            globalThis.Headers = function () {
+                throw networkError
+            }
+            mockedIsolatedGzipCompress.mockResolvedValueOnce({
+                arrayBuffer: () => Promise.resolve(new Uint8Array([0x1f, 0x8b]).buffer),
+            })
+
+            const unhandledRejections: unknown[] = []
+            const onUnhandledRejection = (reason: unknown) => unhandledRejections.push(reason)
+            process.on('unhandledRejection', onUnhandledRejection)
+
+            const callback = vi.fn()
+            try {
+                isolatedRequestModule.request({
+                    url: 'https://any.posthog-instance.com',
+                    data: { foo: 'bar' },
+                    headers: {},
+                    callback,
+                    transport: 'fetch',
+                    method: 'POST',
+                    compression: isolatedCompression.GZipJS,
+                    preferSyncCompression: sync,
+                })
+
+                await flushPromises()
+            } finally {
+                process.off('unhandledRejection', onUnhandledRejection)
+                globalThis.Headers = OriginalHeaders
+            }
+
+            expect(unhandledRejections).toEqual([])
+            expect(mockedIsolatedFetch).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+        })
+
+        it('retries uncompressed without dropping the capture envelope after NotReadableError', async () => {
+            mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
+            const event = { event: 'test event', properties: { token: 'testtoken' } }
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com/e/',
+                data: event,
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
+                timestampMode: 'capture-body',
             })
 
             await flushPromises()
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
-            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/e/')
+            expect(JSON.parse(mockedIsolatedFetch.mock.calls[0][1].body)).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+            })
 
             mockedIsolatedFetch.mockClear()
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -751,18 +1685,21 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+            expect(
+                JSON.parse(gunzipSync(new Uint8Array(mockedIsolatedFetch.mock.calls[0][1].body)).toString('utf8'))
+            ).toEqual({ foo: 'baz' })
         })
 
         it('falls back to fflate and disables native async gzip after invalid native gzip output', async () => {
             mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NativeGzipValidationError' })
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                url: 'https://any.posthog-instance.com',
                 data: { foo: 'bar' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -772,16 +1709,19 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+            expect(
+                JSON.parse(gunzipSync(new Uint8Array(mockedIsolatedFetch.mock.calls[0][1].body)).toString('utf8'))
+            ).toEqual({ foo: 'bar' })
 
             mockedIsolatedFetch.mockClear()
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -791,8 +1731,11 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
+            expect(
+                JSON.parse(gunzipSync(new Uint8Array(mockedIsolatedFetch.mock.calls[0][1].body)).toString('utf8'))
+            ).toEqual({ foo: 'baz' })
         })
 
         it('falls back to JSON if native async gzip resolves a non-gzip body before sending', async () => {
@@ -801,10 +1744,10 @@ describe('request', () => {
             })
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                url: 'https://any.posthog-instance.com',
                 data: { foo: 'bar' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -814,7 +1757,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
         })
 
@@ -824,10 +1767,10 @@ describe('request', () => {
             })
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com?ver=1.23.45',
+                url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -837,7 +1780,7 @@ describe('request', () => {
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com')
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBeInstanceOf(ArrayBuffer)
         })
     })

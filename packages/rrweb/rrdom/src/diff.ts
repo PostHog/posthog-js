@@ -1,4 +1,7 @@
-import { type Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  type Mirror as NodeMirror,
+  attachShadowRootSafely,
+} from '@posthog/rrweb-snapshot';
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
 import type {
   canvasMutationData,
@@ -107,7 +110,7 @@ export function diff(
   replayer: ReplayerHandler,
   rrnodeMirror: Mirror = (newTree as RRDocument).mirror ||
     (newTree.ownerDocument as RRDocument).mirror,
-) {
+): void {
   oldTree = diffBeforeUpdatingChildren(
     oldTree,
     newTree,
@@ -184,14 +187,17 @@ function diffBeforeUpdatingChildren(
         }
       }
       if (newRRElement.shadowRoot) {
-        if (!oldElement.shadowRoot) oldElement.attachShadow({ mode: 'open' });
-        diffChildren(
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          oldElement.shadowRoot!,
-          newRRElement.shadowRoot,
-          replayer,
-          rrnodeMirror,
-        );
+        // The recorded host can come back as a tag the real element refuses as
+        // a shadow host. Skip that subtree rather than let the exception
+        // abandon the rest of the diff.
+        if (oldElement.shadowRoot || attachShadowRootSafely(oldElement)) {
+          diffChildren(
+            oldElement.shadowRoot!,
+            newRRElement.shadowRoot,
+            replayer,
+            rrnodeMirror,
+          );
+        }
       }
       /**
        * Attributes and styles of the old element need to be updated before updating its children because of an edge case:
@@ -257,14 +263,10 @@ function diffAfterUpdatingChildren(
           const rrCanvasElement = newTree as RRCanvasElement;
           // This canvas element is created with initial data in an iframe element. https://github.com/rrweb-io/rrweb/pull/944
           if (rrCanvasElement.rr_dataURL !== null) {
-            const image = document.createElement('img');
-            image.onload = () => {
-              const ctx = (oldElement as HTMLCanvasElement).getContext('2d');
-              if (ctx) {
-                ctx.drawImage(image, 0, 0, image.width, image.height);
-              }
-            };
-            image.src = rrCanvasElement.rr_dataURL;
+            hydrateCanvas(
+              oldElement as HTMLCanvasElement,
+              rrCanvasElement.rr_dataURL,
+            );
           }
           rrCanvasElement.canvasMutations.forEach((canvasMutation) =>
             replayer.applyCanvas(
@@ -329,6 +331,17 @@ function diffAfterUpdatingChildren(
   }
 }
 
+function hydrateCanvas(canvas: HTMLCanvasElement, dataUrl: string) {
+  const image = canvas.ownerDocument.createElement('img');
+  image.onload = () => {
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(image, 0, 0, image.width, image.height);
+    }
+  };
+  image.src = dataUrl;
+}
+
 function diffProps(
   oldTree: HTMLElement,
   newTree: IRRElement,
@@ -343,14 +356,7 @@ function diffProps(
     if (sn?.isSVG && NAMESPACES[name])
       oldTree.setAttributeNS(NAMESPACES[name], name, newValue);
     else if (newTree.tagName === 'CANVAS' && name === 'rr_dataURL') {
-      const image = document.createElement('img');
-      image.src = newValue;
-      image.onload = () => {
-        const ctx = (oldTree as HTMLCanvasElement).getContext('2d');
-        if (ctx) {
-          ctx.drawImage(image, 0, 0, image.width, image.height);
-        }
-      };
+      hydrateCanvas(oldTree as HTMLCanvasElement, newValue);
     } else if (newTree.tagName === 'IFRAME' && name === 'srcdoc') continue;
     else {
       try {
@@ -586,7 +592,7 @@ export function createOrGetNode(
 /**
  * To check whether two nodes are the same type of node. If they are both Elements, check wether their tagNames are same or not.
  */
-export function sameNodeType(node1: Node, node2: IRRNode) {
+export function sameNodeType(node1: Node, node2: IRRNode): boolean {
   if (node1.nodeType !== node2.nodeType) return false;
   return (
     node1.nodeType !== node1.ELEMENT_NODE ||

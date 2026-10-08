@@ -2,19 +2,21 @@
  * Test to verify bug: calling group() before identify() causes initial person props to be lost
  */
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()
@@ -33,8 +35,7 @@ jest.mock('../utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('group before identify bug', () => {
     beforeEach(() => {
@@ -44,11 +45,12 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params in $identify even when group() is called first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles: 'identified_only',
+            capture_pageview: false,
         })
 
         // Simulate what Clerk does: call group() with properties before identify()
@@ -59,14 +61,7 @@ describe('group before identify bug', () => {
 
         // Find the events
         const calls = beforeSendMock.mock.calls
-        const groupIdentifyCall = calls.find((c: any) => c[0].event === '$groupidentify')
         const identifyCall = calls.find((c: any) => c[0].event === '$identify')
-
-        console.log(
-            '$groupidentify $set_once.$initial_utm_source:',
-            groupIdentifyCall?.[0]?.$set_once?.$initial_utm_source
-        )
-        console.log('$identify $set_once.$initial_utm_source:', identifyCall?.[0]?.$set_once?.$initial_utm_source)
 
         // THE BUG: $identify should have $set_once with initial UTM params
         // but because group() was called first, _personProcessingSetOncePropertiesSent is already true
@@ -78,11 +73,12 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params when identify() is called without group() first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles: 'identified_only',
+            capture_pageview: false,
         })
 
         // Just call identify without group first
@@ -90,8 +86,6 @@ describe('group before identify bug', () => {
 
         const calls = beforeSendMock.mock.calls
         const identifyCall = calls.find((c: any) => c[0].event === '$identify')
-
-        console.log('$identify $set_once (no group):', JSON.stringify(identifyCall?.[0]?.$set_once, null, 2))
 
         // This should work
         expect(identifyCall).toBeDefined()

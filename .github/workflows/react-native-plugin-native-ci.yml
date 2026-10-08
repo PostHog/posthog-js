@@ -1,7 +1,7 @@
 name: React Native Plugin Native CI
 
 # Builds the posthog-react-native-plugin example app's native code (Android +
-# iOS) so the Swift/Kotlin bridge is compiled in CI before publishing. Ported
+# iOS + macOS) so the Swift/Kotlin bridge is compiled in CI before publishing. Ported
 # from the standalone posthog-react-native-session-replay repo. The example
 # lives at examples/example-rn-native-plugin and is excluded from the pnpm
 # workspace, so each job installs it standalone and invokes the native build
@@ -16,25 +16,27 @@ on:
     paths:
       - 'packages/react-native-plugin/**'
       - 'examples/example-rn-native-plugin/**'
+      - 'examples/example-rn-spm/**'
       - '.github/workflows/react-native-plugin-native-ci.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   EXAMPLE_DIR: examples/example-rn-native-plugin
 
 jobs:
   build-android:
+    permissions:
+      contents: read
     name: Build example for Android
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -51,7 +53,7 @@ jobs:
 
       - name: Install JDK
         if: steps.is-affected.outputs.is-affected == 'true'
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -63,7 +65,7 @@ jobs:
 
       - name: Cache Gradle
         if: steps.is-affected.outputs.is-affected == 'true'
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/wrapper
@@ -76,31 +78,35 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
-      - name: Build example for Android
+      - name: Build example and test plugin for Android
         if: steps.is-affected.outputs.is-affected == 'true'
         env:
           JAVA_OPTS: '-XX:MaxHeapSize=6g'
-        run: ./gradlew assembleDebug --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleDebug :posthog_react-native-plugin:testDebugUnitTest --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
         working-directory: ${{ env.EXAMPLE_DIR }}/android
 
   build-ios-static-lib:
+    permissions:
+      contents: read
     name: Build example for iOS (CocoaPods)
     runs-on: macos-14-xlarge
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Select latest stable Xcode
-        uses: maxim-lobanov/setup-xcode@1242409711ff5721add51979e9e11e23ebb7e5a4 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
@@ -119,11 +125,13 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -143,16 +151,19 @@ jobs:
             -destination generic/platform=iOS | xcpretty
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
-  build-ios-spm:
-    name: Build example for iOS (SPM opt-in)
-    # Exercises the opt-in path: `posthog.useSpm` in Podfile.properties.json
-    # routes posthog-ios through the React Native spm_dependency helper. The
-    # SPM path requires dynamic frameworks. macos-26 uses the latest Xcode
-    # shipped with the runner image.
+  build-ios-hybrid-spm:
+    permissions:
+      contents: read
+    name: Build example for iOS (CocoaPods plugin + SwiftPM posthog-ios)
+    # Exercises the hybrid opt-in path: `posthog.useSpm` in
+    # Podfile.properties.json routes posthog-ios through the React Native
+    # spm_dependency helper while the React Native plugin remains a CocoaPod.
+    # The hybrid path requires dynamic frameworks. macos-26 uses the latest
+    # Xcode shipped with the runner image.
     runs-on: macos-26
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -171,11 +182,13 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         # --ignore-workspace: the example is excluded from the pnpm workspace,
         # so install it as a standalone project (resolves the link: dep to the
-        # in-repo plugin). The example's own .npmrc sets node-linker=hoisted,
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Opt example into SPM resolution
@@ -206,3 +219,133 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator'
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+  build-ios-full-spm:
+    permissions:
+      contents: read
+    name: Build example for iOS (React Native full SwiftPM)
+    runs-on: macos-26
+    env:
+      SPM_EXAMPLE_DIR: examples/example-rn-spm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build React Native package tarballs
+        run: |
+          export PACKAGE_DEST="$PWD/target"
+          pnpm turbo package \
+            --filter=posthog-react-native... \
+            --filter=@posthog/react-native-plugin
+
+      - name: Install React Native 0.87.1 example dependencies
+        run: pnpm install --lockfile=false --config.node-linker=hoisted
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Verify the published plugin contains its Swift package
+        run: test -f node_modules/@posthog/react-native-plugin/ios/Package.swift
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Convert the iOS project to React Native full SwiftPM
+        run: npx react-native spm add --deintegrate --yes
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Build Debug with SwiftPM
+        run: |
+          xcodebuild \
+            -project PosthogReactNativeSpmExample.xcodeproj \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Verify the native plugin was linked into the app
+        run: |
+          app="ios/build/DerivedData/Build/Products/Debug-iphonesimulator/PosthogReactNativeSpmExample.app"
+          for binary in \
+            "$app/PosthogReactNativeSpmExample" \
+            "$app/PosthogReactNativeSpmExample.debug.dylib"; do
+            if [ -f "$binary" ]; then
+              nm -g "$binary"
+            fi
+          done | grep '_OBJC_CLASS_.*PosthogReactNativePlugin'
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Build Release with SwiftPM
+        run: |
+          xcodebuild \
+            -project PosthogReactNativeSpmExample.xcodeproj \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+  build-macos:
+    permissions:
+      contents: read
+    name: Build example for macOS (CocoaPods)
+    runs-on: macos-14-xlarge
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Check if plugin is affected
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: '@posthog/react-native-plugin'
+
+      - name: Install example dependencies
+        if: steps.is-affected.outputs.is-affected == 'true'
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's macOS autolinking and pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
+        working-directory: ${{ env.EXAMPLE_DIR }}
+
+      - name: Install CocoaPods
+        if: steps.is-affected.outputs.is-affected == 'true'
+        env:
+          NO_FLIPPER: 1
+        run: pod install
+        working-directory: ${{ env.EXAMPLE_DIR }}/macos
+
+      - name: Build example for macOS
+        if: steps.is-affected.outputs.is-affected == 'true'
+        run: |
+          set -o pipefail && xcrun xcodebuild \
+            -workspace PosthogReactNativePluginExample.xcworkspace \
+            -configuration Debug \
+            -scheme PosthogReactNativePluginExample-macOS \
+            -destination 'generic/platform=macOS' | xcpretty
+        working-directory: ${{ env.EXAMPLE_DIR }}/macos

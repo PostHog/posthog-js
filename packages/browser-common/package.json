@@ -1,39 +1,112 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.0.0",
-    "private": true,
-    "description": "Shared browser extension primitives for PostHog JavaScript SDKs",
+    "version": "0.9.2",
+    "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/browser-common"
     },
-    "type": "module",
-    "sideEffects": false,
-    "main": "./src/index.ts",
-    "types": "./src/index.ts",
+    "sideEffects": [
+        "./dist/utils/*-polyfill.js",
+        "./dist/utils/*-polyfill.mjs",
+        "./dist/utils/uuidv7.js",
+        "./dist/utils/uuidv7.mjs"
+    ],
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "config": [
+                "dist/config.d.ts"
+            ],
+            "constants": [
+                "dist/constants.d.ts"
+            ],
+            "extension-runtime": [
+                "dist/extension-runtime.d.ts"
+            ],
+            "pubsub": [
+                "dist/pubsub.d.ts"
+            ],
+            "utils/*": [
+                "dist/utils/*.d.ts"
+            ],
+            "feature-flags": [
+                "dist/feature-flags.d.ts"
+            ],
+            "feature-flags-config": [
+                "dist/feature-flags-config.d.ts"
+            ]
+        }
+    },
     "exports": {
         ".": {
-            "types": "./src/index.ts",
-            "import": "./src/index.ts"
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        },
+        "./config": {
+            "types": "./dist/config.d.ts",
+            "require": "./dist/config.js",
+            "import": "./dist/config.mjs"
+        },
+        "./constants": {
+            "types": "./dist/constants.d.ts",
+            "require": "./dist/constants.js",
+            "import": "./dist/constants.mjs"
+        },
+        "./extension-runtime": {
+            "types": "./dist/extension-runtime.d.ts",
+            "require": "./dist/extension-runtime.js",
+            "import": "./dist/extension-runtime.mjs"
+        },
+        "./pubsub": {
+            "types": "./dist/pubsub.d.ts",
+            "require": "./dist/pubsub.js",
+            "import": "./dist/pubsub.mjs"
+        },
+        "./utils/*": {
+            "types": "./dist/utils/*.d.ts",
+            "require": "./dist/utils/*.js",
+            "import": "./dist/utils/*.mjs"
+        },
+        "./feature-flags": {
+            "types": "./dist/feature-flags.d.ts",
+            "require": "./dist/feature-flags.js",
+            "import": "./dist/feature-flags.mjs"
+        },
+        "./feature-flags-config": {
+            "types": "./dist/feature-flags-config.d.ts",
+            "require": "./dist/feature-flags-config.js",
+            "import": "./dist/feature-flags-config.mjs"
         }
     },
     "scripts": {
-        "lint": "eslint src tests",
-        "lint:fix": "eslint src tests --fix",
-        "build": "tsc -p tsconfig.json --noEmit",
-        "test:unit": "jest -c jest.config.cjs",
-        "check-types": "pnpm build"
+        "clean": "rimraf dist",
+        "lint": "oxlint --report-unused-disable-directives-severity error src tests",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
+        "build": "rslib build",
+        "dev": "rslib build -w",
+        "test:unit": "vitest run",
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
-        "ts-jest": "catalog:",
-        "typescript": "^6.0.3"
+        "@rslib/core": "catalog:",
+        "jsdom": "catalog:",
+        "typescript": "catalog:native",
+        "vitest": "catalog:"
     }
 }

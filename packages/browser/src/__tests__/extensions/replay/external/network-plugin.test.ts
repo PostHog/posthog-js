@@ -1,13 +1,15 @@
 /// <reference lib="dom" />
 
-import { expect } from '@jest/globals'
+import { expect } from 'vitest'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
-import { NetworkRecordOptions } from '../../../../types'
+import { buildNetworkRequestOptions, defaultNetworkOptions } from '../../../../extensions/replay/external/config'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
+import { defaultConfig } from '../../../../posthog-core'
 import {
     _contentLengthExceedsLimit,
     _readBody,
     _tryReadBodyStreaming,
-    NEVER_RECORD_BODY_CONTENT_TYPES,
+    getRecordNetworkPlugin,
     shouldRecordBody,
 } from '../../../../extensions/replay/external/network-plugin'
 
@@ -32,6 +34,7 @@ function createMockWindow() {
             now: () => Date.now(),
             getEntries: () => performanceEntries,
             getEntriesByName: (name: string) => performanceEntries.filter((e: any) => e.name === name),
+            getEntriesByType: (type: string) => performanceEntries.filter((e: any) => e.entryType === type),
             clearResourceTimings: () => {
                 performanceEntries.length = 0
             },
@@ -79,11 +82,63 @@ function createMockWindow() {
             }
         } as any,
         fetch: async () => new Response(),
+        document: { readyState: 'complete' },
     } as any
 
     mockWindow.PerformanceObserver.supportedEntryTypes = ['navigation', 'resource']
 
     return { mockWindow, performanceEntries, observerCallbacks }
+}
+
+function createNavigationTimingEntry(name: string, loadEventEnd: number = 400) {
+    return {
+        name,
+        entryType: 'navigation',
+        initiatorType: 'navigation',
+        startTime: 0,
+        responseEnd: 120,
+        duration: 500,
+        loadEventEnd,
+        toJSON() {
+            return {
+                name: this.name,
+                entryType: this.entryType,
+                initiatorType: this.initiatorType,
+                startTime: this.startTime,
+                duration: 500,
+            }
+        },
+    }
+}
+
+function createResourceTimingEntry(name: string, serverTimingName: string, serverTimingDuration: number) {
+    return {
+        name,
+        entryType: 'resource',
+        initiatorType: 'fetch',
+        startTime: 10,
+        responseEnd: 20,
+        duration: 10,
+        serverTiming: [{ name: serverTimingName, duration: serverTimingDuration }],
+        toJSON() {
+            return {
+                name: this.name,
+                entryType: this.entryType,
+                initiatorType: this.initiatorType,
+                startTime: this.startTime,
+                duration: 10,
+            }
+        },
+    }
+}
+
+function createObserverEntryList(entries: PerformanceEntry[]): PerformanceObserverEntryList {
+    return {
+        getEntries: () => entries,
+        getEntriesByName: (name, type) =>
+            entries.filter((entry) => entry.name === name && (!type || entry.entryType === type)),
+        getEntriesByType: (type) => entries.filter((entry) => entry.entryType === type),
+    }
 }
 
 const blobUrlTestCases = [
@@ -225,10 +280,16 @@ describe('network plugin', () => {
         })
 
         describe('binary content types are never recorded', () => {
-            const neverRecordCases: [string, boolean][] = NEVER_RECORD_BODY_CONTENT_TYPES.map((prefix) => [
-                prefix.endsWith('/') ? `${prefix}example` : prefix,
-                false,
-            ])
+            const neverRecordCases: [string, boolean][] = [
+                ['image/png', false],
+                ['video/mp4', false],
+                ['audio/mpeg', false],
+                ['font/woff2', false],
+                ['application/octet-stream', false],
+                ['application/pdf', false],
+                ['application/zip', false],
+                ['application/wasm', false],
+            ]
             const alwaysRecordCases: [string, boolean][] = [
                 ['application/json', true],
                 ['text/plain', true],
@@ -238,7 +299,7 @@ describe('network plugin', () => {
                 (contentType, expected) => {
                     const result = shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': contentType } as unknown as Headers,
+                        headers: { 'content-type': contentType },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -250,7 +311,7 @@ describe('network plugin', () => {
                 expect(
                     shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': 'Image/WebP' } as unknown as Headers,
+                        headers: { 'content-type': 'Image/WebP' },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -258,7 +319,7 @@ describe('network plugin', () => {
                 expect(
                     shouldRecordBody({
                         type: 'response',
-                        headers: { 'content-type': 'APPLICATION/PDF' } as unknown as Headers,
+                        headers: { 'content-type': 'APPLICATION/PDF' },
                         url: 'https://example.com/asset',
                         recordBody: true,
                     })
@@ -296,84 +357,595 @@ describe('network plugin', () => {
     })
 
     describe('network observer lifecycle', () => {
+        it('emits URL-less initial timing metadata when a method-gated mask filters it', () => {
+            const { mockWindow, performanceEntries } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const entry = createResourceTimingEntry(
+                'https://example.com/page?token=secret',
+                'application',
+                5
+            ) as PerformanceEntry
+            performanceEntries.push(entry)
+            const callback = vi.fn()
+            const posthogConfig = defaultConfig()
+            const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
+                request.method === 'GET' ? request : undefined
+            )
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, { recordPerformance: true })
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    name: 'https://example.com/page?token=secret',
+                    method: undefined,
+                    isInitial: true,
+                })
+            )
+            expect(callback).toHaveBeenCalledWith({
+                isInitial: true,
+                requests: [
+                    expect.objectContaining({
+                        name: '',
+                        entryType: 'resource',
+                        isInitial: true,
+                    }),
+                ],
+            })
+            cleanup()
+        })
+
+        it('drops initial server timings when the current mask filters only their parent URL', () => {
+            // Use the config module from this isolated module registry so its private fallback tracking is shared.
+            const { mockWindow, performanceEntries } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const entry = createResourceTimingEntry(
+                'https://example.com/page?token=secret',
+                'customer-controlled-timing',
+                5
+            ) as PerformanceEntry
+            performanceEntries.push(entry)
+            const callback = vi.fn()
+            const posthogConfig = defaultConfig()
+            const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
+                request.name === entry.name ? null : request
+            )
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                recordPerformance: true,
+            })
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({
+                isInitial: true,
+                requests: [
+                    expect.objectContaining({
+                        name: '',
+                        entryType: 'resource',
+                        startTime: 10,
+                        duration: 10,
+                        endTime: 20,
+                        isInitial: true,
+                    }),
+                ],
+            })
+            cleanup()
+        })
+
+        it('drops initial server timings when the deprecated mask filters only their parent URL', () => {
+            // Use the config module from this isolated module registry so its private fallback tracking is shared.
+            const { mockWindow, performanceEntries } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const entry = createResourceTimingEntry(
+                'https://example.com/page?token=secret',
+                'customer-controlled-timing',
+                5
+            ) as PerformanceEntry
+            performanceEntries.push(entry)
+            const callback = vi.fn()
+            const posthogConfig = defaultConfig()
+            const maskNetworkRequestFn = vi.fn(({ url }: { url: string }) => (url === entry.name ? null : { url }))
+            posthogConfig.session_recording.maskNetworkRequestFn = maskNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                recordPerformance: true,
+            })
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+            expect(maskNetworkRequestFn).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({
+                isInitial: true,
+                requests: [
+                    expect.objectContaining({
+                        name: '',
+                        entryType: 'resource',
+                        startTime: 10,
+                        duration: 10,
+                        endTime: 20,
+                        isInitial: true,
+                    }),
+                ],
+            })
+            cleanup()
+        })
+
+        it('emits request payloads that postMessage can clone when toJSON keeps server timing objects', () => {
+            const { mockWindow, observerCallbacks } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const callback = vi.fn()
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+            const entry = createResourceTimingEntry('https://example.com/api/data', 'db', 5)
+            const browserServerTiming = {
+                name: 'db',
+                duration: 5,
+                description: '',
+                toJSON() {
+                    return { name: this.name, duration: this.duration, description: this.description }
+                },
+            }
+            const baseToJSON = entry.toJSON
+            entry.toJSON = function () {
+                return { ...baseToJSON.call(this), serverTiming: [browserServerTiming] }
+            }
+
+            observerCallbacks[0](createObserverEntryList([entry as PerformanceEntry]))
+
+            const payload = callback.mock.calls[0][0]
+            expect(() => structuredClone(payload)).not.toThrow()
+            expect(payload.requests[0].serverTiming).toEqual([{ name: 'db', duration: 5, description: '' }])
+            cleanup()
+        })
+
+        it('drops server timings derived from a masked PostHog ingestion request', () => {
+            const { mockWindow, observerCallbacks } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const callback = vi.fn()
+            const networkOptions = buildNetworkRequestOptions(
+                { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                { recordPerformance: true }
+            )
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+            const entry = createResourceTimingEntry('https://example.com/ingest/s/?ver=1.406.2', 'proxy', 5)
+
+            observerCallbacks[0](createObserverEntryList([entry]))
+
+            expect(callback).not.toHaveBeenCalled()
+            cleanup()
+        })
+
+        it('does not let a dropped parent suppress the next request in a performance observer batch', () => {
+            const { mockWindow, observerCallbacks } = createMockWindow()
+            global.PerformanceObserver = mockWindow.PerformanceObserver
+
+            const callback = vi.fn()
+            const networkOptions = buildNetworkRequestOptions(
+                { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                { recordPerformance: true }
+            )
+            const plugin = getRecordNetworkPlugin(networkOptions)
+            const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+            const droppedEntry = createResourceTimingEntry('https://example.com/ingest/s/', 'proxy', 5)
+            const allowedEntry = createResourceTimingEntry('https://example.com/api/data', 'allowed-proxy', 3)
+
+            observerCallbacks[0](createObserverEntryList([droppedEntry, allowedEntry]))
+
+            expect(callback).toHaveBeenCalledWith({
+                requests: [
+                    expect.objectContaining({ name: allowedEntry.name, entryType: 'resource' }),
+                    expect.objectContaining({ name: 'allowed-proxy', entryType: 'serverTiming' }),
+                ],
+            })
+            cleanup()
+        })
+
+        describe('unsupported performance observer', () => {
+            it('does not throw when the frame has no PerformanceObserver', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+
+                const plugin = getRecordNetworkPlugin()
+                let cleanup: () => void = () => {}
+                expect(() => {
+                    cleanup = plugin.observer(() => {}, mockWindow, {})
+                }).not.toThrow()
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('does not throw when the frame has no list of supported entry types', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                delete mockWindow.PerformanceObserver.supportedEntryTypes
+
+                const plugin = getRecordNetworkPlugin()
+                let cleanup: () => void = () => {}
+                expect(() => {
+                    cleanup = plugin.observer(() => {}, mockWindow, {})
+                }).not.toThrow()
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('does not observe when no supported entry type is wanted', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                mockWindow.PerformanceObserver.supportedEntryTypes = ['longtask']
+
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
+
+                expect(observerCallbacks.length).toBe(0)
+                cleanup()
+            })
+
+            it('leaves the shared observer for a frame that can observe', () => {
+                const broken = createMockWindow()
+                delete broken.mockWindow.PerformanceObserver
+                const healthy = createMockWindow()
+
+                const plugin = getRecordNetworkPlugin()
+                const stopBroken = plugin.observer(() => {}, broken.mockWindow, {})
+                const stopHealthy = plugin.observer(() => {}, healthy.mockWindow, {})
+
+                expect(healthy.observerCallbacks.length).toBe(1)
+
+                stopHealthy()
+                stopBroken()
+            })
+
+            it("timestamps entries with the observed frame's clock", () => {
+                const broken = createMockWindow()
+                delete broken.mockWindow.PerformanceObserver
+                const healthy = createMockWindow()
+                // the bundle's frame loaded a minute ago and the healthy frame a second ago
+                const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const frameOrigin = Date.now() - 1000
+                healthy.mockWindow.performance.now = () => Date.now() - frameOrigin
+                const globalNow = vi.spyOn(performance, 'now').mockReturnValue(60_000)
+
+                const callback = vi.fn()
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const stopBroken = plugin.observer(() => {}, broken.mockWindow, networkOptions)
+                const stopHealthy = plugin.observer(callback, healthy.mockWindow, networkOptions)
+
+                const entry = createResourceTimingEntry('https://example.com/api/data', 'proxy', 3)
+                healthy.observerCallbacks[0](createObserverEntryList([entry]))
+
+                const [request] = callback.mock.calls[0][0].requests
+                expect(request.timeOrigin).toBe(frameOrigin)
+                expect(request.timestamp).toBe(frameOrigin + entry.startTime)
+
+                stopHealthy()
+                stopBroken()
+                globalNow.mockRestore()
+                dateNow.mockRestore()
+            })
+
+            it('still wraps fetch when the frame has no PerformanceObserver but headers are recorded', () => {
+                const { mockWindow } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+                const originalFetch = mockWindow.fetch
+
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, { recordHeaders: true })
+                expect(mockWindow.fetch).not.toBe(originalFetch)
+
+                cleanup()
+                expect(mockWindow.fetch).toBe(originalFetch)
+            })
+
+            it('still captures initial requests when the frame has no PerformanceObserver', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                delete mockWindow.PerformanceObserver
+                performanceEntries.push(
+                    createResourceTimingEntry('https://example.com/api/data', 'proxy', 3) as PerformanceEntry
+                )
+
+                const callback = vi.fn()
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, {
+                    ...networkOptions,
+                    recordInitialRequests: true,
+                })
+
+                expect(callback).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        isInitial: true,
+                        requests: expect.arrayContaining([
+                            expect.objectContaining({ name: 'https://example.com/api/data' }),
+                        ]),
+                    })
+                )
+                cleanup()
+            })
+        })
+
+        describe('completed navigation timing', () => {
+            let cleanup: () => void = () => {}
+
+            afterEach(() => cleanup())
+
+            it('captures the navigation entry when recording starts after the document loaded', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})
+
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' })],
+                })
+            })
+
+            it('captures the navigation entry without the initial resource entries', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+                performanceEntries.push(createResourceTimingEntry('https://example.com/app.js', 'proxy', 5) as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {})
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it.each([false, true])(
+                'leaves the navigation entry to the observer while the document still loads, recordInitialRequests=%s',
+                (recordInitialRequests) => {
+                    const { mockWindow, performanceEntries } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    mockWindow.document.readyState = 'loading'
+                    performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                    const callback = vi.fn()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests })
+
+                    expect(callback).not.toHaveBeenCalled()
+                }
+            )
+
+            it.each([false, true])(
+                'leaves the navigation entry to the observer while the load event has not finished, recordInitialRequests=%s',
+                (recordInitialRequests) => {
+                    const { mockWindow, performanceEntries } = createMockWindow()
+                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                    // readiness turns `complete` before the load event fires, so the entry is not final yet
+                    performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
+
+                    const callback = vi.fn()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests })
+
+                    expect(callback).not.toHaveBeenCalled()
+                }
+            )
+
+            it('captures the navigation entry once when initial requests are recorded', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it('leaves a mid-load navigation entry to the observer rather than dropping it', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.document.readyState = 'loading'
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app', 0) as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, { recordInitialRequests: true })
+                expect(callback).not.toHaveBeenCalled()
+
+                observerCallbacks[0](createObserverEntryList([createNavigationTimingEntry('https://example.com/app')]))
+
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(callback.mock.calls[0][0].requests).toEqual([
+                    expect.objectContaining({ name: 'https://example.com/app', entryType: 'navigation' }),
+                ])
+            })
+
+            it.each(['initial', 'live'])('isolates masking exceptions in %s entries', (phase) => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const entries = [
+                    createResourceTimingEntry('https://example.com/before', 'before-timing', 1),
+                    createResourceTimingEntry('https://example.com/broken', 'private-timing', 2),
+                    createResourceTimingEntry('https://example.com/after', 'after-timing', 3),
+                ]
+                if (phase === 'initial') {
+                    performanceEntries.push(...(entries as any))
+                }
+                const callback = vi.fn()
+                const maskRequestFn = vi.fn((request: CapturedNetworkRequest) => {
+                    if (request.name === 'https://example.com/broken') {
+                        throw new Error('mask failed')
+                    }
+                    return request
+                })
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    recordInitialRequests: true,
+                    maskRequestFn,
+                })
+                if (phase === 'live') {
+                    expect(() => observerCallbacks[0]({ getEntries: () => entries } as any)).not.toThrow()
+                }
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(
+                    callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/before', 'before-timing', 'https://example.com/after', 'after-timing'])
+                expect(maskRequestFn.mock.calls.some(([request]) => request.name === 'private-timing')).toBe(false)
+                observerCallbacks[0]({
+                    getEntries: () => [createResourceTimingEntry('https://example.com/later', 'later-timing', 4)],
+                } as any)
+                expect(callback).toHaveBeenCalledTimes(2)
+                expect(
+                    callback.mock.calls[1][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/later', 'later-timing'])
+            })
+
+            it('warns once per observer about masking failures without logging private data', () => {
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const debugWindow = window as Window & { POSTHOG_DEBUG?: boolean }
+                const previousDebug = debugWindow.POSTHOG_DEBUG
+                debugWindow.POSTHOG_DEBUG = true
+                const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const callback = vi.fn()
+                const options = {
+                    maskRequestFn: () => {
+                        throw new Error('private exception contents')
+                    },
+                }
+                const emit = () =>
+                    observerCallbacks[0]({
+                        getEntries: () => [
+                            createResourceTimingEntry('https://example.com/private', 'private-timing', 1),
+                        ],
+                    } as any)
+                try {
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, options)
+                    emit()
+                    emit()
+                    expect(warning.mock.calls).toEqual([
+                        [
+                            '[PostHog.js] [Recorder]',
+                            'Network capture masking callback failed; dropping the record. Further masking failures will not be logged for this observer.',
+                        ],
+                    ])
+                    expect(callback).not.toHaveBeenCalled()
+                    cleanup()
+                    cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, options)
+                    emit()
+                    expect(warning).toHaveBeenCalledTimes(2)
+                } finally {
+                    warning.mockRestore()
+                    debugWindow.POSTHOG_DEBUG = previousDebug
+                }
+            })
+
+            it('keeps observing when the mask function throws on the initial entries', () => {
+                const { mockWindow, performanceEntries, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                const start = () =>
+                    (cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                        maskRequestFn: () => {
+                            throw new Error('mask fn threw')
+                        },
+                    }))
+
+                expect(start).not.toThrow()
+                expect(callback).not.toHaveBeenCalled()
+                expect(observerCallbacks).toHaveLength(1)
+            })
+
+            it('skips the navigation entry when navigation timings are not observed', () => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                performanceEntries.push(createNavigationTimingEntry('https://example.com/app') as any)
+
+                const callback = vi.fn()
+                cleanup = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    performanceEntryTypeToObserve: ['resource'],
+                })
+
+                expect(callback).not.toHaveBeenCalled()
+            })
+        })
+
         describe('singleton initialization and cleanup', () => {
             it('should initialize successfully on first call', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin()
-                    const cleanup = plugin.observer(() => {}, mockWindow, {})
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
 
-                    expect(typeof cleanup).toBe('function')
-                    expect(observerCallbacks.length).toBe(1)
-                })
+                expect(typeof cleanup).toBe('function')
+                expect(observerCallbacks.length).toBe(1)
+                cleanup()
             })
 
             it('should allow re-initialization after cleanup', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin1 = getRecordNetworkPlugin()
-                    const cleanup1 = plugin1.observer(() => {}, mockWindow, {})
-                    expect(observerCallbacks.length).toBe(1)
+                const plugin1 = getRecordNetworkPlugin()
+                const cleanup1 = plugin1.observer(() => {}, mockWindow, {})
+                expect(observerCallbacks.length).toBe(1)
 
-                    cleanup1()
-                    expect(observerCallbacks.length).toBe(0)
+                cleanup1()
+                expect(observerCallbacks.length).toBe(0)
 
-                    const plugin2 = getRecordNetworkPlugin()
-                    const cleanup2 = plugin2.observer(() => {}, mockWindow, {})
-                    expect(observerCallbacks.length).toBe(1)
+                const plugin2 = getRecordNetworkPlugin()
+                const cleanup2 = plugin2.observer(() => {}, mockWindow, {})
+                expect(observerCallbacks.length).toBe(1)
 
-                    cleanup2()
-                })
+                cleanup2()
             })
 
             it('should handle multiple cleanup calls safely', () => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const { mockWindow, observerCallbacks } = createMockWindow()
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin()
-                    const cleanup = plugin.observer(() => {}, mockWindow, {})
+                const plugin = getRecordNetworkPlugin()
+                const cleanup = plugin.observer(() => {}, mockWindow, {})
 
-                    expect(() => {
-                        cleanup()
-                        cleanup()
-                        cleanup()
-                    }).not.toThrow()
+                expect(() => {
+                    cleanup()
+                    cleanup()
+                    cleanup()
+                }).not.toThrow()
 
-                    expect(observerCallbacks.length).toBe(0)
-                })
+                expect(observerCallbacks.length).toBe(0)
             })
         })
 
         describe('XHR listener cleanup', () => {
             let mockWindow: any
             let xhr: any
+            let cleanupObserver: () => void
 
             beforeEach(() => {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
-                    const mock = createMockWindow()
-                    mockWindow = mock.mockWindow
+                const mock = createMockWindow()
+                mockWindow = mock.mockWindow
 
-                    global.PerformanceObserver = mockWindow.PerformanceObserver
+                global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                    const plugin = getRecordNetworkPlugin({ recordBody: true })
-                    plugin.observer(() => {}, mockWindow, { recordBody: true })
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
 
-                    xhr = new mockWindow.XMLHttpRequest()
-                })
+                xhr = new mockWindow.XMLHttpRequest()
             })
+
+            afterEach(() => cleanupObserver())
 
             it('should remove readystatechange listener on successful request', () => {
                 xhr.open('GET', 'https://example.com')
@@ -399,7 +971,9 @@ describe('network plugin', () => {
                 it(`should remove all listeners when XHR ${event}s`, () => {
                     xhr.open('GET', 'https://example.com')
                     xhr.send()
-
+                    for (const type of ['readystatechange', 'error', 'abort', 'timeout']) {
+                        expect(xhr.getListenerCount(type)).toBeGreaterThan(0)
+                    }
                     const listeners = xhr.listeners.get(event) || []
                     listeners.forEach((listener: any) => listener(payload))
 
@@ -415,7 +989,9 @@ describe('network plugin', () => {
                     const testXhr = new mockWindow.XMLHttpRequest()
                     testXhr.open('GET', `https://example.com/${i}`)
                     testXhr.send()
-
+                    for (const type of ['readystatechange', 'error', 'abort', 'timeout']) {
+                        expect(testXhr.getListenerCount(type)).toBeGreaterThan(0)
+                    }
                     const errorListeners = testXhr.listeners.get('error') || []
                     errorListeners.forEach((listener: any) => listener(new Error('Network error')))
 
@@ -428,6 +1004,277 @@ describe('network plugin', () => {
                     expect(testXhr.getListenerCount('abort')).toBe(0)
                     expect(testXhr.getListenerCount('timeout')).toBe(0)
                 })
+            })
+        })
+
+        describe('XHR capture teardown', () => {
+            it.each([false, true])('drops pending timing capture before masking, restart=%s', async (restart) => {
+                vi.useFakeTimers()
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const oldCallback = vi.fn()
+                const oldMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const newCallback = vi.fn()
+                const newMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const getEntries = vi.spyOn(mockWindow.performance, 'getEntriesByName')
+                let cleanup = getRecordNetworkPlugin().observer(oldCallback, mockWindow, {
+                    recordHeaders: true,
+                    recordInitialRequests: false,
+                    maskRequestFn: oldMask,
+                })
+                const completeRequest = (url: string) => {
+                    const xhr = new mockWindow.XMLHttpRequest()
+                    xhr.open('GET', url)
+                    xhr.send()
+                    xhr.readyState = xhr.DONE
+                    for (const listener of [...xhr.listeners.get('readystatechange')]) listener()
+                }
+                try {
+                    completeRequest('https://example.com/old-observer')
+                    expect(getEntries).toHaveBeenCalledWith('https://example.com/old-observer')
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    expect(oldMask).not.toHaveBeenCalled()
+                    cleanup()
+                    if (restart) {
+                        cleanup = getRecordNetworkPlugin().observer(newCallback, mockWindow, {
+                            recordHeaders: true,
+                            recordInitialRequests: false,
+                            maskRequestFn: newMask,
+                        })
+                        completeRequest('https://example.com/new-observer')
+                    }
+                    await vi.advanceTimersByTimeAsync(3000)
+                    expect(oldMask).not.toHaveBeenCalled()
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    if (restart) {
+                        expect(newMask).toHaveBeenCalledOnce()
+                        expect(newCallback).toHaveBeenCalledWith({
+                            requests: [expect.objectContaining({ name: 'https://example.com/new-observer' })],
+                        })
+                    }
+                } finally {
+                    cleanup()
+                    vi.useRealTimers()
+                }
+            })
+        })
+
+        describe('fetch capture teardown', () => {
+            const OriginalRequest = global.Request
+            let cleanupObserver: (() => void) | undefined
+
+            afterEach(() => {
+                cleanupObserver?.()
+                global.Request = OriginalRequest
+            })
+
+            function deferredBody() {
+                let resolve!: (body: string) => void
+                const promise = new Promise<string>((r) => {
+                    resolve = r
+                })
+                return { promise, resolve }
+            }
+
+            function instrument(fetch: () => Promise<any>, requestBody: Promise<string>, callback: any) {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.performance.now = () => 10
+                mockWindow.performance.getEntriesByName = () => [
+                    createResourceTimingEntry('https://example.com/', 'server', 1),
+                ]
+                global.Request = class {
+                    url = 'https://example.com/'
+                    method = 'POST'
+                    headers = { forEach: () => {} }
+                    clone() {
+                        return { text: () => requestBody }
+                    }
+                } as any
+                mockWindow.fetch = fetch
+                const plugin = getRecordNetworkPlugin()
+                cleanupObserver = plugin.observer(callback, mockWindow, {
+                    recordBody: true,
+                    maskRequestFn: (entry: CapturedNetworkRequest) => {
+                        if (entry.requestBody) entry.requestBody = 'redacted'
+                        if (entry.responseBody) entry.responseBody = 'redacted'
+                        return entry
+                    },
+                })
+                return mockWindow.fetch
+            }
+
+            it('drops old pending captures after repeated teardown without silencing a restarted observer', async () => {
+                const oldBody = deferredBody()
+                const response = {
+                    status: 204,
+                    headers: { forEach: () => {}, get: () => null },
+                    clone: () => ({ text: async () => '' }),
+                }
+                const oldCallback = vi.fn()
+                const oldFetch = instrument(async () => response, oldBody.promise, oldCallback)
+                const oldHostFetch = oldFetch('https://example.com/')
+                cleanupObserver?.()
+                cleanupObserver?.()
+                const newCallback = vi.fn()
+                const newFetch = instrument(async () => response, Promise.resolve('new body'), newCallback)
+                await expect(newFetch('https://example.com/')).resolves.toBe(response)
+                oldBody.resolve('old body')
+                await expect(oldHostFetch).resolves.toBe(response)
+                await vi.waitFor(() => expect(newCallback).toHaveBeenCalledOnce())
+                expect(oldCallback).not.toHaveBeenCalled()
+            })
+        })
+
+        describe('instrumentation failures degrade gracefully', () => {
+            // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
+            // not let the exception escape and misattribute a failure to session replay
+            const OriginalRequest = global.Request
+            let cleanupObserver: (() => void) | undefined
+
+            afterEach(() => {
+                cleanupObserver?.()
+                cleanupObserver = undefined
+                global.Request = OriginalRequest
+            })
+
+            it('XHR open still delegates to the host when Request construction throws', () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const openCalls: any[] = []
+                mockWindow.XMLHttpRequest.prototype.open = function (...args: any[]) {
+                    openCalls.push(args)
+                }
+
+                global.Request = class {
+                    constructor() {
+                        throw new Error('InvalidMethod')
+                    }
+                } as any
+
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
+
+                const xhr = new mockWindow.XMLHttpRequest()
+                expect(() => xhr.open('GET', 'https://example.com')).not.toThrow()
+
+                // the host's original open still ran with the original arguments
+                expect(openCalls).toHaveLength(1)
+                expect(openCalls[0][0]).toBe('GET')
+                expect(openCalls[0][1]).toBe('https://example.com')
+            })
+
+            it('fetch still delegates to the host when Request construction throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { sentinel: true }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                const plugin = getRecordNetworkPlugin({ ...defaultNetworkOptions, recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
+                patchedFetch = mockWindow.fetch
+
+                global.Request = class {
+                    constructor() {
+                        throw new Error('InvalidMethod')
+                    }
+                } as any
+
+                // the wrapper must not throw and the host's original fetch must still run
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
+            })
+
+            it.each(['request', 'server timing'])('isolates a throwing %s mask in wrapped fetch', async (failure) => {
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.performance.now = () => 10
+                const url = 'https://example.com/broken'
+                const entry = createResourceTimingEntry(url, 'broken-timing', 1)
+                entry.serverTiming.push({ name: 'retained-timing', duration: 2 })
+                performanceEntries.push(entry as any)
+                const response = { status: 200, headers: { forEach: () => {} } }
+                mockWindow.fetch = vi.fn(async () => response)
+                const hostFetch = mockWindow.fetch
+                const callback = vi.fn()
+                const maskRequestFn = vi.fn((request: CapturedNetworkRequest) => {
+                    if (request.name === (failure === 'request' ? url : 'broken-timing')) {
+                        throw new Error('mask failed')
+                    }
+                    return request
+                })
+                cleanupObserver = getRecordNetworkPlugin().observer(callback, mockWindow, {
+                    recordHeaders: true,
+                    maskRequestFn,
+                })
+
+                await expect(mockWindow.fetch(url)).resolves.toBe(response)
+                if (failure === 'request') {
+                    expect(callback).not.toHaveBeenCalled()
+                    expect(maskRequestFn.mock.calls.map(([request]) => request.name)).toEqual([url])
+                } else {
+                    expect(callback).toHaveBeenCalledTimes(1)
+                    expect(
+                        callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                    ).toEqual([url, 'retained-timing'])
+                }
+                callback.mockClear()
+                performanceEntries.push(
+                    createResourceTimingEntry('https://example.com/later', 'later-timing', 3) as any
+                )
+                await expect(mockWindow.fetch('https://example.com/later')).resolves.toBe(response)
+                expect(hostFetch).toHaveBeenCalledTimes(2)
+                expect(callback).toHaveBeenCalledTimes(1)
+                expect(
+                    callback.mock.calls[0][0].requests.map((request: CapturedNetworkRequest) => request.name)
+                ).toEqual(['https://example.com/later', 'later-timing'])
+            })
+
+            it('fetch still delegates to the host when request recording throws', async () => {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                let fetchCallCount = 0
+                const sentinelResponse = { status: 204, headers: { forEach: () => {} } }
+                mockWindow.fetch = async () => {
+                    fetchCallCount++
+                    return sentinelResponse
+                }
+
+                global.Request = class {
+                    url: string
+                    method = 'GET'
+                    headers = {
+                        forEach: () => {
+                            throw new Error('HeaderReadFailed')
+                        },
+                    }
+
+                    constructor(url: string) {
+                        this.url = url
+                    }
+                } as any
+
+                let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
+                const plugin = getRecordNetworkPlugin({
+                    ...defaultNetworkOptions,
+                    recordBody: { request: true, response: false },
+                })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, {
+                    recordBody: { request: true, response: false },
+                })
+                patchedFetch = mockWindow.fetch
+
+                // request header/body recording must not throw or block the host's original fetch
+                await expect(patchedFetch('https://example.com')).resolves.toBe(sentinelResponse)
+                expect(fetchCallCount).toBe(1)
             })
         })
     })
@@ -465,7 +1312,7 @@ describe('network plugin', () => {
                 read: () =>
                     opts.readNeverResolves
                         ? new Promise(() => {})
-                        : opts.readRejects
+                        : opts.readRejects && i >= chunks.length
                           ? Promise.reject(new Error('boom'))
                           : Promise.resolve(
                                 i < chunks.length
@@ -494,10 +1341,21 @@ describe('network plugin', () => {
         })
 
         it('stops at the limit and returns a placeholder, without buffering past it', async () => {
-            const r = fakeStreamingBody([encode('a'.repeat(8)), encode('b'.repeat(8))])
+            const read = vi
+                .fn()
+                .mockResolvedValueOnce({ done: false, value: encode('a'.repeat(8)) })
+                .mockResolvedValueOnce({ done: false, value: encode('b'.repeat(8)) })
+                .mockResolvedValueOnce({ done: false, value: encode('must not read') })
+                .mockResolvedValue({ done: true })
+            const cancel = vi.fn().mockResolvedValue(undefined)
+            const r = {
+                clone: () => ({ body: { tee: () => [], getReader: () => ({ read, cancel }) } }),
+            } as unknown as Response
             await expect(_tryReadBodyStreaming(r, 10)).resolves.toBe(
                 '[SessionReplay] Body too large to record (> 10 bytes)'
             )
+            expect(read).toHaveBeenCalledTimes(2)
+            expect(cancel).toHaveBeenCalledTimes(1)
         })
 
         it('records a body that exactly fills the limit', async () => {
@@ -526,24 +1384,46 @@ describe('network plugin', () => {
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('[SessionReplay] Failed to read body')
         })
 
-        it('resolves (never rejects) when the reader errors mid-stream', async () => {
-            const r = fakeStreamingBody([encode('partial')], { readRejects: true })
+        it.each([
+            { name: 'first read', chunks: [] },
+            { name: 'after one chunk', chunks: ['partial'] },
+        ])('resolves (never rejects) when the reader errors: $name', async ({ chunks }) => {
+            const r = fakeStreamingBody(chunks.map(encode), { readRejects: true })
             await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe(
                 '[SessionReplay] Failed to read body: Error: boom'
             )
         })
 
-        it('times out a hung stream and cancels the reader so it stops being read', async () => {
-            jest.useFakeTimers()
+        it('resolves and swallows the rejection when cancel() rejects (Safari "Load failed")', async () => {
+            const rejections: unknown[] = []
+            const onRejection = (reason: unknown): void => {
+                rejections.push(reason)
+            }
+            process.on('unhandledRejection', onRejection)
             try {
-                const cancel = jest.fn(() => Promise.resolve())
+                const cancel = vi.fn(() => Promise.reject(new TypeError('Load failed')))
+                const r = fakeStreamingBody([encode('hello')], { cancel })
+                await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello')
+                expect(cancel).toHaveBeenCalled()
+                // let the microtask queue surface any rejection that escaped the helper
+                await new Promise((resolve) => setTimeout(resolve, 0))
+                expect(rejections).toHaveLength(0)
+            } finally {
+                process.off('unhandledRejection', onRejection)
+            }
+        })
+
+        it('times out a hung stream and cancels the reader so it stops being read', async () => {
+            vi.useFakeTimers()
+            try {
+                const cancel = vi.fn(() => Promise.resolve())
                 const r = fakeStreamingBody([], { readNeverResolves: true, cancel })
                 const result = _tryReadBodyStreaming(r, 1000)
-                jest.advanceTimersByTime(500)
+                vi.advanceTimersByTime(500)
                 await expect(result).resolves.toBe('[SessionReplay] Timeout while trying to read body')
                 expect(cancel).toHaveBeenCalled()
             } finally {
-                jest.useRealTimers()
+                vi.useRealTimers()
             }
         })
     })

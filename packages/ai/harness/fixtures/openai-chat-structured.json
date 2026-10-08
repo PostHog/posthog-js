@@ -1,0 +1,94 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "source": "openai",
+    "recordedAt": "2026-09-20T02:10:04.317Z",
+    "providerSdkVersion": "6.49.0"
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "gpt-4.1-mini-2025-04-14",
+          "store": false,
+          "max_completion_tokens": 128,
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return the city Paris."
+            }
+          ],
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "city",
+              "strict": true,
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": ["city"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-request-id": "req_9be6e7e9a5844f9a96fe04669742930c"
+        },
+        "body": {
+          "kind": "json",
+          "value": {
+            "id": "chatcmpl-EQ1ICAuf70AC42TbgkKAl617YD5Z7",
+            "object": "chat.completion",
+            "created": 1789870204,
+            "model": "gpt-4.1-mini-2025-04-14",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city\":\"Paris\"}",
+                  "refusal": null,
+                  "annotations": []
+                },
+                "logprobs": null,
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 40,
+              "completion_tokens": 5,
+              "total_tokens": 45,
+              "prompt_tokens_details": {
+                "cached_tokens": 0,
+                "audio_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0,
+                "audio_tokens": 0,
+                "accepted_prediction_tokens": 0,
+                "rejected_prediction_tokens": 0
+              }
+            },
+            "service_tier": "default",
+            "system_fingerprint": "fp_24310a4f43"
+          }
+        }
+      }
+    }
+  ]
+}

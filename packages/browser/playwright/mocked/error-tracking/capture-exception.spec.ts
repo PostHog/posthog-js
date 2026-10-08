@@ -41,7 +41,13 @@ test.describe('ErrorTracking captureException', () => {
             errorWithCause.cause = errorWithCause
             ph.captureException(errorWithCause)
         })
-        exceptionMatch(exception, 'Error', 'wat even am I', 5)
+        exceptionMatch(exception, 'Error', 'wat even am I', 1)
+        expect(exception.properties.$exception_list[0].mechanism).toEqual({
+            type: 'generic',
+            handled: true,
+            synthetic: false,
+            exception_id: 0,
+        })
     })
 
     test('captureException(string)', async ({ posthog, events }) => {
@@ -65,7 +71,7 @@ test.describe('ErrorTracking captureException', () => {
             const exceptionObject = { name: 'foo', message: 'bar' }
             ph.captureException(exceptionObject)
         })
-        exceptionMatch(exception, 'Error', "'foo' captured as exception with message: 'bar'")
+        exceptionMatch(exception, 'foo', "'foo' captured as exception with message: 'bar'")
     })
 
     test('captureException(DOMException)', async ({ posthog, events, browserName }) => {
@@ -135,7 +141,7 @@ async function bootstrap(posthog: PosthogPage, events: EventsPage, cb: (ph: Post
     return exception
 }
 
-async function exceptionMatch(
+function exceptionMatch(
     exception: CaptureResult,
     type: string,
     value: string | number | undefined,

@@ -63,7 +63,7 @@ export class RRWebPluginCanvasWebRTCRecord {
     };
   }
 
-  public signalReceive(signal: RTCSessionDescriptionInit) {
+  public signalReceive(signal: RTCSessionDescriptionInit): void {
     if (!this.peer) this.setupPeer();
     this.peer?.signal(signal);
   }
@@ -71,7 +71,7 @@ export class RRWebPluginCanvasWebRTCRecord {
   public signalReceiveFromCrossOriginIframe(
     signal: RTCSessionDescriptionInit,
     source: WindowProxy,
-  ) {
+  ): void {
     const peer = this.setupPeer(source);
     peer.signal(signal);
   }

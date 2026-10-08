@@ -2,12 +2,38 @@ name: Bundled Size
 
 on: [pull_request]
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  affected_posthog_js:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        .github/workflows/bundled-size.yaml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+
+  affected_browser:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: "@posthog/browser"
+      additional-paths: |
+        .github/workflows/bundled-size.yaml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+
   build:
+    needs: [affected_posthog_js, affected_browser]
+    if: needs.affected_posthog_js.outputs.is-affected == 'true' || needs.affected_browser.outputs.is-affected == 'true'
     runs-on: ubuntu-22.04
 
     permissions:
@@ -16,9 +42,33 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Audit runner egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Setup pnpm
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
+        with:
+          cache: false
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Check minimal browser package size
+        run: pnpm --filter @posthog/browser bundle-size
 
       - name: Upload bundle size visualization
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -27,12 +77,12 @@ jobs:
           name: bundle-stats-array.html
           path: packages/browser/bundle-stats-array.html
 
-      - name: Skip PR comments for fork PR
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: echo "Skipping bundled-size PR comments for fork PRs because GitHub tokens are read-only."
+      - name: Skip PR comments with a read-only token
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        run: echo "Skipping bundled-size PR comments for fork or Dependabot PRs because GitHub tokens are read-only."
 
       - name: Find artifact link comment if it exists
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
         id: fc
         with:
@@ -41,7 +91,7 @@ jobs:
           body-includes: Download bundle size visualization
 
       - name: Create or update artifact link comment
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
@@ -50,8 +100,11 @@ jobs:
             [Download bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
           edit-mode: replace
 
-      - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # pin v2.8.0
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      - uses: preactjs/compressed-size-action@f322c295dde06a1cb7ccaef105732dd8a726d1d9 # pin v2.10.0
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        # v2.10.0 targets Node 24 but still bundles a dependency that calls url.parse().
+        env:
+          NODE_OPTIONS: --disable-warning=DEP0169
         with:
           compression: "none"
           strip-hash: '-(\w{8})\.'

@@ -1,7 +1,12 @@
-import { getMoreToolsResult, PostHogMCP } from '../index'
+import { PostHog } from 'posthog-node'
+import { describe, expect, it, vi } from 'vitest'
+
+import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import type { PostHogCaptureEvent } from '../extensions/posthog-events'
+import { deriveSessionIdFromConversation } from '../extensions/session'
+import { MCP_INSTRUCTIONS_KEY } from '../extensions/output-instructions'
 import { EventCapture } from './test-utils'
 
 // The capture methods are fire-and-forget (mirroring posthog-node's `capture()`),
@@ -41,6 +46,78 @@ describe('PostHogMCP', () => {
     expect(typeof posthog.shutdown).toBe('function')
   })
 
+  // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
+
+  it('adds the configured server build to captured events', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('does not let custom properties replace the configured server build', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({
+        toolName: 'execute-sql',
+        isError: false,
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('rejects a server build that cannot be recorded exactly', () => {
+    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
+  })
+
+  it('adds the configured server build when inherited capture events do not provide one', async () => {
+    const captureEvent = vi.spyOn(PostHog.prototype, 'capture').mockImplementation(() => undefined)
+    const captureImmediate = vi.spyOn(PostHog.prototype, 'captureImmediate').mockResolvedValue(undefined)
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.capture({ distinctId: 'user-123', event: 'custom event', properties: { existing: true } })
+      client.capture({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: undefined },
+      })
+      await client.captureImmediate({
+        distinctId: 'user-123',
+        event: 'immediate event',
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+
+      expect(captureEvent).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'custom event',
+        properties: { existing: true, $mcp_server_build: 'abc123' },
+      })
+      expect(captureEvent).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: 'abc123' },
+      })
+      expect(captureImmediate).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'immediate event',
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+    } finally {
+      await client.shutdown()
+      vi.restoreAllMocks()
+    }
+  })
+
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {
       posthog.captureToolCall({
@@ -51,7 +128,14 @@ describe('PostHogMCP', () => {
         distinctId: 'user-123',
         sessionId: 'session-abc',
         groups: { organization: 'org-1', project: 'proj-1' },
-        properties: { $mcp_client_name: 'claude-code', custom_flag: true },
+        properties: {
+          $mcp_client_name: 'claude-code',
+          custom_flag: true,
+          ...getToolInputProperties(
+            { query: 'example-value', private_identifier: true },
+            { properties: { query: {} } }
+          ),
+        },
       })
       await tick()
 
@@ -68,6 +152,9 @@ describe('PostHogMCP', () => {
       expect(p.$groups).toEqual({ organization: 'org-1', project: 'proj-1' })
       expect(p.$mcp_client_name).toBe('claude-code')
       expect(p.custom_flag).toBe(true)
+      expect(p.$mcp_input_keys).toEqual(['query', '[redacted]'])
+      expect(p).not.toHaveProperty('$mcp_parameters')
+      expect(JSON.stringify(p)).not.toContain('example-value')
       // A resolved identity keeps person processing on.
       expect(p.$process_person_profile).toBeUndefined()
     })
@@ -125,6 +212,21 @@ describe('PostHogMCP', () => {
       expect(JSON.stringify(exception.properties.$exception_list)).toContain('query failed')
     })
 
+    it('forwards an explicit errorType to $mcp_error_type on the tool-call event', async () => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: true,
+        errorType: 'validation',
+        error: new Error('invalid HogQL'),
+      })
+      await tick()
+
+      const toolCall = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall)
+      expect(toolCall.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe('validation')
+      expect(toolCall.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toContain('invalid HogQL')
+    })
+
     it('synthesizes an exception from the tool name when isError is set without an error', async () => {
       posthog.captureToolCall({ toolName: 'execute-sql', distinctId: 'user-123', isError: true })
       await tick()
@@ -149,6 +251,35 @@ describe('PostHogMCP', () => {
       } finally {
         await client.shutdown()
       }
+    })
+
+    it.each([
+      {
+        name: 'trims a direct model value',
+        llmModel: '  claude-sonnet-4-20250514  ',
+        expected: 'claude-sonnet-4-20250514',
+      },
+      { name: 'drops a direct unknown model', llmModel: ' unknown ', expected: undefined },
+      {
+        name: 'redacts a token from a direct model value',
+        llmModel: 'gateway-phx_abcdefghijklmnopqrstuvwxyz1234',
+        expected: 'gateway-[redacted]',
+      },
+    ])('$name', async ({ llmModel, expected }) => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: false,
+        llmModel,
+        llmModelSource: 'self_reported',
+      })
+      await tick()
+
+      const properties = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      expect(properties[PostHogMCPAnalyticsProperty.LlmModel]).toBe(expected)
+      expect(properties[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe(
+        expected === undefined ? undefined : 'self_reported'
+      )
     })
   })
 
@@ -221,6 +352,7 @@ describe('PostHogMCP', () => {
       for (const tool of prepared) {
         expect(tool.inputSchema?.properties?.context).toMatchObject({ type: 'string' })
         expect(tool.inputSchema?.required).toContain('context')
+        expect(tool.inputSchema?.properties).toHaveProperty('llm_model')
       }
     })
 
@@ -235,7 +367,12 @@ describe('PostHogMCP', () => {
     })
 
     it('returns a fresh array even when nothing is added', () => {
-      const prepared = posthog.prepareToolList(tools, { context: false })
+      const client = new PostHogMCP('test', {
+        disabled: true,
+        captureModel: false,
+        enableConversationId: false,
+      })
+      const prepared = client.prepareToolList(tools, { context: false })
       expect(prepared).not.toBe(tools)
       expect(prepared).toEqual(tools)
     })
@@ -259,6 +396,190 @@ describe('PostHogMCP', () => {
       expect(client.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'x' }).isMissingCapability).toBe(false)
       await client.shutdown()
     })
+
+    it('injects and extracts a self-reported model when captureModel is enabled', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        const prepared = client.prepareToolList(tools)
+        expect(prepared[0].inputSchema?.properties?.llm_model).toMatchObject({ type: 'string' })
+        expect(prepared[0].inputSchema?.required).toContain('llm_model')
+
+        const call = client.prepareToolCall('execute-sql', {
+          query: 'select 1',
+          context: 'Counting signups',
+          llm_model: 'claude-sonnet-4-20250514',
+        })
+        expect(call.args).toEqual({ query: 'select 1' })
+        expect(call.llmModel).toBe('claude-sonnet-4-20250514')
+        expect(call.llmModelSource).toBe('self_reported')
+
+        client.captureToolCall({
+          toolName: 'execute-sql',
+          distinctId: 'user-123',
+          isError: false,
+          llmModel: call.llmModel,
+          llmModelSource: call.llmModelSource,
+        })
+        await tick()
+
+        const properties = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+        expect(properties[PostHogMCPAnalyticsProperty.LlmModel]).toBe('claude-sonnet-4-20250514')
+        expect(properties[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe('self_reported')
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('leaves an application-owned llm_model argument untouched and uncaptured', async () => {
+      const client = newClient({ captureModel: true })
+      const ownedTools = [
+        {
+          name: 'route-model',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string', description: 'Application routing model' } },
+            required: ['llm_model'],
+          },
+        },
+      ]
+      try {
+        const prepared = client.prepareToolList(ownedTools)
+        expect(prepared[0].inputSchema.properties.llm_model).toEqual({
+          type: 'string',
+          description: 'Application routing model',
+        })
+
+        const call = client.prepareToolCall('route-model', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('captures a Codex metadata model without taking an application-owned llm_model argument', async () => {
+      const client = newClient({ captureModel: true })
+      const ownedTool = {
+        name: 'route-model',
+        inputSchema: {
+          type: 'object',
+          properties: { llm_model: { type: 'string', description: 'Application routing model' } },
+          required: ['llm_model'],
+        },
+      }
+      try {
+        client.prepareToolList([ownedTool])
+        const call = client.prepareToolCall(
+          'route-model',
+          { llm_model: 'application-owned-value' },
+          {
+            originalTool: ownedTool,
+            requestMeta: { 'x-codex-turn-metadata': { model: 'gpt-5.6-sol' } },
+          }
+        )
+
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBe('gpt-5.6-sol')
+        expect(call.llmModelSource).toBe('client_metadata')
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('skips model injection for duplicate names when any descriptor owns llm_model', async () => {
+      const client = newClient({ captureModel: true })
+      const duplicateTools = [
+        tools[0],
+        {
+          name: 'execute-sql',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string' } },
+            required: ['llm_model'],
+          },
+        },
+      ]
+      try {
+        const prepared = client.prepareToolList(duplicateTools)
+        expect(prepared[0].inputSchema.properties).not.toHaveProperty('llm_model')
+        expect(prepared[1].inputSchema.properties.llm_model).toEqual({ type: 'string' })
+
+        const call = client.prepareToolCall('execute-sql', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('drops an unknown self-reported model', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        client.prepareToolList(tools)
+        const call = client.prepareToolCall('execute-sql', { query: 'select 1', llm_model: ' unknown ' })
+        expect(call.args).toEqual({ query: 'select 1' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('forgets ownership for tools removed from a refreshed list', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        client.prepareToolList(tools)
+        client.prepareToolList([tools[1]])
+
+        const call = client.prepareToolCall('execute-sql', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it.each([
+      {
+        name: 'strips an SDK-owned model argument',
+        originalTool: tools[0],
+        expectedArgs: { query: 'select 1' },
+        expectedModel: 'claude-sonnet-4-20250514',
+      },
+      {
+        name: 'preserves an application-owned model argument',
+        originalTool: {
+          name: 'route-model',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string' } },
+            required: ['llm_model'],
+          },
+        },
+        expectedArgs: { query: 'select 1', llm_model: 'claude-sonnet-4-20250514' },
+        expectedModel: undefined,
+      },
+    ])(
+      '$name from the original schema without prior list preparation',
+      async ({ originalTool, expectedArgs, expectedModel }) => {
+        const client = newClient({ captureModel: true })
+        try {
+          const call = client.prepareToolCall(
+            originalTool.name,
+            { query: 'select 1', llm_model: 'claude-sonnet-4-20250514' },
+            { originalTool }
+          )
+
+          expect(call.args).toEqual(expectedArgs)
+          expect(call.llmModel).toBe(expectedModel)
+          expect(call.llmModelSource).toBe(expectedModel ? 'self_reported' : undefined)
+        } finally {
+          await client.shutdown()
+        }
+      }
+    )
   })
 
   describe('prepareToolCall', () => {
@@ -282,15 +603,273 @@ describe('PostHogMCP', () => {
     })
   })
 
+  describe('conversation correlation', () => {
+    const conversationId = '0198ef20-1234-7abc-8def-123456789abc'
+    const tools = [
+      {
+        name: 'execute-sql',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        outputSchema: { type: 'object', properties: { rows: { type: 'array' } }, additionalProperties: false },
+      },
+    ]
+
+    it('adds conversation schemas by default without mutating the source tool', () => {
+      const prepared = posthog.prepareToolList(tools)
+
+      expect(prepared[0].inputSchema.properties.conversation_id).toMatchObject({ type: 'string' })
+      expect(prepared[0].inputSchema.required).not.toContain('conversation_id')
+      expect(prepared[0].outputSchema.properties[MCP_INSTRUCTIONS_KEY]).toMatchObject({ type: 'object' })
+      expect(tools[0].inputSchema.properties).not.toHaveProperty('conversation_id')
+      expect(tools[0].outputSchema.properties).not.toHaveProperty(MCP_INSTRUCTIONS_KEY)
+    })
+
+    it('leaves schemas, arguments, and results unchanged when disabled', async () => {
+      const client = newClient({ enableConversationId: false })
+      try {
+        const preparedTools = client.prepareToolList(tools)
+        expect(preparedTools[0].inputSchema.properties).not.toHaveProperty('conversation_id')
+        expect(preparedTools[0].outputSchema.properties).not.toHaveProperty(MCP_INSTRUCTIONS_KEY)
+
+        const rawArgs = { query: 'select 1', conversation_id: conversationId }
+        const preparedCall = client.prepareToolCall('execute-sql', rawArgs)
+        const toolResult = { content: [], structuredContent: { rows: [] } }
+        const preparedResult = client.prepareToolResult(toolResult, preparedCall)
+
+        expect(preparedCall.args).toEqual(rawArgs)
+        expect(preparedCall.sessionId).toBeUndefined()
+        expect(preparedCall.conversationId).toBeUndefined()
+        expect(preparedResult).toEqual({ result: toolResult, sessionId: undefined, conversationId: undefined })
+        expect(preparedResult.result).toBe(toolResult)
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('preserves application-owned fields and fails closed for duplicate names', () => {
+      const applicationOwned = {
+        name: 'execute-sql',
+        inputSchema: {
+          type: 'object',
+          properties: { conversation_id: { type: 'string', description: 'Application value' } },
+        },
+        outputSchema: {
+          type: 'object',
+          properties: { [MCP_INSTRUCTIONS_KEY]: { type: 'string', description: 'Application value' } },
+        },
+      }
+      const prepared = posthog.prepareToolList([tools[0], applicationOwned])
+
+      expect(prepared[0].inputSchema.properties).not.toHaveProperty('conversation_id')
+      expect(prepared[1].inputSchema.properties.conversation_id).toEqual({
+        type: 'string',
+        description: 'Application value',
+      })
+      expect(prepared[0].outputSchema.properties).not.toHaveProperty(MCP_INSTRUCTIONS_KEY)
+      expect(prepared[1].outputSchema.properties[MCP_INSTRUCTIONS_KEY]).toEqual({
+        type: 'string',
+        description: 'Application value',
+      })
+
+      const preparedCall = posthog.prepareToolCall('execute-sql', { conversation_id: conversationId })
+      expect(preparedCall.args).toEqual({ conversation_id: conversationId })
+      expect(preparedCall.conversationId).toBeUndefined()
+    })
+
+    it('uses the original tool without prior list preparation', async () => {
+      const client = newClient()
+      try {
+        const preparedCall = client.prepareToolCall(
+          'execute-sql',
+          { query: 'select 1', conversation_id: conversationId },
+          { originalTool: tools[0] }
+        )
+
+        expect(preparedCall.args).toEqual({ query: 'select 1' })
+        expect(preparedCall.conversationId).toBe(conversationId)
+        expect(preparedCall.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('mints UUIDv7 handles and derives stable sessions across clients', async () => {
+      posthog.prepareToolList(tools)
+      const minted = posthog.prepareToolCall('execute-sql', { query: 'select 1', conversation_id: 'invalid' })
+      expect(minted.conversationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+      expect(minted.args).toEqual({ query: 'select 1' })
+      expect(minted.sessionId).toBe(deriveSessionIdFromConversation(minted.conversationId!))
+
+      const client = newClient()
+      try {
+        const first = posthog.prepareToolCall('execute-sql', { conversation_id: conversationId })
+        const echoed = client.prepareToolCall(
+          'execute-sql',
+          { conversation_id: conversationId.toUpperCase() },
+          { originalTool: tools[0] }
+        )
+        expect(echoed.conversationId).toBe(conversationId)
+        expect(echoed.sessionId).toBe(first.sessionId)
+        expect(echoed.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('keeps a carried session unless the client echoes a valid handle', () => {
+      posthog.prepareToolList(tools)
+      const carried = posthog.prepareToolCall('execute-sql', {}, { sessionId: 'ses_carried' })
+      expect(carried).toMatchObject({ sessionId: 'ses_carried', conversationId: undefined })
+
+      const echoed = posthog.prepareToolCall(
+        'execute-sql',
+        { conversation_id: conversationId },
+        { sessionId: 'ses_carried' }
+      )
+      expect(echoed.sessionId).toBe(deriveSessionIdFromConversation(conversationId))
+      expect(echoed.conversationId).toBe(conversationId)
+    })
+
+    it('delivers a minted handle through text and structured content without mutation', () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
+      const toolResult = { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } }
+      const prepared = posthog.prepareToolResult(toolResult, preparedCall)
+
+      expect(prepared.result).not.toBe(toolResult)
+      expect(toolResult).toEqual({ content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } })
+      expect(prepared.result.content.at(-1)).toEqual({
+        type: 'text',
+        text: JSON.stringify({ conversation_id: preparedCall.conversationId }),
+      })
+      expect(prepared.result.structuredContent[MCP_INSTRUCTIONS_KEY]).toEqual({
+        conversation_id: preparedCall.conversationId,
+      })
+      expect(prepared.conversationId).toBe(preparedCall.conversationId)
+    })
+
+    it('preserves result preparation when the prepared call crosses a serialization boundary', () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', { query: 'select 1' })
+      const transportedCall = JSON.parse(JSON.stringify(preparedCall))
+      const prepared = posthog.prepareToolResult(
+        { content: [{ type: 'text', text: 'done' }], structuredContent: { rows: [] } },
+        transportedCall
+      )
+
+      expect(prepared.result.content.at(-1)).toEqual({
+        type: 'text',
+        text: JSON.stringify({ conversation_id: preparedCall.conversationId }),
+      })
+      expect(prepared.result.structuredContent[MCP_INSTRUCTIONS_KEY]).toEqual({
+        conversation_id: preparedCall.conversationId,
+      })
+      expect(prepared.conversationId).toBe(preparedCall.conversationId)
+    })
+
+    it('omits conversation capture when prepared delivery state is missing', () => {
+      const toolResult = { content: [] }
+      const prepared = posthog.prepareToolResult(toolResult, {
+        sessionId: 'ses_123',
+        conversationId,
+        isMissingCapability: false,
+        isFeedback: false,
+      })
+
+      expect(prepared).toEqual({ result: toolResult, sessionId: 'ses_123', conversationId: undefined })
+      expect(prepared.result).toBe(toolResult)
+    })
+
+    it('preserves application-owned structured instructions', () => {
+      const tool = {
+        ...tools[0],
+        outputSchema: {
+          type: 'object',
+          properties: { [MCP_INSTRUCTIONS_KEY]: { type: 'string' } },
+        },
+      }
+      posthog.prepareToolList([tool])
+      const preparedCall = posthog.prepareToolCall('execute-sql', {})
+      const prepared = posthog.prepareToolResult(
+        { content: [], structuredContent: { [MCP_INSTRUCTIONS_KEY]: 'application-value' } },
+        preparedCall
+      )
+
+      expect(prepared.result.structuredContent[MCP_INSTRUCTIONS_KEY]).toBe('application-value')
+      expect(prepared.conversationId).toBe(preparedCall.conversationId)
+    })
+
+    it('delivers a minted handle on error results', () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', {})
+      const prepared = posthog.prepareToolResult({ content: [], isError: true }, preparedCall)
+
+      expect(prepared.result.isError).toBe(true)
+      expect(prepared.result.content).toContainEqual({
+        type: 'text',
+        text: JSON.stringify({ conversation_id: preparedCall.conversationId }),
+      })
+      expect(prepared.conversationId).toBe(preparedCall.conversationId)
+    })
+
+    it('omits an undelivered minted handle from capture but keeps its session', () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', {})
+      const toolResult = { value: 1 }
+      const prepared = posthog.prepareToolResult(toolResult, preparedCall)
+
+      expect(prepared.result).toBe(toolResult)
+      expect(prepared.conversationId).toBeUndefined()
+      expect(prepared.sessionId).toBe(preparedCall.sessionId)
+    })
+
+    it('adds conversation fields to virtual tools', () => {
+      const prepared = posthog.prepareToolList([], { reportMissing: true })
+      const virtualTool = prepared.find((tool) => tool.name === GET_MORE_TOOLS_NAME)
+      const preparedCall = posthog.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'Find a tool' })
+      const preparedResult = posthog.prepareToolResult(getMoreToolsResult(), preparedCall)
+
+      expect(virtualTool?.inputSchema?.properties?.conversation_id).toMatchObject({ type: 'string' })
+      expect(preparedResult.result.content.at(-1)).toEqual({
+        type: 'text',
+        text: JSON.stringify({ conversation_id: preparedCall.conversationId }),
+      })
+    })
+
+    it('captures the finalized conversation and session properties', async () => {
+      posthog.prepareToolList(tools)
+      const preparedCall = posthog.prepareToolCall('execute-sql', {})
+      const prepared = posthog.prepareToolResult({ content: [] }, preparedCall)
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        sessionId: prepared.sessionId,
+        conversationId: prepared.conversationId,
+        isError: false,
+      })
+      await tick()
+
+      const properties = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      expect(properties[PostHogMCPAnalyticsProperty.ConversationId]).toBe(prepared.conversationId)
+      expect(properties[PostHogMCPAnalyticsProperty.SessionId]).toBe(prepared.sessionId)
+    })
+  })
+
   describe('captureMissingCapability', () => {
-    it('emits $mcp_missing_capability with the context as intent', async () => {
-      posthog.captureMissingCapability({ context: 'I need a tool to delete cohorts', distinctId: 'user-123' })
+    it('emits $mcp_missing_capability with the context and model', async () => {
+      posthog.captureMissingCapability({
+        context: 'I need a tool to delete cohorts',
+        distinctId: 'user-123',
+        llmModel: 'claude-sonnet-4-20250514',
+        llmModelSource: 'self_reported',
+      })
       await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.MissingCapability)
       const p = payload.properties
       expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe('I need a tool to delete cohorts')
       expect(p[PostHogMCPAnalyticsProperty.IntentSource]).toBe('context_parameter')
+      expect(p[PostHogMCPAnalyticsProperty.LlmModel]).toBe('claude-sonnet-4-20250514')
+      expect(p[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe('self_reported')
     })
   })
 
@@ -331,6 +910,7 @@ describe('PostHogMCP', () => {
       posthog.captureInitialize({
         clientName: 'claude-code',
         clientVersion: '1.2.3',
+        protocolVersion: '2025-06-18',
         distinctId: 'user-123',
         durationMs: 7,
       })
@@ -339,7 +919,23 @@ describe('PostHogMCP', () => {
       const p = onlyCapture(PostHogMCPAnalyticsEvent.Initialize).properties
       expect(p[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-code')
       expect(p[PostHogMCPAnalyticsProperty.ClientVersion]).toBe('1.2.3')
+      expect(p[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
       expect(p[PostHogMCPAnalyticsProperty.DurationMs]).toBe(7)
+    })
+
+    it('stamps $mcp_protocol_version on later captures too (passed per call, like sessionId)', async () => {
+      // The client holds no per-session state, so callers pass protocolVersion on
+      // every capture — not just initialize — to satisfy the every-event contract.
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        protocolVersion: '2025-06-18',
+        distinctId: 'user-123',
+        isError: false,
+      })
+      await tick()
+
+      const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      expect(p[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
     })
   })
 

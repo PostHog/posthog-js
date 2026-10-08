@@ -6,7 +6,6 @@ import {
 } from '../types'
 import { includes } from './string-utils'
 
-// eslint-disable-next-line posthog-js/no-direct-array-check
 const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
 export const hasOwnProperty = ObjProto.hasOwnProperty
@@ -22,7 +21,6 @@ export const isArray =
 // fails on only one very rare and deliberate custom object:
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
 export const isFunction = (x: unknown): x is (...args: any[]) => any => {
-  // eslint-disable-next-line posthog-js/no-direct-function-check
   return typeof x === 'function'
 }
 
@@ -31,7 +29,7 @@ export const isNativeFunction = (x: unknown): x is (...args: any[]) => any =>
 
 // Underscore Addons
 export const isObject = (x: unknown): x is Record<string, any> => {
-  // eslint-disable-next-line posthog-js/no-direct-object-check
+  // oxlint-disable-next-line posthog-js/no-direct-object-check
   return x === Object(x) && !isArray(x)
 }
 export const isEmptyObject = (x: unknown) => {
@@ -48,14 +46,12 @@ export const isEmptyObject = (x: unknown) => {
 export const isUndefined = (x: unknown): x is undefined => x === void 0
 
 export const isString = (x: unknown): x is string => {
-  // eslint-disable-next-line posthog-js/no-direct-string-check
+  // oxlint-disable-next-line posthog-js/no-direct-string-check
   return toString.call(x) == '[object String]'
 }
 
 export const isEmptyString = (x: unknown): boolean => isString(x) && x.trim().length === 0
-
 export const isNull = (x: unknown): x is null => {
-  // eslint-disable-next-line posthog-js/no-direct-null-check
   return x === null
 }
 
@@ -66,7 +62,6 @@ export const isNull = (x: unknown): x is null => {
 export const isNullish = (x: unknown): x is null | undefined => isUndefined(x) || isNull(x)
 
 export const isNumber = (x: unknown): x is number => {
-  // eslint-disable-next-line posthog-js/no-direct-number-check
   // x !== x is true only for NaN (ES5-compatible NaN check)
   return toString.call(x) == '[object Number]' && x === x
 }
@@ -76,17 +71,16 @@ export const isPositiveNumber = (value: unknown): value is number => {
 }
 
 export const isBoolean = (x: unknown): x is boolean => {
-  // eslint-disable-next-line posthog-js/no-direct-boolean-check
   return toString.call(x) === '[object Boolean]'
 }
 
 export const isFormData = (x: unknown): x is FormData => {
-  // eslint-disable-next-line posthog-js/no-direct-form-data-check
+  // oxlint-disable-next-line posthog-js/no-direct-form-data-check
   return x instanceof FormData
 }
 
 export const isFile = (x: unknown): x is File => {
-  // eslint-disable-next-line posthog-js/no-direct-file-check
+  // oxlint-disable-next-line posthog-js/no-direct-file-check
   return x instanceof File
 }
 

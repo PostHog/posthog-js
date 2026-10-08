@@ -1,0 +1,12 @@
+[
+  {
+    "era": "legacy",
+    "name": "error message is clean",
+    "why": "NestJS RpcExceptionsHandler replaces the thrown error with 'Internal server error' before the MCP layer sees it — mcp-nest/NestJS behaviour, not an @posthog/mcp bug"
+  },
+  {
+    "era": "modern",
+    "name": "error message is clean",
+    "why": "Same NestJS error flattening as the legacy era"
+  }
+]

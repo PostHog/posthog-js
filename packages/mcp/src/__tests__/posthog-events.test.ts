@@ -15,6 +15,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     eventType: MCPAnalyticsEventType.mcpToolsCall,
     timestamp: new Date('2025-01-15T10:00:00Z'),
     resourceName: 'get_weather',
+    serverBuild: 'abc123',
     serverName: 'weather-server',
     serverVersion: '1.0.0',
     clientName: 'claude-desktop',
@@ -51,12 +52,42 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.properties[PostHogMCPAnalyticsProperty.ToolName]).toBe('get_weather')
     expect(event.properties[PostHogMCPAnalyticsProperty.ResourceName]).toBe('get_weather')
     expect(event.properties[PostHogMCPAnalyticsProperty.DurationMs]).toBe(150)
+    expect(event.properties[PostHogMCPAnalyticsProperty.ServerBuild]).toBe('abc123')
     expect(event.properties[PostHogMCPAnalyticsProperty.ServerName]).toBe('weather-server')
     expect(event.properties[PostHogMCPAnalyticsProperty.ServerVersion]).toBe('1.0.0')
     expect(event.properties[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-desktop')
     expect(event.properties[PostHogMCPAnalyticsProperty.ClientVersion]).toBe('2.0.0')
     expect(event.properties[PostHogMCPAnalyticsProperty.IsError]).toBe(false)
     expect(event.properties).not.toHaveProperty('project_id')
+  })
+
+  it('stamps $mcp_protocol_version on any event carrying it, including the $exception sibling', () => {
+    // Not initialize-only: a tool call inherits the session's negotiated version.
+    const [toolCall] = buildPostHogCaptureEvents(makeEvent({ protocolVersion: '2025-06-18' }))
+    expect(toolCall.properties[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
+
+    // The $exception sibling carries it too (surfaced for debugging failures).
+    const errored = buildPostHogCaptureEvents(
+      makeEvent({ protocolVersion: '2025-06-18', isError: true, error: makeError('boom') })
+    )
+    const exception = findEvent(errored, PostHogMCPAnalyticsEvent.Exception)
+    expect(exception?.properties[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
+
+    // Absent before the handshake negotiates it.
+    const [preHandshake] = buildPostHogCaptureEvents(makeEvent())
+    expect(preHandshake.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ProtocolVersion)
+  })
+
+  it('does not stamp $lib/$lib_version in the built properties (the client owns those)', () => {
+    // `$lib` / `$lib_version` are set by the posthog-node client via
+    // `getLibraryId()` / `getLibraryVersion()` (see `applyMcpLibIdentity`), not
+    // by the event builder — and never as the legacy `$mcp_lib` keys.
+    const [event] = buildPostHogCaptureEvents(makeEvent())
+
+    expect(event.properties).not.toHaveProperty('$lib')
+    expect(event.properties).not.toHaveProperty('$lib_version')
+    expect(event.properties).not.toHaveProperty('$mcp_lib')
+    expect(event.properties).not.toHaveProperty('$mcp_lib_version')
   })
 
   it('keeps the canonical MCP analytics event contract stable', () => {
@@ -126,7 +157,10 @@ describe('buildPostHogCaptureEvents', () => {
     expect(exceptionEvent.properties.$session_id).toBe('ses_session456')
     expect(exceptionEvent.properties.$mcp_resource_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_tool_name).toBe('get_weather')
+    expect(exceptionEvent.properties.$mcp_server_build).toBe('abc123')
     expect(exceptionEvent.properties.$mcp_server_name).toBe('weather-server')
+    expect(exceptionEvent.properties).not.toHaveProperty('$mcp_lib')
+    expect(exceptionEvent.properties).not.toHaveProperty('$mcp_lib_version')
   })
 
   it('spreads customer eventProperties onto the $exception event', () => {
@@ -151,6 +185,21 @@ describe('buildPostHogCaptureEvents', () => {
     })
   })
 
+  it('keeps the configured server build authoritative on primary and exception events', () => {
+    const events = buildPostHogCaptureEvents(
+      makeEvent({
+        isError: true,
+        error: makeError('boom'),
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+    )
+
+    expect(events).toHaveLength(2)
+    for (const event of events) {
+      expect(event.properties.$mcp_server_build).toBe('abc123')
+    }
+  })
+
   it('does not build an $exception event when isError is false', () => {
     const events = buildPostHogCaptureEvents(makeEvent({ isError: false }))
 
@@ -173,6 +222,43 @@ describe('buildPostHogCaptureEvents', () => {
 
     expect(events).toHaveLength(2)
     expect(findEvent(events, PostHogMCPAnalyticsEvent.Exception)).toBeDefined()
+  })
+
+  // `undefined` expected value = property must be absent.
+  it.each<[string, Partial<Event>, string | undefined, string | undefined]>([
+    [
+      'derives type and message from the thrown error',
+      { isError: true, error: makeError('Connection timeout', 'TimeoutError') },
+      'TimeoutError',
+      'Connection timeout',
+    ],
+    [
+      'explicit errorType overrides the thrown error type, message still flows',
+      { isError: true, errorType: 'rate_limited', error: makeError('429 Too Many Requests', 'Error') },
+      'rate_limited',
+      '429 Too Many Requests',
+    ],
+    [
+      'explicit errorType with no thrown error stamps type only',
+      { isError: true, errorType: 'validation' },
+      'validation',
+      undefined,
+    ],
+    ['successful call omits both', { isError: false }, undefined, undefined],
+  ])('error properties on the tool-call event: %s', (_, overrides, expectedType, expectedMessage) => {
+    const [event] = buildPostHogCaptureEvents(makeEvent(overrides))
+
+    if (expectedType === undefined) {
+      expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorType)
+    } else {
+      expect(event.properties[PostHogMCPAnalyticsProperty.ErrorType]).toBe(expectedType)
+    }
+
+    if (expectedMessage === undefined) {
+      expect(event.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ErrorMessage)
+    } else {
+      expect(event.properties[PostHogMCPAnalyticsProperty.ErrorMessage]).toBe(expectedMessage)
+    }
   })
 
   it('includes $set person properties from identity data', () => {

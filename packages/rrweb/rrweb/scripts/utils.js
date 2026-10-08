@@ -1,6 +1,5 @@
 import * as path from 'path';
 import * as http from 'http';
-import * as url from 'url';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 
@@ -15,9 +14,8 @@ export const startServer = (defaultPort = 3030) =>
       '.css': 'text/css',
     };
     const s = http.createServer((req, res) => {
-      const parsedUrl = url.parse(req.url);
       const sanitizePath = path
-        .normalize(parsedUrl.pathname)
+        .normalize(new URL(req.url, 'http://localhost').pathname)
         .replace(/^(\.\.[\/\\])+/, '');
       let pathname = path.join(__dirname, sanitizePath);
       if (/^\/rrweb.*\.c?js.*/.test(sanitizePath)) {

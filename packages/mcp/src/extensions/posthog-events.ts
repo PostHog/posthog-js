@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { Event } from '../types'
 import { POSTHOG_MCP_ANALYTICS_SOURCE, PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from './constants'
@@ -9,6 +10,7 @@ import { MCPAnalyticsEventType } from './event-types'
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
   [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
+  [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,
@@ -67,6 +69,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
 
   addCommonEventProperties(event, properties)
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: event.eventName ?? BUILT_IN_EVENT_NAME_BY_TYPE[event.eventType],
@@ -150,14 +153,50 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
+  // HTTP transports only, and only for the request that carried the header —
+  // stdio and in-memory servers simply never set these.
+  if (event.clientUserAgent) {
+    properties[PostHogMCPAnalyticsProperty.ClientUserAgent] = event.clientUserAgent
+  }
+  if (event.vendorClient) {
+    properties[PostHogMCPAnalyticsProperty.VendorClient] = event.vendorClient
+  }
+  // Present on every event once negotiated at `initialize` (carried via
+  // sessionInfo / the session token). Absent only before the handshake.
+  if (event.protocolVersion) {
+    properties[PostHogMCPAnalyticsProperty.ProtocolVersion] = event.protocolVersion
+  }
   if (event.userIntent) {
     properties[PostHogMCPAnalyticsProperty.Intent] = event.userIntent
   }
   if (event.userIntentSource) {
     properties[PostHogMCPAnalyticsProperty.IntentSource] = event.userIntentSource
   }
+  // Supplied by recognized client metadata or the calling agent (`captureModel`),
+  // so it is present only on requests carrying a definite value.
+  if (event.llmModel) {
+    properties[PostHogMCPAnalyticsProperty.LlmModel] = event.llmModel
+  }
+  if (event.llmModelSource) {
+    properties[PostHogMCPAnalyticsProperty.LlmModelSource] = event.llmModelSource
+  }
   if (event.isError !== undefined) {
     properties[PostHogMCPAnalyticsProperty.IsError] = event.isError
+  }
+
+  if (event.isError) {
+    // Surface the failure reason directly on the primary event so the dashboard
+    // can break errors down by cause without joining to the `$exception` sibling
+    // (which can be disabled, and isn't emitted when no error value is passed).
+    const firstException = event.error?.$exception_list?.[0]
+    const errorType = event.errorType ?? firstException?.type
+    if (errorType) {
+      properties[PostHogMCPAnalyticsProperty.ErrorType] = errorType
+    }
+    if (firstException?.value) {
+      // Already bounded to MAX_ERROR_MESSAGE_LENGTH by `truncateExceptionList`.
+      properties[PostHogMCPAnalyticsProperty.ErrorMessage] = firstException.value
+    }
   }
 
   if (event.parameters !== undefined) {
@@ -178,6 +217,12 @@ function addCustomEventProperties(event: Event, properties: Record<string, unkno
     for (const [key, value] of Object.entries(event.properties)) {
       properties[key] = value
     }
+  }
+}
+
+function addServerBuildProperty(event: Event, properties: Record<string, unknown>): void {
+  if (event.serverBuild) {
+    properties[PostHogMCPAnalyticsProperty.ServerBuild] = event.serverBuild
   }
 }
 
@@ -221,8 +266,18 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
+  if (event.clientUserAgent) {
+    properties[PostHogMCPAnalyticsProperty.ClientUserAgent] = event.clientUserAgent
+  }
+  if (event.vendorClient) {
+    properties[PostHogMCPAnalyticsProperty.VendorClient] = event.vendorClient
+  }
+  if (event.protocolVersion) {
+    properties[PostHogMCPAnalyticsProperty.ProtocolVersion] = event.protocolVersion
+  }
 
   addCustomEventProperties(event, properties)
+  addServerBuildProperty(event, properties)
 
   return {
     event: PostHogMCPAnalyticsEvent.Exception,

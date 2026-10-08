@@ -14,7 +14,12 @@ import {
   ISuite,
 } from './utils';
 import type { recordOptions } from '../src/types';
-import { eventWithTime, NodeType, EventType } from '@posthog/rrweb-types';
+import {
+  eventWithTime,
+  NodeType,
+  EventType,
+  IncrementalSource,
+} from '@posthog/rrweb-types';
 import { visitSnapshot } from '@posthog/rrweb-snapshot';
 
 describe('record integration tests', function (this: ISuite) {
@@ -919,6 +924,41 @@ describe('record integration tests', function (this: ISuite) {
       'window.snapshots',
     )) as eventWithTime[];
     await assertSnapshot(snapshots);
+  });
+
+  it('should keep recording shadow DOM mutations after an iframe is torn down', async () => {
+    // A single shared ShadowDomManager observes every shadow root. Tearing down
+    // one iframe's mutation buffer must not disconnect the page's other shadow
+    // observers, or shadow mutations silently stop until the next full snapshot.
+    const page: puppeteer.Page = await browser.newPage();
+    await page.goto('about:blank');
+    await page.setContent(getHtml.call(this, 'shadow-dom-iframe.html'));
+    await page.waitForTimeout(50);
+
+    const countShadowLiAdds = () =>
+      page.evaluate(`
+        window.snapshots
+          .filter((e) => e.type === ${EventType.IncrementalSnapshot} && e.data.source === ${IncrementalSource.Mutation})
+          .flatMap((e) => e.data.adds || [])
+          .filter((a) => a.node && a.node.tagName === 'li').length
+      `) as Promise<number>;
+
+    await page.evaluate(
+      `window.__log.appendChild(document.createElement('li'))`,
+    );
+    await page.waitForTimeout(50);
+    expect(await countShadowLiAdds()).toBe(1);
+
+    // Removing the iframe runs its per-buffer teardown.
+    await page.evaluate(`document.getElementById('frame').remove()`);
+    await page.waitForTimeout(50);
+
+    await page.evaluate(
+      `window.__log.appendChild(document.createElement('li'))`,
+    );
+    await page.waitForTimeout(50);
+    // The second li must still be recorded; before the fix it was dropped.
+    expect(await countShadowLiAdds()).toBe(2);
   });
 
   it('should record shadow DOM 2', async () => {

@@ -140,6 +140,13 @@ export type PostHogCoreOptions = {
    */
   featureFlagsRequestTimeoutMs?: number
   /**
+   * How many times feature flag requests retry after a transient network error.
+   * Set to 0 to disable feature flag request retries.
+   *
+   * @default 1
+   */
+  featureFlagsRequestMaxRetries?: number
+  /**
    * Timeout in milliseconds for remote config calls
    *
    * @default 3000
@@ -260,6 +267,12 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // Isolated capture queue for events that must not share a send cycle with the
+  // main queue. Only used by posthog-node today, to keep `$ai_*` events on the
+  // legacy (v0) transport while other events move to Capture V1 — segregated so a
+  // failure on one route can't re-send events already accepted on the other.
+  AiQueue = 'ai_queue',
+  AiCaptureQueue = 'ai_capture_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',
@@ -272,9 +285,14 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Set by a manual registerPushNotificationToken(): the native SDK persists the
+  // subscription across launches, so cleanup (unregister/reset) must boot native even in a
+  // process where nothing else initialized it. Only used by posthog-react-native.
+  PushRegistered = 'push_registered',
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
+  SurveysInProgress = 'surveys_in_progress', // only used by posthog-react-native
   SurveysSeen = 'surveys_seen', // only used by posthog-react-native
   Surveys = 'surveys', // only used by posthog-react-native
   RemoteConfig = 'remote_config',
@@ -282,12 +300,14 @@ export enum PostHogPersistedProperty {
   DeviceId = 'device_id', // only used by posthog-react-native
 }
 
+export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
+
 export type PostHogFetchOptions = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob
+  body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
 }
 
@@ -295,7 +315,7 @@ export type PostHogFetchOptions = {
 export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
-  /** If provided overrides the auto-generated timestamp */
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   disableGeoip?: boolean
   /**
@@ -408,6 +428,7 @@ export type FeatureFlagValue = string | boolean
  */
 export type FeatureFlagResult = {
   readonly key: string
+  /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
   readonly enabled: boolean
   readonly variant?: string
   readonly payload?: JsonType
@@ -416,6 +437,11 @@ export type FeatureFlagResult = {
 export type FeatureFlagResultOptions = {
   /** Whether to send a $feature_flag_called event. Defaults to true. */
   sendEvent?: boolean
+}
+
+export type IsFeatureEnabledOptions = FeatureFlagResultOptions & {
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  defaultValue?: boolean
 }
 
 export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
@@ -437,6 +463,11 @@ export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> 
   quotaLimited?: string[]
   requestId?: string
   evaluatedAt?: number // Unix timestamp in milliseconds
+  /**
+   * Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the
+   * project opted in; omitted otherwise. Absence always means full events.
+   */
+  minimalFlagCalledEvents?: boolean
 }
 
 export type PostHogFeatureFlagsResponse = PartialWithRequired<
@@ -498,7 +529,7 @@ export type PostHogV2FlagsResponse = Omit<PostHogFlagsResponse, 'featureFlags' |
  * so that we can support v1 and v2 of the API.
  */
 export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'> &
-  Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt'>> & {
+  Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt' | 'minimalFlagCalledEvents'>> & {
     errorsWhileComputingFlags?: boolean
     quotaLimited?: string[]
     requestError?: FeatureFlagRequestError
@@ -575,6 +606,8 @@ export type FeatureFlagMetadata = {
   description: string | undefined
   // Payloads in the response are always JSON encoded as a string
   payload: string | undefined
+  /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+  has_experiment?: boolean
 }
 
 export type EvaluationReason = {
@@ -605,6 +638,14 @@ export type SurveyAppearance = {
   thankYouMessageDescription?: string
   thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
   thankYouMessageCloseButtonText?: string
+  // Optional intro screen shown before the first question — the leading mirror of the
+  // confirmation message. Dismissed with a button; records no response and does not count
+  // toward completion or partial-response metrics.
+  displayIntroScreen?: boolean
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenDescriptionContentType?: SurveyQuestionDescriptionContentType
+  introScreenButtonText?: string
   borderColor?: string
   position?: SurveyPosition
   placeholder?: string
@@ -621,43 +662,49 @@ export type SurveyAppearance = {
   widgetColor?: string
 }
 
-export enum SurveyPosition {
-  TopLeft = 'top_left',
-  TopCenter = 'top_center',
-  TopRight = 'top_right',
-  MiddleLeft = 'middle_left',
-  MiddleCenter = 'middle_center',
-  MiddleRight = 'middle_right',
-  Left = 'left',
-  Right = 'right',
-  Center = 'center',
-}
+export const SurveyPosition = {
+  TopLeft: 'top_left',
+  TopCenter: 'top_center',
+  TopRight: 'top_right',
+  MiddleLeft: 'middle_left',
+  MiddleCenter: 'middle_center',
+  MiddleRight: 'middle_right',
+  Left: 'left',
+  Right: 'right',
+  Center: 'center',
+} as const
+export type SurveyPosition = (typeof SurveyPosition)[keyof typeof SurveyPosition]
 
-export enum SurveyWidgetType {
-  Button = 'button',
-  Tab = 'tab',
-  Selector = 'selector',
-}
+export const SurveyWidgetType = {
+  Button: 'button',
+  Tab: 'tab',
+  Selector: 'selector',
+} as const
+export type SurveyWidgetType = (typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]
 
-export enum SurveyType {
-  Popover = 'popover',
-  API = 'api',
-  Widget = 'widget',
-  ExternalSurvey = 'external_survey',
-}
+export const SurveyType = {
+  Popover: 'popover',
+  API: 'api',
+  Widget: 'widget',
+  ExternalSurvey: 'external_survey',
+} as const
+export type SurveyType = (typeof SurveyType)[keyof typeof SurveyType]
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
 
-export enum SurveyQuestionDescriptionContentType {
-  Html = 'html',
-  Text = 'text',
-}
+export const SurveyQuestionDescriptionContentType = {
+  Html: 'html',
+  Text: 'text',
+} as const
+export type SurveyQuestionDescriptionContentType =
+  (typeof SurveyQuestionDescriptionContentType)[keyof typeof SurveyQuestionDescriptionContentType]
 
 // Survey validation types
-export enum SurveyValidationType {
-  MinLength = 'min_length',
-  MaxLength = 'max_length',
-}
+export const SurveyValidationType = {
+  MinLength: 'min_length',
+  MaxLength: 'max_length',
+} as const
+export type SurveyValidationType = (typeof SurveyValidationType)[keyof typeof SurveyValidationType]
 
 export interface SurveyValidationRule {
   type: SurveyValidationType
@@ -670,6 +717,9 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenButtonText?: string
   submitButtonText?: string
   backButtonText?: string
 }
@@ -698,16 +748,16 @@ type SurveyQuestionBase = {
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Open
+  type: typeof SurveyQuestionType.Open
 }
 
 export type LinkSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Link
+  type: typeof SurveyQuestionType.Link
   link?: string | null
 }
 
 export type RatingSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Rating
+  type: typeof SurveyQuestionType.Rating
   display: SurveyRatingDisplay
   scale: 2 | 3 | 5 | 7 | 10
   lowerBoundLabel: string
@@ -715,49 +765,52 @@ export type RatingSurveyQuestion = SurveyQuestionBase & {
   skipSubmitButton?: boolean
 }
 
-export enum SurveyRatingDisplay {
-  Number = 'number',
-  Emoji = 'emoji',
-}
+export const SurveyRatingDisplay = {
+  Number: 'number',
+  Emoji: 'emoji',
+} as const
+export type SurveyRatingDisplay = (typeof SurveyRatingDisplay)[keyof typeof SurveyRatingDisplay]
 
 export type MultipleSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice
+  type: typeof SurveyQuestionType.SingleChoice | typeof SurveyQuestionType.MultipleChoice
   choices: string[]
   hasOpenChoice?: boolean
   shuffleOptions?: boolean
   skipSubmitButton?: boolean
 }
 
-export enum SurveyQuestionType {
-  Open = 'open',
-  MultipleChoice = 'multiple_choice',
-  SingleChoice = 'single_choice',
-  Rating = 'rating',
-  Link = 'link',
-}
+export const SurveyQuestionType = {
+  Open: 'open',
+  MultipleChoice: 'multiple_choice',
+  SingleChoice: 'single_choice',
+  Rating: 'rating',
+  Link: 'link',
+} as const
+export type SurveyQuestionType = (typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]
 
-export enum SurveyQuestionBranchingType {
-  NextQuestion = 'next_question',
-  End = 'end',
-  ResponseBased = 'response_based',
-  SpecificQuestion = 'specific_question',
-}
+export const SurveyQuestionBranchingType = {
+  NextQuestion: 'next_question',
+  End: 'end',
+  ResponseBased: 'response_based',
+  SpecificQuestion: 'specific_question',
+} as const
+export type SurveyQuestionBranchingType = (typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]
 
 export type NextQuestionBranching = {
-  type: SurveyQuestionBranchingType.NextQuestion
+  type: typeof SurveyQuestionBranchingType.NextQuestion
 }
 
 export type EndBranching = {
-  type: SurveyQuestionBranchingType.End
+  type: typeof SurveyQuestionBranchingType.End
 }
 
 export type ResponseBasedBranching = {
-  type: SurveyQuestionBranchingType.ResponseBased
+  type: typeof SurveyQuestionBranchingType.ResponseBased
   responseValues: Record<string, any>
 }
 
 export type SpecificQuestionBranching = {
-  type: SurveyQuestionBranchingType.SpecificQuestion
+  type: typeof SurveyQuestionBranchingType.SpecificQuestion
   index: number
 }
 
@@ -771,20 +824,38 @@ export type SurveyResponses = Record<string, SurveyResponseValue>
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
-export enum SurveyMatchType {
-  Regex = 'regex',
-  NotRegex = 'not_regex',
-  Exact = 'exact',
-  IsNot = 'is_not',
-  Icontains = 'icontains',
-  NotIcontains = 'not_icontains',
+export const SurveyMatchType = {
+  Regex: 'regex',
+  NotRegex: 'not_regex',
+  Exact: 'exact',
+  IsNot: 'is_not',
+  Icontains: 'icontains',
+  NotIcontains: 'not_icontains',
+} as const
+export type SurveyMatchType = (typeof SurveyMatchType)[keyof typeof SurveyMatchType]
+
+export type PropertyMatchType = SurveyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = Record<
+  string,
+  {
+    values: string[]
+    operator: PropertyOperator
+  }
+>
+
+export interface SurveyEventWithFilters {
+  name: string
+  propertyFilters?: PropertyFilters
 }
 
-export enum SurveySchedule {
-  Once = 'once',
-  Recurring = 'recurring',
-  Always = 'always',
-}
+export const SurveySchedule = {
+  Once: 'once',
+  Recurring: 'recurring',
+  Always: 'always',
+} as const
+export type SurveySchedule = (typeof SurveySchedule)[keyof typeof SurveySchedule]
 
 export type SurveyElement = {
   text?: string
@@ -828,9 +899,7 @@ export type Survey = {
     urlMatchType?: SurveyMatchType
     events?: {
       repeatedActivation?: boolean
-      values?: {
-        name: string
-      }[]
+      values?: SurveyEventWithFilters[]
     }
     actions?: {
       values: SurveyActionType[]
@@ -841,9 +910,10 @@ export type Survey = {
   }
   start_date?: string
   end_date?: string
-  current_iteration?: number
-  current_iteration_start_date?: string
-  schedule?: SurveySchedule
+  current_iteration?: number | null
+  current_iteration_start_date?: string | null
+  schedule?: SurveySchedule | null
+  enable_partial_responses?: boolean | null
 }
 
 export type SurveyActionType = {
@@ -853,11 +923,12 @@ export type SurveyActionType = {
 }
 
 /** Sync with plugin-server/src/types.ts */
-export enum ActionStepStringMatching {
-  Contains = 'contains',
-  Exact = 'exact',
-  Regex = 'regex',
-}
+export const ActionStepStringMatching = {
+  Contains: 'contains',
+  Exact: 'exact',
+  Regex: 'regex',
+} as const
+export type ActionStepStringMatching = (typeof ActionStepStringMatching)[keyof typeof ActionStepStringMatching]
 
 export type ActionStepType = {
   event?: string

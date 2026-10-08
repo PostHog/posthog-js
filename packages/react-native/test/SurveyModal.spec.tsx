@@ -1,13 +1,14 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
+import { Keyboard, Platform } from 'react-native'
 import { act, fireEvent, render, cleanup } from '@testing-library/react'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 
-// Minimal react-native shim — jest-expo's full preset chain pulls in
+// Minimal react-native shim — vi-expo's full preset chain pulls in
 // TurboModule code that explodes under jsdom. We only need a handful of
 // primitives here, all rendering as plain divs so children appear in the DOM.
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const withoutNativeOnlyProps = (props: any) => {
     const domProps = { ...props }
     delete domProps.visible
@@ -35,11 +36,11 @@ jest.mock('react-native', () => {
   return {
     View: Box,
     Modal: Box,
-    KeyboardAvoidingView: Box,
+    KeyboardAvoidingView: (props: any) => RealReact.createElement(Box, { ...props, testID: 'keyboard-avoiding-view' }),
     Pressable,
     TouchableOpacity: Pressable,
     Text: Box,
-    Keyboard: { dismiss: jest.fn(), addListener: () => ({ remove: jest.fn() }) },
+    Keyboard: { dismiss: vi.fn(), addListener: () => ({ remove: vi.fn() }) },
     // Use Android so the timer-based close-notification path runs (iOS would
     // rely on Modal.onDismiss, which the mocked Modal cannot fire).
     Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
@@ -54,27 +55,35 @@ jest.mock('react-native', () => {
 
 // Stub Questions / ConfirmationMessage / Cancel so we can assert exactly
 // which path SurveyModal is rendering, and trigger the submit/close callbacks.
-jest.mock('../src/surveys/components/Surveys', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/Surveys', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     Questions: ({ onSubmit }: { onSubmit: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'questions-stub', onClick: onSubmit }, 'QUESTIONS_RENDERED'),
-    sendSurveyShownEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
-    sendSurveyEvent: jest.fn(),
+    sendSurveyShownEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
+    sendSurveyEvent: vi.fn(),
   }
 })
 
-jest.mock('../src/surveys/components/ConfirmationMessage', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/ConfirmationMessage', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     ConfirmationMessage: ({ header }: { header: string }) =>
       RealReact.createElement('div', { 'data-testid': 'confirmation-stub' }, header),
   }
 })
 
-jest.mock('../src/surveys/components/Cancel', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/IntroMessage', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
+  return {
+    IntroMessage: ({ onStart }: { onStart: () => void }) =>
+      RealReact.createElement('div', { 'data-testid': 'intro-stub', onClick: onStart }, 'INTRO_RENDERED'),
+  }
+})
+
+vi.mock('../src/surveys/components/Cancel', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     Cancel: ({ onPress }: { onPress: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'cancel-stub', onClick: onPress }, 'X'),
@@ -110,7 +119,7 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
 
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
-const renderSurveyModal = (onClose: jest.Mock = jest.fn()) => {
+const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
   const result = render(
     <SurveyModal
       survey={baseSurvey}
@@ -129,13 +138,35 @@ const clickCancel = (getByTestId: (id: string) => HTMLElement) => {
   })
 }
 
+describe('SurveyModal keyboard touches', () => {
+  afterEach(cleanup)
+
+  it.each(['ios', 'android'] as const)('only dismisses the keyboard for backdrop touches on %s', (platform) => {
+    const originalOS = Platform.OS
+    Platform.OS = platform
+    try {
+      const { getByTestId } = renderSurveyModal()
+
+      fireEvent.mouseDown(getByTestId('questions-stub'))
+      expect(Keyboard.dismiss).not.toHaveBeenCalled()
+
+      // The backdrop is the direct child of the keyboard-avoiding container.
+      const backdrop = getByTestId('keyboard-avoiding-view').firstElementChild!
+      fireEvent.mouseDown(backdrop)
+      expect(Keyboard.dismiss).toHaveBeenCalledTimes(1)
+    } finally {
+      Platform.OS = originalOS
+    }
+  })
+})
+
 describe('SurveyModal close behavior', () => {
   afterEach(() => {
     cleanup()
   })
 
   it('does not flash Questions when appearance loses thankYouMessageHeader after submit', () => {
-    const onClose = jest.fn()
+    const onClose = vi.fn()
     const { queryByTestId, getByTestId, rerender } = render(
       <SurveyModal
         survey={baseSurvey}
@@ -187,7 +218,7 @@ describe('SurveyModal close behavior', () => {
     expect(onClose).not.toHaveBeenCalled()
 
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
     expect(onClose).toHaveBeenCalled()
   })
@@ -220,11 +251,56 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('parent-unmounted')).toBeNull()
 
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
 
     // After the fade duration, the parent's onClose fires and it unmounts.
     expect(queryByTestId('parent-unmounted')).not.toBeNull()
+  })
+
+  it('notifies the parent on iOS via the fallback timer even when onDismiss never fires', async () => {
+    // Regression: iOS used to notify the parent only through Modal.onDismiss. When Fabric
+    // failed to fire onDismiss, the parent never cleared the active survey and this transparent
+    // full-screen Modal stayed mounted swallowing every touch — the app appeared frozen. The
+    // fallback timer guarantees the parent is still notified. The mocked Modal cannot fire
+    // onDismiss, so this exercises exactly that failure mode.
+    const rn = await import('react-native')
+    const originalOS = rn.Platform.OS
+    rn.Platform.OS = 'ios'
+    try {
+      const { getByTestId, onClose } = renderSurveyModal()
+
+      clickCancel(getByTestId)
+      expect(onClose).not.toHaveBeenCalled()
+
+      act(() => {
+        vi.runAllTimers()
+      })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      rn.Platform.OS = originalOS
+    }
+  })
+
+  it('does not notify the parent when unmounted before the close timer fires', () => {
+    // Once the close timer is scheduled, clearing it on unmount stops it from calling onClose
+    // against an already-torn-down parent (which would trigger a React update-on-unmounted warning).
+    const { getByTestId, onClose, unmount } = renderSurveyModal()
+
+    clickCancel(getByTestId)
+    // Let the requestAnimationFrame run so the fallback timer is scheduled, but keep the fade
+    // duration (250ms) from elapsing so the timer is still pending at unmount.
+    act(() => {
+      vi.advanceTimersByTime(50)
+    })
+    expect(onClose).not.toHaveBeenCalled()
+
+    unmount()
+    act(() => {
+      vi.runAllTimers()
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('notifies the parent only once even if close is pressed multiple times', () => {
@@ -236,9 +312,102 @@ describe('SurveyModal close behavior', () => {
       fireEvent.click(getByTestId('cancel-stub'))
     })
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SurveyModal intro screen', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const appearanceWithIntro: SurveyAppearanceTheme = {
+    ...defaultSurveyAppearance,
+    displayIntroScreen: true,
+    introScreenHeader: 'Welcome!',
+    thankYouMessageHeader: 'Thanks!',
+  }
+
+  const renderWithAppearance = (appearance: SurveyAppearanceTheme) =>
+    render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearance}
+        onShow={() => {}}
+        onClose={vi.fn()}
+      />
+    )
+
+  it('skips the intro when restoring an answered survey', () => {
+    const { queryByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithIntro}
+        onShow={vi.fn()}
+        onClose={vi.fn()}
+        initialProgress={{
+          submissionId: 'saved',
+          questionIndex: 0,
+          questionOrder: [0],
+          responses: { $survey_response_q1: 'saved' },
+          questionSnapshots: {},
+        }}
+      />
+    )
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('renders the intro screen before the questions and advances on start', () => {
+    const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
+
+    expect(queryByTestId('intro-stub')).not.toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
+
+    act(() => {
+      fireEvent.click(getByTestId('intro-stub'))
+    })
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('does not render the intro screen when displayIntroScreen is off', () => {
+    const { queryByTestId } = renderWithAppearance(appearanceWithThankYou)
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('skips the intro screen when it has neither a header nor a description', () => {
+    const { queryByTestId } = renderWithAppearance({
+      ...defaultSurveyAppearance,
+      displayIntroScreen: true,
+      introScreenHeader: '',
+      introScreenDescription: '',
+    })
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('still shows the confirmation after submitting when the intro was used', () => {
+    const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
+
+    act(() => {
+      fireEvent.click(getByTestId('intro-stub'))
+    })
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
   })
 })

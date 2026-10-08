@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { isNumber, isNull, stripUrlHash } from '@posthog/core'
 import {
@@ -23,21 +22,90 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
-import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
-import { formDataToQuery } from '../../../utils/request-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import {
+    formDataToQuery,
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createConversationsError, isConversationsError } from './errors'
+import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[ConversationsManager]')
 
+const createConversationsRequestError = (
+    response: RequestResponse,
+    operation: string,
+    fallbackMessage: string,
+    rateLimitIsWarning: boolean = false,
+    logFailure: boolean = true
+): Error => {
+    if (response.statusCode === 0) {
+        // Fetch failures are already logged by `_send_request`. XHR reports status 0
+        // without an error, so keep one warning for that otherwise-unlogged path.
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        if (response.error) {
+            const errorWithCause = error as Error & { cause?: unknown }
+            errorWithCause.cause = response.error
+        } else if (logFailure) {
+            logger.warn(`Network error ${operation}`)
+        }
+        return error
+    }
+
+    if (response.statusCode === 429) {
+        if (logFailure) {
+            if (rateLimitIsWarning) {
+                logger.warn(`Rate limited ${operation}`)
+            } else {
+                logger.error(fallbackMessage, { status: response.statusCode })
+            }
+        }
+        return createConversationsError('rate_limit', 'Too many requests. Please wait before trying again.')
+    }
+
+    const message = response.json?.error || response.json?.detail || response.json?.message || fallbackMessage
+    if (logFailure) {
+        logger.error(fallbackMessage, { status: response.statusCode })
+    }
+    return createConversationsError('http', message)
+}
+
+const createInvalidConversationsResponseError = (operation: string, logFailure: boolean = true): Error => {
+    const message = 'Invalid response from server'
+    if (logFailure) {
+        logger.error(message, { operation })
+    }
+    return createConversationsError('invalid_response', message)
+}
+
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
-const POLL_INTERVAL_MS = 5000 // 5 seconds
+// Polling cadence. The widget polls faster while open (so replies feel live) and
+// much slower while closed (the badge can lag a few seconds). Idle widgets with no
+// conversation don't poll at all — see _hasSomethingToPoll.
+const POLL_INTERVAL_OPEN_MS = 5000 // 5 seconds
+const POLL_INTERVAL_CLOSED_MS = 15000 // 15 seconds
+// On HTTP 429 we back off exponentially instead of hammering the shared team budget,
+// which is what starves visitor sends (the send and poll budgets are separate server-side,
+// but polling still competes with everyone else's polls).
+const POLL_RATE_LIMIT_BASE_MS = 5000 // 5 seconds
+const POLL_RATE_LIMIT_MAX_MS = 60000 // 1 minute
 // How often to check that the widget container is still attached to the DOM.
 // SPA frameworks that replace document.body on navigation (e.g. Turbo Drive)
 // detach our container; this watcher re-attaches it so the widget survives.
 const REATTACH_CHECK_INTERVAL_MS = 1000 // 1 second
 const RESTORE_EXCHANGE_ENDPOINT = '/api/conversations/v1/widget/restore'
 const RESTORE_REQUEST_ENDPOINT = '/api/conversations/v1/widget/restore/request'
+// Polling runs every 5s while the widget is visible, so repeated status-0
+// failures can become an endless blocked-request loop. Match the browser event
+// retry budget and pause polling after this many consecutive online failures.
+const MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES = 3
 
 // Singleton guard: only one ConversationsManager per page.
 // The toolbar's internal PostHog instance is excluded from creating a manager
@@ -50,7 +118,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
     private _currentTicketId: string | null = null
-    private _pollIntervalId: number | null = null
+    private _pollTimeoutId: number | null = null
+    // Guards against a second _startPolling() while the first poll is still in flight
+    // (the timeout id isn't set until the poll resolves and schedules the next tick).
+    private _pollLoopRunning: boolean = false
+    // Bumped by every start/stop. An in-flight poll chain captures the generation it
+    // started with and abandons itself if a stop/restart happened while it awaited,
+    // so open/close (which stops then starts) can never leave two loops running.
+    private _pollGeneration: number = 0
+    private _consecutivePollingRateLimitFailures: number = 0
     private _reattachIntervalId: number | null = null
     private _lastMessageTimestamp: string | null = null
     private _isPollingMessages: boolean = false
@@ -70,6 +146,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _currentView: WidgetView = 'messages'
     private _tickets: Ticket[] = []
     private _showTicketList: boolean = false
+    private _consecutivePollingStatusZeroFailures: number = 0
 
     constructor(
         config: ConversationsRemoteConfig,
@@ -84,7 +161,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._isWidgetEnabled = config.widgetEnabled === true
         this._isDomainAllowed = isCurrentDomainAllowed(config.domains)
 
+        if (window) {
+            addEventListener(window, 'online', this._onOnline)
+        }
+
         this._initialize()
+    }
+
+    private _onOnline = (): void => {
+        this._consecutivePollingStatusZeroFailures = 0
+        this._consecutivePollingRateLimitFailures = 0
+        // Clearing the streak alone leaves any pending long backoff timeout in place,
+        // so messages/unread would stay stale until it fires (up to a minute).
+        // Restarting polls immediately and reschedules at the normal cadence.
+        if (this._pollLoopRunning) {
+            this._stopPolling()
+            this._startPolling()
+        }
     }
 
     private _currentUrl(): string | undefined {
@@ -116,7 +209,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const personTraits = this._getPersonTraits()
 
@@ -134,8 +227,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             if (identity) {
-                payload.identity_distinct_id = identity.identity_distinct_id
-                payload.identity_hash = identity.identity_hash
+                Object.assign(payload, identity)
                 payload.distinct_id = identity.identity_distinct_id
             } else {
                 payload.widget_session_id = this._widgetSessionId
@@ -177,20 +269,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200 && response.statusCode !== 201) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
-                        logger.error('Failed to send message', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(response, 'sending message', 'Failed to send message', true)
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('sending message'))
                         return
                     }
 
@@ -216,6 +303,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
                     // Update last message timestamp
                     this._lastMessageTimestamp = data.created_at
+
+                    // A ticket now exists, so resume polling if the loop had stopped
+                    // because there was nothing to poll. Only when a widget is rendered —
+                    // programmatic API-only usage never polls.
+                    if (this._isWidgetRendered) {
+                        this._startPolling()
+                    }
 
                     resolve(data)
                 },
@@ -250,7 +344,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
             const queryParams: Record<string, string> = {
@@ -258,8 +352,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             if (identity) {
-                queryParams.identity_distinct_id = identity.identity_distinct_id
-                queryParams.identity_hash = identity.identity_hash
+                Object.assign(queryParams, identity)
             } else {
                 queryParams.widget_session_id = this._widgetSessionId
             }
@@ -274,24 +367,23 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
+                    this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
 
                     if (response.statusCode !== 200) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch messages'
-                        logger.error('Failed to fetch messages', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(response, 'fetching messages', 'Failed to fetch messages')
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('fetching messages'))
                         return
                     }
 
@@ -318,12 +410,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         logger.info('Marking messages as read', { ticketId: targetTicketId })
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
-            const data = identity
-                ? { identity_distinct_id: identity.identity_distinct_id, identity_hash: identity.identity_hash }
-                : { widget_session_id: this._widgetSessionId }
+            const data = identity || { widget_session_id: this._widgetSessionId }
 
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
@@ -336,21 +426,19 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.detail || response.json?.message || 'Failed to mark messages as read'
-                        logger.error('Failed to mark messages as read', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'marking messages as read',
+                                'Failed to mark messages as read'
+                            )
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('marking messages as read'))
                         return
                     }
 
@@ -392,7 +480,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
             this._restoreFromTokenWithRetry(restoreToken)
                 .catch((error) => {
-                    logger.warn('Failed to restore conversations from URL token', error)
+                    if (!isConversationsError(error)) {
+                        logger.warn('Failed to restore conversations from URL token', error)
+                    }
                 })
                 .finally(() => {
                     clearRestoreTokenFromUrl()
@@ -436,7 +526,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         try {
             return await this._restoreFromToken(restoreToken)
         } catch (error) {
-            logger.warn('Restore token exchange failed, retrying once', error)
+            const requestLayerHandledNetworkError =
+                isConversationsError(error) && error.kind === 'network' && 'cause' in error
+            if (!requestLayerHandledNetworkError) {
+                logger.warn('Restore token exchange failed, retrying once', error)
+            }
             return await this._restoreFromToken(restoreToken)
         }
     }
@@ -451,7 +545,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             current_url: this._currentUrl(),
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_EXCHANGE_ENDPOINT),
@@ -461,23 +555,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.error ||
-                            response.json?.detail ||
-                            response.json?.message ||
-                            'Failed to restore conversations'
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'restoring conversations',
+                                'Failed to restore conversations',
+                                true,
+                                false
+                            )
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('restoring conversations', false))
                         return
                     }
 
@@ -503,7 +595,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (data.migrated_ticket_ids?.length) {
             this._currentTicketId = data.migrated_ticket_ids[0]
             this._persistence.saveTicketId(this._currentTicketId)
-            // Poll straight away so messages and ticket list are fresh
+            // Poll straight away so messages and ticket list are fresh, and resume
+            // the loop in case it had stopped while there was no conversation. At
+            // initial boot the widget isn't rendered yet — _doInitializeWidget starts
+            // the loop after restore completes, so only restart an already-live widget.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
             void this._pollMessages()
             void this._pollTickets()
         } else {
@@ -631,16 +729,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        try {
-            // Call the public API method (which handles tracking and state updates)
-            await this.sendMessage(message, userTraits)
+        // Call the public API method (which handles tracking and state updates).
+        // Any rejection is propagated to the widget, which renders the error state and logs it -
+        // logging it here as well would surface a benign network failure as a captured exception.
+        await this.sendMessage(message, userTraits)
 
-            // Poll for response immediately
-            setTimeout(() => this._pollMessages(), 1000)
-        } catch (error) {
-            logger.error('Failed to send message', error)
-            throw error
-        }
+        // Poll for response immediately (sendMessage already resumed the loop)
+        setTimeout(() => this._pollMessages(), 1000)
     }
 
     /**
@@ -657,6 +752,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
 
         this._persistence.saveWidgetState(state)
+
+        // Restart the loop so the new open/closed cadence takes effect immediately
+        // (and opening triggers a fresh poll rather than waiting out a closed interval).
+        if (this._isWidgetRendered) {
+            this._stopPolling()
+            this._startPolling()
+        }
 
         // Mark messages as read when widget opens (only if in message view with a ticket)
         if (state === 'open') {
@@ -681,7 +783,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._widgetRef?.setUnreadCount(0)
             logger.info('Messages marked as read', { unreadCount: response.unread_count })
         } catch (error) {
-            logger.error('Failed to mark messages as read', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to mark messages as read', error)
+            }
         }
     }
 
@@ -732,7 +836,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 this._lastMessageTimestamp = lastMessage.created_at
             }
         } catch (error) {
-            logger.error('Failed to load messages', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load messages', error)
+            }
         }
     }
 
@@ -744,7 +850,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for new messages
      */
     private _pollMessages = async (): Promise<void> => {
-        if (this._isPollingMessages || !this._currentTicketId) {
+        if (
+            this._isPollingMessages ||
+            !this._currentTicketId ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
             return
         }
 
@@ -760,7 +873,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
      * Poll for tickets list
      */
     private _pollTickets = async (): Promise<void> => {
-        if (this._isPollingTickets) {
+        if (
+            this._isPollingTickets ||
+            isStatusZeroFailureCircuitBreakerTripped(
+                this._consecutivePollingStatusZeroFailures,
+                MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES
+            )
+        ) {
             return
         }
 
@@ -791,18 +910,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
             logger.info('Tickets loaded', { count: response.results.length, totalUnread })
         } catch (error) {
-            logger.error('Failed to load tickets', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets', error)
+            }
         }
     }
 
     private _computeShowTicketList(tickets: Ticket[]): boolean {
-        if (tickets.length > 1) {
-            return true
-        }
-        if (tickets.length === 1 && tickets[0].status === 'resolved') {
-            return true
-        }
-        return false
+        // Surface the ticket-list hub (which holds the "New conversation" button and
+        // the back-to-tickets navigation) whenever the user has any ticket -- including
+        // a single open one. Otherwise a user with one unresolved ticket is locked into
+        // that conversation with no way to start a second one.
+        return tickets.length >= 1
     }
 
     private _isCurrentTicketResolved(): boolean {
@@ -850,6 +969,30 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
     }
 
+    private _trackPollingEndpointReachability(statusCode: number): void {
+        this._consecutivePollingStatusZeroFailures = updateStatusZeroFailureCount(
+            statusCode,
+            this._consecutivePollingStatusZeroFailures,
+            MAX_CONSECUTIVE_POLLING_STATUS_ZERO_FAILURES,
+            () =>
+                logger.warn(
+                    'Conversations polling requests are failing before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped polling conversations; will try again when connectivity changes.'
+                )
+        )
+    }
+
+    /**
+     * Track HTTP 429s on polling requests so the loop can back off. Any 2xx
+     * clears the streak; a 429 lengthens the next poll delay exponentially.
+     */
+    private _trackPollingRateLimit(statusCode: number): void {
+        if (statusCode === 429) {
+            this._consecutivePollingRateLimitFailures += 1
+        } else if (statusCode >= 200 && statusCode < 300) {
+            this._consecutivePollingRateLimitFailures = 0
+        }
+    }
+
     /**
      * Handle view changes from the widget
      */
@@ -875,6 +1018,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Push resolved state for this ticket so MessagesView locks the input if needed
         this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
+        // Selecting a ticket gives the loop something to poll again
+        this._startPolling()
 
         // Load messages for the selected ticket
         await this._loadMessages()
@@ -923,6 +1069,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._widgetRef?.setTicketsLoading(true)
         await this._loadTickets()
 
+        // Resume the loop if it had stopped (tickets view polls the list)
+        this._startPolling()
+
         // Track back to tickets
         this._posthog.capture('$conversations_back_to_tickets')
     }
@@ -945,7 +1094,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const view = this._applyTicketsToState(response.results)
             return { view, tickets: response.results }
         } catch (error) {
-            logger.error('Failed to determine initial view', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to determine initial view', error)
+            }
             return { view: 'messages', tickets: [] }
         }
     }
@@ -983,33 +1134,101 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Start polling based on current view
+     * Start the self-scheduling poll loop.
+     *
+     * Idempotent: safe to call from any state-changing handler (send, restore,
+     * identity change, ticket selection). The loop polls immediately, then
+     * reschedules itself with a delay derived from widget state and rate-limit
+     * backoff (see _nextPollDelayMs), and stops itself when there is nothing to
+     * poll (see _hasSomethingToPoll).
      */
     private _startPolling(): void {
-        if (this._pollIntervalId) {
+        if (this._pollLoopRunning) {
             return // Already polling
         }
-
-        // Poll immediately
-        this._poll()
-
-        // Set up interval
-        this._pollIntervalId = window?.setInterval(() => {
-            this._poll()
-        }, POLL_INTERVAL_MS) as unknown as number
-
+        this._pollLoopRunning = true
+        const generation = ++this._pollGeneration
         logger.info('Started polling', { view: this._currentView })
+        void this._pollThenSchedule(generation)
+    }
+
+    private _pollThenSchedule = async (generation: number): Promise<void> => {
+        try {
+            await this._poll()
+        } catch (error) {
+            // _poll is defensively coded not to throw, but never let an unexpected
+            // error kill the loop (which would leave _pollLoopRunning stuck true).
+            logger.error('Polling iteration failed', error)
+        }
+        // A stop/restart bumped the generation while the request was in flight;
+        // abandon this chain so we don't end up running two loops.
+        if (generation !== this._pollGeneration) {
+            return
+        }
+        this._scheduleNextPoll(generation)
     }
 
     /**
-     * Stop polling for new messages
+     * Schedule the next poll, or stop the loop when there is nothing to poll.
+     * An idle widget with no conversation generates zero polling traffic.
+     */
+    private _scheduleNextPoll(generation: number): void {
+        if (!this._pollLoopRunning || generation !== this._pollGeneration) {
+            return
+        }
+        if (!this._hasSomethingToPoll()) {
+            this._pollTimeoutId = null
+            this._pollLoopRunning = false
+            logger.info('Nothing to poll, pausing until next user action')
+            return
+        }
+        this._pollTimeoutId = window?.setTimeout(
+            () => void this._pollThenSchedule(generation),
+            this._nextPollDelayMs()
+        ) as unknown as number
+    }
+
+    /**
+     * Delay before the next poll: exponential backoff while rate limited,
+     * otherwise the open/closed cadence.
+     */
+    private _nextPollDelayMs(): number {
+        if (this._consecutivePollingRateLimitFailures > 0) {
+            return Math.min(
+                POLL_RATE_LIMIT_BASE_MS * 2 ** (this._consecutivePollingRateLimitFailures - 1),
+                POLL_RATE_LIMIT_MAX_MS
+            )
+        }
+        return this._isWidgetOpen() ? POLL_INTERVAL_OPEN_MS : POLL_INTERVAL_CLOSED_MS
+    }
+
+    /**
+     * Whether the current view has anything worth polling for. Messages view
+     * needs an active ticket; tickets view needs at least one ticket. The
+     * restore-request view never polls.
+     */
+    private _hasSomethingToPoll(): boolean {
+        if (this._currentView === 'restore_request') {
+            return false
+        }
+        if (this._currentView === 'messages') {
+            return !!this._currentTicketId
+        }
+        return this._tickets.length > 0
+    }
+
+    /**
+     * Stop the poll loop.
      */
     private _stopPolling(): void {
-        if (this._pollIntervalId) {
-            window?.clearInterval(this._pollIntervalId)
-            this._pollIntervalId = null
+        if (this._pollTimeoutId != null) {
+            window?.clearTimeout(this._pollTimeoutId)
+            this._pollTimeoutId = null
             logger.info('Stopped polling for messages')
         }
+        this._pollLoopRunning = false
+        // Invalidate any in-flight poll chain so it won't reschedule itself.
+        this._pollGeneration++
     }
 
     /**
@@ -1134,8 +1353,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         if (identity) {
-            queryParams.identity_distinct_id = identity.identity_distinct_id
-            queryParams.identity_hash = identity.identity_hash
+            Object.assign(queryParams, identity)
         } else {
             queryParams.widget_session_id = this._widgetSessionId
         }
@@ -1144,7 +1362,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             queryParams.status = options.status
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
@@ -1152,24 +1370,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
+                    this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
 
                     if (response.statusCode !== 200) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch tickets'
-                        logger.error('Failed to fetch tickets', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(createConversationsRequestError(response, 'fetching tickets', 'Failed to fetch tickets'))
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('fetching tickets'))
                         return
                     }
 
@@ -1196,7 +1411,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             request_url: this._currentUrl() || '',
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_REQUEST_ENDPOINT),
@@ -1206,18 +1421,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.error ||
-                            response.json?.detail ||
-                            response.json?.message ||
-                            'Failed to request restore link'
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'requesting restore link',
+                                'Failed to request restore link'
+                            )
+                        )
                         return
                     }
 
@@ -1276,13 +1487,38 @@ export class ConversationsManager implements ConversationsManagerInterface {
         return this._widgetSessionId
     }
 
-    private _identityFields(): { identity_distinct_id: string; identity_hash: string } | null {
+    private _identityFields(): Record<string, string> | null {
         const id = this._posthog.config.identity_distinct_id
         const hash = this._posthog.config.identity_hash
         if (!id || !hash) {
             return null
         }
-        return { identity_distinct_id: id, identity_hash: hash }
+
+        const fields: Record<string, string> = {
+            identity_distinct_id: id,
+            identity_hash: hash,
+        }
+
+        const claims = this._posthog.config.identity_claims
+        if (claims) {
+            Object.entries(claims).forEach(([field, claim]) => {
+                const isReservedField = field === 'distinct_id' || field === 'hash' || field.startsWith('hash_')
+                if (
+                    field &&
+                    !isReservedField &&
+                    claim &&
+                    typeof claim.value === 'string' &&
+                    claim.value.length > 0 &&
+                    typeof claim.hash === 'string' &&
+                    claim.hash.length > 0
+                ) {
+                    fields[`identity_${field}`] = claim.value
+                    fields[`identity_hash_${field}`] = claim.hash
+                }
+            })
+        }
+
+        return fields
     }
 
     setIdentity(): void {
@@ -1320,11 +1556,19 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._currentView = view
             this._widgetRef?.setView(view)
 
+            // Identity change may have surfaced (or cleared) conversations; resume
+            // the loop if it had stopped. It stops itself again if there's nothing to poll.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
+
             if (view === 'messages' && this._currentTicketId) {
                 void this._loadMessages()
             }
         } catch (error) {
-            logger.error('Failed to load tickets after identity change', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets after identity change', error)
+            }
         }
     }
 
@@ -1334,6 +1578,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
     destroy(): void {
         this._stopPolling()
         this._stopReattachWatcher()
+        if (window) {
+            window.removeEventListener('online', this._onOnline)
+        }
 
         // Unsubscribe from identify events
         if (this._unsubscribeIdentifyListener) {
@@ -1367,6 +1614,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         this._currentTicketId = null
         this._lastMessageTimestamp = null
         this._unreadCount = 0
+        this._consecutivePollingStatusZeroFailures = 0
 
         // Destroy the widget
         this.destroy()

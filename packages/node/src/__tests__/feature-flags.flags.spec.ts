@@ -1,14 +1,15 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
-import { PostHogV2FlagsResponse, FeatureFlagError } from '@posthog/core'
+import { PostHogV2FlagsResponse, FeatureFlagError, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsRequestMaxRetries: 0,
 }
 
 describe('flags v2', () => {
@@ -220,51 +221,63 @@ describe('flags v2', () => {
     let posthog: PostHog
     describe.each([
       {
+        case: 'HTTP error response',
+        status: 400,
+        json: vi.fn().mockResolvedValue({ error: 'error response' }),
+        expectedError: 'unknown_error',
+      },
+      {
         case: 'JSON error response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve({ error: 'error response' }),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue({ error: 'error response' }),
+        expectedError: 'flag_missing',
       },
       {
         case: 'undefined response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve(undefined),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue(undefined),
+        expectedError: 'unknown_error',
       },
       {
         case: 'null response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve(null),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue(null),
+        expectedError: 'unknown_error',
       },
       {
         case: 'empty response',
-        mock: apiImplementationV4({
-          status: 400,
-          json: () => Promise.resolve({}),
-        }),
+        status: 200,
+        json: vi.fn().mockResolvedValue({}),
+        expectedError: 'flag_missing',
       },
       {
         case: 'network error',
-        mock: () => Promise.reject(new Error('Network error')),
+        status: undefined,
+        json: vi.fn(),
+        expectedError: 'unknown_error',
       },
       {
         case: 'invalid JSON',
-        mock: apiImplementationV4({
-          status: 500,
-          json: () => Promise.reject(new Error('Invalid JSON')),
-        }),
+        status: 200,
+        json: vi.fn().mockRejectedValue(new Error('Invalid JSON')),
+        expectedError: 'unknown_error',
       },
-    ])('when $case', ({ mock }) => {
+    ])('when $case', ({ status, json, expectedError }) => {
       beforeEach(() => {
         posthog = new PostHog('TEST_API_KEY', {
           host: 'http://example.com',
           ...posthogImmediateResolveOptions,
         })
-        mockedFetch.mockImplementation(mock)
+        mockedFetch.mockImplementation(
+          status === undefined
+            ? () => Promise.reject(new Error('Network error'))
+            : apiImplementationV4({ status, json })
+        )
+      })
+
+      afterEach(async () => {
+        expect(json).toHaveBeenCalledTimes(status === 200 ? 1 : 0)
+        await posthog.shutdown()
       })
 
       it('getFeatureFlag returns undefined', async () => {
@@ -290,7 +303,7 @@ describe('flags v2', () => {
         })
       })
 
-      it('captures event with $feature_flag_error=unknown_error', async () => {
+      it('captures event with the response-specific $feature_flag_error', async () => {
         let capturedMessage: any
         posthog.on('capture', (message) => {
           capturedMessage = message
@@ -300,7 +313,7 @@ describe('flags v2', () => {
         await waitForPromises()
         expect(capturedMessage).toBeDefined()
         expect(capturedMessage.event).toBe('$feature_flag_called')
-        expect(capturedMessage.properties.$feature_flag_error).toBe('unknown_error')
+        expect(capturedMessage.properties.$feature_flag_error).toBe(expectedError)
       })
     })
   })
@@ -630,6 +643,8 @@ describe('getFeatureFlagResult', () => {
       enabled: true,
       variant: 'variant-a',
       payload: { discount: 20 },
+      reason: 'Matched condition set 3',
+      reasonCode: 'variant',
     })
   })
 
@@ -729,6 +744,55 @@ describe('getFeatureFlagResult', () => {
     expect(result?.payload).toBeUndefined()
   })
 
+  it('normalizes null variant from the API to undefined', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'boolean-flag': {
+          key: 'boolean-flag',
+          enabled: true,
+          // The flags API serializes missing variants as null
+          variant: null as unknown as undefined,
+          reason: undefined,
+          metadata: undefined,
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('boolean-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'boolean-flag',
+      enabled: true,
+      variant: undefined,
+      payload: undefined,
+    })
+  })
+
+  it.each([
+    { code: 'flag_disabled', condition_index: undefined, description: 'Flag switched off' },
+    { code: 'flag_disabled', condition_index: undefined, description: undefined },
+  ])('exposes remote evaluation reason $code / $description', async (reason) => {
+    mockedFetch.mockImplementation(
+      apiImplementationV4({
+        flags: { 'test-flag': { key: 'test-flag', enabled: false, variant: undefined, metadata: undefined, reason } },
+        errorsWhileComputingFlags: false,
+      })
+    )
+    const posthog = new PostHog('TEST_API_KEY', { host: 'http://example.com', ...posthogImmediateResolveOptions })
+    const result = await posthog.getFeatureFlagResult('test-flag', 'user', { sendFeatureFlagEvents: false })
+    expect(result).toMatchObject({ enabled: false, reason: reason.description ?? reason.code, reasonCode: reason.code })
+    await posthog.shutdown()
+  })
+
   it('returns disabled result when conditions do not match', async () => {
     const flagsResponse: PostHogV2FlagsResponse = {
       flags: {
@@ -767,6 +831,8 @@ describe('getFeatureFlagResult', () => {
       enabled: false,
       variant: undefined,
       payload: undefined,
+      reason: 'No conditions matched',
+      reasonCode: 'no_condition_match',
     })
   })
 
@@ -822,6 +888,57 @@ describe('getFeatureFlagResult', () => {
         locally_evaluated: false,
       },
     })
+  })
+
+  it.each([
+    ['sends true when the server reports has_experiment true', true],
+    ['sends false when the server reports has_experiment false', false],
+    ['omits the property when the server omits has_experiment', undefined],
+  ])('$feature_flag_has_experiment: %s', async (_, hasExperiment) => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: undefined,
+          reason: {
+            code: 'condition_match',
+            condition_index: 0,
+            description: 'Matched condition set 1',
+          },
+          metadata: {
+            id: 10,
+            version: 3,
+            payload: undefined,
+            description: 'description',
+            ...(hasExperiment === undefined ? {} : { has_experiment: hasExperiment }),
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'test-request-id',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+
+    await waitForPromises()
+    expect(capturedMessage.event).toBe('$feature_flag_called')
+    if (hasExperiment === undefined) {
+      expect(capturedMessage.properties).not.toHaveProperty('$feature_flag_has_experiment')
+    } else {
+      expect(capturedMessage.properties.$feature_flag_has_experiment).toBe(hasExperiment)
+    }
   })
 
   it('does not capture event when sendFeatureFlagEvents is false', async () => {
@@ -904,11 +1021,31 @@ describe('getFeatureFlagResult', () => {
   })
 
   it('returns undefined when flag is overridden to undefined (simulates missing flag)', async () => {
-    mockedFetch.mockImplementation(apiImplementationV4({ flags: {}, errorsWhileComputingFlags: false }))
+    mockedFetch.mockImplementation(
+      apiImplementationV4({
+        flags: {
+          'undefined-override-flag': {
+            key: 'undefined-override-flag',
+            enabled: true,
+            variant: undefined,
+            reason: undefined,
+            metadata: { id: 1, version: 1, payload: '{"discount": 15}', description: undefined },
+          },
+        },
+        errorsWhileComputingFlags: false,
+      })
+    )
 
     const posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getFeatureFlagResult('undefined-override-flag', 'some-distinct-id')).toEqual({
+      key: 'undefined-override-flag',
+      enabled: true,
+      variant: undefined,
+      payload: { discount: 15 },
     })
 
     posthog.overrideFeatureFlags({
@@ -921,6 +1058,39 @@ describe('getFeatureFlagResult', () => {
   })
 
   describe('local evaluation', () => {
+    it.each([true, false])(
+      'exposes local reason without treating every off result as disabled (active=%s)',
+      async (active) => {
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: {
+              flags: [
+                {
+                  id: 42,
+                  name: 'Local Feature',
+                  key: 'local-flag',
+                  active,
+                  filters: { groups: [{ rollout_percentage: 0 }] },
+                },
+              ],
+            },
+          })
+        )
+        const posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          ...posthogImmediateResolveOptions,
+        })
+        const result = await posthog.getFeatureFlagResult('local-flag', 'user', {
+          onlyEvaluateLocally: true,
+          sendFeatureFlagEvents: false,
+        })
+        expect(result).toMatchObject({ enabled: false, reason: 'Evaluated locally' })
+        expect(result).toHaveProperty('reasonCode', active ? undefined : 'flag_disabled')
+        await posthog.shutdown()
+      }
+    )
+
     it('returns flag result with parsed payload when evaluated locally', async () => {
       const localFlags = {
         flags: [
@@ -1002,7 +1172,8 @@ describe('getFeatureFlagResult', () => {
       })
       expect(result?.variant).toBeDefined()
       expect(['control', 'test']).toContain(result?.variant)
-      expect(result?.payload).toBeDefined()
+      const payloads = { control: { version: 'control' }, test: { version: 'test' } }
+      expect(result?.payload).toEqual(payloads[result!.variant as keyof typeof payloads])
 
       await posthog.shutdown()
     })
@@ -1082,6 +1253,411 @@ describe('getFeatureFlagResult', () => {
           locally_evaluated: true,
         },
       })
+
+      await posthog.shutdown()
+    })
+
+    it.each([
+      ['sends true when the definition reports has_experiment true', true],
+      ['sends false when the definition reports has_experiment false', false],
+      ['omits the property when the definition omits has_experiment', undefined],
+    ])('$feature_flag_has_experiment on local evaluation: %s', async (_, hasExperiment) => {
+      const localFlags = {
+        flags: [
+          {
+            id: 55,
+            name: 'Simple Flag',
+            key: 'simple-flag',
+            active: true,
+            filters: {
+              groups: [{ rollout_percentage: 100 }],
+            },
+            ...(hasExperiment === undefined ? {} : { has_experiment: hasExperiment }),
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      let capturedMessage: any
+      posthog.on('capture', (message) => {
+        capturedMessage = message
+      })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+
+      await waitForPromises()
+      expect(capturedMessage.event).toBe('$feature_flag_called')
+      expect(capturedMessage.properties.locally_evaluated).toBe(true)
+      if (hasExperiment === undefined) {
+        expect(capturedMessage.properties).not.toHaveProperty('$feature_flag_has_experiment')
+      } else {
+        expect(capturedMessage.properties.$feature_flag_has_experiment).toBe(hasExperiment)
+      }
+
+      await posthog.shutdown()
+    })
+  })
+})
+
+describe('minimal $feature_flag_called events', () => {
+  const remoteFlagsResponse = (options: {
+    minimalFlagCalledEvents?: boolean
+    hasExperiment?: boolean
+  }): PostHogV2FlagsResponse => ({
+    flags: {
+      'test-flag': {
+        key: 'test-flag',
+        enabled: true,
+        variant: undefined,
+        reason: {
+          code: 'condition_match',
+          condition_index: 0,
+          description: 'Matched condition set 1',
+        },
+        metadata: {
+          id: 10,
+          version: 3,
+          payload: undefined,
+          description: 'description',
+          ...(options.hasExperiment === undefined ? {} : { has_experiment: options.hasExperiment }),
+        },
+      },
+    },
+    errorsWhileComputingFlags: false,
+    requestId: 'minimal-request-id',
+    evaluatedAt: 1640995200000,
+    ...(options.minimalFlagCalledEvents === undefined
+      ? {}
+      : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
+  })
+
+  const createClient = (options: Partial<PostHogOptions> = {}): { posthog: PostHog; captured: any[] } => {
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+      ...options,
+    })
+    const captured: any[] = []
+    posthog.on('capture', (message) => captured.push(message))
+    return { posthog, captured }
+  }
+
+  const findFlagCalledEvent = (captured: any[]): any => captured.find((m) => m.event === '$feature_flag_called')
+
+  describe('remote evaluation', () => {
+    it('sends exactly the allowlisted properties when gated and the flag has no experiment', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      const { posthog, captured } = createClient()
+      // Super properties must be structurally excluded from the minimal event
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id', { groups: { organization: 'org-1' } })
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message).toBeDefined()
+      expect(Object.keys(message.properties).sort()).toEqual(
+        [
+          '$feature_flag',
+          '$feature_flag_response',
+          '$feature_flag_has_experiment',
+          '$feature_flag_id',
+          '$feature_flag_version',
+          '$feature_flag_reason',
+          '$feature_flag_request_id',
+          '$feature_flag_evaluated_at',
+          'locally_evaluated',
+          '$groups',
+          '$lib',
+          '$lib_version',
+          '$is_server',
+          '$geoip_disable',
+        ].sort()
+      )
+      expect(message.properties).toMatchObject({
+        $feature_flag: 'test-flag',
+        $feature_flag_response: true,
+        $feature_flag_has_experiment: false,
+        $feature_flag_id: 10,
+        $feature_flag_version: 3,
+        locally_evaluated: false,
+        $groups: { organization: 'org-1' },
+        $is_server: true,
+        $geoip_disable: true,
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('keeps every campaign attribution property on the remote-evaluation minimization path', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      const { posthog, captured } = createClient()
+      const campaignProperties = Object.fromEntries(
+        MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES.map((key) => [key, `value-for-${key}`])
+      )
+      await posthog.register({
+        ...campaignProperties,
+        $referring_domain: 'referring.example',
+        $referrer: 'https://referring.example/path?private=value',
+        unrelated_superproperty: 'must-be-stripped',
+      })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message).toBeDefined()
+      expect(message.properties).toMatchObject({
+        ...campaignProperties,
+        $referring_domain: 'referring.example',
+      })
+      expect(message.properties).not.toHaveProperty('$referrer')
+      expect(message.properties).not.toHaveProperty('unrelated_superproperty')
+
+      await posthog.shutdown()
+    })
+
+    it('sends the full event when gated but the flag has an experiment', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: true }))
+      )
+      const { posthog, captured } = createClient()
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties).toMatchObject({
+        $feature_flag_has_experiment: true,
+        super_prop: 'super_value',
+        '$feature/test-flag': true,
+      })
+
+      await posthog.shutdown()
+    })
+
+    it.each([
+      ['the gate field is absent', remoteFlagsResponse({ hasExperiment: false })],
+      ['the gate field is false', remoteFlagsResponse({ minimalFlagCalledEvents: false, hasExperiment: false })],
+      ['has_experiment is absent', remoteFlagsResponse({ minimalFlagCalledEvents: true })],
+      [
+        'the gate field is a truthy non-boolean value',
+        remoteFlagsResponse({ minimalFlagCalledEvents: 'true' as any, hasExperiment: false }),
+      ],
+    ])('sends the full event when %s', async (_, response) => {
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+      const { posthog, captured } = createClient()
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties).toMatchObject({
+        super_prop: 'super_value',
+        '$feature/test-flag': true,
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('flips the gate off when a later flags response omits the field', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      const { posthog, captured } = createClient()
+
+      await posthog.getFeatureFlagResult('test-flag', 'user-1')
+      await waitForPromises()
+      expect(findFlagCalledEvent(captured).properties).not.toHaveProperty('$feature/test-flag')
+
+      mockedFetch.mockImplementation(apiImplementationV4(remoteFlagsResponse({ hasExperiment: false })))
+      // Different distinct id so the flag-called dedup cache doesn't swallow the event
+      await posthog.getFeatureFlagResult('test-flag', 'user-2')
+      await waitForPromises()
+
+      const fullMessage = captured.filter((m) => m.event === '$feature_flag_called')[1]
+      expect(fullMessage.properties).toMatchObject({ '$feature/test-flag': true })
+
+      await posthog.shutdown()
+    })
+
+    it('lets before_send re-add a property stripped by minimization', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      let beforeSendProperties: Record<string, any> | undefined
+      const { posthog, captured } = createClient({
+        before_send: (event) => {
+          if (event.event === '$feature_flag_called') {
+            beforeSendProperties = event.properties
+            return { ...event, properties: { ...event.properties, super_prop: 're-added' } }
+          }
+          return event
+        },
+      })
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      // before_send sees the already-minimized properties, not the pre-filter merged set
+      expect(beforeSendProperties).toBeDefined()
+      expect(beforeSendProperties).not.toHaveProperty('super_prop')
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties).toMatchObject({ super_prop: 're-added' })
+
+      await posthog.shutdown()
+    })
+  })
+
+  describe('local evaluation', () => {
+    const localFlagsPayload = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean }): any => ({
+      flags: [
+        {
+          id: 55,
+          name: 'Simple Flag',
+          key: 'simple-flag',
+          active: true,
+          filters: {
+            groups: [{ rollout_percentage: 100 }],
+          },
+          ...(options.hasExperiment === undefined ? {} : { has_experiment: options.hasExperiment }),
+        },
+      ],
+      ...(options.minimalFlagCalledEvents === undefined
+        ? {}
+        : { minimal_flag_called_events: options.minimalFlagCalledEvents }),
+    })
+
+    it('sends exactly the allowlisted properties when the definitions payload carries the gate', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: localFlagsPayload({ minimalFlagCalledEvents: true, hasExperiment: false }) })
+      )
+      const { posthog, captured } = createClient({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message).toBeDefined()
+      expect(Object.keys(message.properties).sort()).toEqual(
+        [
+          '$feature_flag',
+          '$feature_flag_response',
+          '$feature_flag_has_experiment',
+          '$feature_flag_id',
+          '$feature_flag_reason',
+          '$feature_flag_evaluated_at',
+          'locally_evaluated',
+          '$lib',
+          '$lib_version',
+          '$is_server',
+          '$geoip_disable',
+        ].sort()
+      )
+      expect(message.properties).toMatchObject({
+        $feature_flag: 'simple-flag',
+        $feature_flag_response: true,
+        $feature_flag_has_experiment: false,
+        $feature_flag_id: 55,
+        locally_evaluated: true,
+        $is_server: true,
+      })
+      // Not part of the contract allowlist, so the locally-evaluated debug scalar is stripped
+      expect(message.properties).not.toHaveProperty('$feature_flag_definitions_loaded_at')
+
+      await posthog.shutdown()
+    })
+
+    it('sends the full event when the definitions payload omits the gate', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsPayload({ hasExperiment: false }) }))
+      const { posthog, captured } = createClient({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties).toMatchObject({
+        super_prop: 'super_value',
+        '$feature/simple-flag': true,
+        $feature_flag_definitions_loaded_at: expect.any(Number),
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('reads the gate from cached definitions when the cache provider skips fetching', async () => {
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: { flags: [] } }))
+      const cacheProvider = {
+        getFlagDefinitions: () => ({
+          flags: [
+            {
+              id: 55,
+              name: 'Simple Flag',
+              key: 'simple-flag',
+              active: true,
+              filters: { groups: [{ rollout_percentage: 100 }] },
+              has_experiment: false,
+            } as any,
+          ],
+          groupTypeMapping: {},
+          cohorts: {},
+          minimalFlagCalledEvents: true,
+        }),
+        shouldFetchFlagDefinitions: () => false,
+        onFlagDefinitionsReceived: () => {},
+        shutdown: () => {},
+      }
+      const { posthog, captured } = createClient({
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: cacheProvider,
+      })
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties.$feature_flag_has_experiment).toBe(false)
+      expect(message.properties).not.toHaveProperty('super_prop')
+      expect(message.properties).not.toHaveProperty('$feature/simple-flag')
+
+      await posthog.shutdown()
+    })
+
+    it('flips the gate off when a later local-evaluation reload omits the field', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: localFlagsPayload({ minimalFlagCalledEvents: true, hasExperiment: false }) })
+      )
+      const { posthog, captured } = createClient({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'user-1')
+      await waitForPromises()
+      expect(findFlagCalledEvent(captured).properties).not.toHaveProperty('$feature/simple-flag')
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsPayload({ hasExperiment: false }) }))
+      await posthog.reloadFeatureFlags()
+      // Different distinct id so the flag-called dedup cache doesn't swallow the event
+      await posthog.getFeatureFlagResult('simple-flag', 'user-2')
+      await waitForPromises()
+
+      const fullMessage = captured.filter((m) => m.event === '$feature_flag_called')[1]
+      expect(fullMessage.properties).toMatchObject({ '$feature/simple-flag': true })
 
       await posthog.shutdown()
     })

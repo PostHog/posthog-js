@@ -1,8 +1,8 @@
 import { PostHog } from '@/entrypoints/index.node'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 const DEBOUNCE_MS = 50
 const HALF_DEBOUNCE_MS = DEBOUNCE_MS / 2
 
@@ -12,20 +12,56 @@ function getFlushedBatches(): any[][] {
     .map((c) => JSON.parse((c[1] as any).body).batch)
 }
 
+describe('flush combines events and spans', () => {
+  it('waits for the span export even when the event flush rejects', async () => {
+    // `Promise.all` settled on the event rejection, so a serverless host could
+    // freeze the invocation with the span request still open.
+    vi.useRealTimers()
+    const order: string[] = []
+    mockedFetch.mockImplementation(async (url: any) => {
+      if (String(url).includes('/i/v1/traces')) {
+        order.push('traces-start')
+        await new Promise((resolve) => setTimeout(resolve, 30))
+        order.push('traces-done')
+        return { status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) } as any
+      }
+      throw new Error('events endpoint down')
+    })
+    const posthog = new PostHog('key', {
+      host: 'http://example.com',
+      flushAt: 1,
+      fetchRetryCount: 0,
+      traces: { serviceName: 'svc' },
+      disableCompression: true,
+    })
+    posthog.capture({ distinctId: 'u', event: 'e' })
+    posthog.startSpan('s').end()
+
+    await expect(posthog.flush()).rejects.toThrow()
+    order.push('flush-returned')
+
+    // Exact, not an index comparison: before the fix `traces-done` is absent
+    // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
+    expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
+    await posthog.shutdown()
+    vi.useFakeTimers()
+  })
+})
+
 describe('waitUntil debounced flush', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    jest.clearAllMocks()
-    jest.clearAllTimers()
+    vi.clearAllMocks()
+    vi.clearAllTimers()
   })
 
   describe('debounce behavior', () => {
     let posthog: PostHog
-    let mockWaitUntil: jest.Mock
+    let mockWaitUntil: vi.Mock
 
     beforeEach(() => {
-      mockWaitUntil = jest.fn()
+      mockWaitUntil = vi.fn()
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100, // High threshold so normal flushAt doesn't trigger
@@ -49,7 +85,7 @@ describe('waitUntil debounced flush', () => {
 
     it('calls waitUntil with a promise on first capture', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
       expect(mockWaitUntil).toHaveBeenCalledWith(expect.any(Promise))
@@ -58,18 +94,18 @@ describe('waitUntil debounced flush', () => {
     it('does not call waitUntil again on subsequent captures in same batch', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
     })
 
     it('flushes 50ms after the last capture', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS - 1)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS - 1)
 
       expect(mockedFetch).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
 
       const batches = getFlushedBatches()
       expect(batches).toHaveLength(1)
@@ -79,19 +115,19 @@ describe('waitUntil debounced flush', () => {
 
     it('resets debounce timer on each capture', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
-      jest.advanceTimersByTime(DEBOUNCE_MS - 1)
+      vi.advanceTimersByTime(DEBOUNCE_MS - 1)
 
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
-      jest.advanceTimersByTime(HALF_DEBOUNCE_MS)
+      vi.advanceTimersByTime(HALF_DEBOUNCE_MS)
 
       // Not yet flushed (only 25ms since last capture's enqueue)
       expect(mockedFetch).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(HALF_DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(HALF_DEBOUNCE_MS)
 
       // Now flushed with both events
       const batches = getFlushedBatches()
@@ -100,14 +136,34 @@ describe('waitUntil debounced flush', () => {
     })
 
     it('resolves the waitUntil promise after flush completes', async () => {
-      posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      let completeDelivery!: () => void
+      const delivery = new Promise<void>((resolve) => {
+        completeDelivery = resolve
+      })
+      mockedFetch.mockImplementationOnce(async () => {
+        await delivery
+        return { status: 200, text: async () => 'ok', json: async () => ({ status: 'ok' }) } as any
+      })
 
-      const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+      try {
+        posthog.capture({ distinctId: 'user-1', event: 'test_event' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+        const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+        const settled = vi.fn()
+        void waitUntilPromise.then(settled)
 
-      await expect(waitUntilPromise).resolves.toBeUndefined()
+        await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['test_event']])
+        expect(settled).not.toHaveBeenCalled()
+
+        completeDelivery()
+        await expect(waitUntilPromise).resolves.toBeUndefined()
+        expect(settled).toHaveBeenCalledTimes(1)
+      } finally {
+        completeDelivery()
+      }
     })
 
     it('does not activate debounced flush when no waitUntil in options', async () => {
@@ -120,9 +176,9 @@ describe('waitUntil debounced flush', () => {
       })
 
       posthogNoWaitUntil.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       // With flushAt=100 and only 1 event, no flush should happen from debounce
       expect(mockedFetch).not.toHaveBeenCalled()
@@ -133,11 +189,11 @@ describe('waitUntil debounced flush', () => {
     it('starts a new debounce cycle for captures after flush', async () => {
       // First cycle
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       // Second capture should start a new cycle
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       expect(getFlushedBatches().length).toEqual(2)
       expect(getFlushedBatches()[0][0].event).toBe('event_1')
@@ -146,14 +202,14 @@ describe('waitUntil debounced flush', () => {
 
     it('does not flush after shutdown when debounce timer is pending', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       const sentinelPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
 
       await posthog.shutdown()
       mockedFetch.mockClear()
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS * 2)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 2)
       expect(mockedFetch).not.toHaveBeenCalled()
 
       // Shutdown must resolve the sentinel so the serverless runtime can terminate
@@ -164,11 +220,11 @@ describe('waitUntil debounced flush', () => {
       mockedFetch.mockRejectedValueOnce(new Error('Network error'))
 
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       await expect(waitUntilPromise).resolves.toBeUndefined()
     })
@@ -176,11 +232,11 @@ describe('waitUntil debounced flush', () => {
 
   describe('max time cap', () => {
     let posthog: PostHog
-    let mockWaitUntil: jest.Mock
+    let mockWaitUntil: vi.Mock
     const MAX_DEBOUNCE_MS = 500
 
     beforeEach(() => {
-      mockWaitUntil = jest.fn()
+      mockWaitUntil = vi.fn()
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100,
@@ -205,17 +261,17 @@ describe('waitUntil debounced flush', () => {
 
     it('flushes when max time cap is exceeded instead of resetting debounce', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // Advance past the max wait (default 500ms), capturing along the way
       // to keep resetting the debounce timer. Each iteration advances DEBOUNCE_MS - 1ms
       // (under the 50ms debounce) so the debounce never fires on its own.
       for (let i = 0; i < 11; i++) {
-        jest.advanceTimersByTime(DEBOUNCE_MS - 1)
+        vi.advanceTimersByTime(DEBOUNCE_MS - 1)
         posthog.capture({ distinctId: 'user-1', event: `event_${i + 2}` })
         // Flush microtasks so enqueue completes. This also fires the 0ms
         // max-cap timer on the iteration where elapsed exceeds 500ms.
-        await jest.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(0)
       }
 
       // The max cap triggered a flush during the loop (not the 50ms debounce)
@@ -234,35 +290,39 @@ describe('waitUntil debounced flush', () => {
         waitUntilMaxWaitMs: 100,
       })
 
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      try {
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_1' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // Advance DEBOUNCE_MS - 1ms (under the 50ms debounce) then capture again
-      jest.advanceTimersByTime(DEBOUNCE_MS - 1)
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(40)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_2' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // No flush yet — DEBOUNCE_MS - 1ms elapsed, under the 100ms custom max
-      expect(getFlushedBatches()).toHaveLength(0)
+        await vi.advanceTimersByTimeAsync(40)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_3' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // Advance another 51ms (total 100ms) then capture — hits 100ms max
-      jest.advanceTimersByTime(DEBOUNCE_MS + 1)
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_3' })
-      // This fires the 0ms max-cap timer
-      await jest.advanceTimersByTimeAsync(0)
+        // At 100ms the ordinary debounce is still pending until 130ms.
+        await vi.advanceTimersByTimeAsync(20)
+        expect(getFlushedBatches()).toHaveLength(0)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_4' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      expect(getFlushedBatches().length).toEqual(1)
-
-      await posthogCustomMax.shutdown()
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([
+          ['event_1', 'event_2', 'event_3', 'event_4'],
+        ])
+      } finally {
+        await posthogCustomMax.shutdown()
+      }
     })
   })
 
   describe('flush() override', () => {
     let posthog: PostHog
-    let mockWaitUntil: jest.Mock
+    let mockWaitUntil: vi.Mock
 
     beforeEach(() => {
-      mockWaitUntil = jest.fn()
+      mockWaitUntil = vi.fn()
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 2, // Low threshold to trigger flushAt
@@ -296,14 +356,14 @@ describe('waitUntil debounced flush', () => {
 
       // First capture: registers debounce waitUntil sentinel
       posthogFlushAt.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
       const sentinelPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
 
       // Second capture triggers flushAt (threshold is 2)
       posthogFlushAt.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // flushAt-triggered flush should have sent the data
       expect(mockedFetch).toHaveBeenCalled()
@@ -329,7 +389,7 @@ describe('waitUntil debounced flush', () => {
       })
 
       posthogWithInterval.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // Debounce sentinel registered on first capture
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
@@ -337,7 +397,7 @@ describe('waitUntil debounced flush', () => {
       expect(mockedFetch).not.toHaveBeenCalled()
 
       // Fire the flushInterval timer (before debounce at 60s)
-      await jest.advanceTimersByTimeAsync(500)
+      await vi.advanceTimersByTimeAsync(500)
 
       // flushInterval-triggered flush should have sent the data
       expect(mockedFetch).toHaveBeenCalled()
@@ -375,7 +435,7 @@ describe('waitUntil debounced flush', () => {
 
       // Capture establishes a debounce sentinel
       posthogDebounce.capture({ distinctId: 'user-1', event: 'event_1' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
       expect(mockWaitUntil).toHaveBeenCalledTimes(1)
 
       // Manual flush() should skip waitUntil — sentinel already keeps runtime alive
@@ -386,7 +446,7 @@ describe('waitUntil debounced flush', () => {
     })
 
     it('handles waitUntil throwing', async () => {
-      const throwingWaitUntil = jest.fn(() => {
+      const throwingWaitUntil = vi.fn(() => {
         throw new Error('Not in request context')
       })
       const posthogThrowing = new PostHog('TEST_API_KEY', {
@@ -399,14 +459,14 @@ describe('waitUntil debounced flush', () => {
       })
 
       posthogThrowing.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // flush() should not throw even if waitUntil throws
       await expect(posthogThrowing.flush()).resolves.toBeUndefined()
     })
 
     it('handles waitUntil throwing during first capture scheduling', async () => {
-      const throwingWaitUntil = jest.fn(() => {
+      const throwingWaitUntil = vi.fn(() => {
         throw new Error('Not in request context')
       })
       const posthogThrowing = new PostHog('TEST_API_KEY', {
@@ -419,16 +479,29 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      // Should not throw even though waitUntil throws during scheduleDebouncedFlush
-      expect(() => {
-        posthogThrowing.capture({ distinctId: 'user-1', event: 'test_event' })
-      }).not.toThrow()
+      const captureError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        expect(() => {
+          posthogThrowing.capture({ distinctId: 'user-1', event: 'test_event' })
+        }).not.toThrow()
+        await vi.advanceTimersByTimeAsync(0)
+
+        expect(throwingWaitUntil).toHaveBeenCalledTimes(1)
+        expect(throwingWaitUntil).toHaveBeenCalledWith(expect.any(Promise))
+        expect(captureError).not.toHaveBeenCalled()
+
+        await expect(posthogThrowing.flush()).resolves.toBeUndefined()
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['test_event']])
+      } finally {
+        await posthogThrowing.shutdown()
+        captureError.mockRestore()
+      }
     })
   })
 
   describe('disabled client', () => {
     it('does not schedule debounced flush when disabled', async () => {
-      const mockWaitUntil = jest.fn()
+      const mockWaitUntil = vi.fn()
       const posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100,
@@ -441,12 +514,12 @@ describe('waitUntil debounced flush', () => {
       })
 
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // waitUntil should never be called when client is disabled
       expect(mockWaitUntil).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       // No flush should have happened
       expect(mockedFetch).not.toHaveBeenCalled()
@@ -457,7 +530,7 @@ describe('waitUntil debounced flush', () => {
 
   describe('opted out client', () => {
     it('does not schedule debounced flush when opted out', async () => {
-      const mockWaitUntil = jest.fn()
+      const mockWaitUntil = vi.fn()
       const posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100,
@@ -470,12 +543,12 @@ describe('waitUntil debounced flush', () => {
       })
 
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // waitUntil should never be called when client is opted out
       expect(mockWaitUntil).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
 
       // No flush should have happened
       expect(mockedFetch).not.toHaveBeenCalled()
@@ -486,7 +559,7 @@ describe('waitUntil debounced flush', () => {
 
   describe('shutdown with waitUntil', () => {
     it('flushes all queued events during shutdown', async () => {
-      const mockWaitUntil = jest.fn()
+      const mockWaitUntil = vi.fn()
       const posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100,
@@ -505,7 +578,7 @@ describe('waitUntil debounced flush', () => {
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // No flush yet — debounce hasn't fired
       expect(mockedFetch).not.toHaveBeenCalled()
@@ -520,7 +593,7 @@ describe('waitUntil debounced flush', () => {
     })
 
     it('flushes all queued events during shutdown when waitUntil throws', async () => {
-      const throwingWaitUntil = jest.fn(() => {
+      const throwingWaitUntil = vi.fn(() => {
         throw new Error('Not in request context')
       })
       const posthog = new PostHog('TEST_API_KEY', {
@@ -541,7 +614,7 @@ describe('waitUntil debounced flush', () => {
 
       posthog.capture({ distinctId: 'user-1', event: 'event_1' })
       posthog.capture({ distinctId: 'user-1', event: 'event_2' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       await posthog.shutdown()
 
@@ -555,10 +628,10 @@ describe('waitUntil debounced flush', () => {
 
   describe('custom debounce interval', () => {
     let posthog: PostHog
-    let mockWaitUntil: jest.Mock
+    let mockWaitUntil: vi.Mock
 
     beforeEach(() => {
-      mockWaitUntil = jest.fn()
+      mockWaitUntil = vi.fn()
       posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         flushAt: 100,
@@ -583,7 +656,7 @@ describe('waitUntil debounced flush', () => {
     it('does not flush before custom debounce interval elapses', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
 
-      await jest.advanceTimersByTimeAsync(50)
+      await vi.advanceTimersByTimeAsync(50)
 
       expect(mockedFetch).not.toHaveBeenCalled()
     })
@@ -591,7 +664,7 @@ describe('waitUntil debounced flush', () => {
     it('flushes at custom debounce interval', async () => {
       posthog.capture({ distinctId: 'user-1', event: 'test_event' })
 
-      await jest.advanceTimersByTimeAsync(200)
+      await vi.advanceTimersByTimeAsync(200)
 
       expect(getFlushedBatches().length).toBe(1)
     })
@@ -602,7 +675,7 @@ describe('waitUntil debounced flush', () => {
       const posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         waitUntilDebounceMs: -100,
-        waitUntil: jest.fn(),
+        waitUntil: vi.fn(),
       })
       expect(posthog.options.waitUntilDebounceMs).toBe(0)
       await posthog.shutdown()
@@ -612,7 +685,7 @@ describe('waitUntil debounced flush', () => {
       const posthog = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
         waitUntilMaxWaitMs: -200,
-        waitUntil: jest.fn(),
+        waitUntil: vi.fn(),
       })
       expect(posthog.options.waitUntilMaxWaitMs).toBe(0)
       await posthog.shutdown()

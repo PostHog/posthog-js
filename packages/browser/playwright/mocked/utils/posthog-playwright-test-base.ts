@@ -1,6 +1,6 @@
 import { test as base, Page, expect } from '@playwright/test'
-import { PostHog } from '@/posthog-core'
-import { CaptureResult } from '@/types'
+import { PostHog } from '../../../src/posthog-core'
+import { CaptureResult } from '../../../src/types'
 import { shouldSkipForVersion } from '../../compat-skips'
 
 export type StaticOverrides = Record<string, string>
@@ -12,6 +12,7 @@ const lazyLoadedJSFiles = [
     'posthog-recorder',
     'lazy-recorder',
     'conversations',
+    'logs',
     'surveys',
     'product-tours',
     'exception-autocapture',
@@ -87,10 +88,7 @@ export const test = base.extend<{
                 return this.waitForResponse(urlPattern)
             })
 
-            await options.action()
-
-            // eslint-disable-next-line compat/compat
-            await Promise.allSettled(responsePromises)
+            await Promise.all([...responsePromises, Promise.resolve().then(options.action)])
         }
         page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {
             const capturedEvents = await this.capturedEvents()

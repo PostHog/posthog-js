@@ -31,7 +31,7 @@ function createSuppressionRule(
 }
 
 describe('PostHogExceptions', () => {
-    const captureMock = jest.fn().mockReturnValue({ uuid: 'test-uuid', event: '$exception', properties: {} })
+    const captureMock = vi.fn().mockReturnValue({ uuid: 'test-uuid', event: '$exception', properties: {} })
     let posthog: PostHog
     let exceptions: PostHogExceptions
     let config: PostHogConfig
@@ -62,14 +62,17 @@ describe('PostHogExceptions', () => {
 
     afterEach(() => {
         captureMock.mockClear()
+        vi.useRealTimers()
     })
 
     describe('onRemoteConfig', () => {
         it('persists the suppression rules', () => {
             const suppressionRule = createSuppressionRule()
             const remoteResponse: Partial<RemoteConfig> = { errorTracking: { suppressionRules: [suppressionRule] } }
-            exceptions.onRemoteConfig(remoteResponse as RemoteConfig)
+            exceptions.onRemoteConfig({ ok: true, config: remoteResponse as RemoteConfig })
             expect(exceptions['_suppressionRules']).toEqual([suppressionRule])
+            expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([suppressionRule])
+            expect(new PostHogExceptions(posthog)['_suppressionRules']).toEqual([suppressionRule])
         })
 
         it('does not overwrite persistence when called with empty config', () => {
@@ -83,8 +86,8 @@ describe('PostHogExceptions', () => {
             // Create new instance to pick up persisted values
             const newExceptions = new PostHogExceptions(posthog)
 
-            // Call with empty config (simulating config fetch failure)
-            newExceptions.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            newExceptions.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values
             expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([suppressionRule])
@@ -100,8 +103,11 @@ describe('PostHogExceptions', () => {
 
             const newExceptions = new PostHogExceptions(posthog)
             newExceptions.onRemoteConfig({
-                errorTracking: { suppressionRules: [], captureExtensionExceptions: false },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    errorTracking: { suppressionRules: [], captureExtensionExceptions: false },
+                } as RemoteConfig,
+            })
 
             expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([])
             expect(posthog.persistence!.props[ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]).toBe(false)
@@ -112,6 +118,20 @@ describe('PostHogExceptions', () => {
         it('captures the event when no suppression rules are provided', () => {
             exceptions.sendExceptionEvent({ custom_property: true })
             expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
+        })
+
+        it('attaches the injected release id when present', () => {
+            ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+            try {
+                exceptions.sendExceptionEvent({ custom_property: true })
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'release-row-id' },
+                    expect.anything()
+                )
+            } finally {
+                delete (globalThis as any)._posthogReleaseId
+            }
         })
 
         it('fails gracefully with a warning when capture throws', () => {
@@ -127,21 +147,63 @@ describe('PostHogExceptions', () => {
             ['GenericError', 'This is a message that contains a ReactMinified error'],
         ])('drops the event if a suppression rule matches', (type, value) => {
             const suppressionRule = createSuppressionRule('OR')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type, value }] })
             expect(captureMock).not.toBeCalled()
         })
 
         it('captures an exception if no $exception_list property exists', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ custom_property: true })
             expect(captureMock).toBeCalled()
         })
 
         it('captures an exception if all rule conditions do not match', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
+            exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
+            expect(captureMock).toBeCalled()
+        })
+
+        test.each([
+            [
+                'an operator the SDK does not implement',
+                createSuppressionRule('AND', [
+                    {
+                        key: '$lib',
+                        value: 'is_not_set',
+                        operator: 'is_not_set',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            [
+                'a negative operator on a key the SDK cannot resolve',
+                createSuppressionRule('OR', [
+                    {
+                        key: '$host',
+                        value: '(\\.|^)posthog\\.com$',
+                        operator: 'not_regex',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            ['values that are not an array', { type: 'AND', values: null } as unknown as ErrorTrackingSuppressionRule],
+        ])('captures the exception when a rule uses %s', (_description, suppressionRule) => {
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
@@ -155,27 +217,236 @@ describe('PostHogExceptions', () => {
                     type: 'error_tracking_issue_property',
                 },
             ])
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
 
         describe('Extension exceptions', () => {
-            it('does not capture exceptions with frames from extensions by default', () => {
-                const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
+            it.each([
+                ['chrome', 'chrome-extension://abc/content.js'],
+                ['firefox', 'moz-extension://abc/content.js'],
+                ['safari', 'safari-extension:abc/content.js'],
+                ['safari web', 'safari-web-extension:abc/content.js'],
+            ])('does not capture exceptions with frames from %s extensions by default', (_browser, filename) => {
+                const frame = { filename, platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
+            })
+
+            it('captures exceptions from the page even when a filename merely mentions an extension', () => {
+                const frame = {
+                    filename: 'https://example.com/moz-extension://not-really.js',
+                    platform: 'javascript:web',
+                }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
 
             it('captures extension exceptions when enabled', () => {
-                exceptions.onRemoteConfig({ errorTracking: { captureExtensionExceptions: true } } as RemoteConfig)
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
                 const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('does not capture Safari extension exceptions with only masked frames', () => {
+                // uBlock Origin Lite content script: Safari masks every frame filename.
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'isolatedAPI.contexts.topHostname')",
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: false,
+                            },
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'uBOL_cssSpecific',
+                                platform: 'javascript:web',
+                                in_app: false,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['NoResponse', 'No response from target'],
+                ['NoResponse', ''],
+                ['Error', 'No response from target'],
+            ])('does not capture masked Safari extension messaging failures: %s / %s', (type, value) => {
+                const exception = {
+                    type,
+                    value,
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['ReferenceError', "Can't find variable: handleNoResponse"],
+                ['Error', 'No response from target server after 30 seconds'],
+            ])('captures masked application errors that only mention a messaging signature: %s / %s', (type, value) => {
+                const error = new Error(value)
+                error.name = type
+                error.stack = 'applicationEval@webkit-masked-url://hidden/:1:1'
+                const properties = exceptions.buildProperties(error)
+                expect(properties.$exception_list[0]).toMatchObject({
+                    type,
+                    value,
+                    stacktrace: { frames: [{ filename: 'webkit-masked-url://hidden/' }] },
+                })
+                exceptions.sendExceptionEvent(properties)
+                expect(captureMock).toBeCalledWith('$exception', properties, expect.anything())
+            })
+
+            it('captures ambiguous masked-only application exceptions', () => {
+                // Safari also masks blob, eval'd, and injected application code, so the masked URL
+                // is not sufficient evidence that the exception came from a browser extension.
+                const frame = {
+                    filename: 'webkit-masked-url://hidden/',
+                    function: 'applicationEval',
+                    platform: 'javascript:web',
+                    in_app: false,
+                }
+                const exception = {
+                    type: 'Error',
+                    value: 'application failure',
+                    stacktrace: { frames: [frame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('does not capture Safari extension exceptions with only masked frames marked in_app', () => {
+                // The Sentry integration forwards Sentry's `in_app: true` for every browser frame,
+                // and Sentry does not rewrite the masked scheme, so a masked-only stack arrives with
+                // in_app: true. The masked frame must not count as the page's own code.
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'isolatedAPI.contexts.topHostname')",
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'uBOL_cssSpecific',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['TypeError', 'first-party error'],
+                ['NoResponse', 'No response from target'],
+            ])('captures mixed masked and page frames: %s / %s', (type, value) => {
+                const exception = {
+                    type,
+                    value,
+                    stacktrace: {
+                        frames: [
+                            { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false },
+                            { filename: 'https://example.com/app.js', platform: 'javascript:web', in_app: true },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures Safari extension exceptions when enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const frame = { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false }
+                const exception = {
+                    type: 'NoResponse',
+                    value: 'No response from target',
+                    stacktrace: { frames: [frame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
+
+        describe('Injected browser script exceptions', () => {
+            const pageFrame = {
+                filename: 'https://example.com/project/566302/sessions/index.js',
+                platform: 'javascript:web',
+            }
+
+            it.each([
+                ['Firefox for iOS', { type: 'ReferenceError', value: "Can't find variable: __firefox__" }],
+                [
+                    'Chrome for iOS',
+                    { type: 'TypeError', value: "undefined is not an object (evaluating 'window.__gCrWeb.something')" },
+                ],
+            ])('does not capture exceptions thrown by %s injected scripts', (_browser, exceptionFields) => {
+                const exception = { ...exceptionFields, stacktrace: { frames: [pageFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toHaveBeenCalled()
+            })
+
+            it('captures the exception when the value does not reference an injected global', () => {
+                const exception = {
+                    type: 'ReferenceError',
+                    value: 'something is not defined',
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures injected browser script exceptions when extension capture is enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const exception = {
+                    type: 'ReferenceError',
+                    value: "Can't find variable: __firefox__",
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
@@ -194,11 +465,7 @@ describe('PostHogExceptions', () => {
             it('does not capture exceptions thrown by the PostHog SDK', () => {
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it('captures the exception if a frame from the PostHog SDK is not the kaboom frame', () => {
@@ -251,7 +518,7 @@ describe('PostHogExceptions', () => {
                 getAttachable: () => {
                     throw new Error('buffer read failed')
                 },
-                clear: jest.fn(),
+                clear: vi.fn(),
             } as any
 
             expect(() => exceptions.sendExceptionEvent({ custom_property: true })).not.toThrow()
@@ -275,14 +542,17 @@ describe('PostHogExceptions', () => {
             exceptions.addExceptionStep('kept step')
 
             const suppressionRule = createSuppressionRule('OR')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
 
             exceptions.sendExceptionEvent({
                 $exception_list: [{ type: 'TypeError', value: 'This is a type error' }],
             })
             expect(captureMock).not.toHaveBeenCalled()
 
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [] } } as RemoteConfig)
+            exceptions.onRemoteConfig({ ok: true, config: { errorTracking: { suppressionRules: [] } } as RemoteConfig })
             exceptions.sendExceptionEvent({ custom_property: true })
 
             expect(captureMock).toHaveBeenCalledWith(
@@ -338,6 +608,8 @@ describe('PostHogExceptions', () => {
         })
 
         it('drops reserved keys from addExceptionStep properties', () => {
+            vi.useFakeTimers()
+            vi.setSystemTime(new Date('2024-06-18T16:34:36.965Z'))
             exceptions.addExceptionStep('from-message-arg', {
                 $message: 'ignored',
                 $timestamp: 'ignored',
@@ -352,7 +624,7 @@ describe('PostHogExceptions', () => {
                     {
                         $message: 'from-message-arg',
                         custom_property: true,
-                        $timestamp: expect.any(String),
+                        $timestamp: '2024-06-18T16:34:36.965Z',
                     },
                 ],
             })

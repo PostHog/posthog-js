@@ -15,9 +15,10 @@ module.exports = {
       root: path.join(__dirname, '..', '..', 'packages', 'react-native-plugin'),
       platforms: {
         // Required so autolinking codegen detects the locally-linked
-        // dependency on iOS and Android.
+        // dependency on iOS, Android, and macOS.
         ios: {},
         android: {},
+        macos: {},
       },
     },
   },

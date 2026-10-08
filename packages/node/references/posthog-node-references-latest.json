@@ -49,9 +49,9 @@
               "code": "\n\n// Basic initialization\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  { host: 'https://app.posthog.com' }\n)\n\n\n"
             },
             {
-              "id": "with_personal_api_key",
-              "name": "With personal API key",
-              "code": "\n\n// With personal API key\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  {\n    host: 'https://app.posthog.com',\n    personalApiKey: 'your-personal-api-key'\n  }\n)\n\n\n\n"
+              "id": "with_a_secret_key_(personal_api_key_or_project_secret_api_key)_for_local_evaluation",
+              "name": "With a secret key (Personal API Key or Project Secret API Key) for local evaluation",
+              "code": "\n\n// With a secret key (Personal API Key or Project Secret API Key) for local evaluation\nconst client = new PostHogBackendClient(\n  'your-api-key',\n  {\n    host: 'https://app.posthog.com',\n    secretKey: 'your-secret-key'\n  }\n)\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -159,6 +159,64 @@
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint.\nBeta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.",
+          "details": null,
+          "id": "captureAi",
+          "showDocs": true,
+          "title": "captureAi",
+          "examples": [
+            {
+              "id": "captureai",
+              "name": "Generated example for captureAi",
+              "code": "// Generated example for captureAi\nposthog.captureAi();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "string | undefined",
+            "name": "string | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.",
+          "details": null,
+          "id": "captureAiImmediate",
+          "showDocs": true,
+          "title": "captureAiImmediate",
+          "examples": [
+            {
+              "id": "captureaiimmediate",
+              "name": "Generated example for captureAiImmediate",
+              "code": "// Generated example for captureAiImmediate\nposthog.captureAiImmediate();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<string | undefined>",
+            "name": "Promise<string | undefined>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -426,7 +484,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`.\n**Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags — useful when you only need a few flags and want to reduce the response payload.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -456,7 +514,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.",
+              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.",
               "isOptional": true,
               "type": "AllFlagsOptions",
               "name": "options"
@@ -486,6 +544,28 @@
           "returnType": {
             "id": "Promise<void>",
             "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Traces",
+          "description": "The span currently active on this async execution path, or `null` outside any `withSpan` callback.\nOn the edge build this returns `null` after an `await`, because the active span is tracked synchronously there.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "getActiveSpan",
+          "showDocs": true,
+          "title": "getActiveSpan",
+          "examples": [
+            {
+              "id": "propagate_the_trace_to_another_service",
+              "name": "Propagate the trace to another service",
+              "code": "\n\n// Propagate the trace to another service\nconst traceparent = posthog.getActiveSpan()?.traceparent()\nawait fetch(url, { headers: traceparent ? { traceparent } : {} })\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Span | null",
+            "name": "Span | null"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -613,7 +693,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Get the value of a feature flag for a specific user.",
+          "description": "Get the value of a feature flag for a specific user.\nA boolean `false` is a conclusive off evaluation. `undefined` means no result is available, for example because the key was not returned or local-only evaluation was inconclusive. Local evaluation resolves cached inactive definitions to `false`; remote evaluation omits globally inactive flags, so the result depends on which evaluation path is available.",
           "details": null,
           "id": "getFeatureFlag",
           "showDocs": true,
@@ -622,7 +702,7 @@
             {
               "id": "basic_feature_flag_check",
               "name": "Basic feature flag check",
-              "code": "\n\n// Basic feature flag check\nconst flagValue = await client.getFeatureFlag('new-feature', 'user_123')\nif (flagValue === 'variant-a') {\n  // Show variant A\n} else if (flagValue === 'variant-b') {\n  // Show variant B\n} else {\n  // Flag is disabled or not found\n}\n\n\n"
+              "code": "\n\n// Basic feature flag check\nconst flagValue = await client.getFeatureFlag('new-feature', 'user_123')\nif (flagValue === 'variant-a') {\n  // Show variant A\n} else if (flagValue === 'variant-b') {\n  // Show variant B\n} else {\n  // Flag evaluated off, or no value was returned\n}\n\n\n"
             },
             {
               "id": "with_groups_and_properties",
@@ -652,13 +732,71 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
           "returnType": {
             "id": "Promise<FeatureFlagValue | undefined>",
             "name": "Promise<FeatureFlagValue | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get where a locally loaded feature flag is meant to be evaluated.",
+          "details": "Read from the definitions local evaluation already holds, so no request is made. A definition that carries no runtime reports `all`, the default PostHog applies.",
+          "id": "getFeatureFlagEvaluationRuntime",
+          "showDocs": true,
+          "title": "getFeatureFlagEvaluationRuntime",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst runtime = client.getFeatureFlagEvaluationRuntime('my-flag')\n// Returns: 'client'\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The feature flag key",
+              "isOptional": false,
+              "type": "string",
+              "name": "key"
+            }
+          ],
+          "returnType": {
+            "id": "FeatureFlagEvaluationRuntime | undefined",
+            "name": "FeatureFlagEvaluationRuntime | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Feature flags",
+          "description": "Get the keys of locally loaded flags that a runtime can evaluate.",
+          "details": "A flag set to `all` suits either runtime, so it is returned for `client` and for `server`, and asking for `all` returns every loaded flag. Use this to decide which flags to hand to a browser when a backend serves flags to its own frontend.",
+          "id": "getFeatureFlagKeysByEvaluationRuntime",
+          "showDocs": true,
+          "title": "getFeatureFlagKeysByEvaluationRuntime",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')\n// Returns: ['web-banner', 'shared-copy']\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The runtime to match",
+              "isOptional": false,
+              "type": "FeatureFlagEvaluationRuntime",
+              "name": "evaluationRuntime"
+            }
+          ],
+          "returnType": {
+            "id": "string[]",
+            "name": "string[]"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -709,7 +847,7 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
@@ -721,7 +859,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Get the result of evaluating a feature flag, including its value and payload. This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.",
+          "description": "Get the result of evaluating a feature flag, including its value and payload. This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both. A result with `enabled: false` is a conclusive off evaluation; `undefined` means no evaluation is available. Local evaluation resolves cached inactive definitions to `enabled: false`, while remote evaluation omits globally inactive flags.",
           "details": null,
           "id": "getFeatureFlagResult",
           "showDocs": true,
@@ -868,13 +1006,54 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "GroupIdentifyMessage",
+              "type": "any",
               "name": "{ groupType, groupKey, properties, distinctId, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Identification",
+          "description": "Create or update a group and its properties immediately (synchronously).",
+          "details": null,
+          "id": "groupIdentifyImmediate",
+          "showDocs": true,
+          "title": "groupIdentifyImmediate",
+          "examples": [
+            {
+              "id": "immediately_create_or_update_a_company_group",
+              "name": "Immediately create or update a company group",
+              "code": "\n\n// Immediately create or update a company group\nawait client.groupIdentifyImmediate({\n  groupType: 'company',\n  groupKey: 'acme-corp',\n  properties: {\n    name: 'Acme Corporation',\n    industry: 'Technology',\n    employee_count: 500\n  }\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "any",
+              "name": "{ groupType, groupKey, properties, distinctId, disableGeoip, }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "GroupIdentifyMessage",
+              "name": "input"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -902,8 +1081,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -931,8 +1116,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "IdentifyMessage",
+              "type": "any",
               "name": "{ distinctId, properties, disableGeoip }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "IdentifyMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -952,7 +1143,7 @@
             {
               "id": "basic_feature_flag_check",
               "name": "Basic feature flag check",
-              "code": "\n\n// Basic feature flag check\nconst isEnabled = await client.isFeatureEnabled('new-feature', 'user_123')\nif (isEnabled) {\n  // Feature is enabled\n  console.log('New feature is active')\n} else {\n  // Feature is disabled\n  console.log('New feature is not active')\n}\n\n\n"
+              "code": "\n\n// Basic feature flag check\nconst isEnabled = await client.isFeatureEnabled('new-feature', 'user_123')\nif (isEnabled) {\n  // Feature is enabled\n  console.log('New feature is active')\n} else {\n  // Flag evaluated off, or no value was returned\n  console.log('New feature is not active')\n}\n\n\n"
             },
             {
               "id": "with_groups_and_properties",
@@ -977,7 +1168,7 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
@@ -1152,13 +1343,54 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "SetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties, propertiesOnce }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "SetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Traces",
+          "description": "Starts a span without making it active — for work that can't wrap a callback. Prefer `withSpan`, which ends the span for you.\nAlways returns a handle, so calling code never has to branch: when the `traces` option is absent, the SDK is disabled, or the user has opted out, the handle is inert and nothing is exported. An inert handle given a `parent` header still returns it from `traceparent()`, so a service with tracing off passes a distributed trace through instead of severing it.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "startSpan",
+          "showDocs": true,
+          "title": "startSpan",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst span = posthog.startSpan('checkout', { attributes: { plan: 'pro' } })\nspan.setAttribute('cart.items', 3)\nspan.end()\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "name"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "StartSpanOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Span",
+            "name": "Span"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -1181,8 +1413,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "UnsetPersonPropertiesMessage",
+              "type": "any",
               "name": "{ distinctId, properties }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "UnsetPersonPropertiesMessage",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -1258,6 +1496,41 @@
               "isOptional": true,
               "type": "ContextOptions",
               "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "T",
+            "name": "T"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Traces",
+          "description": "Runs a callback with a span active for its duration and ends the span for you — at return for a sync callback, at settle for an async one. Takes an optional `StartSpanOptions` between the name and the callback: `withSpan(name, fn)` or `withSpan(name, options, fn)`.\nSpans started inside the callback nest under it automatically. If the callback throws or rejects, the span records the exception and the original error is rethrown unchanged. A callback that ends the span itself gets the rethrow but not the recording, since the span is already exported by then.\nSpans nest across `await` only on the Node runtime, which tracks the active span with `AsyncLocalStorage`. The edge build restores the active span when the callback returns its promise, so spans started after an `await` there begin a new trace.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "withSpan",
+          "showDocs": true,
+          "title": "withSpan",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nawait posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, async (span) => {\n  span.setAttribute('plan', user.plan)\n  return processOrder()\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "name"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "(span: Span) => T",
+              "name": "fn"
             }
           ],
           "returnType": {
@@ -1530,35 +1803,81 @@
     {
       "id": "ActionStepStringMatching",
       "name": "ActionStepStringMatching",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof ActionStepStringMatching)[keyof typeof ActionStepStringMatching]"
+    },
+    {
+      "id": "ActionStepType",
+      "name": "ActionStepType",
       "properties": [
         {
-          "type": "\"contains\"",
-          "name": "Contains"
+          "type": "string",
+          "name": "event"
         },
         {
-          "type": "\"exact\"",
-          "name": "Exact"
+          "type": "string",
+          "name": "selector"
         },
         {
-          "type": "\"regex\"",
-          "name": "Regex"
+          "type": "string",
+          "name": "text"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "text_matching"
+        },
+        {
+          "type": "string",
+          "name": "href"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "href_matching"
+        },
+        {
+          "type": "string",
+          "name": "url"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "url_matching"
         }
       ],
       "path": "../core/src/types.ts"
     },
     {
-      "id": "ActionStepType",
-      "name": "ActionStepType",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    event?: string;\n    selector?: string;\n    text?: string;\n    text_matching?: ActionStepStringMatching;\n    href?: string;\n    href_matching?: ActionStepStringMatching;\n    url?: string;\n    url_matching?: ActionStepStringMatching;\n}"
-    },
-    {
       "id": "AllFlagsOptions",
       "name": "AllFlagsOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "BaseFlagEvaluationOptions & {\n    flagKeys?: string[];\n}"
+      "properties": [
+        {
+          "type": "Record<string, string>",
+          "name": "groups"
+        },
+        {
+          "type": "Properties",
+          "name": "personProperties"
+        },
+        {
+          "type": "Record<string, Properties>",
+          "name": "groupProperties"
+        },
+        {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
+          "type": "boolean",
+          "name": "onlyEvaluateLocally"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "description": "Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.\nAn empty array returns an empty snapshot without evaluating flags; omitting this option\nevaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing\nfrom local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are\nnot cached, so a key missing both locally and remotely costs one `/flags` request per call.",
+          "type": "string[]",
+          "name": "flagKeys"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "BaseException",
@@ -1582,16 +1901,81 @@
     {
       "id": "BaseFlagEvaluationOptions",
       "name": "BaseFlagEvaluationOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    groups?: Record<string, string>;\n    personProperties?: Record<string, string>;\n    groupProperties?: Record<string, Record<string, string>>;\n    onlyEvaluateLocally?: boolean;\n    disableGeoip?: boolean;\n}"
+      "properties": [
+        {
+          "type": "Record<string, string>",
+          "name": "groups"
+        },
+        {
+          "type": "Properties",
+          "name": "personProperties"
+        },
+        {
+          "type": "Record<string, Properties>",
+          "name": "groupProperties"
+        },
+        {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
+          "type": "boolean",
+          "name": "onlyEvaluateLocally"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "BasicSurveyQuestion",
       "name": "BasicSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Open;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"open\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "BeforeSendFn_2",
@@ -1610,9 +1994,39 @@
     {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    uuid?: string;\n    event: string;\n    properties?: PostHogEventProperties;\n    $set?: PostHogEventProperties;\n    $set_once?: PostHogEventProperties;\n    timestamp?: Date;\n}"
+      "properties": [
+        {
+          "description": "UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "description": "The name of the event",
+          "type": "string",
+          "name": "event"
+        },
+        {
+          "description": "Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage)",
+          "type": "PostHogEventProperties",
+          "name": "properties"
+        },
+        {
+          "description": "Properties to set on the person (overrides existing values)",
+          "type": "PostHogEventProperties",
+          "name": "$set"
+        },
+        {
+          "description": "Properties to set on the person only once (does not override existing values)",
+          "type": "PostHogEventProperties",
+          "name": "$set_once"
+        },
+        {
+          "description": "Timestamp for the event",
+          "type": "Date",
+          "name": "timestamp"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "ChunkIdMapType",
@@ -1689,17 +2103,21 @@
       "path": "src/extensions/context/types.ts"
     },
     {
-      "id": "CookieStore",
-      "name": "CookieStore",
+      "id": "CookieStore_2",
+      "name": "CookieStore_2",
       "properties": [],
       "path": "../core/src/cookie.ts"
     },
     {
       "id": "EndBranching",
       "name": "EndBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.End;\n}"
+      "properties": [
+        {
+          "type": "\"end\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "ErrorEventLike",
@@ -1767,9 +2185,50 @@
     {
       "id": "EventMessage",
       "name": "EventMessage",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "Omit<IdentifyMessage, 'distinctId'> & {\n    distinctId?: string;\n    event: string;\n    groups?: Record<string, string | number>;\n    flags?: FeatureFlagEvaluations;\n    sendFeatureFlags?: boolean | SendFeatureFlagsOptions;\n    timestamp?: Date;\n    uuid?: string;\n    _originatedFromCaptureException?: boolean;\n}"
+      "properties": [
+        {
+          "type": "Record<string | number, any>",
+          "name": "properties"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "string",
+          "name": "event"
+        },
+        {
+          "type": "Record<string, string | number>",
+          "name": "groups"
+        },
+        {
+          "description": "Attach feature flag values evaluated via `posthog.evaluateFlags()` to this event.\nPrefer this over `sendFeatureFlags` — it guarantees the event carries the exact\nvalues the code branched on and avoids a hidden `/flags` request on every capture.",
+          "type": "FeatureFlagEvaluations",
+          "name": "flags"
+        },
+        {
+          "description": "Deprecated: Use the `flags` option with a `FeatureFlagEvaluations` object obtained\nfrom `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags`\nrequest on capture and may return different values than the ones the code branched on.",
+          "type": "boolean | SendFeatureFlagsOptions",
+          "name": "sendFeatureFlags",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
+          "type": "Date",
+          "name": "timestamp"
+        },
+        {
+          "description": "If provided overrides the auto-generated event UUID. Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "EventWithDetailReason",
@@ -1836,21 +2295,38 @@
       "id": "ExceptionList",
       "name": "ExceptionList",
       "properties": [],
-      "path": "../core/src/error-tracking/types.ts"
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "Exception[]"
     },
     {
       "id": "ExceptionStep",
       "name": "ExceptionStep",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    [EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: string;\n    [EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: string | number;\n    [key: string]: unknown;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "$message"
+        },
+        {
+          "type": "string | number",
+          "name": "$timestamp"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ExceptionStepsConfig",
       "name": "ExceptionStepsConfig",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    enabled?: boolean;\n    max_bytes?: number;\n}"
+      "properties": [
+        {
+          "type": "boolean | undefined",
+          "name": "enabled"
+        },
+        {
+          "type": "number | undefined",
+          "name": "max_bytes"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ExpressErrorMiddleware",
@@ -1876,9 +2352,25 @@
     {
       "id": "FeatureFlagCondition",
       "name": "FeatureFlagCondition",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    properties: FlagProperty[];\n    rollout_percentage?: number;\n    variant?: string;\n    aggregation_group_type_index?: number | null;\n}"
+      "properties": [
+        {
+          "type": "FlagProperty[]",
+          "name": "properties"
+        },
+        {
+          "type": "number",
+          "name": "rollout_percentage"
+        },
+        {
+          "type": "string",
+          "name": "variant"
+        },
+        {
+          "type": "number",
+          "name": "aggregation_group_type_index"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "FeatureFlagDetail",
@@ -1892,35 +2384,87 @@
       "name": "FeatureFlagErrorType",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "\"apiError\""
+      "example": "(typeof FeatureFlagError)[Exclude<keyof typeof FeatureFlagError, 'apiError'>] | ReturnType<typeof FeatureFlagError.apiError> | string"
+    },
+    {
+      "id": "FeatureFlagEvaluationRuntime",
+      "name": "FeatureFlagEvaluationRuntime",
+      "properties": [],
+      "path": "src/types.ts",
+      "example": "\"all\" | \"client\" | \"server\""
     },
     {
       "id": "FeatureFlagMetadata",
       "name": "FeatureFlagMetadata",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n}"
+      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n    has_experiment?: boolean;\n}"
     },
     {
       "id": "FeatureFlagOverrideOptions",
       "name": "FeatureFlagOverrideOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    flags?: false | string[] | Record<string, FeatureFlagValue>;\n    payloads?: false | Record<string, JsonType>;\n}"
+      "properties": [
+        {
+          "description": "Flag overrides. Can be:\n- `false` to clear flag overrides\n- `string[]` to enable a list of flags\n- `Record<string, FeatureFlagValue>` to set specific values/variants",
+          "type": "false | string[] | Record<string, FeatureFlagValue>",
+          "name": "flags"
+        },
+        {
+          "description": "Payload overrides for flags.\n- `false` to clear payload overrides\n- `Record<string, JsonType>` to set specific payloads",
+          "type": "false | Record<string, JsonType>",
+          "name": "payloads"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "FeatureFlagRequestError",
       "name": "FeatureFlagRequestError",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error';\n    statusCode?: number;\n}"
+      "properties": [
+        {
+          "type": "\"timeout\" | \"connection_error\" | \"unknown_error\" | \"api_error\"",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "statusCode"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "FeatureFlagResult",
       "name": "FeatureFlagResult",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    key: string;\n    enabled: boolean;\n    variant: string | undefined;\n    payload: JsonType | undefined;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "description": "Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result.",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "type": "string",
+          "name": "variant"
+        },
+        {
+          "type": "JsonType",
+          "name": "payload"
+        },
+        {
+          "description": "PostHog's evaluation explanation, when available.",
+          "type": "string",
+          "name": "reason"
+        },
+        {
+          "description": "Stable evaluation reason code, when available (for example, `flag_disabled`).",
+          "type": "string",
+          "name": "reasonCode"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "FeatureFlagValue",
@@ -1944,12 +2488,44 @@
           "name": "flags"
         },
         {
-          "description": "Mapping of group type index to group name",
+          "description": "Mapping of group type index to group name, using the flag-definitions endpoint's field name.",
+          "type": "Record<string, string>",
+          "name": "group_type_mapping"
+        },
+        {
+          "description": "Legacy alias for group_type_mapping, retained for existing providers and cache readers.",
           "type": "Record<string, string>",
           "name": "groupTypeMapping"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events, from the top-level `minimal_flag_called_events` field of the flag-definitions payload. If neither this field nor its legacy alias is present, full events are sent.",
+          "type": "boolean",
+          "name": "minimal_flag_called_events"
+        },
+        {
+          "description": "Legacy alias for minimal_flag_called_events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
+          "description": "Top-level definitions matching version; absent in older caches means legacy matching.",
+          "type": "number",
+          "name": "property_matching_version"
+        },
+        {
+          "description": "Legacy alias for property_matching_version.",
+          "type": "number",
+          "name": "propertyMatchingVersion"
         }
       ],
       "path": "src/extensions/feature-flags/cache.ts"
+    },
+    {
+      "id": "FlagDefinitionCacheInput",
+      "name": "FlagDefinitionCacheInput",
+      "properties": [],
+      "path": "src/extensions/feature-flags/cache.ts",
+      "example": "FlagDefinitionCacheData | (Omit<FlagDefinitionCacheData, 'groupTypeMapping'> & {\n    group_type_mapping: Record<string, string>;\n    groupTypeMapping?: Record<string, string>;\n})"
     },
     {
       "id": "FlagDefinitionCacheProvider",
@@ -1960,16 +2536,65 @@
     {
       "id": "FlagEvaluationOptions",
       "name": "FlagEvaluationOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "BaseFlagEvaluationOptions & {\n    sendFeatureFlagEvents?: boolean;\n}"
+      "properties": [
+        {
+          "type": "Record<string, string>",
+          "name": "groups"
+        },
+        {
+          "type": "Properties",
+          "name": "personProperties"
+        },
+        {
+          "type": "Record<string, Properties>",
+          "name": "groupProperties"
+        },
+        {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
+          "type": "boolean",
+          "name": "onlyEvaluateLocally"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "type": "boolean",
+          "name": "sendFeatureFlagEvents"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "FlagProperty",
       "name": "FlagProperty",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    key: string;\n    type?: string;\n    value: FlagPropertyValue;\n    operator?: string;\n    negation?: boolean;\n    dependency_chain?: string[];\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": "FlagPropertyValue",
+          "name": "value"
+        },
+        {
+          "type": "string",
+          "name": "operator"
+        },
+        {
+          "type": "boolean",
+          "name": "negation"
+        },
+        {
+          "type": "string[]",
+          "name": "dependency_chain"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "FlagPropertyValue",
@@ -1995,21 +2620,59 @@
     {
       "id": "GroupIdentifyMessage",
       "name": "GroupIdentifyMessage",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    groupType: string;\n    groupKey: string;\n    properties?: Record<string | number, any>;\n    distinctId?: string;\n    disableGeoip?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "groupType"
+        },
+        {
+          "type": "string",
+          "name": "groupKey"
+        },
+        {
+          "type": "Record<string | number, any>",
+          "name": "properties"
+        },
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "IdentifyMessage",
       "name": "IdentifyMessage",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    distinctId: string;\n    properties?: Record<string | number, any>;\n    disableGeoip?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "Record<string | number, any>",
+          "name": "properties"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "IPostHog",
       "name": "IPostHog",
-      "properties": [],
+      "properties": [
+        {
+          "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
+          "type": "Metrics",
+          "name": "metrics"
+        }
+      ],
       "path": "src/types.ts"
     },
     {
@@ -2028,24 +2691,104 @@
     {
       "id": "LinkSurveyQuestion",
       "name": "LinkSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Link;\n    link?: string | null;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"link\"",
+          "name": "type"
+        },
+        {
+          "type": "string",
+          "name": "link"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "Logger",
       "name": "Logger",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    debug: (...args: any[]) => void;\n    info: (...args: any[]) => void;\n    warn: (...args: any[]) => void;\n    error: (...args: any[]) => void;\n    critical: (...args: any[]) => void;\n    createLogger: (prefix: string) => Logger;\n}"
+      "properties": [
+        {
+          "type": "(...args: any[]) => void",
+          "name": "debug"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "info"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "warn"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "error"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "critical"
+        },
+        {
+          "type": "(prefix: string) => Logger",
+          "name": "createLogger"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "Mechanism",
       "name": "Mechanism",
       "properties": [
         {
+          "type": "number",
+          "name": "exception_id"
+        },
+        {
           "type": "boolean",
           "name": "handled"
+        },
+        {
+          "type": "number",
+          "name": "parent_id"
         },
         {
           "type": "string",
@@ -2056,7 +2799,7 @@
           "name": "synthetic"
         },
         {
-          "type": "'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'",
+          "type": "string",
           "name": "type"
         }
       ],
@@ -2088,16 +2831,80 @@
     {
       "id": "MultipleSurveyQuestion",
       "name": "MultipleSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"single_choice\" | \"multiple_choice\"",
+          "name": "type"
+        },
+        {
+          "type": "string[]",
+          "name": "choices"
+        },
+        {
+          "type": "boolean",
+          "name": "hasOpenChoice"
+        },
+        {
+          "type": "boolean",
+          "name": "shuffleOptions"
+        },
+        {
+          "type": "boolean",
+          "name": "skipSubmitButton"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "NextQuestionBranching",
       "name": "NextQuestionBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.NextQuestion;\n}"
+      "properties": [
+        {
+          "type": "\"next_question\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "ObjectLike",
@@ -2179,9 +2986,23 @@
     {
       "id": "PostHogCaptureOptions",
       "name": "PostHogCaptureOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n    _originatedFromCaptureException?: boolean;\n}"
+      "properties": [
+        {
+          "description": "If provided overrides the auto-generated event UUID. Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
+          "type": "Date",
+          "name": "timestamp"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCookieState",
@@ -2209,9 +3030,156 @@
     {
       "id": "PostHogCoreOptions",
       "name": "PostHogCoreOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    disable_capture_url_hashes?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
+      "properties": [
+        {
+          "description": "PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'",
+          "type": "string",
+          "name": "host"
+        },
+        {
+          "description": "The number of events to queue before sending to PostHog (flushing)",
+          "type": "number",
+          "name": "flushAt"
+        },
+        {
+          "description": "The interval in milliseconds between periodic flushes",
+          "type": "number",
+          "name": "flushInterval"
+        },
+        {
+          "description": "The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxBatchSize"
+        },
+        {
+          "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxQueueSize"
+        },
+        {
+          "description": "If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything)",
+          "type": "boolean",
+          "name": "disabled"
+        },
+        {
+          "description": "If set to false the SDK will not track until the `optIn` function is called.",
+          "type": "boolean",
+          "name": "defaultOptIn"
+        },
+        {
+          "description": "Whether to strip URL fragments (`#...`) from automatically captured URL fields.\nDisabled by default for backwards compatibility. Set to `true` to strip hashes from:\n\n- `$current_url` on automatically captured browser events, including `$pageview`\n- `$initial_current_url`\n- `$session_entry_url`\n- `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture\n- Next.js Pages Router `$pageview` `$current_url`\n- web vitals `$current_url`\n- logs `url.full`\n- conversations `current_url` and `request_url`\n- session replay rrweb meta/custom-event `href` URLs\n- heatmap data URLs\n\nIf your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.\nIf you want to capture hashes selectively, leave this as `false` and use `before_send` to remove\nsensitive hash values before events are sent.",
+          "type": "boolean",
+          "name": "disable_capture_url_hashes"
+        },
+        {
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "type": "boolean",
+          "name": "sendFeatureFlagEvent"
+        },
+        {
+          "description": "Whether to load feature flags when initialized or not",
+          "type": "boolean",
+          "name": "preloadFeatureFlags"
+        },
+        {
+          "description": "Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.\n\nWhen set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,\n`group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request\nto the flags endpoint that still goes out (e.g. to fetch remote config or surveys)\ncarries `disable_flags: true` so the server skips flag evaluation. Flag values must be\nsupplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and\nrelated methods keep working against those values. Until `updateFlags()` runs, reads\nreturn their not-loaded defaults, so use `bootstrap` for any flags needed at startup.\nEquivalent to the web SDK's `advanced_disable_feature_flags`.\n\nNote: surveys gated on feature flags will not evaluate unless the survey targeting\nflags are also provided via `updateFlags()`. This option cannot be toggled at runtime.\n`posthog-node` inherits this option but does not implement it (no-op).",
+          "type": "boolean",
+          "name": "disableRemoteFeatureFlags"
+        },
+        {
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
+          "type": "boolean",
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
+          "type": "boolean",
+          "name": "disableSurveys"
+        },
+        {
+          "description": "Option to bootstrap the library with given distinctId and feature flags",
+          "type": "{ distinctId?: string; isIdentifiedId?: boolean; featureFlags?: Record<string, FeatureFlagValue>; featureFlagPayloads?: Record<string, JsonType>; }",
+          "name": "bootstrap"
+        },
+        {
+          "description": "How many times we will retry HTTP requests",
+          "type": "number",
+          "name": "fetchRetryCount"
+        },
+        {
+          "description": "The delay between HTTP request retries in milliseconds",
+          "type": "number",
+          "name": "fetchRetryDelay"
+        },
+        {
+          "description": "Timeout in milliseconds for any calls",
+          "type": "number",
+          "name": "requestTimeout"
+        },
+        {
+          "description": "Timeout in milliseconds for feature flag calls",
+          "type": "number",
+          "name": "featureFlagsRequestTimeoutMs"
+        },
+        {
+          "description": "How many times feature flag requests retry after a transient network error.\nSet to 0 to disable feature flag request retries.",
+          "type": "number",
+          "name": "featureFlagsRequestMaxRetries"
+        },
+        {
+          "description": "Timeout in milliseconds for remote config calls",
+          "type": "number",
+          "name": "remoteConfigRequestTimeoutMs"
+        },
+        {
+          "description": "For Session Analysis how long before we expire a session in seconds",
+          "type": "number",
+          "name": "sessionExpirationTimeSeconds"
+        },
+        {
+          "description": "Whether to disable GZIP compression",
+          "type": "boolean",
+          "name": "disableCompression"
+        },
+        {
+          "description": "Whether to disable GeoIP lookups",
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "description": "Special flag to indicate ingested data is for a historical migration",
+          "type": "boolean",
+          "name": "historicalMigration"
+        },
+        {
+          "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'mobile']",
+          "type": "readonly string[]",
+          "name": "evaluationContexts"
+        },
+        {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
+          "type": "\"always\" | \"identified_only\" | \"never\"",
+          "name": "personProfiles"
+        },
+        {
+          "description": "Allows modification or dropping of events before they're sent to PostHog.\nIf an array is provided, the functions are run in order.\nIf a function returns null, the event will be dropped.",
+          "type": "BeforeSendFn | BeforeSendFn[]",
+          "name": "before_send"
+        },
+        {
+          "description": "A list of hostnames for which to inject PostHog tracing headers\n(X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.\n\nUse this to link requests made from your app to session replays and LLM traces\nin PostHog. When set, the global `fetch` is patched on initialization and the\nheaders are added to requests whose hostname matches one of the entries.\n\nRequires the SDK to wire up `patchFetchForTracingHeaders` against this option\n(currently supported in posthog-react-native).",
+          "type": "string[]",
+          "name": "addTracingHeaders"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogEventProperties",
@@ -2223,63 +3191,641 @@
     {
       "id": "PostHogFeatureFlag",
       "name": "PostHogFeatureFlag",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    id: number;\n    name: string;\n    key: string;\n    bucketing_identifier?: FeatureFlagBucketingIdentifier;\n    filters?: {\n        aggregation_group_type_index?: number;\n        groups?: FeatureFlagCondition[];\n        multivariate?: {\n            variants: {\n                key: string;\n                rollout_percentage: number;\n            }[];\n        };\n        payloads?: Record<string, string>;\n        early_exit?: boolean;\n    };\n    deleted: boolean;\n    active: boolean;\n    rollout_percentage: null | number;\n    ensure_experience_continuity: boolean;\n    experiment_set: number[];\n}"
+      "properties": [
+        {
+          "type": "number",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "key"
+        },
+        {
+          "type": "FeatureFlagBucketingIdentifier",
+          "name": "bucketing_identifier"
+        },
+        {
+          "type": "{ aggregation_group_type_index?: number; groups?: FeatureFlagCondition[]; multivariate?: { variants: { key: string; rollout_percentage: number; }[]; }; payloads?: Record<string, string>; holdout?: { id: number; exclusion_percentage: number; } | null; early_exit?: boolean; }",
+          "name": "filters"
+        },
+        {
+          "type": "boolean",
+          "name": "deleted"
+        },
+        {
+          "type": "boolean",
+          "name": "active"
+        },
+        {
+          "type": "number",
+          "name": "rollout_percentage"
+        },
+        {
+          "type": "boolean",
+          "name": "ensure_experience_continuity"
+        },
+        {
+          "type": "number[]",
+          "name": "experiment_set"
+        },
+        {
+          "description": "Whether the flag is linked to an experiment. Absent when the server does not report it.",
+          "type": "boolean",
+          "name": "has_experiment"
+        },
+        {
+          "description": "Evaluation context tags set on the flag. The local evaluation poller keeps a flag only\nwhen this list is empty or shares at least one entry with the SDK's `evaluationContexts`.\nAbsent when the server does not report it.",
+          "type": "string[]",
+          "name": "evaluation_contexts"
+        },
+        {
+          "description": "Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,\n2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a\nfallback so local-evaluation context filtering still works against those servers.",
+          "type": "string[]",
+          "name": "evaluation_tags"
+        },
+        {
+          "description": "Where the flag is meant to be evaluated. Absent or null on a flag that does not set a\nruntime, and on servers older than the field; both mean `all`, the default PostHog applies.",
+          "type": "FeatureFlagEvaluationRuntime",
+          "name": "evaluation_runtime"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "PostHogFeatureFlagDetails",
       "name": "PostHogFeatureFlagDetails",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+      "properties": [
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFeatureFlagsResponse",
       "name": "PostHogFeatureFlagsResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+      "properties": [
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PostHogFetchBodyBytes",
+      "name": "PostHogFetchBodyBytes",
+      "properties": [
+        {
+          "description": "The size in bytes of each element in the array.",
+          "type": "number",
+          "name": "BYTES_PER_ELEMENT"
+        },
+        {
+          "description": "The ArrayBuffer instance referenced by the array.",
+          "type": "ArrayBufferLike & ArrayBuffer",
+          "name": "buffer"
+        },
+        {
+          "description": "The length in bytes of the array.",
+          "type": "number",
+          "name": "byteLength"
+        },
+        {
+          "description": "The offset in bytes of the array.",
+          "type": "number",
+          "name": "byteOffset"
+        },
+        {
+          "description": "The length of the array.",
+          "type": "number",
+          "name": "length"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFetchOptions",
       "name": "PostHogFetchOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    method: 'GET' | 'POST' | 'PUT' | 'PATCH';\n    mode?: 'no-cors';\n    credentials?: 'omit';\n    headers: {\n        [key: string]: string;\n    };\n    body?: string | Blob;\n    signal?: AbortSignal;\n}"
+      "properties": [
+        {
+          "type": "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\"",
+          "name": "method"
+        },
+        {
+          "type": "\"no-cors\"",
+          "name": "mode"
+        },
+        {
+          "type": "\"omit\"",
+          "name": "credentials"
+        },
+        {
+          "type": "{ [key: string]: string; }",
+          "name": "headers"
+        },
+        {
+          "type": "string | PostHogFetchBodyBytes | Blob",
+          "name": "body"
+        },
+        {
+          "type": "AbortSignal",
+          "name": "signal"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFetchResponse",
       "name": "PostHogFetchResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n    body?: ReadableStream<Uint8Array> | null;\n}"
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "() => Promise<string>",
+          "name": "text"
+        },
+        {
+          "type": "() => Promise<any>",
+          "name": "json"
+        },
+        {
+          "type": "{ get(name: string): string | null; }",
+          "name": "headers"
+        },
+        {
+          "type": "ReadableStream<Uint8Array<ArrayBufferLike>>",
+          "name": "body"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFlagsAndPayloadsResponse",
       "name": "PostHogFlagsAndPayloadsResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "\"featureFlags\" | \"featureFlagPayloads\""
+      "properties": [
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFlagsResponse",
       "name": "PostHogFlagsResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {\n    featureFlags: {\n        [key: string]: FeatureFlagValue;\n    };\n    featureFlagPayloads: {\n        [key: string]: JsonType;\n    };\n    flags: {\n        [key: string]: FeatureFlagDetail;\n    };\n    errorsWhileComputingFlags: boolean;\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    quotaLimited?: string[];\n    requestId?: string;\n    evaluatedAt?: number;\n}"
+      "properties": [
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "description": "Supported compression algorithms",
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "description": "Whether surveys are enabled",
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "description": "Error tracking remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "description": "Capture performance remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "description": "Logs feature remote config. When a map, `captureConsoleLogs` (boolean)\nis the local opt-in flag for `console.*` autocapture (read by the JS\nSDK's `PostHogLogs` extension to decide whether to load the autocapture\nbundle).",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the\nproject opted in; omitted otherwise. Absence always means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogOptions",
       "name": "PostHogOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n    featureFlagsLogWarnings?: boolean;\n    waitUntil?: (promise: Promise<unknown>) => void;\n    waitUntilDebounceMs?: number;\n    waitUntilMaxWaitMs?: number;\n    isServer?: boolean;\n}"
+      "properties": [
+        {
+          "description": "Whether to disable GeoIP lookups",
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "description": "PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'",
+          "type": "string",
+          "name": "host"
+        },
+        {
+          "description": "The number of events to queue before sending to PostHog (flushing)",
+          "type": "number",
+          "name": "flushAt"
+        },
+        {
+          "description": "The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxBatchSize"
+        },
+        {
+          "description": "If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything)",
+          "type": "boolean",
+          "name": "disabled"
+        },
+        {
+          "description": "If set to false the SDK will not track until the `optIn` function is called.",
+          "type": "boolean",
+          "name": "defaultOptIn"
+        },
+        {
+          "description": "Whether to strip URL fragments (`#...`) from automatically captured URL fields.\nDisabled by default for backwards compatibility. Set to `true` to strip hashes from:\n\n- `$current_url` on automatically captured browser events, including `$pageview`\n- `$initial_current_url`\n- `$session_entry_url`\n- `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture\n- Next.js Pages Router `$pageview` `$current_url`\n- web vitals `$current_url`\n- logs `url.full`\n- conversations `current_url` and `request_url`\n- session replay rrweb meta/custom-event `href` URLs\n- heatmap data URLs\n\nIf your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.\nIf you want to capture hashes selectively, leave this as `false` and use `before_send` to remove\nsensitive hash values before events are sent.",
+          "type": "boolean",
+          "name": "disable_capture_url_hashes"
+        },
+        {
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "type": "boolean",
+          "name": "sendFeatureFlagEvent"
+        },
+        {
+          "description": "Whether to load feature flags when initialized or not",
+          "type": "boolean",
+          "name": "preloadFeatureFlags"
+        },
+        {
+          "description": "Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.\n\nWhen set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,\n`group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request\nto the flags endpoint that still goes out (e.g. to fetch remote config or surveys)\ncarries `disable_flags: true` so the server skips flag evaluation. Flag values must be\nsupplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and\nrelated methods keep working against those values. Until `updateFlags()` runs, reads\nreturn their not-loaded defaults, so use `bootstrap` for any flags needed at startup.\nEquivalent to the web SDK's `advanced_disable_feature_flags`.\n\nNote: surveys gated on feature flags will not evaluate unless the survey targeting\nflags are also provided via `updateFlags()`. This option cannot be toggled at runtime.\n`posthog-node` inherits this option but does not implement it (no-op).",
+          "type": "boolean",
+          "name": "disableRemoteFeatureFlags"
+        },
+        {
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
+          "type": "boolean",
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
+          "type": "boolean",
+          "name": "disableSurveys"
+        },
+        {
+          "description": "Option to bootstrap the library with given distinctId and feature flags",
+          "type": "{ distinctId?: string; isIdentifiedId?: boolean; featureFlags?: Record<string, FeatureFlagValue>; featureFlagPayloads?: Record<string, JsonType>; }",
+          "name": "bootstrap"
+        },
+        {
+          "description": "How many times we will retry HTTP requests",
+          "type": "number",
+          "name": "fetchRetryCount"
+        },
+        {
+          "description": "The delay between HTTP request retries in milliseconds",
+          "type": "number",
+          "name": "fetchRetryDelay"
+        },
+        {
+          "description": "Timeout in milliseconds for any calls",
+          "type": "number",
+          "name": "requestTimeout"
+        },
+        {
+          "description": "Timeout in milliseconds for feature flag calls",
+          "type": "number",
+          "name": "featureFlagsRequestTimeoutMs"
+        },
+        {
+          "description": "How many times feature flag requests retry after a transient network error.\nSet to 0 to disable feature flag request retries.",
+          "type": "number",
+          "name": "featureFlagsRequestMaxRetries"
+        },
+        {
+          "description": "Timeout in milliseconds for remote config calls",
+          "type": "number",
+          "name": "remoteConfigRequestTimeoutMs"
+        },
+        {
+          "description": "For Session Analysis how long before we expire a session in seconds",
+          "type": "number",
+          "name": "sessionExpirationTimeSeconds"
+        },
+        {
+          "description": "Whether to disable GZIP compression",
+          "type": "boolean",
+          "name": "disableCompression"
+        },
+        {
+          "description": "Special flag to indicate ingested data is for a historical migration",
+          "type": "boolean",
+          "name": "historicalMigration"
+        },
+        {
+          "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'mobile']\nEvaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'backend', 'api']",
+          "type": "readonly string[]",
+          "name": "evaluationContexts"
+        },
+        {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
+          "type": "\"always\" | \"identified_only\" | \"never\"",
+          "name": "personProfiles"
+        },
+        {
+          "description": "A list of hostnames for which to inject PostHog tracing headers\n(X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.\n\nUse this to link requests made from your app to session replays and LLM traces\nin PostHog. When set, the global `fetch` is patched on initialization and the\nheaders are added to requests whose hostname matches one of the entries.\n\nRequires the SDK to wire up `patchFetchForTracingHeaders` against this option\n(currently supported in posthog-react-native).",
+          "type": "string[]",
+          "name": "addTracingHeaders"
+        },
+        {
+          "type": "\"memory\"",
+          "name": "persistence"
+        },
+        {
+          "description": "The interval in milliseconds between periodic flushes",
+          "type": "number",
+          "name": "flushInterval"
+        },
+        {
+          "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxQueueSize"
+        },
+        {
+          "description": "Configuration for the `posthog.metrics` API (count, gauge, histogram).\nSet `serviceName` so series can be filtered per service in the Metrics UI.",
+          "type": "MetricsConfig",
+          "name": "metrics"
+        },
+        {
+          "description": "Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is\noff until this is set; supplying it is all that's needed to turn it on.\n\nSet `serviceName` so spans can be attributed and grouped per service — the\nproduct aggregates operations by service and span name.\n\n`shutdown()` drains spans that have already ended, within the shutdown\ntimeout; spans still open at that point are discarded.",
+          "type": "TracesConfig",
+          "name": "traces"
+        },
+        {
+          "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "type": "string",
+          "name": "secretKey"
+        },
+        {
+          "description": "Deprecated: Use `secretKey` instead.",
+          "type": "string",
+          "name": "personalApiKey",
+          "releaseTag": "deprecated"
+        },
+        {
+          "type": "boolean",
+          "name": "privacyMode"
+        },
+        {
+          "type": "boolean",
+          "name": "enableExceptionAutocapture"
+        },
+        {
+          "description": "The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.\nSet to null to disable automatic polling. Definitions are still loaded on initialization;\ncall reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.",
+          "type": "number",
+          "name": "featureFlagsPollingInterval"
+        },
+        {
+          "type": "number",
+          "name": "maxCacheSize"
+        },
+        {
+          "type": "(url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>",
+          "name": "fetch"
+        },
+        {
+          "type": "boolean",
+          "name": "enableLocalEvaluation"
+        },
+        {
+          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
+          "type": "FlagDefinitionCacheProvider<FlagDefinitionCacheInput>",
+          "name": "flagDefinitionCacheProvider"
+        },
+        {
+          "description": "Allows modification or dropping of events before they're sent to PostHog.\nIf an array is provided, the functions are run in order.\nIf a function returns null, the event will be dropped.",
+          "type": "BeforeSendFn | BeforeSendFn[]",
+          "name": "before_send"
+        },
+        {
+          "description": "Additional user agent strings to block from being tracked.\nThese are combined with the default list of blocked user agents.",
+          "type": "string[]",
+          "name": "custom_blocked_useragents"
+        },
+        {
+          "description": "When enabled, all feature flag evaluations will use local evaluation only,\nnever falling back to server-side evaluation. This prevents unexpected server\nrequests and associated costs when using local evaluation.\n\nFlags that cannot be evaluated locally (e.g., those with experience continuity)\nwill return `undefined` instead of making a server request.",
+          "type": "boolean",
+          "name": "strictLocalEvaluation"
+        },
+        {
+          "description": "Controls whether `FeatureFlagEvaluations` filter helpers (`onlyAccessed()` and\n`only()`) log warnings when their input is unexpected — for example, calling\n`onlyAccessed()` before accessing any flags, or passing unknown keys to `only()`.",
+          "type": "boolean",
+          "name": "featureFlagsLogWarnings"
+        },
+        {
+          "description": "Provides the API to extend the lifetime of a serverless invocation until\nbackground work (like flushing analytics events) completes after the response\nis sent.",
+          "type": "(promise: Promise<unknown>) => void",
+          "name": "waitUntil"
+        },
+        {
+          "description": "Debounce interval in milliseconds for the `waitUntil`-based flush.\nAfter the last event is enqueued, the SDK waits this long before flushing.",
+          "type": "number",
+          "name": "waitUntilDebounceMs"
+        },
+        {
+          "description": "Maximum time in milliseconds to debounce before forcing a flush.\nPrevents starvation from rapid concurrent captures.",
+          "type": "number",
+          "name": "waitUntilMaxWaitMs"
+        },
+        {
+          "description": "Whether to attach the `$is_server: true` property to every captured event.",
+          "type": "boolean",
+          "name": "isServer"
+        },
+        {
+          "description": "Capture full AI content: PostHog AI wrapper events route through the\ndedicated AI capture endpoint, skip string truncation, and pass media\n(base64 / data URIs) through unredacted. Privacy mode always wins.\nDefaults to false.",
+          "type": "boolean",
+          "name": "enableFullAiCapture"
+        },
+        {
+          "description": "ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.\nNormally only altered alongside PostHog support guidance.\nAccepts values between 0 and 100.",
+          "type": "number",
+          "name": "exceptionRateLimiterRefillRate"
+        },
+        {
+          "description": "ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket.\nNormally only altered alongside PostHog support guidance.\nAccepts values between 0 and 100.",
+          "type": "number",
+          "name": "exceptionRateLimiterBucketSize"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
+        {
+          "type": "\"ai_queue\"",
+          "name": "AiQueue"
+        },
         {
           "type": "\"anonymous_id\"",
           "name": "AnonymousId"
@@ -2361,6 +3907,10 @@
           "name": "Props"
         },
         {
+          "type": "\"push_registered\"",
+          "name": "PushRegistered"
+        },
+        {
           "type": "\"queue\"",
           "name": "Queue"
         },
@@ -2397,6 +3947,10 @@
           "name": "Surveys"
         },
         {
+          "type": "\"surveys_in_progress\"",
+          "name": "SurveysInProgress"
+        },
+        {
           "type": "\"surveys_seen\"",
           "name": "SurveysSeen"
         }
@@ -2406,19 +3960,48 @@
     {
       "id": "PostHogRemoteConfig",
       "name": "PostHogRemoteConfig",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    supportedCompression?: Compression[];\n    surveys?: boolean | Survey[];\n    hasFeatureFlags?: boolean;\n    errorTracking?: boolean | {\n        [key: string]: JsonType;\n    };\n    capturePerformance?: boolean | {\n        [key: string]: JsonType;\n    };\n    logs?: boolean | {\n        [key: string]: JsonType;\n    };\n}"
+      "properties": [
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "sessionRecording"
+        },
+        {
+          "description": "Supported compression algorithms",
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "description": "Whether surveys are enabled",
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "description": "Indicates if the team has any flags enabled (if not we don't need to load them)",
+          "type": "boolean",
+          "name": "hasFeatureFlags"
+        },
+        {
+          "description": "Error tracking remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "description": "Capture performance remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "description": "Logs feature remote config. When a map, `captureConsoleLogs` (boolean)\nis the local opt-in flag for `console.*` autocapture (read by the JS\nSDK's `PostHogLogs` extension to decide whether to load the autocapture\nbundle).",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "__posthog_previously_captured_error"
-        }
-      ],
+      "properties": [],
       "path": "../core/src/error-tracking/types.ts"
     },
     {
@@ -2440,18 +4023,110 @@
       "path": "../core/src/error-tracking/coercers/promise-rejection-event.ts"
     },
     {
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
       "id": "PropertyGroup",
       "name": "PropertyGroup",
+      "properties": [
+        {
+          "type": "\"AND\" | \"OR\"",
+          "name": "type"
+        },
+        {
+          "type": "FlagProperty[] | PropertyGroup[]",
+          "name": "values"
+        }
+      ],
+      "path": "src/types.ts"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
       "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    type: 'AND' | 'OR';\n    values: PropertyGroup[] | FlagProperty[];\n}"
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
     },
     {
       "id": "RatingSurveyQuestion",
       "name": "RatingSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"rating\"",
+          "name": "type"
+        },
+        {
+          "type": "SurveyRatingDisplay",
+          "name": "display"
+        },
+        {
+          "type": "2 | 3 | 5 | 7 | 10",
+          "name": "scale"
+        },
+        {
+          "type": "string",
+          "name": "lowerBoundLabel"
+        },
+        {
+          "type": "string",
+          "name": "upperBoundLabel"
+        },
+        {
+          "type": "boolean",
+          "name": "skipSubmitButton"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "RejectionLike",
@@ -2463,16 +4138,32 @@
     {
       "id": "ResolvedExceptionStepsConfig",
       "name": "ResolvedExceptionStepsConfig",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    enabled: boolean;\n    max_bytes: number;\n}"
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "type": "number",
+          "name": "max_bytes"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ResponseBasedBranching",
       "name": "ResponseBasedBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.ResponseBased;\n    responseValues: Record<string, any>;\n}"
+      "properties": [
+        {
+          "type": "\"response_based\"",
+          "name": "type"
+        },
+        {
+          "type": "Record<string, any>",
+          "name": "responseValues"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "RetriableOptions",
@@ -2496,30 +4187,92 @@
     {
       "id": "SendFeatureFlagsOptions",
       "name": "SendFeatureFlagsOptions",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    onlyEvaluateLocally?: boolean;\n    personProperties?: Record<string, any>;\n    groupProperties?: Record<string, Record<string, any>>;\n    flagKeys?: string[];\n}"
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "onlyEvaluateLocally"
+        },
+        {
+          "type": "Properties",
+          "name": "personProperties"
+        },
+        {
+          "type": "Record<string, Properties>",
+          "name": "groupProperties"
+        },
+        {
+          "type": "string[]",
+          "name": "flagKeys"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "SendLogsBatchOutcome",
       "name": "SendLogsBatchOutcome",
       "properties": [],
       "path": "../core/src/posthog-core-stateless.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendMetricsBatchOutcome",
+      "name": "SendMetricsBatchOutcome",
+      "properties": [],
+      "path": "../core/src/metrics/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SentryIntegrationOptions",
       "name": "SentryIntegrationOptions",
-      "properties": [],
-      "path": "src/extensions/sentry-integration.ts",
-      "example": "{\n    organization?: string;\n    projectId?: number;\n    prefix?: string;\n    severityAllowList?: CoreErrorTracking.SeverityLevel[] | '*';\n    sendExceptionsToPostHog?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "organization"
+        },
+        {
+          "type": "number",
+          "name": "projectId"
+        },
+        {
+          "type": "string",
+          "name": "prefix"
+        },
+        {
+          "type": "(\"fatal\" | \"error\" | \"warning\" | \"log\" | \"info\" | \"debug\")[] | \"*\"",
+          "name": "severityAllowList"
+        },
+        {
+          "type": "boolean",
+          "name": "sendExceptionsToPostHog"
+        }
+      ],
+      "path": "src/extensions/sentry-integration.ts"
     },
     {
       "id": "SetPersonPropertiesMessage",
       "name": "SetPersonPropertiesMessage",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    distinctId: string;\n    properties?: Record<string | number, any>;\n    propertiesOnce?: Record<string | number, any>;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "Record<string | number, any>",
+          "name": "properties"
+        },
+        {
+          "type": "Record<string | number, any>",
+          "name": "propertiesOnce"
+        }
+      ],
+      "path": "src/types.ts"
     },
     {
       "id": "SeverityLevel",
@@ -2529,11 +4282,25 @@
       "example": "(typeof severityLevels)[number]"
     },
     {
+      "id": "SpanContextManager",
+      "name": "SpanContextManager",
+      "properties": [],
+      "path": "../core/src/traces/types.ts"
+    },
+    {
       "id": "SpecificQuestionBranching",
       "name": "SpecificQuestionBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.SpecificQuestion;\n    index: number;\n}"
+      "properties": [
+        {
+          "type": "\"specific_question\"",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "index"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "StackFrame",
@@ -2626,97 +4393,260 @@
     {
       "id": "Survey",
       "name": "Survey",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    translations?: Record<string, SurveyTranslation>;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n    schedule?: SurveySchedule;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyType",
+          "name": "type"
+        },
+        {
+          "type": "Record<string, SurveyTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "{ key: string; value?: string; }[]",
+          "name": "feature_flag_keys"
+        },
+        {
+          "type": "string",
+          "name": "linked_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "targeting_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "internal_targeting_flag_key"
+        },
+        {
+          "type": "SurveyQuestion[]",
+          "name": "questions"
+        },
+        {
+          "type": "SurveyAppearance",
+          "name": "appearance"
+        },
+        {
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "name": "conditions"
+        },
+        {
+          "type": "string",
+          "name": "start_date"
+        },
+        {
+          "type": "string",
+          "name": "end_date"
+        },
+        {
+          "type": "number",
+          "name": "current_iteration"
+        },
+        {
+          "type": "string",
+          "name": "current_iteration_start_date"
+        },
+        {
+          "type": "SurveySchedule",
+          "name": "schedule"
+        },
+        {
+          "type": "boolean",
+          "name": "enable_partial_responses"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyActionType",
       "name": "SurveyActionType",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    id: number;\n    name?: string;\n    steps?: ActionStepType[];\n}"
+      "properties": [
+        {
+          "type": "number",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "ActionStepType[]",
+          "name": "steps"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyAppearance",
       "name": "SurveyAppearance",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    backgroundColor?: string;\n    textColor?: string;\n    submitButtonColor?: string;\n    submitButtonText?: string;\n    submitButtonTextColor?: string;\n    ratingButtonColor?: string;\n    ratingButtonActiveColor?: string;\n    inputBackground?: string;\n    inputTextColor?: string;\n    autoDisappear?: boolean;\n    displayThankYouMessage?: boolean;\n    thankYouMessageHeader?: string;\n    thankYouMessageDescription?: string;\n    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType;\n    thankYouMessageCloseButtonText?: string;\n    borderColor?: string;\n    position?: SurveyPosition;\n    placeholder?: string;\n    shuffleQuestions?: boolean;\n    surveyPopupDelaySeconds?: number;\n    allowGoBack?: boolean;\n    backButtonText?: string;\n    widgetType?: SurveyWidgetType;\n    widgetSelector?: string;\n    widgetLabel?: string;\n    widgetColor?: string;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "backgroundColor"
+        },
+        {
+          "type": "string",
+          "name": "textColor"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonColor"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonText"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonTextColor"
+        },
+        {
+          "type": "string",
+          "name": "ratingButtonColor"
+        },
+        {
+          "type": "string",
+          "name": "ratingButtonActiveColor"
+        },
+        {
+          "type": "string",
+          "name": "inputBackground"
+        },
+        {
+          "type": "string",
+          "name": "inputTextColor"
+        },
+        {
+          "type": "boolean",
+          "name": "autoDisappear"
+        },
+        {
+          "type": "boolean",
+          "name": "displayThankYouMessage"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageHeader"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "thankYouMessageDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageCloseButtonText"
+        },
+        {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "borderColor"
+        },
+        {
+          "type": "SurveyPosition",
+          "name": "position"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
+        },
+        {
+          "type": "boolean",
+          "name": "shuffleQuestions"
+        },
+        {
+          "type": "number",
+          "name": "surveyPopupDelaySeconds"
+        },
+        {
+          "type": "boolean",
+          "name": "allowGoBack"
+        },
+        {
+          "type": "string",
+          "name": "backButtonText"
+        },
+        {
+          "type": "SurveyWidgetType",
+          "name": "widgetType"
+        },
+        {
+          "type": "string",
+          "name": "widgetSelector"
+        },
+        {
+          "type": "string",
+          "name": "widgetLabel"
+        },
+        {
+          "type": "string",
+          "name": "widgetColor"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyMatchType",
       "name": "SurveyMatchType",
-      "properties": [
-        {
-          "type": "\"exact\"",
-          "name": "Exact"
-        },
-        {
-          "type": "\"icontains\"",
-          "name": "Icontains"
-        },
-        {
-          "type": "\"is_not\"",
-          "name": "IsNot"
-        },
-        {
-          "type": "\"not_icontains\"",
-          "name": "NotIcontains"
-        },
-        {
-          "type": "\"not_regex\"",
-          "name": "NotRegex"
-        },
-        {
-          "type": "\"regex\"",
-          "name": "Regex"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyMatchType)[keyof typeof SurveyMatchType]"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
-      "properties": [
-        {
-          "type": "\"center\"",
-          "name": "Center"
-        },
-        {
-          "type": "\"left\"",
-          "name": "Left"
-        },
-        {
-          "type": "\"middle_center\"",
-          "name": "MiddleCenter"
-        },
-        {
-          "type": "\"middle_left\"",
-          "name": "MiddleLeft"
-        },
-        {
-          "type": "\"middle_right\"",
-          "name": "MiddleRight"
-        },
-        {
-          "type": "\"right\"",
-          "name": "Right"
-        },
-        {
-          "type": "\"top_center\"",
-          "name": "TopCenter"
-        },
-        {
-          "type": "\"top_left\"",
-          "name": "TopLeft"
-        },
-        {
-          "type": "\"top_right\"",
-          "name": "TopRight"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
       "id": "SurveyQuestion",
@@ -2728,47 +4658,63 @@
     {
       "id": "SurveyQuestionBase",
       "name": "SurveyQuestionBase",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    question: string;\n    id: string;\n    description?: string | null;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n    validation?: SurveyValidationRule[];\n    translations?: Record<string, SurveyQuestionTranslation>;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
-      "properties": [
-        {
-          "type": "\"end\"",
-          "name": "End"
-        },
-        {
-          "type": "\"next_question\"",
-          "name": "NextQuestion"
-        },
-        {
-          "type": "\"response_based\"",
-          "name": "ResponseBased"
-        },
-        {
-          "type": "\"specific_question\"",
-          "name": "SpecificQuestion"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
       "id": "SurveyQuestionDescriptionContentType",
       "name": "SurveyQuestionDescriptionContentType",
-      "properties": [
-        {
-          "type": "\"html\"",
-          "name": "Html"
-        },
-        {
-          "type": "\"text\"",
-          "name": "Text"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionDescriptionContentType)[keyof typeof SurveyQuestionDescriptionContentType]"
     },
     {
       "id": "SurveyQuestionTranslation",
@@ -2808,70 +4754,34 @@
     {
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
-      "properties": [
-        {
-          "type": "\"link\"",
-          "name": "Link"
-        },
-        {
-          "type": "\"multiple_choice\"",
-          "name": "MultipleChoice"
-        },
-        {
-          "type": "\"open\"",
-          "name": "Open"
-        },
-        {
-          "type": "\"rating\"",
-          "name": "Rating"
-        },
-        {
-          "type": "\"single_choice\"",
-          "name": "SingleChoice"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyRatingDisplay",
       "name": "SurveyRatingDisplay",
-      "properties": [
-        {
-          "type": "\"emoji\"",
-          "name": "Emoji"
-        },
-        {
-          "type": "\"number\"",
-          "name": "Number"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyRatingDisplay)[keyof typeof SurveyRatingDisplay]"
     },
     {
       "id": "SurveyResponse",
       "name": "SurveyResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    surveys: Survey[];\n}"
+      "properties": [
+        {
+          "type": "Survey[]",
+          "name": "surveys"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
-      "properties": [
-        {
-          "type": "\"always\"",
-          "name": "Always"
-        },
-        {
-          "type": "\"once\"",
-          "name": "Once"
-        },
-        {
-          "type": "\"recurring\"",
-          "name": "Recurring"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTranslation",
@@ -2880,6 +4790,18 @@
         {
           "type": "string",
           "name": "backButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
         },
         {
           "type": "string",
@@ -2907,25 +4829,9 @@
     {
       "id": "SurveyType",
       "name": "SurveyType",
-      "properties": [
-        {
-          "type": "\"api\"",
-          "name": "API"
-        },
-        {
-          "type": "\"external_survey\"",
-          "name": "ExternalSurvey"
-        },
-        {
-          "type": "\"popover\"",
-          "name": "Popover"
-        },
-        {
-          "type": "\"widget\"",
-          "name": "Widget"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyValidationRule",
@@ -2949,43 +4855,31 @@
     {
       "id": "SurveyValidationType",
       "name": "SurveyValidationType",
-      "properties": [
-        {
-          "type": "\"max_length\"",
-          "name": "MaxLength"
-        },
-        {
-          "type": "\"min_length\"",
-          "name": "MinLength"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyValidationType)[keyof typeof SurveyValidationType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
-      "properties": [
-        {
-          "type": "\"button\"",
-          "name": "Button"
-        },
-        {
-          "type": "\"selector\"",
-          "name": "Selector"
-        },
-        {
-          "type": "\"tab\"",
-          "name": "Tab"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
       "id": "UnsetPersonPropertiesMessage",
       "name": "UnsetPersonPropertiesMessage",
-      "properties": [],
-      "path": "src/types.ts",
-      "example": "{\n    distinctId: string;\n    properties: string | string[];\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "distinctId"
+        },
+        {
+          "type": "string | string[]",
+          "name": "properties"
+        }
+      ],
+      "path": "src/types.ts"
     }
   ],
   "categories": [
@@ -2995,6 +4889,7 @@
     "Error tracking",
     "Privacy",
     "Feature flags",
+    "Traces",
     "Context"
   ]
 }

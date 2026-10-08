@@ -1,16 +1,24 @@
-/* eslint-disable compat/compat */
+import type { Mock as VitestMock } from 'vitest'
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
+import { within } from '@testing-library/dom'
 import {
     SurveyManager,
+    FeedbackWidget,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
 import {
+    getSurveyContainerClass,
+    retrieveSurveyShadow,
+    setInProgressSurveyState,
+} from '../../extensions/surveys/surveys-extension-utils'
+import {
+    DisplaySurveyType,
     Survey,
+    SurveyPosition,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveySchedule,
@@ -18,23 +26,49 @@ import {
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
 
-import { afterAll, beforeAll, beforeEach } from '@jest/globals'
+import { beforeEach } from 'vitest'
+import Config from '@posthog/browser-common/config'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { PostHog } from '../../posthog-core'
+import { PostHog, defaultConfig } from '../../posthog-core'
+import { BrowserSurveys } from '../../browser-surveys'
+import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
+import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
+import { FeatureFlagsExtension } from '../../extension-tokens'
 import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
+const createSurveyFeatureFlags = (values?: Record<string, boolean | string>): PostHogFeatureFlags => {
+    const flags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+    vi.spyOn(flags, 'hasLoadedFlags', 'get').mockReturnValue(true)
+    vi.spyOn(flags, 'getFeatureFlag').mockImplementation((key) => (values ? values[key] : true))
+    vi.spyOn(flags, 'isFeatureEnabled').mockImplementation((key) => (values ? !!values[key] : true))
+    return flags
+}
+
 declare const global: any
+
+const realTimers = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+}
+
+afterEach(() => {
+    vi.useRealTimers()
+    Object.assign(globalThis, realTimers)
+})
 
 describe('survey display logic', () => {
     beforeEach(() => {
         // we have to manually reset the DOM before each test
         document.getElementsByTagName('html')[0].innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('retrieveSurveyShadow', () => {
@@ -77,26 +111,40 @@ describe('survey display logic', () => {
     ]
 
     const mockPostHog = createMockPostHog({
-        surveys: {
-            getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
-        },
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
+        get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
         config: {
+            ...defaultConfig(),
             disable_surveys_automatic_display: false,
         },
     })
 
-    test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
-        jest.useFakeTimers()
-        jest.spyOn(global, 'setInterval')
-        generateSurveys(mockPostHog, true)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+    mockPostHog.surveys = new BrowserSurveys(mockPostHog)
+    mockPostHog.surveys.getSurveys = vi.fn<
+        Parameters<BrowserSurveys['getSurveys']>,
+        ReturnType<BrowserSurveys['getSurveys']>
+    >((callback) => callback(mockSurveys))
 
-        jest.advanceTimersByTime(1000)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+    test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
+        vi.useFakeTimers()
+        vi.spyOn(global, 'setInterval')
+        // generateSurveys constructs a real SurveyManager, which attaches a 'languagechange'
+        // window listener (see surveys.tsx). Left undisposed, that listener stays live for the
+        // rest of the suite and fires on any later test's window.dispatchEvent(new
+        // Event('languagechange')), even in an unrelated describe block.
+        const surveyManager = generateSurveys(mockPostHog, true)
+        try {
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+
+            vi.advanceTimersByTime(1000)
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+        } finally {
+            surveyManager?.dispose()
+            vi.useRealTimers()
+        }
     })
 })
 
@@ -131,31 +179,34 @@ describe('usePopupVisibility', () => {
         feature_flag_keys: null,
     }
     const mockPostHog = createMockPostHog({
-        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
+        getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
     })
 
-    const removeSurvey = jest.fn()
+    const removeSurvey = vi.fn()
 
     test('should set isPopupVisible to true immediately if delay is 0', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after delay', () => {
-        jest.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
+        vi.useFakeTimers()
+        const { result } = renderHook(() =>
+            usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey, true)
+        )
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
         })
         expect(result.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should hide popup when PHSurveyClosed event is dispatched', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         act(() => {
             window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
         })
@@ -163,7 +214,7 @@ describe('usePopupVisibility', () => {
     })
 
     test('should show thank you message when survey is sent and handle auto disappear', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         mockSurvey.appearance = {
             displayThankYouMessage: true,
             autoDisappear: true,
@@ -171,7 +222,7 @@ describe('usePopupVisibility', () => {
             thankYouMessageDescription: 'We appreciate your feedback.',
         }
 
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
         act(() => {
             window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
         })
@@ -180,49 +231,63 @@ describe('usePopupVisibility', () => {
         expect(result.current.isPopupVisible).toBe(true)
 
         act(() => {
-            jest.advanceTimersByTime(5000)
+            vi.advanceTimersByTime(5000)
         })
 
         expect(result.current.isPopupVisible).toBe(false)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should clean up event listeners and timers on unmount', () => {
-        jest.useFakeTimers()
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
-        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+        vi.useFakeTimers()
+        const { unmount } = renderHook(() =>
+            usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey, true)
+        )
+        const shown = vi.fn()
+        addEventListener(window, 'PHSurveyShown', shown)
+        const capture = vi.spyOn(mockPostHog, 'capture')
+        capture.mockClear()
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
 
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveySent', expect.any(Function))
-        jest.useRealTimers()
+        act(() => {
+            vi.advanceTimersByTime(1001)
+        })
+        expect(shown).not.toHaveBeenCalled()
+        expect(capture).not.toHaveBeenCalled()
+        window.removeEventListener('PHSurveyShown', shown)
+        capture.mockRestore()
+        removeEventListenerSpy.mockRestore()
+        vi.useRealTimers()
     })
 
     test('should set isPopupVisible to true if isPreviewMode is true', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after a delay of 500 milliseconds', () => {
-        jest.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey))
+        vi.useFakeTimers()
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
         })
         expect(result.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should not throw an error if posthog is undefined', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false, removeSurvey))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false, removeSurvey, true))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should clean up event listeners on unmount when delay is 0', () => {
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
-        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
 
@@ -231,31 +296,194 @@ describe('usePopupVisibility', () => {
     })
 
     test('should dispatch PHSurveyShown event when survey is shown', () => {
-        const dispatchEventSpy = jest.spyOn(window, 'dispatchEvent')
-        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
+        const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent')
+        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(new Event('PHSurveyShown'))
     })
 
     test('should handle multiple surveys with overlapping conditions', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const mockSurvey2 = { ...mockSurvey, id: 'testSurvey2', name: 'Test survey 2' } as Survey
         const { result: result1 } = renderHook(() =>
-            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey)
+            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true)
         )
         const { result: result2 } = renderHook(() =>
-            usePopupVisibility(mockSurvey2, mockPostHog, 500, false, removeSurvey)
+            usePopupVisibility(mockSurvey2, mockPostHog, 500, false, removeSurvey, true)
         )
 
         expect(result1.current.isPopupVisible).toBe(true)
         expect(result2.current.isPopupVisible).toBe(false)
 
         act(() => {
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
         })
 
         expect(result2.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
+    })
+})
+
+describe('usePopupVisibility close animation path', () => {
+    const mockSurvey: Survey = {
+        id: 'testSurvey1',
+        name: 'Test survey 1',
+        description: 'Test survey description 1',
+        type: SurveyType.Popover,
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
+        questions: [
+            {
+                question: 'How satisfied are you with our newest product?',
+                description: 'This is a question description',
+                descriptionContentType: 'text',
+                type: SurveyQuestionType.Rating,
+                display: 'number',
+                scale: 10,
+                lowerBoundLabel: 'Not Satisfied',
+                upperBoundLabel: 'Very Satisfied',
+                id: 'question-a',
+            },
+        ],
+        appearance: {},
+        conditions: null,
+        start_date: '2021-01-01T00:00:00.000Z',
+        end_date: null,
+        current_iteration: null,
+        current_iteration_start_date: null,
+        feature_flag_keys: null,
+    }
+    const mockPostHog = createMockPostHog({
+        getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
+    })
+    const removeSurvey = vi.fn()
+
+    const renderWithContainer = (container?: HTMLElement) =>
+        renderHook(() =>
+            usePopupVisibility(
+                mockSurvey,
+                mockPostHog,
+                0,
+                false,
+                removeSurvey,
+                true,
+                container ? ({ current: container } as any) : undefined
+            )
+        )
+
+    const attachedContainer = () => {
+        const container = document.createElement('div')
+        document.body.appendChild(container)
+        return container
+    }
+
+    beforeEach(() => {
+        removeSurvey.mockClear()
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    test('tears down synchronously when there is no container ref to animate', () => {
+        const { result } = renderWithContainer()
+        expect(result.current.isPopupVisible).toBe(true)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('fades the container out without removing it, then unmounts once the fade has run', () => {
+        const container = attachedContainer()
+        const { result } = renderWithContainer(container)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+
+        // The container is faded out via a scoped opacity transition — NOT removed,
+        // and the popup stays mounted until the fade has had time to run.
+        expect(container.parentNode).not.toBeNull()
+        expect(container.style.opacity).toBe('0')
+        expect(container.style.transition).toContain('opacity')
+        expect(result.current.isPopupVisible).toBe(true)
+        expect(removeSurvey).not.toHaveBeenCalled()
+
+        act(() => {
+            vi.advanceTimersByTime(1000)
+        })
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('never calls document.startViewTransition (no full-page snapshot on heavy pages)', () => {
+        const startViewTransition = vi.fn()
+        Object.defineProperty(document, 'startViewTransition', {
+            configurable: true,
+            writable: true,
+            value: startViewTransition,
+        })
+
+        const { result } = renderWithContainer(attachedContainer())
+        act(() => {
+            result.current.hidePopupWithAnimation()
+            vi.advanceTimersByTime(1000)
+        })
+
+        // The whole point of the fix: closing a survey must not snapshot the page.
+        expect(startViewTransition).not.toHaveBeenCalled()
+        expect(result.current.isPopupVisible).toBe(false)
+
+        delete document.startViewTransition
+    })
+
+    test('does not tear down twice on repeated close calls', () => {
+        const { result } = renderWithContainer(attachedContainer())
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+            // A second close while the first is still animating.
+            result.current.hidePopupWithAnimation()
+            vi.advanceTimersByTime(1000)
+        })
+
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('a no-container close does not leave the close guard stuck for a later close', () => {
+        // The no-container path tears down synchronously with no settle timer, so it
+        // must not raise the in-flight guard — otherwise a popup that is shown again
+        // (e.g. a tab widget re-shown on a URL match) can never be closed a second time.
+        const { result } = renderWithContainer()
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+
+        // The same hook instance shows the popup again.
+        act(() => {
+            result.current.setIsPopupVisible(true)
+        })
+        expect(result.current.isPopupVisible).toBe(true)
+
+        // The second close must still tear down — the guard was not left stuck.
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(2)
     })
 })
 
@@ -263,6 +491,18 @@ describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
+    // Several nested describes/tests below construct their own SurveyManager and reassign
+    // `surveyManager`, overwriting the reference to any previous instance. Since SurveyManager
+    // attaches a 'languagechange' window listener on construction, an overwritten instance's
+    // listener stays attached unless disposed — createSurveyManager tracks every instance so
+    // the outer afterEach can dispose all of them, not just whichever one `surveyManager`
+    // currently points to.
+    let createdSurveyManagers: SurveyManager[] = []
+    const createSurveyManager = (instance: PostHog): SurveyManager => {
+        const manager = new SurveyManager(instance)
+        createdSurveyManagers.push(manager)
+        return manager
+    }
     const flagsResponse = {
         featureFlags: {
             'linked-flag-key': true,
@@ -276,6 +516,7 @@ describe('SurveyManager', () => {
     } as unknown as FlagsResponse
 
     beforeEach(() => {
+        localStorage.clear()
         mockSurveys = [
             {
                 id: 'testSurvey1',
@@ -309,36 +550,79 @@ describe('SurveyManager', () => {
         ]
 
         mockPostHog = createMockPostHog({
-            getActiveMatchingSurveys: jest.fn(),
-            get_session_replay_url: jest.fn(),
-            capture: jest.fn(),
-            featureFlags: {
-                _send_request: jest
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: jest
-                    .fn()
-                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-            },
-            surveys: {
-                getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
-            },
+            getActiveMatchingSurveys: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
+            capture: vi.fn(),
+            featureFlags: createSurveyFeatureFlags(flagsResponse.featureFlags),
         })
 
-        surveyManager = new SurveyManager(mockPostHog)
+        mockPostHog.surveys = new BrowserSurveys(mockPostHog)
+        mockPostHog.surveys.getSurveys = vi.fn<
+            Parameters<BrowserSurveys['getSurveys']>,
+            ReturnType<BrowserSurveys['getSurveys']>
+        >((callback) => callback(mockSurveys))
+        surveyManager = createSurveyManager(mockPostHog)
+    })
+
+    it('resolves feature flags through the extension registry', () => {
+        const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+        vi.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
+        vi.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
+        mockPostHog.getExtension = vi.fn(() => registeredFeatureFlags) as PostHog['getExtension']
+        const survey = {
+            ...mockSurveys[0],
+            linked_flag_key: 'linked-flag-key',
+            conditions: { events: null, actions: null, cancelEvents: null, linkedFlagVariant: 'control' },
+        }
+
+        expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
+        expect(mockPostHog.getExtension).toHaveBeenCalledWith(FeatureFlagsExtension)
+        expect(registeredFeatureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', { send_event: true })
+        expect(registeredFeatureFlags.getFeatureFlag).toHaveBeenCalledWith('linked-flag-key', { send_event: false })
+        expect(mockPostHog.featureFlags.isFeatureEnabled).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the legacy featureFlags property when extension lookup is unavailable', () => {
+        const survey = { ...mockSurveys[0], linked_flag_key: 'linked-flag-key' }
+
+        expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
+        expect(mockPostHog.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', {
+            send_event: true,
+        })
+    })
+
+    afterEach(() => {
+        // Dispose every SurveyManager constructed during the test (see createSurveyManager
+        // above), not just the current value of `surveyManager` — otherwise listeners from
+        // overwritten instances stay attached and fire on later tests'
+        // window.dispatchEvent(new Event('languagechange')), hitting a stale mockPostHog whose
+        // mocks may no longer exist. try/catch per instance so one throwing dispose() (e.g. a
+        // mocked-out dependency from that specific test) doesn't abort the forEach and skip
+        // disposing the rest.
+        createdSurveyManagers.forEach((manager) => {
+            try {
+                manager.dispose()
+            } catch {
+                // best-effort cleanup; a failure here shouldn't fail the test or block
+                // disposing the remaining tracked managers
+            }
+        })
+        createdSurveyManagers = []
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
-        const handlePopoverSurveyMock = jest
+        mockPostHog.getActiveMatchingSurveys = vi.fn((callback) => callback([mockSurveys[0]]))
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
     })
 
     test('should initialize surveyInFocus correctly', () => {
@@ -363,17 +647,19 @@ describe('SurveyManager', () => {
     it('should only display one popover survey if multiple popovers are eligible', () => {
         const anotherPopover = { ...mockSurveys[0], id: 'popover-2' }
 
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurveys[0], anotherPopover]))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback([mockSurveys[0], anotherPopover]))
 
-        const handlePopoverSurveySpy = jest.spyOn(surveyManager as any, 'handlePopoverSurvey')
-        const addSurveyToFocusSpy = jest.spyOn(surveyManager as any, '_addSurveyToFocus')
+        const handlePopoverSurveySpy = vi.spyOn(surveyManager as any, 'handlePopoverSurvey')
+        const addSurveyToFocusSpy = vi.spyOn(surveyManager as any, '_addSurveyToFocus')
 
         surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
 
         // First popover should be handled
-        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0])
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurveys[0].id)
 
@@ -381,7 +667,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
         // Second popover should NOT be handled as one is already in focus
-        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover)
+        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover, undefined, {
+            resumeDelayFromActivation: true,
+        })
 
         // Ensure only called once for the first popover
         expect(handlePopoverSurveySpy).toHaveBeenCalledTimes(1)
@@ -399,7 +687,7 @@ describe('SurveyManager', () => {
         })
 
         const setInternalFlagEnabled = (enabled: boolean): void => {
-            mockPostHog.featureFlags.isFeatureEnabled = jest
+            mockPostHog.featureFlags.isFeatureEnabled = vi
                 .fn()
                 .mockImplementation((key: string) =>
                     key === INTERNAL_FLAG ? enabled : (flagsResponse.featureFlags as Record<string, boolean>)[key]
@@ -407,13 +695,13 @@ describe('SurveyManager', () => {
         }
 
         afterEach(() => {
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('does not display a survey that became ineligible during the delay (delay re-check)', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-recheck')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             // queued while eligible: focus claimed, timer pending, not yet shown
@@ -424,7 +712,7 @@ describe('SurveyManager', () => {
             // identify() during the delay reloads flags; the internal targeting flag is now false
             setInternalFlagEnabled(false)
 
-            jest.advanceTimersByTime(30000)
+            vi.advanceTimersByTime(30000)
 
             // the survey is dropped instead of shown: focus released, timer cleared
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
@@ -432,25 +720,30 @@ describe('SurveyManager', () => {
         })
 
         it('still displays a survey that stays eligible through the delay (regression guard)', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-eligible')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
 
-            jest.advanceTimersByTime(30000)
+            act(() => {
+                vi.advanceTimersByTime(30000)
+            })
 
             // shown: focus is retained (released only on dismiss/close), pending timer consumed
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
         })
 
         it('cancels a pending survey when a later evaluation cycle finds it ineligible', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-cancel')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
@@ -465,19 +758,408 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('resumes the popup delay across navigations', () => {
+        const makeDelayedSurvey = (id: string, delaySeconds: number): Survey => ({
+            ...mockSurveys[0],
+            id,
+            conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'trigger_event' }] } },
+            appearance: { surveyPopupDelaySeconds: delaySeconds },
+        })
+
+        // The trigger records when it fired; handlePopoverSurvey reads that through the event
+        // receiver to compute the remaining wait instead of restarting a fresh countdown.
+        const stubEventReceiver = (surveyId: string, activatedAt: number | undefined): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = {
+                getSurveys: () => [surveyId],
+                getActivationTimestamp: () => activatedAt,
+            }
+        }
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it('waits only the remaining delay when the survey was triggered on an earlier page', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('resume-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            // triggered 40s ago, so only 20s of the 60s delay should remain
+            stubEventReceiver(survey.id, Date.now() - 40_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+
+            // the full 60s has not elapsed, but the remaining 20s has → shown
+            act(() => {
+                vi.advanceTimersByTime(19_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+
+        it('shows immediately when the delay already elapsed on an earlier page', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('elapsed-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000) // 90s ago > 60s delay
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            // no pending timer: rendered right away
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+
+        it('waits the full delay when no activation time is recorded', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('no-timestamp-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, undefined)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            act(() => {
+                vi.advanceTimersByTime(59_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+
+        it('waits the full delay when an older core bundle has no activation timestamp method', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('older-core-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => [survey.id] }
+
+            expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
+            act(() => {
+                vi.advanceTimersByTime(59_999)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            expect(
+                document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent
+            ).not.toContain(survey.questions[0].question)
+            act(() => {
+                vi.advanceTimersByTime(1)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+
+        // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
+        // shortcut the wait using an activation the display loop recorded.
+        it('waits the full delay for an explicit display call even when the trigger fired long ago', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('explicit-display-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000)
+
+            surveyManager.handlePopoverSurvey(survey)
+
+            act(() => {
+                vi.advanceTimersByTime(59_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            act(() => {
+                vi.advanceTimersByTime(1_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+
+        it('never waits longer than the configured delay when the clock moved backwards', () => {
+            vi.useFakeTimers()
+            const survey = makeDelayedSurvey('clock-skew-survey', 60)
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
+            // stamped in the future, so the naive elapsed time is negative
+            stubEventReceiver(survey.id, Date.now() + 600_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            act(() => {
+                vi.advanceTimersByTime(60_000)
+            })
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+            expect(document.querySelector(`.${getSurveyContainerClass(survey)}`)?.shadowRoot?.textContent).toContain(
+                survey.questions[0].question
+            )
+        })
+    })
+
+    describe('waits for feature flags to load before trusting the internal targeting flag', () => {
+        // Regression guard: a recurring survey re-showed and recorded a duplicate response because
+        // the display loop read a stale-but-eligible cached internal targeting flag on a quick
+        // revisit, before /flags reflected the just-recorded response.
+        const INTERNAL_FLAG = 'enabled-internal-targeting-flag-key'
+
+        const makeGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: 'internal-flag-gated-survey',
+            schedule: SurveySchedule.Recurring,
+            internal_targeting_flag_key: INTERNAL_FLAG,
+            conditions: null,
+        })
+
+        it('is not eligible while flags have not loaded, even when the cached flag says eligible', () => {
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(false)
+            const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
+            expect(result.eligible).toBe(false)
+            expect(result.reason).toContain('Feature flags have not loaded yet')
+        })
+
+        it('is eligible once flags have loaded and the internal flag is enabled', () => {
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
+            const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+
+        it('still bypasses the internal flag for repeatable surveys before flags load', () => {
+            vi.spyOn(mockPostHog.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(false)
+            const result = surveyManager.checkSurveyEligibility({
+                ...makeGatedSurvey(),
+                schedule: SurveySchedule.Always,
+            })
+            expect(result.eligible).toBe(true)
+        })
+    })
+
+    describe('reports when capturing is opted out', () => {
+        it('is not eligible to display, and names the reason', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
+            expect(result.eligible).toBe(false)
+            expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+        })
+
+        it('stays eligible to display while capturing is on', () => {
+            mockPostHog.is_capturing = vi.fn(() => true)
+            expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
+        })
+
+        it('keeps the survey out of the display loop', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const handlePopoverSurveyMock = vi
+                .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                .mockImplementation(() => {})
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+            expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
+        })
+
+        // A tab widget draws its own trigger, so it stays mounted until something removes it.
+        // Filtering it out of the display loop is not enough: the button stays on screen and opens
+        // a survey whose answer capture() then drops.
+        it('removes a tab widget that is already on screen', () => {
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                id: 'tabWidgetSurvey',
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab },
+            }
+            const originalGetSurveys = mockPostHog.surveys.getSurveys
+            mockPostHog.surveys.getSurveys = vi.fn((callback: (surveys: Survey[]) => void) => callback([widgetSurvey]))
+            const container = getSurveyContainerClass(widgetSurvey, true)
+
+            try {
+                mockPostHog.is_capturing = vi.fn(() => true)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).not.toBeNull()
+
+                mockPostHog.is_capturing = vi.fn(() => false)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).toBeNull()
+            } finally {
+                mockPostHog.surveys.getSurveys = originalGetSurveys
+                document.querySelector(container)?.remove()
+            }
+        })
+
+        it('does not open a tab clicked after opt-out but before the next display poll', () => {
+            const isCapturing = vi.fn(() => true)
+            mockPostHog.is_capturing = isCapturing
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab, widgetLabel: 'Feedback' },
+            }
+            const { container, getByRole } = render(
+                Preact.createElement(FeedbackWidget, { survey: widgetSurvey, posthog: mockPostHog as PostHog })
+            )
+            isCapturing.mockReturnValue(false)
+
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+
+            expect(container.querySelector('.survey-form')).toBeNull()
+            isCapturing.mockReturnValue(true)
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+            expect(container.querySelector('.survey-form')).not.toBeNull()
+        })
+
+        // Regression guard: the capture gate must stay out of the public discovery result. Custom
+        // integrations find API surveys through getActiveMatchingSurveys and record responses with
+        // their own backend, where PostHog's capture state says nothing about what can be recorded.
+        it('still returns the survey from getActiveMatchingSurveys', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const callback = vi.fn()
+            surveyManager.getActiveMatchingSurveys(callback)
+            expect(callback).toHaveBeenCalledWith([mockSurveys[0]])
+        })
+
+        it('checkSurveyEligibility stays eligible so discovery is unaffected', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
+        })
+
+        // The surveys bundle is loaded from the CDN and can run against an older cached core.
+        // `is_capturing` was only added in posthog-js 1.260.0, so simulate an older core that lacks
+        // it and assert we read its own consent gate instead of throwing on every display poll.
+        describe('on a core without is_capturing (version skew)', () => {
+            beforeEach(() => {
+                // Deliberately remove the method to emulate an older core (strictNullChecks is disabled).
+                mockPostHog.is_capturing = undefined
+            })
+
+            it('is not eligible to display when that core says the person opted out', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => true)
+                const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
+                expect(result.eligible).toBe(false)
+                expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+            })
+
+            it('still displays the survey when that core says the person opted in', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => false)
+                const handlePopoverSurveyMock = vi
+                    .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                    .mockImplementation(() => {})
+
+                expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic()).not.toThrow()
+
+                expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
+                expect(handlePopoverSurveyMock).toHaveBeenCalled()
+            })
+        })
+    })
+
+    describe('warns when advanced_disable_feature_flags hides a survey', () => {
+        const makeFlagGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: 'flag-gated-survey',
+            targeting_flag_key: 'survey-targeting-flag-key2',
+        })
+
+        let consoleWarn: ReturnType<typeof vi.spyOn>
+
+        beforeEach(() => {
+            Config.DEBUG = true
+            consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            Config.DEBUG = false
+            consoleWarn.mockRestore()
+        })
+
+        it('names the survey-only escape hatch, once per instance', () => {
+            mockPostHog.config.advanced_disable_feature_flags = true
+
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            surveyManager.checkSurveyEligibility(makeFlagGatedSurvey())
+
+            expect(consoleWarn).toHaveBeenCalledTimes(1)
+            expect(consoleWarn.mock.calls[0].join(' ')).toContain('advanced_only_evaluate_survey_feature_flags')
+        })
+
+        it('stays quiet when debug logging is disabled', () => {
+            Config.DEBUG = false
+            mockPostHog.config.advanced_disable_feature_flags = true
+
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            expect(consoleWarn).not.toHaveBeenCalled()
+        })
+
+        it('stays quiet when a survey flag is false and flags are enabled', () => {
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            expect(consoleWarn).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('respects the event trigger condition (issue #2501)', () => {
+        const EVENT_GATED_SURVEY_ID = 'event-gated-survey'
+
+        const makeEventGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: EVENT_GATED_SURVEY_ID,
+            conditions: { actions: null, cancelEvents: null, events: { values: [{ name: 'survey_trigger_event' }] } },
+        })
+
+        const setActivatedSurveys = (surveyIds: string[]): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => surveyIds }
+        }
+
+        it('is not renderable until the trigger event has fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
+            expect(result.eligible).toBe(false)
+        })
+
+        it('becomes renderable once the trigger event has fired', () => {
+            setActivatedSurveys([EVENT_GATED_SURVEY_ID])
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+
+        it('is unaffected for surveys without an event/action trigger', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyRenderability({ ...mockSurveys[0], conditions: null })
+            expect(result.eligible).toBe(true)
+        })
+
+        // Regression guard: the trigger gate must live only in checkSurveyRenderability, not in
+        // checkSurveyEligibility, so explicit displaySurvey('id') calls are not silently suppressed.
+        it('checkSurveyEligibility stays eligible for an event-gated survey whose trigger has not fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+    })
+
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
-        const handlePopoverSurveyMock = jest
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
-        const handleWidgetMock = jest.spyOn(surveyManager as any, '_handleWidget').mockImplementation(() => {})
-        const manageWidgetSelectorListener = jest
+        const handleWidgetMock = vi.spyOn(surveyManager as any, '_handleWidget').mockImplementation(() => {})
+        const manageWidgetSelectorListener = vi
             .spyOn(surveyManager as any, '_manageWidgetSelectorListener')
             .mockImplementation(() => {})
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(handleWidgetMock).not.toHaveBeenCalled()
         expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
     })
@@ -492,7 +1174,7 @@ describe('SurveyManager', () => {
             linked_flag_key: null,
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
-            questions: [],
+            questions: [{ id: 'widget-question', type: SurveyQuestionType.Open, question: 'Widget question?' }],
             appearance: { widgetType: SurveyWidgetType.Tab }, // Specify widget type
             conditions: null,
             start_date: '2021-01-01T00:00:00.000Z',
@@ -502,11 +1184,16 @@ describe('SurveyManager', () => {
             feature_flag_keys: [],
         })
         const mockSurvey = mockSurveys[1]
-        const handleWidgetSpy = jest.spyOn(surveyManager as any, '_handleWidget')
+        const handleWidgetSpy = vi.spyOn(surveyManager as any, '_handleWidget')
         surveyManager.getTestAPI().handleWidget(mockSurvey) // Call the actual method
         expect(handleWidgetSpy).toHaveBeenCalledWith(mockSurvey)
-        // We can add more specific assertions here if needed, e.g., checking if the shadow DOM was created
-        // For now, just ensuring it was called seems sufficient for this test's scope.
+        const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)!.shadowRoot!
+        const tab = shadow.querySelector('.ph-survey-widget-tab') as HTMLButtonElement
+        expect(tab).not.toBeNull()
+        expect(tab).toBeEnabled()
+        expect(shadow.textContent).not.toContain('Widget question?')
+        fireEvent.click(tab)
+        expect(shadow.textContent).toContain('Widget question?')
     })
 
     test('manageWidgetSelectorListener should be called for selector widgets', () => {
@@ -530,35 +1217,205 @@ describe('SurveyManager', () => {
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
         }
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurvey]))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback([mockSurvey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
-        const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
+        const manageWidgetSelectorListenerSpy = vi.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey, '.my-selector')
     })
 
-    test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
+    it('does not tear down an open selector-widget survey when its trigger element unmounts (issue #2036)', async () => {
+        const survey = {
+            id: 'openSelectorWidgetSurvey',
+            name: 'Open Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
 
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+
+        // attaches the click listener and renders the feedback widget into the shadow container
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // open the survey, as if the trigger element was clicked
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+
+        // the trigger element is unmounted (e.g. a dropdown that hosts it closes) while the survey is open
+        document.querySelector('.my-selector')!.remove()
+
+        // the display poll runs again and finds the trigger gone
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // the open survey must still be in the DOM, not abruptly removed
+        expect(surveyPopup()).not.toBeNull()
+    })
+
+    it('completes the deferred trigger teardown once the open survey is closed (issue #2036)', async () => {
+        const survey = {
+            id: 'openSelectorWidgetSurvey',
+            name: 'Open Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+        const widgetListeners = (surveyManager as any)._widgetSelectorListeners as Map<string, any>
+
+        // attaches the click listener (marker attribute) and renders the feedback widget
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        const triggerElement = document.querySelector('.my-selector')!
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.has(survey.id)).toBe(true)
+
+        // open the survey, then unmount its trigger element while it is open
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+        triggerElement.remove()
+
+        // while the survey is open the teardown is deferred: nothing is cleaned up yet
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        expect(surveyPopup()).not.toBeNull()
+        expect(widgetListeners.has(survey.id)).toBe(true)
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+
+        // close the survey (the popup unmounts), then let the display poll run again
+        surveyPopup()!.remove()
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // now that _isWidgetSurveyOpen is false, the deferred teardown must actually complete:
+        // the tracked listener is dropped and its marker attribute removed from the old element.
+        expect(widgetListeners.has(survey.id)).toBe(false)
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(false)
+    })
+
+    it('detaches the old trigger listener when the selector resolves to a new element mid-survey (issue #2036)', async () => {
+        const survey = {
+            id: 'swapSelectorWidgetSurvey',
+            name: 'Swap Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector" id="first">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+        const widgetListeners = (surveyManager as any)._widgetSelectorListeners as Map<string, any>
+
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        const firstElement = document.getElementById('first')!
+        expect(firstElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.get(survey.id)?.element).toBe(firstElement)
+
+        // open the survey, then swap the trigger: the selector now resolves to a different live
+        // element while the survey is still open.
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+        firstElement.remove()
+        const secondElement = document.createElement('div')
+        secondElement.className = 'my-selector'
+        secondElement.id = 'second'
+        document.body.appendChild(secondElement)
+
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // the open survey must stay put, and the listener must have moved to the new element with
+        // no orphaned marker left on the old one (which would keep firing show_survey_widget).
+        expect(surveyPopup()).not.toBeNull()
+        expect(firstElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(false)
+        expect(secondElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.get(survey.id)?.element).toBe(secondElement)
+    })
+
+    test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
+        const handlePopoverSurveyMock = vi
+            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .mockImplementation(() => {})
         surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
+        expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
-
-        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
-        surveyManager.callSurveysAndEvaluateDisplayLogic()
-
-        const handlePopoverSurveyMock = jest
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
@@ -660,7 +1517,7 @@ describe('SurveyManager', () => {
         } as unknown as Survey
 
         beforeEach(() => {
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         it('can render survey', () => {
@@ -674,6 +1531,76 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+
+        it('still renders the form when a stale persisted index points past the last question (issue #3575)', () => {
+            // A prior completion/interaction can leave an in-progress index beyond the questions
+            // array. Without clamping, the question renderer bails and the survey container is
+            // injected but empty — the exact symptom reported in #3575.
+            const staleSurvey = { ...mockSurvey, id: 'stale-index-survey' } as unknown as Survey
+            setInProgressSurveyState(staleSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: staleSurvey.questions.length, // out of range (only 0..length-1 are valid)
+                visitedIndices: [0],
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(staleSurvey, surveyDiv)
+
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            localStorage.clear()
+        })
+
+        it('does not navigate Back to a stale out-of-range visited index (issue #3575)', async () => {
+            // A corrupt/stale persisted blob can carry a valid current index but a visitedIndices
+            // array that points past the end of the questions array. Popping such an entry on Back
+            // would send the renderer to a non-existent question and re-empty the container. The
+            // restored visited indices must be filtered so Back always lands on a real question.
+            //
+            // Open questions schedule a 100ms autofocus setTimeout on mount. Unlike the
+            // @testing-library render() tests (which auto-unmount in afterEach and clear it),
+            // renderSurvey mounts Preact directly with no teardown, so that timer would outlive
+            // the test as an orphan and trip CI's "worker failed to exit gracefully" guard. Fake
+            // timers keep it from ever becoming a real pending handle.
+            vi.useFakeTimers()
+            const backSurvey = {
+                ...mockSurvey,
+                id: 'stale-visited-indices-survey',
+                appearance: { ...(mockSurvey.appearance ?? {}), allowGoBack: true },
+                questions: [
+                    { id: 'q1', question: 'Question 1', type: SurveyQuestionType.Open, optional: true },
+                    { id: 'q2', question: 'Question 2', type: SurveyQuestionType.Open, optional: true },
+                ],
+            } as unknown as Survey
+            setInProgressSurveyState(backSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: 1, // in range, so the whole blob is kept
+                visitedIndices: [0, backSurvey.questions.length], // trailing entry is out of range
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(backSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            const backButton = surveyDiv.querySelector<HTMLButtonElement>('.form-back')
+            expect(backButton).not.toBeNull()
+            await act(async () => {
+                fireEvent.click(backButton!)
+            })
+
+            // Back must land on the real first question, not the stale out-of-range index.
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            document.body.removeChild(surveyDiv)
+            localStorage.clear()
+            vi.useRealTimers()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {
@@ -724,18 +1651,21 @@ describe('SurveyManager', () => {
         })
     })
 
-    describe('renderSurvey with URL prefill that completes the survey', () => {
+    describe('renderSurvey with URL prefill', () => {
         let surveyManager: SurveyManager
-        let originalLocation: Location
+        let originalLocation: PropertyDescriptor
 
         beforeEach(() => {
-            originalLocation = window.location
-            delete (window as any).location
-            window.location = { ...originalLocation, search: '' } as Location
+            originalLocation = Object.getOwnPropertyDescriptor(window, 'location')
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...window.location, search: '' },
+            })
         })
 
         afterEach(() => {
-            window.location = originalLocation
+            Object.defineProperty(window, 'location', originalLocation)
         })
 
         it.each([
@@ -752,17 +1682,19 @@ describe('SurveyManager', () => {
         ])('should show confirmation=$shouldShowConfirmation for $scenario', ({ search, shouldShowConfirmation }) => {
             const mockPH = createMockPostHog({
                 config: {
+                    ...defaultConfig(),
                     token: 'test-token',
                     api_host: 'https://test.com',
                     surveys: { prefillFromUrl: true },
                 },
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
-                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                capture: vi.fn(),
+                featureFlags: createSurveyFeatureFlags(),
             })
 
-            surveyManager = new SurveyManager(mockPH)
+            surveyManager = createSurveyManager(mockPH)
 
             const survey: Survey = {
                 id: 'prefill-render-survey',
@@ -774,6 +1706,8 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'How was the draft?',
                         scale: 2,
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         display: 'emoji',
                         skipSubmitButton: true,
                         branching: {
@@ -812,6 +1746,78 @@ describe('SurveyManager', () => {
                 expect(surveyDiv.getElementsByClassName('thank-you-message').length).toBe(0)
             }
         })
+
+        it('retains the auto-advanced prefilled answer through a later manual submit', async () => {
+            localStorage.clear()
+            const mockPH = createMockPostHog({
+                config: {
+                    ...defaultConfig(),
+                    token: 'test-token',
+                    api_host: 'https://test.com',
+                    surveys: { prefillFromUrl: true },
+                },
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                capture: vi.fn(),
+                featureFlags: createSurveyFeatureFlags(),
+            })
+            surveyManager = createSurveyManager(mockPH)
+
+            const survey: Survey = {
+                id: 'prefill-merge-survey',
+                name: 'Prefill Merge Survey',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate the draft',
+                        scale: 2,
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
+                        display: 'emoji',
+                        skipSubmitButton: true,
+                    },
+                    { id: 'q2', type: SurveyQuestionType.Open, question: 'Tell us more' },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            } as unknown as Survey
+
+            // q0 (the rating) is prefilled and auto-advances; the open question is shown for manual submit.
+            window.location.search = '?q0=1'
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(survey, surveyDiv)
+
+            const textarea = surveyDiv.querySelector('textarea')
+            await act(async () => {
+                fireEvent.input(textarea!, { target: { value: 'because reasons' } })
+            })
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            // The manual submit must still carry the prefilled rating, not just the open answer —
+            // both events share one submission id and merge server-side, so dropping it would clear it.
+            expect(mockPH.capture).toHaveBeenLastCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_response_q1: 1,
+                    $survey_response_q2: 'because reasons',
+                })
+            )
+        })
     })
 
     describe('timeout management', () => {
@@ -820,18 +1826,17 @@ describe('SurveyManager', () => {
         let mockSurvey: Survey
 
         beforeEach(() => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             // Set up mocks
             mockPostHog = createMockPostHog({
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
-                featureFlags: {
-                    isFeatureEnabled: jest.fn().mockReturnValue(true),
-                },
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                capture: vi.fn(),
+                featureFlags: createSurveyFeatureFlags(),
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
 
             mockSurvey = {
                 id: 'delayed-survey',
@@ -860,33 +1865,37 @@ describe('SurveyManager', () => {
             }
 
             // Make the internal methods accessible for testing
-            jest.spyOn(surveyManager as any, '_addSurveyToFocus')
-            jest.spyOn(surveyManager as any, '_removeSurveyFromFocus')
-
-            // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
-            jest.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
-                // Add survey to focus and create a timeout
-                surveyManager.getTestAPI().addSurveyToFocus(survey)
-
-                if (survey.appearance?.surveyPopupDelaySeconds) {
-                    const timeoutId = setTimeout(() => {
-                        // This simulates what would happen when the timeout completes
-                        // In the real implementation, it would render the survey
-                        surveyManager.getTestAPI().surveyTimeouts.delete(survey.id)
-                    }, survey.appearance.surveyPopupDelaySeconds * 1000)
-                    surveyManager.getTestAPI().surveyTimeouts.set(survey.id, timeoutId)
-                }
-            })
+            vi.spyOn(surveyManager as any, '_addSurveyToFocus')
+            vi.spyOn(surveyManager as any, '_removeSurveyFromFocus')
         })
 
         afterEach(() => {
-            jest.useRealTimers()
-            jest.clearAllMocks()
+            vi.useRealTimers()
+            // restoreAllMocks (not clearAllMocks) so spies installed via vi.spyOn(global,
+            // 'clearTimeout') below get their real implementation back. Left merely cleared,
+            // the spy stays wrapped around whatever clearTimeout fake timers had installed when
+            // the spy was created; once real timers are restored that reference is stale, and a
+            // later test's SurveyManager.dispose() (which calls clearTimeout on any pending
+            // timeout) throws "clearTimeout is not defined".
+            vi.restoreAllMocks()
         })
 
-        test('should track timeouts when scheduling delayed surveys', () => {
+        test('should track timeouts until a delayed survey renders', () => {
             surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)!.shadowRoot!
             expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+
+            act(() => {
+                vi.advanceTimersByTime(4999)
+            })
+            expect(shadow.textContent).not.toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+
+            act(() => {
+                vi.advanceTimersByTime(1)
+            })
+            expect(shadow.textContent).toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
         })
 
         test('should clear timeouts when removing survey from focus', () => {
@@ -896,7 +1905,7 @@ describe('SurveyManager', () => {
             expect(timeoutId).toBeDefined()
 
             // Test that clearTimeout is called with correct ID
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey)
             expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
 
@@ -925,9 +1934,19 @@ describe('SurveyManager', () => {
             surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey2)
             const secondTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey2.id)
 
-            // Verify both timeouts are tracked separately
+            expect(firstTimeoutId).toBeDefined()
+            expect(secondTimeoutId).toBeDefined()
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+
+            act(() => {
+                vi.advanceTimersByTime(10000)
+            })
+            expect(document.querySelector(`.${getSurveyContainerClass(mockSurvey)}`)).toBeNull()
+            const shadow = document.querySelector(`.${getSurveyContainerClass(mockSurvey2)}`)!.shadowRoot!
+            expect(shadow.textContent).toContain('Test question?')
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey2.id)).toBe(false)
         })
 
         test('cancelSurvey should clear timeout and release focus for pending survey', () => {
@@ -935,7 +1954,7 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey.id)
 
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.cancelSurvey(mockSurvey.id)
 
             expect(clearTimeoutSpy).toHaveBeenCalled()
@@ -945,10 +1964,193 @@ describe('SurveyManager', () => {
 
         test('cancelSurvey should do nothing if survey has no pending timeout', () => {
             // Don't schedule the survey, just try to cancel it
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.cancelSurvey('non-existent-survey')
 
             expect(clearTimeoutSpy).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('re-renders the actual popup on a real language change', () => {
+        const setNavigatorLanguage = (language: string): void => {
+            Object.defineProperty(window.navigator, 'language', {
+                value: language,
+                configurable: true,
+            })
+        }
+
+        const langSurvey: Survey = {
+            id: 'lang-survey-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
+            appearance: {},
+            conditions: null,
+            start_date: '2024-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+        } as unknown as Survey
+
+        const originalLanguage = window.navigator.language
+
+        afterEach(() => {
+            setNavigatorLanguage(originalLanguage)
+            document.getElementsByTagName('html')[0].innerHTML = ''
+        })
+
+        it('updates the rendered question text and keeps the typed answer when the language changes', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey)
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const textarea = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(within(shadow as unknown as HTMLElement).getByText('Hello?')).toBeInTheDocument()
+
+            fireEvent.input(textarea, { target: { value: 'my in-progress answer' } })
+            expect(textarea.value).toBe('my in-progress answer')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            const textareaAfter = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(textareaAfter.value).toBe('my in-progress answer')
+        })
+
+        it('renders in the flipped language once a delayed popup elapses, even though the flip happened mid-delay', () => {
+            vi.useFakeTimers()
+            try {
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
+
+                surveyManager.handlePopoverSurvey({
+                    ...langSurvey,
+                    appearance: { surveyPopupDelaySeconds: 5 },
+                })
+
+                // Flip the language while the popup is still counting down its delay.
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                act(() => {
+                    vi.advanceTimersByTime(5000)
+                })
+
+                const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+                expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            } finally {
+                vi.useRealTimers()
+            }
+        })
+
+        it('keeps display overrides (position) applied after a language change', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey, {
+                ignoreConditions: false,
+                ignoreDelay: false,
+                displayType: DisplaySurveyType.Popover,
+                position: SurveyPosition.TopLeft,
+            })
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const container = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(container.style.left).toBe('0px')
+            expect(container.style.right).toBe('')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            const containerAfter = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(containerAfter.style.left).toBe('0px')
+            expect(containerAfter.style.right).toBe('')
+        })
+
+        it('keeps the shuffled question order stable across a language change', () => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+            try {
+                const trial = 0
+                const shuffledSurvey: Survey = {
+                    id: `shuffled-lang-survey-${trial}`,
+                    name: 'Shuffled Lang Survey',
+                    type: SurveyType.Popover,
+                    linked_flag_key: null,
+                    targeting_flag_key: null,
+                    internal_targeting_flag_key: null,
+                    questions: ['q1', 'q2', 'q3', 'q4'].map((id) => ({
+                        type: SurveyQuestionType.Open,
+                        question: `${id.toUpperCase()}-EN`,
+                        id,
+                        description: '',
+                        translations: { fr: { question: `${id.toUpperCase()}-FR` } },
+                    })),
+                    appearance: { shuffleQuestions: true },
+                    conditions: null,
+                    start_date: '2024-01-01T00:00:00.000Z',
+                    end_date: null,
+                    current_iteration: null,
+                    current_iteration_start_date: null,
+                    feature_flag_keys: [],
+                } as unknown as Survey
+
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = vi.fn().mockReturnValue([shuffledSurvey])
+
+                surveyManager.handlePopoverSurvey(shuffledSurvey)
+
+                const { shadow } = retrieveSurveyShadow(shuffledSurvey, mockPostHog)
+                const shadowEl = shadow as unknown as HTMLElement
+                // Whichever question the (random) shuffle put first is the one that must still
+                // be shown first — with its translation, not some other question's — after the
+                // language change below.
+                const firstQuestionId = ['q1', 'q2', 'q3', 'q4'].find((id) =>
+                    Boolean(within(shadowEl).queryByText(`${id.toUpperCase()}-EN`))
+                )
+                expect(firstQuestionId).toBeDefined()
+                expect(firstQuestionId).toBe('q2')
+                random.mockReturnValue(0.999)
+
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                expect(within(shadowEl).getByText(`${firstQuestionId!.toUpperCase()}-FR`)).toBeInTheDocument()
+                for (const otherId of ['q1', 'q2', 'q3', 'q4'].filter((id) => id !== firstQuestionId)) {
+                    expect(within(shadowEl).queryByText(`${otherId.toUpperCase()}-FR`)).not.toBeInTheDocument()
+                }
+
+                for (const expected of ['q3', 'q4', 'q1']) {
+                    fireEvent.input(within(shadowEl).getByRole('textbox'), { target: { value: 'answer' } })
+                    fireEvent.click(within(shadowEl).getByRole('button', { name: /submit survey/i }))
+                    expect(within(shadowEl).getByText(`${expected.toUpperCase()}-FR`)).toBeInTheDocument()
+                }
+                surveyManager.getTestAPI().removeSurveyFromFocus(shuffledSurvey)
+            } finally {
+                random.mockRestore()
+            }
         })
     })
 
@@ -969,7 +2171,7 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
 
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
@@ -985,7 +2187,7 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
                 flag === 'flag-1' ? true : false
             )
 
@@ -1004,40 +2206,45 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
+            const enabled = vi
+                .spyOn(mockPostHog.featureFlags, 'isFeatureEnabled')
+                .mockImplementation((flag) => flag === 'flag-3')
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
+            expect(enabled).toHaveBeenCalledTimes(1)
+            expect(enabled).toHaveBeenCalledWith('flag-3', { send_event: true })
         })
     })
 
     describe('URL prefill auto-submit behavior', () => {
         let mockPostHog: PostHog
         let surveyManager: SurveyManager
-        let originalLocation: Location
+        let originalLocation: PropertyDescriptor
 
         beforeEach(() => {
             localStorage.clear()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
-            originalLocation = window.location
-            delete (window as any).location
-            window.location = { ...originalLocation, search: '' } as Location
-
-            mockPostHog = createMockPostHog({
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
-                featureFlags: {
-                    isFeatureEnabled: jest.fn().mockReturnValue(true),
-                },
+            originalLocation = Object.getOwnPropertyDescriptor(window, 'location')
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...window.location, search: '' },
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            mockPostHog = createMockPostHog({
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                capture: vi.fn(),
+                featureFlags: createSurveyFeatureFlags(),
+            })
+
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         afterEach(() => {
-            window.location = originalLocation
+            Object.defineProperty(window, 'location', originalLocation)
         })
 
         it('should auto-submit prefilled responses when skipSubmitButton is true and enable_partial_responses is true', () => {
@@ -1052,6 +2259,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -1085,6 +2295,55 @@ describe('SurveyManager', () => {
             )
         })
 
+        it('should include caller-provided properties in the auto-submitted prefill event', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-props',
+                name: 'Prefill Survey Props',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey, null, { account_number: 'A12345', month: 'January' })
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-props',
+                    $survey_response_q1: 8,
+                    account_number: 'A12345',
+                    month: 'January',
+                })
+            )
+        })
+
         it('should NOT auto-submit when skipSubmitButton is false, even with enable_partial_responses true', () => {
             const survey: Survey = {
                 id: 'prefill-survey-no-skip',
@@ -1097,6 +2356,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: false,
                     },
                     {
@@ -1135,6 +2397,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -1173,6 +2438,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                 ],
@@ -1213,6 +2481,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate us',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: true,
                     },
                     {
@@ -1220,6 +2491,9 @@ describe('SurveyManager', () => {
                         type: SurveyQuestionType.Rating,
                         question: 'Rate again',
                         scale: 10,
+                        display: 'number',
+                        lowerBoundLabel: 'Not satisfied',
+                        upperBoundLabel: 'Very satisfied',
                         skipSubmitButton: false,
                     },
                     {
@@ -1263,18 +2537,13 @@ describe('SurveyManager', () => {
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
     let posthog: PostHog
-    let mockRemoveSurveyFromFocus: jest.Mock
-    let originalLocationHref: string
+    let mockRemoveSurveyFromFocus: VitestMock
+    let originalLocationDescriptor: PropertyDescriptor
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
 
-    // Set up fake timers for all tests in this suite
-    beforeAll(() => {
-        jest.useFakeTimers()
-    })
-
-    afterAll(() => {
-        jest.useRealTimers()
+    beforeEach(() => {
+        vi.useFakeTimers()
     })
 
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
@@ -1302,18 +2571,19 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     beforeEach(() => {
         // Mock PostHog instance
         posthog = createMockPostHog({
-            capture: jest.fn(),
-            get_session_replay_url: jest.fn(),
+            capture: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
         })
 
-        mockRemoveSurveyFromFocus = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
 
         // Store original history methods
         originalPushState = window.history.pushState
         originalReplaceState = window.history.replaceState
 
         // Store original location and set initial location
-        originalLocationHref = window.location.href
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         Object.defineProperty(window, 'location', {
             value: new URL('https://example.com'),
             writable: true,
@@ -1326,10 +2596,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         window.history.replaceState = originalReplaceState
 
         // Restore original location
-        Object.defineProperty(window, 'location', {
-            value: new URL(originalLocationHref),
-            writable: true,
-        })
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
     })
 
     it('should not hide survey when URL matches - exact match', () => {
@@ -1338,7 +2605,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             value: new URL('https://example.com/path1'),
             writable: true,
         })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         act(() => {
             window.history.pushState({}, '', '/path1')
@@ -1349,10 +2618,18 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should hide survey when URL changes to non-matching - exact match', () => {
-        const survey = createTestSurvey({ url: '/path1', urlMatchType: 'exact' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        const survey = createTestSurvey({ url: 'https://example.com/path1', urlMatchType: 'exact' })
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
         act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        act(() => {
+            Object.defineProperty(window, 'location', { value: new URL('https://example.com/path2'), writable: true })
             window.history.pushState({}, '', '/path2')
         })
 
@@ -1370,7 +2647,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             writable: true,
         })
 
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         act(() => {
             window.history.pushState({}, '', '/path/subpage')
@@ -1382,9 +2661,20 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle replaceState URL changes', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
         act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/other/page'),
+                writable: true,
+            })
             window.history.replaceState({}, '', '/other/page')
         })
 
@@ -1394,8 +2684,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle browser back/forward navigation', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
+        act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         act(() => {
             Object.defineProperty(window, 'location', {
                 value: new URL('https://example.com/other/page'),
@@ -1411,8 +2708,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should handle hash-based navigation', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
-
+        Object.defineProperty(window, 'location', { value: new URL('https://example.com/path1'), writable: true })
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
+        expect(result.current.isPopupVisible).toBe(true)
+        act(() => {
+            window.dispatchEvent(new Event('popstate'))
+        })
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         act(() => {
             Object.defineProperty(window, 'location', {
                 value: new URL('https://example.com/other/page#/hash'),
@@ -1429,7 +2733,9 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
     it('should restore original history methods on unmount', () => {
         const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
-        const { unmount } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+        const { unmount } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus, true)
+        )
 
         unmount()
 
@@ -1438,9 +2744,10 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should not show delayed survey if URL no longer matches when delay expires', () => {
+        vi.useFakeTimers()
         // Create a survey with a URL condition and a 2 second delay
         const survey = createTestSurvey({
-            url: '/initial-path',
+            url: 'https://example.com/initial-path',
             urlMatchType: 'exact',
         })
         survey.appearance = { surveyPopupDelaySeconds: 2 }
@@ -1453,15 +2760,18 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Ensure clearTimeout is defined in the global scope for this test
         if (typeof global.clearTimeout === 'undefined') {
-            global.clearTimeout = jest.fn()
+            global.clearTimeout = vi.fn()
         }
 
         // Start the survey visibility hook
-        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
+        const { result } = renderHook(() =>
+            usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus, true)
+        )
 
         // Initially the survey should not be visible (due to delay)
         expect(result.current.isPopupVisible).toBe(false)
 
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
         // Change URL to non-matching path before delay expires
         act(() => {
             Object.defineProperty(window, 'location', {
@@ -1473,7 +2783,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Advance timers past the delay
         act(() => {
-            jest.runAllTimers()
+            vi.runAllTimers()
         })
 
         // Survey should still not be visible since URL no longer matches
@@ -1483,11 +2793,11 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 })
 
 describe('useHideSurveyOnURLChange', () => {
-    let originalLocationHref: string
+    let originalLocationDescriptor: PropertyDescriptor
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
-    let mockRemoveSurveyFromFocus: jest.Mock
-    let mockSetSurveyVisible: jest.Mock
+    let mockRemoveSurveyFromFocus: VitestMock
+    let mockSetSurveyVisible: VitestMock
 
     const BASE_SURVEY = {
         id: 'test-survey',
@@ -1499,11 +2809,11 @@ describe('useHideSurveyOnURLChange', () => {
         // Store original history methods
         originalPushState = window.history.pushState
         originalReplaceState = window.history.replaceState
-        mockRemoveSurveyFromFocus = jest.fn()
-        mockSetSurveyVisible = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
+        mockSetSurveyVisible = vi.fn()
 
         // Store original location and set initial location
-        originalLocationHref = window.location.href
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         Object.defineProperty(window, 'location', {
             value: { href: 'https://example.com' },
             writable: true,
@@ -1516,18 +2826,16 @@ describe('useHideSurveyOnURLChange', () => {
         window.history.replaceState = originalReplaceState
 
         // Restore original location
-        Object.defineProperty(window, 'location', {
-            value: { href: originalLocationHref },
-            writable: true,
-        })
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
 
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('should not do anything in preview mode', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
                 events: null,
@@ -1556,6 +2864,7 @@ describe('useHideSurveyOnURLChange', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 events: null,
                 actions: null,
             },
@@ -1578,130 +2887,56 @@ describe('useHideSurveyOnURLChange', () => {
         expect(mockSetSurveyVisible).not.toHaveBeenCalled()
     })
 
-    it('should handle pushState navigation', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
+    it.each(['pushState', 'replaceState', 'popstate', 'hashchange'] as const)(
+        'handles %s navigation only when the URL stops matching',
+        (navigation) => {
+            const survey = {
+                ...BASE_SURVEY,
+                conditions: {
+                    cancelEvents: null,
+                    url: 'https://example.com',
+                    urlMatchType: 'exact' as const,
+                    events: null,
+                    actions: null,
+                },
+            }
+            renderHook(() =>
+                useHideSurveyOnURLChange({
+                    survey,
+                    removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                    setSurveyVisible: mockSetSurveyVisible,
+                    isPreviewMode: false,
+                })
+            )
+            act(() => {
+                window.dispatchEvent(new Event('popstate'))
+            })
+            expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+            expect(mockSetSurveyVisible).not.toHaveBeenCalled()
+            act(() => {
+                const href =
+                    navigation === 'hashchange'
+                        ? 'https://different.com/#/some-hash'
+                        : navigation === 'popstate'
+                          ? 'https://different.com'
+                          : 'https://example.com/different-path'
+                Object.defineProperty(window, 'location', { value: { href }, writable: true })
+                if (navigation === 'pushState' || navigation === 'replaceState') {
+                    window.history[navigation]({}, '', '/different-path')
+                } else {
+                    window.dispatchEvent(new Event(navigation))
+                }
+            })
+            expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
+            expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
         }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            window.history.pushState({}, '', '/different-path')
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle replaceState navigation', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            window.history.replaceState({}, '', '/different-path')
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle popstate events', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://different.com' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('popstate'))
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
-
-    it('should handle hashchange events', () => {
-        const survey = {
-            ...BASE_SURVEY,
-            conditions: {
-                url: 'example.com',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        renderHook(() =>
-            useHideSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://different.com/#/some-hash' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('hashchange'))
-        })
-
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
-    })
+    )
 
     it('should clean up event listeners and history methods on unmount', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
                 events: null,
@@ -1737,6 +2972,7 @@ describe('useHideSurveyOnURLChange', () => {
         const survey = {
             ...BASE_SURVEY,
             conditions: {
+                cancelEvents: null,
                 url: 'example.com',
                 urlMatchType: 'icontains' as const,
                 events: null,
@@ -1766,7 +3002,7 @@ describe('preview renders', () => {
         // we have to manually reset the DOM before each test
         document.getElementsByTagName('html')[0].innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('renderSurveysPreview', () => {
@@ -1790,7 +3026,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -1800,6 +3036,52 @@ describe('preview renders', () => {
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+    })
+
+    test('renderSurveysPreview renders the intro screen for the intro sentinel page index (-1)', () => {
+        const mockSurvey = {
+            id: 'testSurveyIntro',
+            name: 'Test survey with intro',
+            type: SurveyType.Popover,
+            appearance: {
+                displayIntroScreen: true,
+                introScreenHeader: 'Welcome!',
+                introScreenDescription: 'Two quick questions.',
+                introScreenButtonText: 'Get started',
+            },
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: { events: null, actions: null, cancelEvents: null },
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: -1 })
+        expect(surveyDiv.getElementsByClassName('intro-screen').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(0)
+        expect(surveyDiv.querySelector('.intro-screen-header')!.textContent).toBe('Welcome!')
+        expect(surveyDiv.querySelector('.intro-screen-body')!.textContent).toBe('Two quick questions.')
+        expect(surveyDiv.querySelector('.form-submit')!.textContent).toBe('Get started')
+
+        // Page index 0 renders the first question, not the intro
+        const questionDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: questionDiv, previewPageIndex: 0 })
+        expect(questionDiv.getElementsByClassName('intro-screen').length).toBe(0)
+        expect(questionDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(questionDiv.getElementsByClassName('survey-question').length).toBe(1)
     })
 
     test('renderSurveysPreview marks up question with html when no content type is selected by default', () => {
@@ -1822,7 +3104,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -1858,7 +3140,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -1894,7 +3176,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -1930,7 +3212,7 @@ describe('preview renders', () => {
                     upperBoundLabel: 'Very Satisfied',
                 },
             ],
-            conditions: {},
+            conditions: { events: null, actions: null, cancelEvents: null },
             end_date: null,
             targeting_flag_key: null,
         }
@@ -2015,18 +3297,12 @@ describe('preview renders', () => {
             } as Survey
 
             useEffect(() => {
-                console.log('Render effect triggered with page index:', currentPageIndex)
                 if (surveyPreviewRef.current) {
                     renderSurveysPreview({
                         survey,
                         parentElement: surveyPreviewRef.current,
                         previewPageIndex: currentPageIndex,
-                        onPreviewSubmit: () => {
-                            setCurrentPageIndex((prev) => {
-                                console.log('Setting page index from', prev, 'to', prev + 1)
-                                return prev + 1
-                            })
-                        },
+                        onPreviewSubmit: () => setCurrentPageIndex((prev) => prev + 1),
                     })
                 }
             }, [currentPageIndex])
@@ -2043,7 +3319,6 @@ describe('preview renders', () => {
 
         // Find and fill the textarea
         const textarea = container.querySelector('textarea')
-        console.log('Found textarea:', !!textarea)
 
         await act(async () => {
             // Use fireEvent.input to trigger onInput handler (change event fires on blur)
@@ -2052,9 +3327,6 @@ describe('preview renders', () => {
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
         const submitButton = container.querySelectorAll('button[type="button"]')[1]
-
-        console.log('Found submit button:', !!submitButton)
-        console.log('Submit button text:', submitButton?.textContent)
 
         await act(async () => {
             fireEvent.click(submitButton!)

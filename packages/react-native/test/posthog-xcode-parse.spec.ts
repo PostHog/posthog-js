@@ -1,6 +1,9 @@
-import { execFileSync, execSync } from 'child_process'
+import { execFileSync, execSync, spawnSync } from 'child_process'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
+
+import { POSTHOG_RELEASE_MODES, buildDsymUploadShellScript } from '../src/tooling/expoconfig'
 
 /**
  * These tests validate the sed expressions used in tooling/posthog-xcode.sh
@@ -79,55 +82,303 @@ describe('posthog-xcode.sh remote URL parsing', () => {
   })
 })
 
-// Regression tests for issue #3682:
-// The Expo plugin wraps the bundle phase as:
-//   /bin/sh posthog-xcode.sh /bin/sh react-native-xcode.sh ...
-// making $1 = /bin/sh inside posthog-xcode.sh.  REACT_NATIVE_XCODE then
-// resolves to /bin/sh (a binary), so the grep/sed patch against it silently
-// no-ops and the packager sourcemap is deleted before posthog-cli reads it.
-describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
+describe('posthog-xcode.sh bundle command composition', () => {
   const scriptContents = fs.readFileSync(SCRIPT_PATH, 'utf8')
 
-  // Extract the REACT_NATIVE_XCODE_DEFAULT + resolution block from the script
-  // so the tests track the actual source and cannot silently diverge from it.
-  const extractAssignmentBlock = (): string => {
-    // Match from REACT_NATIVE_XCODE_DEFAULT=... through the closing `fi` of
-    // the if/else guard (or a plain assignment if the structure changes again).
-    const match = scriptContents.match(
-      /REACT_NATIVE_XCODE_DEFAULT="[^"]+"[\s\S]+?(?:fi|REACT_NATIVE_XCODE="\$\{[^}]+\}")/
-    )
-    if (!match) throw new Error('Could not locate REACT_NATIVE_XCODE assignment in posthog-xcode.sh')
+  const extractReactNativeXcodeResolutionBlock = (): string => {
+    const match = scriptContents.match(/REACT_NATIVE_XCODE_DEFAULT="[^"]+"[\s\S]+?\n\s*done/)
+    if (!match) throw new Error('Could not locate REACT_NATIVE_XCODE resolution in posthog-xcode.sh')
     return match[0]
   }
 
-  const resolveReactNativeXcode = (arg1: string): string => {
-    const block = extractAssignmentBlock()
-    // Run the extracted shell fragment with $1 set to the provided value and
-    // print the resulting REACT_NATIVE_XCODE variable.
-    const script = `${block}\nprintf '%s' "$REACT_NATIVE_XCODE"`
-    const escaped = arg1.replace(/'/g, `'\\''`)
-    return execSync(`/bin/bash -c 'set -- '"'"'${escaped}'"'"'; ${script}'`).toString()
+  const resolveReactNativeXcode = (args: string[]): string => {
+    const script = `${extractReactNativeXcodeResolutionBlock()}\nprintf '%s' "$REACT_NATIVE_XCODE"`
+    return execFileSync('/bin/bash', ['-c', script, 'posthog-xcode-test', ...args]).toString()
   }
 
   it.each([
-    ['RN script path', '../node_modules/react-native/scripts/react-native-xcode.sh'],
-    ['/bin/sh (issue #3682 — Expo shell-prefixed bundle phase)', '/bin/sh'],
-  ])('REACT_NATIVE_XCODE resolves to react-native-xcode.sh path when $1 is %s', (_desc, arg1) => {
-    const result = resolveReactNativeXcode(arg1)
-    expect(result).not.toBe('/bin/sh')
-    expect(result).toContain('react-native-xcode.sh')
+    ['direct RN script', ['../node_modules/react-native/scripts/react-native-xcode.sh']],
+    ['shell-prefixed RN script', ['/bin/sh', '../node_modules/react-native/scripts/react-native-xcode.sh']],
+    [
+      'nested source-map wrapper',
+      [
+        '/bin/sh',
+        '../node_modules/@sentry/react-native/scripts/sentry-xcode.sh',
+        '../node_modules/react-native/scripts/react-native-xcode.sh',
+      ],
+    ],
+  ])('locates react-native-xcode.sh in a %s command', (_desc, args) => {
+    expect(resolveReactNativeXcode(args)).toBe('../node_modules/react-native/scripts/react-native-xcode.sh')
+  })
+
+  it('falls back to the standard RN script when an outer wrapper does not forward arguments', () => {
+    expect(resolveReactNativeXcode([])).toBe('../node_modules/react-native/scripts/react-native-xcode.sh')
+  })
+
+  it('forwards nested commands, preserves the Hermes map, and resolves a hoisted fallback', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-composition-'))
+    const derivedDir = path.join(tempDir, 'derived')
+    const configurationDir = path.join(tempDir, 'configuration')
+    const homeDir = path.join(tempDir, 'home')
+    const iosDir = path.join(tempDir, 'packages', 'example', 'ios')
+    const tracePath = path.join(tempDir, 'trace.log')
+    const wrapperPath = path.join(tempDir, 'sentry-xcode.sh')
+    const reactNativeRoot = path.join(tempDir, 'node_modules', 'react-native')
+    const reactNativePath = path.join(reactNativeRoot, 'scripts', 'react-native-xcode.sh')
+    const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
+
+    try {
+      for (const directory of [
+        derivedDir,
+        configurationDir,
+        iosDir,
+        path.dirname(reactNativePath),
+        path.dirname(cliPath),
+      ]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(wrapperPath, '#!/bin/sh\necho wrapper >> "$TRACE_PATH"\n"$@"\n', { mode: 0o755 })
+      fs.writeFileSync(path.join(reactNativeRoot, 'package.json'), '{}')
+      fs.writeFileSync(
+        reactNativePath,
+        '#!/bin/sh\necho react-native >> "$TRACE_PATH"\nrm "$PACKAGER_SOURCEMAP_FILE"\n',
+        { mode: 0o755 }
+      )
+      fs.writeFileSync(cliPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+      const env = {
+        ...process.env,
+        CONFIGURATION_BUILD_DIR: configurationDir,
+        DERIVED_FILE_DIR: derivedDir,
+        HOME: homeDir,
+        NODE_BINARY: process.execPath,
+        // The CLI stub reports no version. SKIP_BUNDLING skips the upload calls, and the
+        // event-mode floor check with them, so the run succeeds as it did before the default.
+        SKIP_BUNDLING: '1',
+        TRACE_PATH: tracePath,
+      }
+
+      execFileSync(SCRIPT_PATH, ['/bin/sh', wrapperPath, reactNativePath], {
+        cwd: iosDir,
+        env,
+        stdio: 'pipe',
+      })
+
+      expect(fs.readFileSync(tracePath, 'utf8').trim().split('\n')).toEqual(['wrapper', 'react-native'])
+      expect(fs.readFileSync(reactNativePath, 'utf8')).toContain('#rm "$PACKAGER_SOURCEMAP_FILE"')
+
+      // Sentry only passes its $1 script path to sentry-cli. When Sentry wraps
+      // PostHog, posthog-xcode.sh is therefore invoked without the original RN
+      // argument and must execute the standard script itself.
+      fs.writeFileSync(tracePath, '')
+      execFileSync(SCRIPT_PATH, [], { cwd: iosDir, env, stdio: 'pipe' })
+      expect(fs.readFileSync(tracePath, 'utf8').trim()).toBe('react-native')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 })
 
-describe('posthog-xcode.sh skipOnConflict upload flag', () => {
-  it('passes --skip-on-conflict only to hermes upload', () => {
+describe('posthog-xcode.sh release version resolution', () => {
+  const scriptContents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+
+  const extractReleaseInfoBlock = (): string => {
+    const match = scriptContents.match(
+      /resolve_posthog_ios_release_info\(\) \{[\s\S]+?\n\}\n\nresolve_posthog_ios_release_info/
+    )
+    if (!match) throw new Error('Could not locate iOS release info resolution in posthog-xcode.sh')
+    return match[0]
+  }
+
+  const resolveReleaseInfo = (
+    tempDir: string,
+    plistVersion: string,
+    plistBuild: string,
+    marketingVersion = '1.0',
+    projectVersion = '1',
+    buildSettings: Record<string, string> = {}
+  ): string => {
+    const plistBuddy = path.join(tempDir, 'plist-buddy')
+    const infoPlist = path.join(tempDir, 'ExampleApp', 'Info.plist')
+    fs.mkdirSync(path.dirname(infoPlist), { recursive: true })
+    fs.writeFileSync(infoPlist, '')
+    fs.writeFileSync(
+      plistBuddy,
+      '#!/bin/sh\ncase "$2" in\n  *CFBundleShortVersionString*) printf %s "$TEST_PLIST_VERSION" ;;\n  *CFBundleVersion*) printf %s "$TEST_PLIST_BUILD" ;;\nesac\n',
+      { mode: 0o755 }
+    )
+
+    const script = `${extractReleaseInfoBlock()}\nprintf '%s|%s' "$POSTHOG_RELEASE_VERSION" "$POSTHOG_BUILD_VERSION"`
+    return execFileSync('/bin/bash', ['-c', script], {
+      env: {
+        ...process.env,
+        SRCROOT: tempDir,
+        INFOPLIST_FILE: 'ExampleApp/Info.plist',
+        POSTHOG_PLIST_BUDDY: plistBuddy,
+        MARKETING_VERSION: marketingVersion,
+        CURRENT_PROJECT_VERSION: projectVersion,
+        TEST_PLIST_VERSION: plistVersion,
+        TEST_PLIST_BUILD: plistBuild,
+        ...buildSettings,
+      },
+    }).toString()
+  }
+
+  it('prefers Expo source Info.plist versions over generated Xcode defaults', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(resolveReleaseInfo(tempDir, '2.10.0', '154')).toBe('2.10.0|154')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves custom Xcode build settings referenced by the source Info.plist', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(
+        resolveReleaseInfo(tempDir, '$(APP_VERSION)', '${BUILD_NUMBER}', '1.0', '1', {
+          APP_VERSION: '9.9.9',
+          BUILD_NUMBER: '321',
+        })
+      ).toBe('9.9.9|321')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves compound Xcode build settings referenced by the source Info.plist', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(
+        resolveReleaseInfo(tempDir, '$(VERSION_MAJOR).$(VERSION_MINOR)', '$(BUILD_PREFIX)$(BUILD_NUMBER)', '1.0', '1', {
+          VERSION_MAJOR: '2',
+          VERSION_MINOR: '10.0',
+          BUILD_PREFIX: '1',
+          BUILD_NUMBER: '54',
+        })
+      ).toBe('2.10.0|154')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps Xcode versions when Info.plist preprocessing is enabled', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(
+        resolveReleaseInfo(tempDir, 'APP_VERSION', 'APP_BUILD', '1.0', '1', {
+          INFOPLIST_PREPROCESS: 'YES',
+        })
+      ).toBe('1.0|1')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps Xcode versions when source Info.plist values are unresolved', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(resolveReleaseInfo(tempDir, '$(MISSING_VERSION)', '$(A)-$(B)')).toBe('1.0|1')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  const captureReleaseArgs = (cliVersion: string): { commands: string[]; infoPlist: string } => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-release-args-'))
+    const derivedDir = path.join(tempDir, 'derived')
+    const configurationDir = path.join(tempDir, 'configuration')
+    const homeDir = path.join(tempDir, 'home')
+    const sourceRoot = path.join(tempDir, 'source')
+    const iosDir = path.join(sourceRoot, 'ios')
+    const infoPlist = path.join(sourceRoot, 'ExampleApp', 'Info.plist')
+    const reactNativePath = path.join(tempDir, 'react-native-xcode.sh')
+    const plistBuddyPath = path.join(tempDir, 'plist-buddy')
+    const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
+    const cliTracePath = path.join(tempDir, 'cli-trace.log')
+
+    try {
+      for (const directory of [derivedDir, configurationDir, iosDir, path.dirname(infoPlist), path.dirname(cliPath)]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(infoPlist, '')
+      fs.writeFileSync(reactNativePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(
+        plistBuddyPath,
+        '#!/bin/sh\ncase "$2" in\n  *CFBundleShortVersionString*) printf %s 2.10.0 ;;\n  *CFBundleVersion*) printf %s 154 ;;\nesac\n',
+        { mode: 0o755 }
+      )
+      fs.writeFileSync(
+        cliPath,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then\n  echo "posthog-cli $TEST_CLI_VERSION"\n  exit 0\nfi\nprintf "%s\\n" "$*" >> "$TEST_CLI_TRACE"\n',
+        { mode: 0o755 }
+      )
+
+      execFileSync(SCRIPT_PATH, [reactNativePath], {
+        cwd: iosDir,
+        env: {
+          ...process.env,
+          CONFIGURATION_BUILD_DIR: configurationDir,
+          CURRENT_PROJECT_VERSION: '1',
+          DERIVED_FILE_DIR: derivedDir,
+          GITHUB_SHA: 'test-sha',
+          HOME: homeDir,
+          INFOPLIST_FILE: 'ExampleApp/Info.plist',
+          MARKETING_VERSION: '1.0',
+          POSTHOG_PLIST_BUDDY: plistBuddyPath,
+          PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+          SRCROOT: sourceRoot,
+          TEST_CLI_TRACE: cliTracePath,
+          TEST_CLI_VERSION: cliVersion,
+        },
+        stdio: 'pipe',
+      })
+
+      return {
+        commands: fs.readFileSync(cliTracePath, 'utf8').trim().split('\n'),
+        infoPlist,
+      }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  it.each([
+    ['0.15.0', false],
+    ['0.15.1', true],
+    ['0.16.0', true],
+  ])('uses Info.plist arguments with posthog-cli %s: %s', (cliVersion, usesInfoPlist) => {
+    const { commands, infoPlist } = captureReleaseArgs(cliVersion)
+
+    expect(commands).toHaveLength(2)
+    for (const command of commands) {
+      if (usesInfoPlist) {
+        expect(command).toContain(`--info-plist ${infoPlist}`)
+        expect(command).not.toContain('--release-name')
+        expect(command).not.toContain('--release-version')
+        expect(command).not.toContain('--build')
+      } else {
+        expect(command).not.toContain('--info-plist')
+        expect(command).toContain('--release-name com.example.app')
+        expect(command).toContain('--release-version 2.10.0')
+        expect(command).toContain('--build 154')
+      }
+    }
+  })
+})
+
+describe('posthog-xcode.sh conflict upload flags', () => {
+  it('passes --skip-on-conflict and --force only to hermes upload', () => {
     const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
 
-    expect(contents).toContain('POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"')
+    expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)')
+    expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--force)')
     expect(contents).toContain(
-      'CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)'
+      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)'
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
+    expect(contents).not.toContain('hermes clone --force')
   })
 })
 
@@ -159,5 +410,397 @@ print_command_error "posthog-cli hermes upload" "42" "$CLI_OUTPUT"`
       'error: posthog-cli hermes upload - Oops! real failure',
     ])
     expect(output.every((line) => line.startsWith('error: '))).toBe(true)
+  })
+})
+
+describe('posthog-xcode.sh posthog-cli invocation', () => {
+  // The wrapper reads `posthog-cli --version` once, to choose the release arguments and to check
+  // the --release-mode floor. These stubs answer that without recording it, so the trace holds only
+  // the clone and upload calls. The versions sit far either side of the real floor, so the tests
+  // survive it being set.
+  const cliStub = (version: string): string =>
+    [
+      '#!/bin/sh',
+      `case " $* " in *" --version "*) echo "posthog-cli ${version}"; exit 0;; esac`,
+      'echo "$@" >> "$CLI_TRACE_PATH"',
+      '',
+    ].join('\n')
+  const CLI_NEW_ENOUGH = cliStub('9.9.9')
+  const CLI_TOO_OLD = cliStub('0.0.1')
+  // Reports no version, and records every call, the version probe included.
+  const CLI_WITHOUT_VERSION = ['#!/bin/sh', 'echo "$@" >> "$CLI_TRACE_PATH"', ''].join('\n')
+  // Below the version at which the wrapper hands Info.plist to posthog-cli as --info-plist, so the
+  // wrapper resolves the release from the plist itself. The hand-over has its own tests above.
+  const CLI_WITHOUT_INFO_PLIST = cliStub('0.15.0')
+
+  // Runs the wrapper against a posthog-cli stub that records its arguments, so the assertions
+  // are on what the CLI was actually asked to do rather than on the shell source.
+  const runWrapper = (
+    args: string[],
+    extraEnv: Record<string, string>,
+    infoPlist?: Record<string, string>,
+    cli: string = CLI_NEW_ENOUGH
+  ): { status: number; invocations: string[]; output: string } => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-release-mode-'))
+    try {
+      const derivedDir = path.join(tempDir, 'derived')
+      const configurationDir = path.join(tempDir, 'configuration')
+      const homeDir = path.join(tempDir, 'home')
+      const iosDir = path.join(tempDir, 'ios')
+      const cliTracePath = path.join(tempDir, 'cli.log')
+      const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
+      const reactNativePath = path.join(tempDir, 'react-native-xcode.sh')
+
+      for (const directory of [derivedDir, configurationDir, iosDir, path.dirname(cliPath)]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(cliPath, cli, { mode: 0o755 })
+      fs.writeFileSync(reactNativePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+      const plistEnv: Record<string, string> = {}
+      if (infoPlist) {
+        const entries = Object.entries(infoPlist)
+          .map(([key, value]) => `  <key>${key}</key>\n  <string>${value}</string>`)
+          .join('\n')
+        fs.mkdirSync(path.join(iosDir, 'App'), { recursive: true })
+        fs.writeFileSync(
+          path.join(iosDir, 'App', 'Info.plist'),
+          `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${entries}\n</dict>\n</plist>\n`
+        )
+        // Stands in for /usr/libexec/PlistBuddy, which Linux CI does not have. Answers with the
+        // values written above, so the assertions see the wrapper's own plist resolution.
+        const plistBuddyPath = path.join(tempDir, 'plist-buddy')
+        fs.writeFileSync(
+          plistBuddyPath,
+          [
+            '#!/bin/sh',
+            'case "$2" in',
+            ...Object.entries(infoPlist).map(([key, value]) => `  *${key}*) printf %s '${value}' ;;`),
+            'esac',
+            '',
+          ].join('\n'),
+          { mode: 0o755 }
+        )
+        plistEnv.POSTHOG_PLIST_BUDDY = plistBuddyPath
+        plistEnv.SRCROOT = iosDir
+        plistEnv.INFOPLIST_FILE = 'App/Info.plist'
+      }
+
+      const result = spawnSync(SCRIPT_PATH, [...args, '/bin/sh', reactNativePath], {
+        cwd: iosDir,
+        env: {
+          ...process.env,
+          CLI_TRACE_PATH: cliTracePath,
+          CONFIGURATION_BUILD_DIR: configurationDir,
+          DERIVED_FILE_DIR: derivedDir,
+          // Stands in for a CI runner so the wrapper skips deriving git metadata from the
+          // (repo-less) temp directory.
+          GITHUB_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          HOME: homeDir,
+          NODE_BINARY: process.execPath,
+          ...plistEnv,
+          ...extraEnv,
+        },
+        encoding: 'utf8',
+      })
+
+      const invocations = fs.existsSync(cliTracePath)
+        ? fs.readFileSync(cliTracePath, 'utf8').trim().split('\n').filter(Boolean)
+        : []
+      return { status: result.status ?? -1, invocations, output: `${result.stdout}${result.stderr}` }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  // `git config --get` exits 1 with no origin; `rev-parse HEAD` exits 128 with no commits.
+  it.each([
+    ['no git repo', ''],
+    ['a git repo with no origin remote', 'git init -q'],
+    [
+      'a git repo with an origin remote but no commits',
+      'git init -q && git remote add origin git@github.com:acme/app.git',
+    ],
+  ])('continues without git metadata in a local build with %s', (_label, setup) => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
+    try {
+      if (setup) {
+        execSync(setup, { cwd: repoDir, stdio: 'pipe' })
+      }
+
+      const { status, invocations } = runWrapper([], { GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir })
+
+      expect(status).toBe(0)
+      expect(invocations).toHaveLength(2)
+      expect(invocations[0]).toContain('hermes clone')
+      expect(invocations[1]).toContain('hermes upload')
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not advertise GitHub Actions metadata for a repo with a remote but no commits', () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
+    try {
+      execSync('git init -q && git remote add origin git@github.com:acme/app.git', { cwd: repoDir, stdio: 'pipe' })
+      const envRecordingCli = [
+        '#!/bin/sh',
+        'if [ "$1" = "--version" ]; then echo 0.99.0; exit 0; fi',
+        'echo "$1 GITHUB_ACTIONS=[$GITHUB_ACTIONS] GITHUB_SHA=[$GITHUB_SHA]" >> "$CLI_TRACE_PATH"',
+        '',
+      ].join('\n')
+
+      const { status, invocations } = runWrapper(
+        [],
+        { GITHUB_ACTIONS: '', GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir },
+        undefined,
+        envRecordingCli
+      )
+
+      expect(status).toBe(0)
+      expect(invocations).toEqual(['hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]', 'hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]'])
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],
+    ['the --posthog-release-mode argument', ['--posthog-release-mode', 'event', '--'], {}],
+  ])('passes --release-mode event to clone and upload from %s', (_source, args, env) => {
+    const { status, invocations } = runWrapper(args, env)
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('hermes clone')
+    expect(invocations[0]).toContain('--release-mode event')
+    expect(invocations[1]).toContain('hermes upload')
+    expect(invocations[1]).toContain('--release-mode event')
+  })
+
+  it.each([
+    ['the POSTHOG_SKIP_ON_CONFLICT env var', [] as string[], { POSTHOG_SKIP_ON_CONFLICT: '1' }, '--skip-on-conflict'],
+    ['the --posthog-skip-on-conflict argument', ['--posthog-skip-on-conflict', '--'], {}, '--skip-on-conflict'],
+    ['the POSTHOG_FORCE env var', [] as string[], { POSTHOG_FORCE: '1' }, '--force'],
+    ['the --posthog-force argument', ['--posthog-force', '--'], {}, '--force'],
+  ])('passes %s to the upload alone', (_source, args, env, flag) => {
+    const { status, invocations } = runWrapper(args, env)
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('hermes clone')
+    expect(invocations[0]).not.toContain(flag)
+    expect(invocations[1]).toContain('hermes upload')
+    expect(invocations[1]).toContain(flag)
+  })
+
+  it('refuses to keep and overwrite a conflicting symbol set at once', () => {
+    // posthog-cli declares the two flags mutually exclusive, so the pair has to fail with a
+    // message naming them rather than with an argument-parser error after the bundle is built.
+    const { status, invocations, output } = runWrapper([], { POSTHOG_SKIP_ON_CONFLICT: '1', POSTHOG_FORCE: '1' })
+
+    expect(status).not.toBe(0)
+    expect(output).toContain('skip-on-conflict and force cannot both be set')
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it('pins the same posthog-cli floor as posthog.gradle', () => {
+    const shellFloor = fs.readFileSync(SCRIPT_PATH, 'utf8').match(/^MIN_RELEASE_MODE_CLI_VERSION="([^"]+)"$/m)?.[1]
+    const gradleFloor = fs
+      .readFileSync(path.join(path.dirname(SCRIPT_PATH), 'posthog.gradle'), 'utf8')
+      .match(/MIN_RELEASE_MODE_VERSION = "([^"]+)"/)?.[1]
+
+    expect(shellFloor).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(gradleFloor).toBe(shellFloor)
+  })
+
+  it.each([
+    ['is below the minimum', CLI_TOO_OLD, 'needs posthog-cli >='],
+    ['reports no version at all', CLI_WITHOUT_VERSION, 'could not determine the posthog-cli version'],
+  ])('names the upgrade when the posthog-cli on the box %s', (_case, cli, message) => {
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, cli)
+
+    expect(status).not.toBe(0)
+    expect(output).toContain(message)
+    expect(output).toContain('npm install -g @posthog/cli@latest')
+    // It fails before uploading anything, rather than part way through.
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it('reports the version it found so the message is actionable', () => {
+    const { output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, CLI_TOO_OLD)
+
+    expect(output).toContain('needs posthog-cli >= 0.16.0 (found 0.0.1)')
+  })
+
+  it('skips the version check for a posthog-cli built from source', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      { POSTHOG_RELEASE_MODE: 'event', POSTHOG_SKIP_CLI_VERSION_CHECK: '1' },
+      undefined,
+      CLI_TOO_OLD
+    )
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('--release-mode event')
+  })
+
+  it('does not apply the event-mode floor to a SKIP_BUNDLING build', () => {
+    // A native-only compile sets SKIP_BUNDLING and never uploads maps, so the default event mode
+    // must not fail it over an old posthog-cli it never exercises.
+    const { status, invocations } = runWrapper([], { SKIP_BUNDLING: '1' }, undefined, CLI_TOO_OLD)
+
+    expect(status).toBe(0)
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it('passes the flag by default so a build that configures nothing uploads release-independent', () => {
+    const { status, invocations } = runWrapper([], {})
+
+    expect(status).toBe(0)
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).toContain('--release-mode event')
+  })
+
+  it.each([
+    ['is below the minimum', CLI_TOO_OLD],
+    ['reports no version at all', CLI_WITHOUT_VERSION],
+  ])('softens the default event mode when the posthog-cli on the box %s', (_case, cli) => {
+    // Nothing configured a mode, so upgrading the SDK must not fail the build: the wrapper warns,
+    // drops the flag, and uploads the maps bound to the release, like builds did before the
+    // default changed. Only an explicitly configured event mode fails on an old CLI.
+    const { status, invocations, output } = runWrapper([], {}, undefined, cli)
+
+    expect(status).toBe(0)
+    expect(output).toContain('warning:')
+    expect(output).toContain('npm install -g @posthog/cli@latest')
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).not.toContain('--release-mode')
+  })
+
+  it('omits the flag in symbol-set mode so an older posthog-cli keeps working', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      { POSTHOG_RELEASE_MODE: 'symbol-set' },
+      undefined,
+      CLI_WITHOUT_VERSION
+    )
+
+    expect(status).toBe(0)
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).not.toContain('--release-mode')
+  })
+
+  it('fails the build on an unrecognized mode instead of binding the maps anyway', () => {
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'evnet' })
+
+    expect(status).not.toBe(0)
+    expect(invocations).toHaveLength(0)
+    expect(output).toContain("must be 'symbol-set' or 'event'")
+  })
+
+  // The SDK reports $app_version and $app_build from Info.plist, and event release mode resolves
+  // an exception's release from exactly those. Expo writes literal versions there and leaves
+  // MARKETING_VERSION at the Xcode template default of 1.0, so a release keyed on the build
+  // setting never matches an event and the exception silently reports no release. posthog-cli
+  // 0.15.1 and newer read the plist themselves; older ones get the wrapper's resolution below.
+  it('keys the release on Info.plist rather than the build settings', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      {
+        PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+        MARKETING_VERSION: '1.0',
+        CURRENT_PROJECT_VERSION: '1',
+      },
+      { CFBundleShortVersionString: '1.0.0', CFBundleVersion: '42' },
+      CLI_WITHOUT_INFO_PLIST
+    )
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-name com.example.app')
+    expect(invocations[1]).toContain('--release-version 1.0.0')
+    expect(invocations[1]).toContain('--build 42')
+  })
+
+  it('falls back to the build settings when Info.plist only references them', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      {
+        PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+        MARKETING_VERSION: '2.5.0',
+        CURRENT_PROJECT_VERSION: '7',
+      },
+      { CFBundleShortVersionString: '$(MARKETING_VERSION)', CFBundleVersion: '$(CURRENT_PROJECT_VERSION)' },
+      CLI_WITHOUT_INFO_PLIST
+    )
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-version 2.5.0')
+    expect(invocations[1]).toContain('--build 7')
+  })
+
+  it('falls back to the build settings when there is no Info.plist at all', () => {
+    const { status, invocations } = runWrapper([], {
+      PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+      MARKETING_VERSION: '3.1.4',
+      CURRENT_PROJECT_VERSION: '9',
+    })
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-version 3.1.4')
+    expect(invocations[1]).toContain('--build 9')
+  })
+})
+
+/**
+ * The accepted release modes are written out three times: POSTHOG_RELEASE_MODES, the case in
+ * posthog-xcode.sh, and the list in posthog.gradle. A third mode would be accepted at prebuild and
+ * then rejected at build time by whichever copy was missed. The dSYM phase carries no mode, because
+ * it always binds.
+ */
+describe('release mode lists stay in sync', () => {
+  const GRADLE_PATH = path.resolve(__dirname, '..', 'tooling', 'posthog.gradle')
+
+  // Reads `  symbol-set|event) ;;` out of the case on $POSTHOG_RELEASE_MODE_VALUE.
+  const shellModes = (): string[] => {
+    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+    const match = contents.match(/case "\$POSTHOG_RELEASE_MODE_VALUE" in\s*\n\s*([^)]+)\)/)
+    if (!match) throw new Error('Could not locate the release mode case in posthog-xcode.sh')
+    return match[1].split('|').map((mode) => mode.trim())
+  }
+
+  // Reads `["symbol-set", "event"]` out of resolvePostHogReleaseMode.
+  const gradleModes = (): string[] => {
+    const contents = fs.readFileSync(GRADLE_PATH, 'utf8')
+    const match = contents.match(/value in \[([^\]]+)\]/)
+    if (!match) throw new Error('Could not locate the release mode list in posthog.gradle')
+    return match[1].split(',').map((mode) => mode.trim().replace(/"/g, ''))
+  }
+
+  it('leaves the release mode out of the generated dSYM phase', () => {
+    // posthog-ios always binds its symbol sets, so the phase must carry no mode at all.
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_RESOLVED_RELEASE_MODE')
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_NO_RELEASE_BIND')
+  })
+
+  it.each([
+    ['posthog-xcode.sh', shellModes],
+    ['posthog.gradle', gradleModes],
+  ])('%s accepts exactly the modes the plugin does', (_name, extract) => {
+    expect((extract as () => string[])().sort()).toEqual([...POSTHOG_RELEASE_MODES].sort())
+  })
+
+  // Both platforms gate event mode on the same posthog-cli, so raising one floor and forgetting
+  // the other would leave one platform accepting a CLI the other rejects.
+  it('gates both platforms on the same posthog-cli version', () => {
+    const shell = fs.readFileSync(SCRIPT_PATH, 'utf8').match(/MIN_RELEASE_MODE_CLI_VERSION="([^"]+)"/)
+    const gradle = fs.readFileSync(GRADLE_PATH, 'utf8').match(/MIN_RELEASE_MODE_VERSION = "([^"]+)"/)
+    if (!shell || !gradle) throw new Error('Could not locate the release mode version floors')
+
+    expect(shell[1]).toBe(gradle[1])
   })
 })

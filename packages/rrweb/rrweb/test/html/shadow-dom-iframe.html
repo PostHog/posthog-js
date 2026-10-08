@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <div class="my-element"></div>
+    <iframe id="frame" src="about:blank"></iframe>
+    <script>
+      // Attach an open shadow root synchronously at load, before recording starts.
+      var host = document.querySelector('.my-element');
+      var root = host.attachShadow({ mode: 'open' });
+      root.innerHTML = '<ul id="log"></ul>';
+      window.__log = root.getElementById('log');
+    </script>
+  </body>
+</html>

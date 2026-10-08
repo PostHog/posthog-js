@@ -7,19 +7,20 @@ import { log } from '../extensions/logger'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
-jest.mock('../extensions/logger', () => ({
-  log: jest.fn(),
-  setLogger: jest.fn(),
+vi.mock('../extensions/logger', () => ({
+  createLogger: (logger?: (message: string) => void) => logger ?? (() => undefined),
+  log: vi.fn(),
+  setLogger: vi.fn(),
 }))
 
-const mockedLog = jest.mocked(log)
+const mockedLog = vi.mocked(log)
 
 beforeEach(() => {
   mockedLog.mockClear()
 })
 
 afterEach(() => {
-  jest.restoreAllMocks()
+  vi.restoreAllMocks()
 })
 
 /**
@@ -103,6 +104,16 @@ describe('addContextParameterToTool', () => {
         "already has 'context' parameter",
       ],
       [
+        'tool declares context with a false schema',
+        { name: 'has-false-context', inputSchema: { type: 'object', properties: { context: false } } },
+        "already has 'context' parameter",
+      ],
+      [
+        'schema uses a root $ref',
+        { name: 'referenced-tool', inputSchema: { $ref: '#/$defs/Input' } },
+        'complex schema',
+      ],
+      [
         'schema uses oneOf',
         { name: 'union-tool', inputSchema: { oneOf: [{ type: 'object', properties: {} }] } },
         'complex schema',
@@ -137,13 +148,13 @@ describe('addContextParameterToTool', () => {
 })
 
 describe('addContextParameterToTools (batch)', () => {
-  it('skips the get_more_tools virtual tool', () => {
+  it('treats get_more_tools like a normal tool when it is already in the batch', () => {
     const result = addContextParameterToTools([
       { name: 'get_more_tools', inputSchema: {} },
       { name: 'other-tool', inputSchema: {} },
     ])
 
-    expect(result[0].inputSchema?.properties).toBeUndefined()
+    expect(result[0].inputSchema?.properties?.context).toBeDefined()
     expect(result[1].inputSchema?.properties?.context).toBeDefined()
   })
 
@@ -276,7 +287,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
   it('prefers an explicit `context` argument over the fallback', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const intentFallback = jest.fn(() => 'Fallback intent')
+    const intentFallback = vi.fn(() => 'Fallback intent')
     instrument(server, fakePostHog(), { context: true, intentFallback })
 
     await client.request(

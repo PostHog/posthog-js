@@ -1,5 +1,107 @@
 # @rrweb/rrweb-plugin-console-record
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [[`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721)]:
+    - @posthog/rrweb-utils@0.0.65
+    - @posthog/rrweb@0.1.8
+
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727)]:
+    - @posthog/rrweb@0.1.7
+
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
+    - @posthog/rrweb-utils@0.0.64
+    - @posthog/rrweb@0.1.6
+
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`045d79c`](https://github.com/PostHog/posthog-js/commit/045d79cf5ce9a5b58872b987bc5689a396321485)]:
+    - @posthog/rrweb@0.1.5
+
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [[`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c)]:
+    - @posthog/rrweb@0.1.4
+
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [[`4a2ecf5`](https://github.com/PostHog/posthog-js/commit/4a2ecf5ccdc3ed2567a5d59dcdcf88c6541d9b1b)]:
+    - @posthog/rrweb@0.1.3
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5)]:
+    - @posthog/rrweb@0.1.2
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`f48eaf2`](https://github.com/PostHog/posthog-js/commit/f48eaf2242dafdf72e8fc9dd739b90c9a6b89513), [`c50b27f`](https://github.com/PostHog/posthog-js/commit/c50b27f54e551ea76b1a7e7b935346bcf4d13ebf)]:
+    - @posthog/rrweb@0.1.1
+
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f), [`5116a41`](https://github.com/PostHog/posthog-js/commit/5116a413a5d95706a4fb38dc6c40a0525cb16578), [`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc)]:
+    - @posthog/rrweb@0.1.0
+    - @posthog/rrweb-utils@0.0.63
+
+## 0.0.79
+
+### Patch Changes
+
+- Updated dependencies [[`f630394`](https://github.com/PostHog/posthog-js/commit/f6303946729b2882e495a06d75b8458433a74646)]:
+    - @posthog/rrweb-utils@0.0.62
+    - @posthog/rrweb@0.0.79
+
+## 0.0.78
+
+### Patch Changes
+
+- Updated dependencies [[`45f17ee`](https://github.com/PostHog/posthog-js/commit/45f17eeb14a5fefd160309e50b29ddad4d044c53)]:
+    - @posthog/rrweb@0.0.78
+
+## 0.0.77
+
+### Patch Changes
+
+- Updated dependencies [[`c75c0ba`](https://github.com/PostHog/posthog-js/commit/c75c0baaaf107844de57a5ce496790cac6adcf8b)]:
+    - @posthog/rrweb@0.0.77
+
+## 0.0.76
+
+### Patch Changes
+
+- Updated dependencies [[`38bb185`](https://github.com/PostHog/posthog-js/commit/38bb185fac9d0e20250620932e2dcbcf44dd1da9)]:
+    - @posthog/rrweb@0.0.76
+
+## 0.0.75
+
+### Patch Changes
+
+- Updated dependencies [[`e803b8f`](https://github.com/PostHog/posthog-js/commit/e803b8f253a0498da4469657203813102b3d3e8f)]:
+    - @posthog/rrweb@0.0.75
+
 ## 0.0.74
 
 ### Patch Changes

@@ -5,7 +5,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import { vi, MockInstance } from 'vitest';
-import { createMirror, Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  buildNodeWithSN,
+  createCache,
+  createMirror,
+  Mirror as NodeMirror,
+} from '@posthog/rrweb-snapshot';
 import {
   buildFromDom,
   getDefaultSN,
@@ -461,18 +466,29 @@ describe('diff algorithm for rrdom', () => {
       vi.restoreAllMocks();
     });
 
-    it('can diff properties for canvas', async () => {
-      const element = document.createElement('canvas');
+    it('hydrates canvas data URLs with images from the canvas owner document', () => {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const ownerDocument = iframe.contentDocument!;
+      const element = ownerDocument.createElement('canvas');
       const rrDocument = new RRDocument();
       const rrCanvas = rrDocument.createElement('canvas');
       const sn = Object.assign({}, elementSn, { tagName: 'canvas' });
       rrDocument.mirror.add(rrCanvas, sn);
-      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,';
+      rrCanvas.rr_dataURL = 'data:image/png;base64,initial';
+      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,updated';
 
-      vi.spyOn(document, 'createElement');
+      const ownerCreateElement = vi.spyOn(ownerDocument, 'createElement');
+      const globalCreateElement = vi.spyOn(document, 'createElement');
 
       diff(element, rrCanvas, replayer);
-      expect(document.createElement).toHaveBeenCalledWith('img');
+
+      expect(ownerCreateElement).toHaveBeenCalledTimes(2);
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(1, 'img');
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(2, 'img');
+      expect(globalCreateElement).not.toHaveBeenCalledWith('img');
+
+      iframe.remove();
       vi.restoreAllMocks();
     });
 
@@ -513,6 +529,41 @@ describe('diff algorithm for rrdom', () => {
       expect(setAttributeSpy).toHaveBeenCalledWith('type', 'application/css');
 
       setAttributeSpy.mockRestore();
+    });
+  });
+
+  describe('a form field added while fast-forwarding', () => {
+    // Fast-forward builds the node against the RRDocument, so rebuild's
+    // autofill guard lands on an RRElement. createOrGetNode then makes a bare
+    // real element, leaving diffProps as the only thing that carries it over.
+    it('keeps autocomplete="off" on the real input', () => {
+      const rrDocument = new RRDocument();
+      const rrContainer = rrDocument.createElement('div');
+      const rrInput = buildNodeWithSN(
+        {
+          type: RRNodeType.Element,
+          tagName: 'input',
+          attributes: { type: 'text' },
+          childNodes: [],
+          id: 2,
+        } as serializedNodeWithId,
+        {
+          doc: rrDocument as unknown as Document,
+          mirror: rrDocument.mirror as unknown as NodeMirror,
+          hackCss: false,
+          cache: createCache(),
+        },
+      );
+      expect(rrInput).not.toBeNull();
+      rrContainer.appendChild(rrInput as unknown as IRRNode);
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      diff(container, rrContainer, replayer, rrDocument.mirror);
+
+      const input = container.querySelector('input');
+      expect(input).not.toBeNull();
+      expect(input!.getAttribute('autocomplete')).toEqual('off');
     });
   });
 
@@ -1217,6 +1268,37 @@ describe('diff algorithm for rrdom', () => {
       const childElement = (node as Node as HTMLElement).shadowRoot!
         .childNodes[0] as HTMLElement;
       expect(childElement.tagName).toEqual('DIV');
+    });
+
+    it('should skip a shadow dom the real element refuses', () => {
+      const tagName = 'NOHYPHEN';
+      const node = document.createElement(tagName);
+      mirror.add(node, {
+        ...elementSn,
+        tagName,
+        id: 1,
+      } as serializedNodeWithId);
+
+      const rrDocument = new RRDocument();
+      const rrNode = rrDocument.createElement(tagName);
+      rrDocument.mirror.add(
+        rrNode,
+        Object.assign({}, elementSn, { tagName, id: 1 }),
+      );
+
+      rrNode.attachShadow({ mode: 'open' });
+      const child = rrDocument.createElement('div');
+      rrDocument.mirror.add(
+        child,
+        Object.assign({}, elementSn, { tagName: 'div', id: 2 }),
+      );
+      rrNode.shadowRoot!.appendChild(child);
+
+      expect(() =>
+        diff(node, rrNode, replayer, rrDocument.mirror),
+      ).not.toThrow();
+      expect((node as Node as HTMLElement).shadowRoot).toBeNull();
+      expect(node.childNodes.length).toBe(0);
     });
   });
 

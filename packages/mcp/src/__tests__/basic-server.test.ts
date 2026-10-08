@@ -105,7 +105,7 @@ describe('Basic Server Test', () => {
       const { isCompatibleServerType } = await import('../extensions/compatibility')
 
       // This should not throw since our test server has proper _serverInfo
-      const result = isCompatibleServerType(server)
+      const result = isCompatibleServerType(server, () => undefined)
       expect(result).toBe(server)
 
       // Verify we can still access server info after compatibility check

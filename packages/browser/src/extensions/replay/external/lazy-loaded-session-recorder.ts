@@ -1,8 +1,12 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
+export { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
+import type { SnapshotCost } from '@posthog/rrweb-record'
 import {
     type customEvent,
     EventType,
     eventWithTime,
+    type fullSnapshotEvent,
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
@@ -15,23 +19,27 @@ import {
     EventTriggerMatching,
     LinkedFlagMatching,
     PAUSED,
+    SAMPLED,
     SessionRecordingStatus,
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
 import {
+    circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
-import { addEventListener } from '../../../utils'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { MutationThrottler } from './mutation-throttler'
-import { createLogger } from '../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
     gzipCompress,
@@ -58,11 +66,13 @@ import {
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_START_REASON,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
     SDK_DEBUG_REPLAY_RRWEB_ATTACHED,
     SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
+import { sessionStore } from '../../../storage'
 import { PostHog } from '../../../posthog-core'
 import {
     NetworkRecordOptions,
@@ -70,10 +80,11 @@ import {
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost, maskQueryParams } from '../../../utils/request-utils'
+import { isLocalhost, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {
@@ -83,7 +94,8 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '../../../utils/event-utils'
+import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -100,6 +112,16 @@ const ONE_KB = 1024
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
+const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
+const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
+
+// A full snapshot runs as one uninterruptible task, so anything at this scale is a
+// visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
+const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
+
+// why a flush is held. `status` still reads "active" for a held epoch, so the reason is
+// reported on captured events and logged, or a held recording looks like a shipping one.
+type FlushHoldReason = 'no_interaction_since_recording_started' | 'no_interaction_since_session_rotated'
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -110,10 +132,13 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 }
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
-export const RECORDING_REMOTE_CONFIG_TTL_MS = ONE_HOUR
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
+// snapshots a timing gate still held when the page unloaded are parked under this key for the
+// next page in the same tab. sessionStorage dies with the tab, so a visit that really ended
+// there still honours the gate that held them
+export const PENDING_BUFFER_STORAGE_SUFFIX = '_replay_pending_buffer'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -141,6 +166,11 @@ interface SessionIdlePayload {
     threshold: number
     bufferLength: number
     bufferSize: number
+    // the session that went idle. The marker is restamped to lastActivityTimestamp + threshold,
+    // so routing it by the recorder's live session id backdates a rotation-born session by the
+    // whole idle gap when a rotation lands between emit and capture (see onRRwebEmit)
+    sessionId?: string
+    windowId?: string
 }
 
 export interface SnapshotBuffer {
@@ -220,12 +250,30 @@ function gzipStringToString(serializedData: string): string {
     return strFromU8(gzipSync(strToU8(serializedData)), true)
 }
 
+function serializeForCompression(data: unknown): string {
+    try {
+        // fast path: plain native stringify, since a replacer callback is expensive on
+        // large snapshots and circular event data is rare
+        return JSON.stringify(data)
+    } catch (e) {
+        // data past the engine's maximum string length is not something the replacer can
+        // shorten, and the retry would build the string up to that limit all over again
+        // before failing the same way - on unload that stall is paid before the final flush
+        if (e instanceof RangeError) {
+            throw e
+        }
+        // circular event data (e.g. a leaked instance graph) degrades gracefully to
+        // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
+        return JSON.stringify(data, circularReferenceReplacer())
+    }
+}
+
 function gzipToString(data: unknown): string {
-    return gzipStringToString(JSON.stringify(data))
+    return gzipStringToString(serializeForCompression(data))
 }
 
 async function gzipToStringAsync(data: unknown): Promise<string> {
-    const serializedData = JSON.stringify(data)
+    const serializedData = serializeForCompression(data)
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
     return strFromU8(new Uint8Array(await compressed!.arrayBuffer()), true)
 }
@@ -294,18 +342,24 @@ function compressedResult(event: compressedEventWithTime): CompressedEventResult
     return { event, size: estimateCompressedEventSize(event) }
 }
 
-function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): compressedEventWithTime {
+function buildCompressedFullSnapshotEvent(
+    event: fullSnapshotEvent & { timestamp: number; delay?: number },
+    data: string
+): compressedEventWithTime {
     return {
         ...event,
         data,
-        cv: '2024-10' as const,
-    } as compressedEventWithTime
+        cv: '2024-10',
+    }
 }
 
 function buildCompressedIncrementalEvent(
     event: eventWithTime,
     fields: CompressedMutationFields | CompressedStyleFields
 ): compressedEventWithTime {
+    // reshapes rrweb incremental `data` into its compressed string-field variant — the
+    // compiler cannot relate the incoming union member to the matching compressed member
+    // oxlint-disable-next-line typescript/consistent-type-assertions
     return {
         ...event,
         cv: '2024-10' as const,
@@ -349,7 +403,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
             )
         }
     } catch (e) {
-        logger.error('could not compress event - will use uncompressed event', e)
+        logger.warn('could not compress event - will use uncompressed event', e)
     }
     return { event, size: estimateSize(event) }
 }
@@ -379,7 +433,7 @@ async function compressEventAsync(event: eventWithTime): Promise<CompressedEvent
         if (isNativeAsyncGzipError(e)) {
             _nativeAsyncSessionRecordingGzipDisabled = true
         }
-        logger.error('could not compress event asynchronously - trying synchronous compression', e)
+        logger.warn('could not compress event asynchronously - trying synchronous compression', e)
         return compressEventSync(event)
     }
     return { event, size: estimateSize(event) }
@@ -391,6 +445,10 @@ function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & cust
 
 function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, 'sessionIdle')
+}
+
+function getSessionIdlePayload(e: eventWithTime): SessionIdlePayload | null {
+    return isSessionIdleEvent(e) ? (e.data.payload as SessionIdlePayload) : null
 }
 
 type SessionEndingPayload = {
@@ -425,6 +483,15 @@ function isAllowedWhenIdle(e: eventWithTime): boolean {
     return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
+// dropping these desyncs the player's mirror, styles, or viewport in ways only a
+// fresh full snapshot repairs; canvas is excluded because a snapshot cannot restore it
+function isMirrorDesyncingWhenDropped(e: eventWithTime): boolean {
+    if (e.type === EventType.FullSnapshot || e.type === EventType.Meta) {
+        return true
+    }
+    return e.type === EventType.IncrementalSnapshot && e.data.source !== IncrementalSource.CanvasMutation
+}
+
 /** When we put the recording into a paused state, we add a custom event.
  *  However, in the paused state, events are dropped and never make it to the buffer,
  *  so we need to manually let this one through */
@@ -440,7 +507,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _forceAllowLocalhostNetworkCapture = false
     private _stopRrweb: listenerHandler | undefined = undefined
+    private _jsonLdCapture: ReturnType<typeof startJsonLdCapture> | undefined
+    private _jsonLdCaptureReady = false
     private _lastActivityTimestamp: number = Date.now()
+    private _sessionStartTimestamp: number
     private _isActivatingTrigger: boolean = false
     /**
      * if pageview capture is disabled,
@@ -452,9 +522,49 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // events rrweb observed while confirmed idle are dropped, not buffered, so the
+    // player's mirror no longer matches the live DOM; when > 0 only a fresh full
+    // snapshot stops later incrementals referencing state the player never saw.
+    // Cleared only when a full snapshot actually passes the idle gate, so a failed
+    // wake heal retries on the next wake instead of losing the signal
+    private _eventsDroppedWhileIdle = 0
+    private _throttledMutationsDropped = 0
+    private _oversizedMutationsDropped = 0
+    private _oversizedMutationBytesDropped = 0
+    // events dropped because their JSON is longer than the engine's maximum string length. The
+    // page keeps running and the recording loses them silently, so the count has to ship
+    private _unstringifiableEventsDropped = 0
+    // true while the current epoch has had no user interaction; a held epoch is
+    // discarded (not shipped) by stop or a subsequent rotation
+    private _holdFlushUntilInteraction = false
+    private _flushHoldReason: FlushHoldReason | undefined
+    private _lastLoggedFlushHold: string | undefined
+    // fresh-start holds ship on a clean unload (passive visits are captured, matching
+    // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
+    private _heldEpochShipsOnUnload = false
+    // Sticky for the document lifetime: background tabs that are never foregrounded should
+    // not release a fresh-start hold just because they unload.
+    private _documentWasEverVisible: boolean
+    // set when a held buffer hit the size cap and stopped collecting to bound memory; a
+    // release ships what was held and takes a fresh full snapshot to resume playable
+    private _heldBufferOverflowed = false
+    // a release while the recorder is stopped (e.g. an override during startSessionRecording's
+    // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
+    private _suppressNextFreshStartHold = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
-    private _maxDepthExceeded = false
+    // the cost object most recently read from rrweb; each snapshot produces a fresh
+    // object, so identity comparison dedupes the sync and microtask reads
+    private _lastSeenSnapshotCost: SnapshotCost | undefined
+    // only log a snapshot cost tracking error once per recorder instance
+    private _snapshotCostErrorLogged = false
+    // only warn once per recorder instance that client-side masking is shadowing the project setting
+    private _hasWarnedClientMaskingOverride = false
+    // only warn once per recorder instance that maskAttributeFn is ignored
+    private _hasWarnedExclusiveAttributeMasking = false
+    private _maskRegionsFnFailed = false
+    // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
+    private _hasLoggedRecorderCallbackError = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -462,7 +572,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Strategy pattern: V1 vs V2 trigger logic
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
-    private _fullSnapshotTimestamps: Array<[string, number]> = []
+    // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
+    // the marker-only flush guard. Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
+    private _lastFullSnapshotSessionId: string | undefined = undefined
+    private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
     private _windowId: string
     private _sessionId: string
@@ -473,6 +586,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBufferTimer?: any
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private _buffer: SnapshotBuffer
+    private readonly _pendingBufferStorageKey: string
+    // a parked buffer is read once per recorder, so a re-entrant start() cannot replay it twice
+    private _pendingBufferRestored = false
+    // beforeunload and pagehide both drive an unload flush, so the size last written tells the
+    // second one whether anything was added since, rather than re-serialising the same buffer
+    private _lastParkedBufferSize: number | undefined
     private _compressionQueue?: Promise<void>
     private _pendingCompressionEvents: QueuedCompressionEvent[] = []
     private _queuedCompressionEvents: number = 0
@@ -516,17 +635,31 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(
+        private readonly _instance: PostHog,
+        documentWasEverVisible?: boolean
+    ) {
+        // An older core does not provide visibility history. Preserve its unload behavior
+        // rather than treating a currently hidden document as one that was never visible.
+        this._documentWasEverVisible = documentWasEverVisible ?? true
+
         // we know there's a sessionManager, so don't need to start without a session id
-        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId, sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
         this._windowId = windowId
+        this._sessionStartTimestamp = sessionStartTimestamp
 
         this._linkedFlagMatching = new LinkedFlagMatching(this._instance)
         this._urlTriggerMatching = new URLTriggerMatching(this._instance)
         this._eventTriggerMatching = new EventTriggerMatching(this._instance)
 
         this._buffer = this._clearBuffer()
+        // A shared persistence_name also shares session/window IDs, but must not share replay
+        // data across project tokens. Encode the pair without ambiguous separators and use a
+        // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
+        const persistenceName = this._instance.config.persistence_name || this._instance.config.token
+        this._pendingBufferStorageKey =
+            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(
@@ -537,27 +670,94 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
     }
 
+    setDocumentWasEverVisible(documentWasEverVisible: boolean): void {
+        if (documentWasEverVisible) {
+            this._documentWasEverVisible = true
+        }
+    }
+
     private get _masking():
-        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        | Pick<
+              SessionRecordingOptions,
+              'maskAllInputs' | 'maskTextSelector' | 'blockSelector' | 'maskAllElementAttributes'
+          >
         | undefined {
         const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
             maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
             blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllElementAttributes: this._instance.config.session_recording?.maskAllElementAttributes,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
         const blockSelector = masking_client_side?.blockSelector ?? masking_server_side?.blockSelector
+        const maskAllElementAttributes =
+            masking_client_side?.maskAllElementAttributes ?? masking_server_side?.maskAllElementAttributes
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector) || !isUndefined(blockSelector)
+        return !isUndefined(maskAllInputs) ||
+            !isUndefined(maskTextSelector) ||
+            !isUndefined(blockSelector) ||
+            !isUndefined(maskAllElementAttributes)
             ? {
                   maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
                   blockSelector,
+                  maskAllElementAttributes,
               }
             : undefined
+    }
+
+    /**
+     * Client-side masking config in `posthog.init` intentionally wins over the "Privacy and masking"
+     * project setting (the remote config). That precedence is by-design, but silent: a developer who
+     * sets e.g. `maskTextSelector: '*'` locally can be surprised that their dashboard setting has no
+     * effect. Warn (once per recorder) when the two diverge so the override is self-explaining.
+     */
+    private _warnIfClientMaskingShadowsServer(): void {
+        if (this._hasWarnedClientMaskingOverride) {
+            return
+        }
+
+        const masking_server_side = this._remoteConfig?.masking
+        if (isNullish(masking_server_side)) {
+            return
+        }
+
+        const clientConfig = this._instance.config.session_recording
+        const divergentFields = (
+            ['maskAllInputs', 'maskTextSelector', 'blockSelector', 'maskAllElementAttributes'] as const
+        ).filter((field) => {
+            const clientValue = clientConfig?.[field]
+            const serverValue = masking_server_side[field]
+            // a client value that is set and disagrees with the project's value shadows it — an unset
+            // server value counts as a divergence too, since the client is then masking something the
+            // project setting did not ask for (e.g. maskTextSelector: '*' vs an unset project selector)
+            return !isUndefined(clientValue) && clientValue !== serverValue
+        })
+
+        if (divergentFields.length === 0) {
+            return
+        }
+
+        this._hasWarnedClientMaskingOverride = true
+        logger.warn(
+            'Session recording masking is configured both in `posthog.init` and in your project settings, and they differ. ' +
+                'The `session_recording` options in `posthog.init` take precedence, so the project ("Privacy and masking") setting is ignored for: ' +
+                divergentFields.join(', ') +
+                '. Remove these masking options from `posthog.init` to use the project setting instead. ' +
+                'See https://posthog.com/docs/session-replay/privacy',
+            {
+                client: {
+                    maskAllInputs: clientConfig?.maskAllInputs,
+                    maskTextSelector: clientConfig?.maskTextSelector,
+                    blockSelector: clientConfig?.blockSelector,
+                    maskAllElementAttributes: clientConfig?.maskAllElementAttributes,
+                },
+                project: masking_server_side,
+            }
+        )
     }
 
     // (0,1] fraction of the canvas display size to capture frames at, from
@@ -644,8 +844,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
+                // The unversioned recorder can run with older cores, so this router method must be feature-detected.
+                const isIngestionEndpoint = isFunction(this._instance.requestRouter.isIngestionEndpoint)
+                    ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
+                    : undefined
                 plugins.push(
-                    networkPlugin(buildNetworkRequestOptions(this._instance.config, this._networkPayloadCapture))
+                    networkPlugin(
+                        buildNetworkRequestOptions(
+                            this._instance.config,
+                            this._networkPayloadCapture,
+                            isIngestionEndpoint
+                        )
+                    )
                 )
             } else {
                 logger.info('NetworkCapture not started because we are on localhost.')
@@ -714,6 +924,37 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.addCustomEvent(tag, payload)))
     }
 
+    private _canCaptureJsonLd(): boolean {
+        return (
+            this._jsonLdCaptureReady &&
+            this._instance.config.session_recording?.captureJsonLd === true &&
+            !this._urlTriggerMatching.urlBlocked &&
+            this._isIdle !== true
+        )
+    }
+
+    private _tryAddJsonLdEvent(jsonLd: unknown): boolean {
+        if (!this._canCaptureJsonLd()) {
+            return false
+        }
+        try {
+            const rrwebRecord = getRRWebRecord()
+            if (!rrwebRecord) {
+                return false
+            }
+            rrwebRecord.addCustomEvent(JSON_LD_EVENT_TAG, jsonLd)
+            return this._canCaptureJsonLd()
+        } catch {
+            return false
+        }
+    }
+
+    private _scheduleJsonLdScan(force = false): void {
+        // Run the scan after the current rrweb event updates the JSON-LD capture state.
+        // oxlint-disable-next-line compat/compat
+        Promise.resolve().then(() => this._jsonLdCapture?.scan(force))
+    }
+
     private _pageViewFallBack() {
         try {
             if (this._instance.config.capture_pageview || !window) {
@@ -721,7 +962,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
             // Preserve the previous normalization behavior for this fallback (e.g. https://test.com -> https://test.com/)
             // while still applying query masking. This path was already hashless before disable_capture_url_hashes.
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const url = new URL(window.location.href)
             const currentUrl = this._maskReplayUrl(url.origin + url.pathname + url.search)
             if (this._lastHref !== currentUrl) {
@@ -761,7 +1002,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
-            return ONE_MINUTE
+            const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
+            return isNumber(configuredInterval) &&
+                Number.isFinite(configuredInterval) &&
+                configuredInterval >= MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS &&
+                configuredInterval <= MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS
+                ? configuredInterval
+                : ONE_MINUTE
         }
 
         return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
@@ -786,6 +1033,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }, interval)
     }
 
+    private _onTriggerActivated(triggerType?: TriggerType): void {
+        // V2 event-trigger matches release the interaction hold here (V1's release lives in
+        // _activateTrigger). URL and linked-flag activations never release — they fire
+        // without a human present.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
+        }
+        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
+            return
+        }
+        this._scheduleFullSnapshot()
+    }
+
     private _pauseRecording() {
         // we check _urlBlocked not status, since more than one thing can affect status
         if (this._urlTriggerMatching.urlBlocked) {
@@ -797,6 +1057,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // so we might not get the below custom event, but events will report the paused status.
         // which will allow debugging of sessions that start on blocked pages
         this._urlTriggerMatching.urlBlocked = true
+        this._jsonLdCapture?.scan()
 
         // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
@@ -811,9 +1072,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // Baseline JSON-LD while capture is suppressed so blocked-page mutations cannot emit after resume.
+        this._jsonLdCapture?.scan()
         this._urlTriggerMatching.urlBlocked = false
 
         this._tryTakeFullSnapshot()
+        this._scheduleJsonLdScan()
         this._scheduleFullSnapshot()
 
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
@@ -821,6 +1085,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
+        // Event triggers are explicit "this session matters" evidence and release the
+        // interaction hold; URL triggers only scope where recording is allowed and never do.
+        // Must run before the pending-trigger short-circuit below: with triggerMatchType
+        // 'any' a URL trigger may already have satisfied the combined status, making this
+        // activation a no-op — the hold release must still happen.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
+        }
+
         // V1 only: V2 uses per-group activation and never calls this method
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
@@ -846,6 +1119,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
+            this._onTriggerActivated()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -877,7 +1151,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
-        if (!this.isStarted) {
+        // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
+        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
@@ -886,7 +1161,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     cacheTimestamp,
                     persistedConfig,
                 })
-                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                // Core needs the persisted config to reach its refresh path when recording restarts.
                 return undefined
             }
         }
@@ -911,6 +1186,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // any epoch that starts without confirmed user activity is held until there's
+        // evidence someone cares (interaction, event trigger, or explicit override) —
+        // a tab nobody touches (prefetch, background load) must not ship a billable
+        // recording. Rotation-born epochs re-set this in _restartForSessionIdChange
+        // after this returns. Guarded on isStarted so a re-entrant start() on a live
+        // held recorder (e.g. a remote-config refresh) cannot release a hold that only
+        // interaction evidence should release.
+        if (!this.isStarted) {
+            const holdFreshStart = this._isIdle !== false && !this._suppressNextFreshStartHold
+            this._setFlushHold(holdFreshStart ? 'no_interaction_since_recording_started' : undefined)
+            this._suppressNextFreshStartHold = false
+            this._heldEpochShipsOnUnload = holdFreshStart
+            this._heldBufferOverflowed = false
+        }
+
         // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
         // rotation, _updateWindowAndSessionIds calls stop() then start() synchronously; if
         // stop() took the _stopAfterCompressionQueueDrains path (non-empty compression queue),
@@ -931,9 +1221,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
-        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId, sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
         this._windowId = windowId
+        this._sessionStartTimestamp = sessionStartTimestamp
+
+        // pick up snapshots a timing gate held when the previous page in this tab unloaded
+        this._restorePendingBuffer()
 
         // Reset first full snapshot tracking for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
@@ -950,7 +1244,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
+                this._tryAddCustomEvent.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(
@@ -959,7 +1254,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         }
 
@@ -1013,15 +1309,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
+        // registered after _startRecorder so rrweb's own pagehide listener runs first:
+        // it synchronously flushes deferred stylesheet mutations, and this later
+        // listener then ships them (beforeunload has already fired, so nothing else will)
+        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
-        addEventListener(window, 'visibilitychange', this._onVisibilityChange)
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
 
-        if (!this._onSessionIdListener) {
+        if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
         }
 
-        if (!this._onSessionIdleResetForcedListener) {
+        // NB: SessionIdManager.on was only added in posthog-js 1.268.6. This recorder chunk is loaded
+        // from the CDN and can run against an older bundled core that has no `on` method, so guard the
+        // call to degrade gracefully (recording still starts, it just skips the forced-idle-reset listener)
+        // rather than throwing a TypeError during start().
+        if (!this._onSessionIdleResetForcedListener && isFunction(this._sessionManager.on)) {
             this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
                 // a session was forced to reset due to idle timeout and lack of activity
                 this._clearConditionalRecordingPersistence()
@@ -1037,6 +1341,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                 )
             })
+        } else if (!isFunction(this._sessionManager.on)) {
+            logger.warn(
+                'bundled core has no SessionIdManager.on (requires posthog-js >= 1.268.6); ' +
+                    'recording will start but skip forced-idle-reset handling'
+            )
         }
 
         if (isNullish(this._removePageViewCaptureHook)) {
@@ -1100,19 +1409,29 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Reset first full snapshot timestamp for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
 
-        this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
 
-        // When rrweb isn't running _updateWindowAndSessionIds can't drive the restart,
-        // so we restart here. Otherwise it handles the restart after this callback returns.
-        if (this._isIdle === true || !this.isStarted) {
+        // The $session_id_change emit above can synchronously re-enter
+        // _updateWindowAndSessionIds (rrweb delivers addCustomEvent through emit), which
+        // adopts the new ids and restarts the recorder itself. Restart here only when the
+        // ids are still stale — confirmed idle, stopped, or states where that emit never
+        // reached the session check (blocked URL, queued emit) — so a rotation restarts
+        // exactly once.
+        if (
+            (this._isIdle !== false || !this.isStarted) &&
+            (this._sessionId !== sessionId || this._windowId !== windowId)
+        ) {
+            // rotation while not confirmed-active: hold the new epoch's buffer until the
+            // user actually interacts, so idle tabs don't ship one recording per rotation.
+            // gated on a real session-id change (a windowId-only restart is not rotation-born)
+            // and read before _isIdle is overwritten with 'unknown'
+            const holdNextEpoch = this._sessionId !== sessionId && this._isIdle !== false
             this._isIdle = 'unknown'
-            this.stop()
-            this.start('session_id_changed')
+            this._restartForSessionIdChange(holdNextEpoch)
         }
 
         if (shouldLinkSessions) {
@@ -1135,9 +1454,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
+        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
-        window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
         clearInterval(this._fullSnapshotTimer)
         this._clearFlushBufferTimer()
@@ -1176,7 +1496,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
 
-        this._stopRrweb?.()
+        this._jsonLdCapture?.stop()
+        this._jsonLdCapture = undefined
+        this._jsonLdCaptureReady = false
+        // rrweb's stop closure must neither abort the teardown that follows nor leave
+        // _stopRrweb set, which would keep isStarted reporting a stopped recorder
+        try {
+            this._stopRrweb?.()
+        } catch (e) {
+            logger.warn('could not stop rrweb', e)
+        }
         this._stopRrweb = undefined
     }
 
@@ -1189,6 +1518,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._isStoppingAfterCompression = true
+        // The internal hold still suppresses the final flush, but it is no longer an actionable
+        // diagnostic once stop() has returned to the caller.
+        this._flushHoldReason = undefined
         const generation = this._compressionQueueGeneration
         this._clearFlushBufferTimer()
         // Stop rrweb synchronously so it cannot keep producing events while we wait
@@ -1204,6 +1536,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._isStoppingAfterCompression = false
                 this._flushBuffer()
                 this._clearBuffer()
+                this._releaseHoldAfterStop()
                 this._teardown()
                 logger.info('stopped')
             })
@@ -1211,6 +1544,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // Keep stop() best-effort. Compression errors are handled per event,
                 // but never let an unexpected queue failure block teardown.
                 this._isStoppingAfterCompression = false
+                this._releaseHoldAfterStop()
                 this._teardown()
                 logger.info('stopped')
             })
@@ -1219,19 +1553,152 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     stop() {
-        if (this._stopAfterCompressionQueueDrains()) {
+        // Stop rrweb first: its teardown synchronously flushes any deferred
+        // stylesheet mutations through the emit path, and they must reach the
+        // buffer (or the compression queue, checked next) before the final
+        // flush below, or they are cleared unshipped.
+        this._stopRecordingProducers()
+
+        // a rotation's synchronous start() would invalidate a deferred drain, destroying the old session's tail
+        if (this._isRestartingForSessionIdChange) {
+            this._drainCompressionQueueSync()
+        } else if (this._stopAfterCompressionQueueDrains()) {
             return
         }
 
+        // for a held (interaction-less) epoch the flush is suppressed, so this
+        // flush-then-clear discards it — correct for rotation restarts and opt-out alike
         this._flushBuffer()
         this._clearBuffer()
+        this._releaseHoldAfterStop()
         this._teardown()
         logger.info('stopped')
     }
 
-    discard() {
+    // Release the internal hold once the epoch's buffer is gone. Must run AFTER the
+    // flush-then-clear above: releasing it first would let the suppressed flush ship the held
+    // buffer. The async stop path clears the externally reported reason immediately while keeping
+    // this internal protection until compression drains. Without this cleanup a stopped or
+    // discarded recorder keeps reporting a stale $sdk_debug_replay_flush_hold_reason on later
+    // captured events, because the sdkDebugProperties getter still runs after stop() (the recorder
+    // is torn down, not dropped).
+    // During a rotation restart, preserveLogDedup keeps _lastLoggedFlushHold: start() sets a
+    // transient fresh-start hold that _restartForSessionIdChange immediately overwrites with the
+    // real rotation reason. Explicit stops clear the key so a later held epoch logs again.
+    private _releaseHoldAfterStop() {
+        this._setFlushHold(undefined, { preserveLogDedup: this._isRestartingForSessionIdChange })
+        this._heldEpochShipsOnUnload = false
+    }
+
+    flushBeforeIdentityReset(): void {
+        // a deferred stop has already torn rrweb down but still holds the tail for a later flush
+        if (!this.isStarted && !this._isStoppingAfterCompression) {
+            return
+        }
+        this._drainCompressionQueueSync()
+        this._flushBuffer()
+    }
+
+    // ordering matters: the hold is set after stop() (so the stop discards or ships the
+    // old epoch per its own flag) and after start() (whose fresh-start reset would
+    // otherwise clobber it); no flush can run synchronously in between
+    private _isRestartingForSessionIdChange = false
+
+    private _restartForSessionIdChange(holdNextEpoch: boolean) {
+        this._isRestartingForSessionIdChange = true
+        // the new epoch's idle clock starts now, before teardown or the restart snapshot can emit
+        this._lastActivityTimestamp = Date.now()
+        try {
+            this.stop()
+            // cost metrics are per-session; reset them only after the old recorder has
+            // stopped (its teardown flush still records deferred stylesheet work, which
+            // belongs to the old session) and before the new one takes its first snapshot
+            this._lastSeenSnapshotCost = undefined
+            // the drop counts are per-session too, so the new session starts at zero
+            this._unstringifiableEventsDropped = 0
+            this._throttledMutationsDropped = 0
+            this._oversizedMutationsDropped = 0
+            this._oversizedMutationBytesDropped = 0
+            getRRWeb()?.resetSnapshotCostState?.()
+            this.start('session_id_changed')
+        } finally {
+            this._isRestartingForSessionIdChange = false
+        }
+        this._setFlushHold(holdNextEpoch ? 'no_interaction_since_session_rotated' : undefined)
+        this._heldEpochShipsOnUnload = false
+    }
+
+    // Keep the hold and its reported reason synchronized during normal recording transitions.
+    // Terminal paths can temporarily keep only the internal hold to prevent teardown-time flushes.
+    // Nothing else announces a held epoch - no flush is scheduled while held, so the log has to
+    // happen here rather than on a flush that may never run.
+    private _setFlushHold(reason: FlushHoldReason | undefined, { preserveLogDedup = false } = {}) {
+        this._holdFlushUntilInteraction = !isUndefined(reason)
+        this._flushHoldReason = reason
+        if (isUndefined(reason)) {
+            // a stop/discard preserves the dedup key so a rotation restart's transient
+            // fresh-start hold is not logged; a release clears it so a later hold re-logs
+            if (!preserveLogDedup) {
+                this._lastLoggedFlushHold = undefined
+            }
+            return
+        }
+        // Inside a rotation restart, start() sets a transient fresh-start hold that
+        // _restartForSessionIdChange overwrites with the real rotation reason on its next line
+        // (with this flag already cleared). Defer the log and dedup bookkeeping to that
+        // authoritative call, so a held rotation logs once, under the reason that actually sticks,
+        // instead of also emitting a mislabelled fresh-start line for the same epoch.
+        if (this._isRestartingForSessionIdChange) {
+            return
+        }
+        const holdKey = `${this.sessionId}:${reason}`
+        if (holdKey === this._lastLoggedFlushHold) {
+            return
+        }
+        this._lastLoggedFlushHold = holdKey
+        logger.info(`holding buffer: ${reason}. nothing is uploaded until the user interacts with the page`)
+    }
+
+    // releases run on evidence someone cares about the session: a user interaction, an event
+    // trigger match, or an explicit override. Scheduling instead of flushing synchronously keeps
+    // the release batched on the normal cadence and re-passes _flushBuffer's gates.
+    private _releaseHoldAndFlush() {
+        if (!this.isStarted) {
+            this._suppressNextFreshStartHold = true
+        }
+        if (!this._holdFlushUntilInteraction) {
+            return
+        }
+        this._setFlushHold(undefined)
+        this._heldEpochShipsOnUnload = false
+        if (this._heldBufferOverflowed) {
+            this._heldBufferOverflowed = false
+            // the overflowed hold retained its data, so the release ships it; a fresh full
+            // snapshot bridges the gap between the cap and this release
+            this._tryTakeFullSnapshot()
+        }
+        this._scheduleFlushBuffer()
+    }
+
+    discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        // Reuse the internal hold as a synchronous discard guard. rrweb teardown can emit enough
+        // data to hit the size cap, but discard must never flush it.
+        this._holdFlushUntilInteraction = true
+        if (discardProducerEvents) {
+            // rrweb teardown can synchronously emit deferred stylesheet mutations.
+            // Clear first so those emissions cannot flush existing data, then clear them below too.
+            this._clearBuffer()
+            this._stopRecordingProducers()
+        }
+        // rrweb can synchronously emit deferred stylesheet mutations while _teardown() stops it,
+        // so clear on both sides of it: the first clear stops those emissions flushing this epoch's
+        // data at the size cap, the second drops the emissions themselves. The hold is released
+        // only afterwards — _teardown() clears the flush timer before it stops rrweb, so a flush
+        // an unheld emission schedules outlives teardown and ships a discarded epoch.
         this._clearBuffer()
         this._teardown()
+        this._clearBuffer()
+        this._releaseHoldAfterStop()
         logger.info('discarded')
     }
 
@@ -1242,6 +1709,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         targetSessionId: string,
         targetWindowId: string
     ) {
+        // the request encoder stringifies the whole batch, and the request queue merges every
+        // queued recording chunk into one request, so buffering an event that cannot be
+        // stringified would take every chunk queued alongside it down too. Drop only this event.
+        if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
+            this._unstringifiableEventsDropped += 1
+            logger.warn('could not stringify event - dropping it to keep the rest of the recording')
+            return
+        }
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
@@ -1249,16 +1725,73 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
-            this._maxDepthExceeded = true
-        }
-
         if (this.status === DISABLED) {
             this._clearBuffer()
             return
         }
 
+        this._ensureFullSnapshotForSession(event, targetSessionId)
+
         this._captureSnapshotBuffered(properties)
+    }
+
+    // snapshot cost tracking is telemetry: an error in it must be visible in debug
+    // logs, but must never break recording. Logged once per recorder lifetime so
+    // the FullSnapshot hot path cannot spam the console.
+    private _safeTrackFullSnapshotCost() {
+        try {
+            this._trackFullSnapshotCost()
+        } catch (e) {
+            if (!this._snapshotCostErrorLogged) {
+                this._snapshotCostErrorLogged = true
+                logger.error('could not track full snapshot cost', e)
+            }
+        }
+    }
+
+    private _trackFullSnapshotCost() {
+        const cost = getRRWeb()?.getLastSnapshotCost?.()
+        if (!cost || cost === this._lastSeenSnapshotCost) {
+            return
+        }
+        this._lastSeenSnapshotCost = cost
+        if (cost.durationMs >= SLOW_FULL_SNAPSHOT_THRESHOLD_MS) {
+            logger.warn('full snapshot was slow, the page may have been unresponsive while it ran', {
+                durationMs: Math.round(cost.durationMs),
+                stylesheetMs: Math.round(cost.stylesheetMs),
+                nodeCount: cost.nodeCount,
+                cssRuleCount: cost.cssRuleCount,
+                nonDeferrableCssRuleCount: cost.nonDeferrableCssRuleCount,
+                deferredStylesheetCount: cost.deferredStylesheetCount,
+            })
+        }
+    }
+
+    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
+        if (event.type === EventType.FullSnapshot) {
+            this._lastFullSnapshotSessionId = targetSessionId
+            return
+        }
+
+        if (event.type !== EventType.IncrementalSnapshot) {
+            return
+        }
+
+        if (
+            // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
+            isUndefined(this._lastFullSnapshotSessionId) ||
+            this._lastFullSnapshotSessionId === targetSessionId ||
+            this._fullSnapshotHealAttemptedFor === targetSessionId
+        ) {
+            return
+        }
+
+        this._fullSnapshotHealAttemptedFor = targetSessionId
+        logger.info('incremental snapshot for a session with no full snapshot - requesting one', {
+            sessionId: targetSessionId,
+        })
+        this._tryTakeFullSnapshot()
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -1290,11 +1823,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
         try {
-            const { event: eventToSend, size } = queuedEvent.compressionEnabled
-                ? compressEventSync(queuedEvent.event)
-                : { event: queuedEvent.event, size: estimateSize(queuedEvent.event) }
-
-            this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
+            let eventToSend: eventWithTime | compressedEventWithTime = queuedEvent.event
+            let size: number | undefined
+            if (queuedEvent.compressionEnabled) {
+                try {
+                    ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
+                } catch (e) {
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
+                }
+            }
+            // only size the raw event when compression did not already report a size: this drain
+            // runs on unload, and a discarded estimate costs a full stringify of every event
+            if (isUndefined(size)) {
+                size = estimateSize(queuedEvent.event)
+            }
+            try {
+                this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
+            } catch (e) {
+                // the async path swallows this too, a throw here would abort the rotation restart
+                logger.warn('could not capture queued compression event', e)
+            }
         } finally {
             this._finishQueuedCompressionEvent(queuedEvent)
         }
@@ -1303,7 +1851,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _drainCompressionQueueSync() {
         const queuedEvents = [...this._pendingCompressionEvents]
         queuedEvents.forEach((queuedEvent) => {
-            this._processQueuedCompressionEventSync(queuedEvent)
+            try {
+                this._processQueuedCompressionEventSync(queuedEvent)
+            } catch (e) {
+                // this drain runs on unload: a throw here would skip the remaining
+                // queued events and the final flush, truncating the recording
+                logger.warn('could not drain queued compression event', e)
+            }
         })
     }
 
@@ -1331,11 +1885,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     return
                 }
 
-                const { event: eventToSend, size } = compressionEnabled
-                    ? shouldUseNativeAsyncSessionRecordingGzip(event)
-                        ? await compressEventAsync(event)
-                        : compressEventSync(event)
-                    : { event, size: estimateSize(event) }
+                let eventToSend: eventWithTime | compressedEventWithTime
+                let size: number
+                try {
+                    const result = compressionEnabled
+                        ? shouldUseNativeAsyncSessionRecordingGzip(event)
+                            ? await compressEventAsync(event)
+                            : compressEventSync(event)
+                        : { event, size: estimateSize(event) }
+                    eventToSend = result.event
+                    size = result.size
+                } catch (e) {
+                    // a compression failure must never reject the queue promise chain, since the
+                    // rejection would surface as an unhandled rejection and drop the event
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
+                    eventToSend = event
+                    size = estimateSize(event)
+                }
 
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } finally {
@@ -1387,6 +1953,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
+            // the FullSnapshot event is emitted partway through rrweb's takeFullSnapshot,
+            // whose cost window only closes after the post-snapshot buffer drain and
+            // adoptedStyleSheets work; the sync read below picks up any snapshot we have
+            // not seen yet, and the microtask (which runs as soon as the synchronous
+            // snapshot task finishes, before any newer snapshot can replace the globals)
+            // picks up the one in progress right now
+            this._safeTrackFullSnapshotCost()
+            Promise.resolve().then(() => this._safeTrackFullSnapshotCost())
+
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
@@ -1403,74 +1978,108 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this._strategy?.hasPendingTriggers(this.sessionId)) {
+        const jsonLdRemovedFromPendingBuffer =
+            rawEvent.type === EventType.FullSnapshot && this._strategy?.hasPendingTriggers(this.sessionId)
+        if (jsonLdRemovedFromPendingBuffer) {
             this._clearBufferBeforeMostRecentMeta()
         }
 
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
 
         if (!throttledEvent) {
+            // when awake, a throttled attribute's later updates get through once the bucket
+            // refills; while idle those are dropped too, so only the wake heal restores them
+            if (this._isIdle === true) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
 
-        // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
-        // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
-        // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
-        // This is critical for $session_ending which must go to the OLD session, not the new one,
-        // and for $session_starting which must go to the NEW session.
+        // Session lifecycle events ($session_ending, $session_starting, sessionIdle) carry their
+        // target session ID in the payload. We must extract this BEFORE _updateWindowAndSessionIds
+        // runs, because that method triggers checkAndGetSessionAndWindowId() which would update
+        // this._sessionId. This is critical for $session_ending which must go to the OLD session,
+        // not the new one, and for $session_starting which must go to the NEW session.
         const sessionEndingPayload = getSessionEndingPayload(event)
         const sessionStartingPayload = getSessionStartingPayload(event)
+        const sessionIdlePayload = getSessionIdlePayload(event)
 
         if (sessionEndingPayload || sessionStartingPayload) {
-            // Adjust timestamp from payload to avoid artificially extending session duration
-            const payload = (sessionEndingPayload ?? sessionStartingPayload) as {
-                lastActivityTimestamp?: number
+            // Backdate $session_ending to the old session's real end so a late-detected idle
+            // period doesn't artificially extend it. $session_starting must NOT be backdated:
+            // it ships to the NEW session, and stamping it with the old session's last activity
+            // drags the new recording's start back by the whole idle gap
+            if (sessionEndingPayload?.lastActivityTimestamp) {
+                event.timestamp = sessionEndingPayload.lastActivityTimestamp
             }
-            if (payload?.lastActivityTimestamp) {
-                event.timestamp = payload.lastActivityTimestamp
-            }
-        } else {
+        } else if (!sessionIdlePayload?.sessionId) {
+            // sessionIdle markers with a pinned session id skip the session check: they are only
+            // emitted from inside _updateWindowAndSessionIds, whose caller runs the check itself
+            // right after, and running it here first can adopt a pending rotation before the
+            // marker is captured — attributing a marker backdated by the idle gap to the new
+            // session, which drags the new recording's start back and makes its prefix unplayable
             this._updateWindowAndSessionIds(event)
-        }
-
-        if (rawEvent.type === EventType.FullSnapshot) {
-            this._fullSnapshotTimestamps.push([this._sessionId, rawEvent.timestamp])
-            if (this._fullSnapshotTimestamps.length > 6) {
-                this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)
-            }
         }
 
         // Route lifecycle events using their payload IDs:
         // - $session_ending uses currentSessionId (the old session it's ending)
         // - $session_starting uses nextSessionId (the new session it's starting)
+        // - sessionIdle uses the session that went idle (backdated markers must not follow a rotation)
         // - All other events use the current session ID
         const targetSessionId =
-            sessionEndingPayload?.currentSessionId ?? sessionStartingPayload?.nextSessionId ?? this._sessionId
+            sessionEndingPayload?.currentSessionId ??
+            sessionStartingPayload?.nextSessionId ??
+            sessionIdlePayload?.sessionId ??
+            this._sessionId
         const targetWindowId =
-            sessionEndingPayload?.currentWindowId ?? sessionStartingPayload?.nextWindowId ?? this._windowId
+            sessionEndingPayload?.currentWindowId ??
+            sessionStartingPayload?.nextWindowId ??
+            sessionIdlePayload?.windowId ??
+            this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
         if (this._isIdle === true && !isAllowedWhenIdle(event)) {
+            if (isMirrorDesyncingWhenDropped(event)) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
-        if (isSessionIdleEvent(event)) {
+        if (event.type === EventType.FullSnapshot) {
+            // this snapshot re-syncs the player's mirror, so idle-era drops are healed
+            this._eventsDroppedWhileIdle = 0
+        }
+
+        if (sessionIdlePayload) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp
-            const payload = event.data.payload as SessionIdlePayload
-            if (payload) {
-                const lastActivity = payload.lastActivityTimestamp
-                const threshold = payload.threshold
-                event.timestamp = lastActivity + threshold
-            }
+            event.timestamp = sessionIdlePayload.lastActivityTimestamp + sessionIdlePayload.threshold
+        }
+
+        const jsonLdCaptureWasReady = this._jsonLdCaptureReady
+        this._jsonLdCaptureReady = true
+        if (jsonLdRemovedFromPendingBuffer) {
+            this._scheduleJsonLdScan(true)
+        } else if (!jsonLdCaptureWasReady) {
+            this._scheduleJsonLdScan()
         }
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
+
+        if (event.type === EventType.Custom && event.data.tag === JSON_LD_EVENT_TAG) {
+            let href: string | undefined
+            try {
+                href = window ? this._maskReplayUrl(window.location.href) : undefined
+            } catch {
+                // A masking callback failure must not expose the original URL or interrupt recording.
+            }
+            event.data.href = href
+        }
 
         if (
             this._queuedCompressionEvents > 0 ||
@@ -1524,6 +2133,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     public overrideLinkedFlag() {
         this._linkedFlagMatching.linkedFlagSeen = true
         this._tryTakeFullSnapshot()
+        this._releaseHoldAndFlush()
         this._reportStarted('linked_flag_overridden')
     }
 
@@ -1540,6 +2150,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
+        this._releaseHoldAndFlush()
         this._reportStarted('sampling_overridden')
     }
 
@@ -1551,6 +2162,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * */
     public overrideTrigger(triggerType: TriggerType) {
         this._activateTrigger(triggerType)
+        // unlike an organic URL trigger match, an explicit override releases the hold for both trigger types
+        this._releaseHoldAndFlush()
+    }
+
+    private _currentMaskedHostname(): string | undefined {
+        try {
+            const href = window?.location?.href
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
+            // against the current page and would return the real hostname we're trying to mask.
+            // new URL throws instead, so bad input falls through to the catch and we omit the property.
+            // oxlint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
     }
 
     private _clearFlushBufferTimer() {
@@ -1560,35 +2193,225 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _flushBuffer(): SnapshotBuffer {
+    private _scheduleFlushBuffer() {
+        if (!this._flushBufferTimer) {
+            this._flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+        }
+    }
+
+    // Custom events are lifecycle markers (sessionIdle, $session_id_change, ...). A buffer holding
+    // nothing else has no content to render, so shipping it as a session's first block opens a
+    // recording that bills the customer and plays back as nothing. Once the session has a
+    // FullSnapshot, later marker-only blocks append to real content and are fine.
+    // $session_starting and $session_ending are exempt: they only exist in this stream, and
+    // dropping them would break the linking chain through a session that recorded nothing.
+    private _wouldOpenRecordingWithMarkersOnly(): boolean {
+        if (this._lastFullSnapshotSessionId === this._buffer.sessionId || this._buffer.data.length === 0) {
+            return false
+        }
+        return this._buffer.data.every(
+            (event) =>
+                event?.type === EventType.Custom && !isSessionEndingEvent(event) && !isSessionStartingEvent(event)
+        )
+    }
+
+    /**
+     * Names the trigger conditions that are keeping the session in BUFFERING, so diagnostics can
+     * identify which leg failed instead of only reporting an unexplained "buffering". A URL trigger
+     * that never matches under the default AND matching otherwise looks like a session that is about
+     * to record.
+     */
+    private _describePendingTriggerConditions(): string[] {
+        return this._strategy?.getPendingTriggerConditions(this.sessionId) ?? []
+    }
+
+    private _lastLoggedBufferingReason: string | undefined
+
+    private _maybeLogBufferingReason(status: SessionRecordingStatus): void {
+        if (status !== BUFFERING) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
+            this._lastLoggedBufferingReason = undefined
+            return
+        }
+        const pending = this._describePendingTriggerConditions()
+        if (pending.length === 0) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
+            this._lastLoggedBufferingReason = undefined
+            return
+        }
+        const reason = pending.join(', ')
+        const reasonKey = `${this.sessionId}:${reason}`
+        // only report on change so the flush cadence doesn't repeat diagnostics while buffering
+        if (reasonKey === this._lastLoggedBufferingReason) {
+            return
+        }
+        this._lastLoggedBufferingReason = reasonKey
+        this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: pending })
+        logger.info(`buffering: ${reason}`)
+    }
+
+    private _canParkPendingBuffer(): boolean {
+        // the same three conditions the sessionid manager applies to the window id, so an opt-out
+        // that stops one from writing stops the other
+        return (
+            this._instance.config.persistence !== 'memory' &&
+            this._instance.persistence?._disabled !== true &&
+            sessionStore._is_supported()
+        )
+    }
+
+    /**
+     * Parks the buffer for the next page in this tab. A timing gate holds the buffer for a retry
+     * that an unloading page never runs, so without this the snapshots die with the page and the
+     * recording opens partway through the session.
+     */
+    private _parkBufferForNextPage(): void {
+        if (
+            this._buffer.data.length === 0 ||
+            this._buffer.size === this._lastParkedBufferSize ||
+            this._buffer.size > RECORDING_MAX_EVENT_SIZE ||
+            !this._canParkPendingBuffer()
+        ) {
+            return
+        }
+        this._lastParkedBufferSize = this._buffer.size
+        sessionStore._set(this._pendingBufferStorageKey, this._buffer)
+    }
+
+    private _restorePendingBuffer(): void {
+        if (this._pendingBufferRestored || !this._canParkPendingBuffer()) {
+            return
+        }
+        this._pendingBufferRestored = true
+
+        const parked = sessionStore._parse(this._pendingBufferStorageKey)
+        sessionStore._remove(this._pendingBufferStorageKey)
+
+        if (
+            !isObject(parked) ||
+            !isArray(parked.data) ||
+            parked.data.length === 0 ||
+            !isArray(parked.sizes) ||
+            parked.sizes.length !== parked.data.length ||
+            !isNumber(parked.size)
+        ) {
+            return
+        }
+        // same epoch, same tab only: a rotation or a duplicated tab (which copies sessionStorage)
+        // must not replay another epoch's snapshots
+        if (parked.sessionId !== this._sessionId || parked.windowId !== this._windowId) {
+            return
+        }
+        if (this._buffer.data.length > 0) {
+            return
+        }
+
+        this._buffer = parked as SnapshotBuffer
+    }
+
+    private _flushBuffer(isUnloading: boolean = false): SnapshotBuffer {
+        // cleared before the re-entrant reads below, so a flush they schedule survives this call
         this._clearFlushBufferTimer()
+
+        // hold the buffer rather than ship a billable recording for an epoch nobody touched
+        if (this._holdFlushUntilInteraction) {
+            return this._buffer
+        }
+
+        // keep the markers rather than open a recording with them: the next capture schedules another
+        // flush, so they ship alongside the content that follows, and go with the page if none does
+        if (this._wouldOpenRecordingWithMarkersOnly()) {
+            // unplayable either way, so a flush that finds them past the cap drops them rather than
+            // holding them. Only a flush checks this, so it bounds the common case, not every case
+            if (this._buffer.size > RECORDING_MAX_EVENT_SIZE) {
+                return this._clearBuffer()
+            }
+            if (isUnloading) {
+                this._parkBufferForNextPage()
+            }
+            return this._buffer
+        }
+
+        // the reads below consult the session manager, which can synchronously adopt a pending
+        // session rotation and re-enter this recorder, swapping this._buffer for the new epoch's;
+        // that pass flushes or holds it itself, so ship only the buffer these checks validated
+        const validatedBuffer = this._buffer
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
         // undecided session reads as ACTIVE and would leak a batch it then decides not to record
         this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
+        const status = this.status
 
-        if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+        // run on every flush, not just the buffering branch: when the session goes active this
+        // clears the saved reason, so a later session that buffers for the same condition still logs
+        this._maybeLogBufferingReason(status)
+
+        if (status === BUFFERING || status === PAUSED || status === DISABLED || isBelowMinimumDuration) {
+            // ACTIVE or SAMPLED here means the minimum duration is the only gate left: both are
+            // shippable statuses that only reach this branch through isBelowMinimumDuration. Shipping
+            // past it would open a recording the customer configured away, so park it instead: it
+            // ships from the next page once the session is long enough, and dies with the tab if it
+            // ended here
+            if (isUnloading && (status === ACTIVE || status === SAMPLED)) {
+                this._parkBufferForNextPage()
+            }
+            this._scheduleFlushBuffer()
             return this._buffer
         }
 
-        if (this._buffer.data.length > 0) {
-            const snapshotEvents = splitBuffer(this._buffer)
+        if (this._buffer !== validatedBuffer) {
+            return this._buffer
+        }
+
+        if (validatedBuffer.data.length > 0) {
+            const snapshotHostname = this._currentMaskedHostname()
+            const snapshotEvents = splitBuffer(validatedBuffer)
             snapshotEvents.forEach((snapshotBuffer) => {
-                this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
-                this._captureSnapshot({
-                    $snapshot_bytes: snapshotBuffer.size,
-                    $snapshot_data: snapshotBuffer.data,
-                    $session_id: snapshotBuffer.sessionId,
-                    $window_id: snapshotBuffer.windowId,
-                    $lib: Config.LIB_NAME,
-                    $lib_version: Config.LIB_VERSION,
-                })
+                try {
+                    this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
+                    this._captureSnapshot({
+                        $snapshot_bytes: snapshotBuffer.size,
+                        $snapshot_data: snapshotBuffer.data,
+                        $session_id: snapshotBuffer.sessionId,
+                        $window_id: snapshotBuffer.windowId,
+                        $lib: Config.LIB_NAME,
+                        $lib_version: Config.LIB_VERSION,
+                        $snapshot_host: snapshotHostname,
+                        ...(this._throttledMutationsDropped > 0
+                            ? { $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationsDropped > 0
+                            ? { $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped }
+                            : {}),
+                        ...(this._oversizedMutationBytesDropped > 0
+                            ? {
+                                  $sdk_debug_replay_oversized_mutation_bytes_dropped:
+                                      this._oversizedMutationBytesDropped,
+                              }
+                            : {}),
+                        ...(this._unstringifiableEventsDropped > 0
+                            ? { $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped }
+                            : {}),
+                    })
+                } catch (e) {
+                    // one chunk that cannot be captured must not drop the chunks after it
+                    logger.warn('could not capture snapshot chunk - skipping it', e)
+                }
             })
+
+            // A cancelled beforeunload or a later pagehide flush can ship a previously parked buffer.
+            if (!isUndefined(this._lastParkedBufferSize)) {
+                sessionStore._remove(this._pendingBufferStorageKey)
+                this._lastParkedBufferSize = undefined
+            }
 
             // Notify strategy that initial flush is complete (performance optimization)
             this._strategy?.onFlushComplete()
@@ -1659,25 +2482,55 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // have different target session IDs than this._sessionId
         const targetSessionId = properties.$session_id as string
 
+        // A session-id mismatch must flush and rebind even while idle, or an idle rotation appends the new session's Meta and FullSnapshot to the old session's buffer and ships them under the old session id.
+        const sessionChanged = this._buffer.sessionId !== targetSessionId
+
         if (
-            !this._isIdle && // we never want to flush when idle
-            (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== targetSessionId)
+            sessionChanged ||
+            // we never want to flush a healthy same-session buffer while confirmed idle, but
+            // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
+            (this._isIdle !== true &&
+                !this._holdFlushUntilInteraction &&
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
+            const sessionBeforeFlush = this._sessionId
             this._buffer = this._flushBuffer()
+            // a rotation adopted re-entrantly during that flush owns this._buffer now; clearing it
+            // or relabeling it with this event's pre-rotation ids would mis-attribute the new
+            // epoch, so drop the stale event instead
+            if (this._sessionId !== sessionBeforeFlush) {
+                return
+            }
+            // A suppressed flush (e.g. buffering, paused, held, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            if (sessionChanged && this._buffer.data.length > 0) {
+                this._buffer = this._clearBuffer()
+            }
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
+        }
+
+        // a held buffer can't ship at the cap, so bound memory instead: stop collecting but
+        // keep what is held, so a release still ships the epoch from its start; the release
+        // takes a fresh full snapshot to bridge the gap between cap and interaction
+        if (
+            this._holdFlushUntilInteraction &&
+            (this._heldBufferOverflowed ||
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
+        ) {
+            this._heldBufferOverflowed = true
+            return
         }
 
         this._buffer.size += properties.$snapshot_bytes
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        if (!this._flushBufferTimer && !this._isIdle) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+        // Schedule the flush unless confirmed idle or held — a held epoch can't ship anyway
+        // (scheduling would just churn a no-op timer every cycle) and every release path
+        // schedules its own flush.
+        if (this._isIdle !== true && !this._holdFlushUntilInteraction) {
+            this._scheduleFlushBuffer()
         }
     }
 
@@ -1693,8 +2546,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _sessionDuration(): number | null {
         const mostRecentSnapshot = this._buffer?.data[this._buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
+        // During rotation the manager already owns the new session, but stop() must
+        // evaluate the old buffer before start() adopts the new session's start time.
+        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - this._sessionStartTimestamp : null
     }
 
     private _clearBufferBeforeMostRecentMeta(): SnapshotBuffer {
@@ -1738,10 +2592,31 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // a clean unload releases a fresh-start hold for passive visits (reading, video),
+        // but only if the document was ever visible. Rotation-born holds stay held. An
+        // overflowed hold takes its recovery snapshot here, not in _releaseHoldAndFlush:
+        // that path early-returns once the hold is cleared, so a cancelled navigation
+        // would never heal the gap between cap and the resumed recording.
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && this._documentWasEverVisible) {
+            this._setFlushHold(undefined)
+            if (this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = false
+                this._tryTakeFullSnapshot()
+            }
+        }
+
         // beforeunload cannot wait for async CompressionStream work. Synchronously
         // compress any queued events so sendBeacon can include them in this flush.
         this._drainCompressionQueueSync()
-        this._flushBuffer()
+        this._flushBuffer(true)
+    }
+
+    // pagehide fires after beforeunload, i.e. after the flush above has emptied the
+    // buffer - but also after rrweb's own pagehide listener has synchronously emitted
+    // any remaining deferred stylesheet mutations. Repeat the drain+flush so those
+    // events ship instead of dying in a buffer nothing will ever flush again.
+    private _onPageHide = (): void => {
+        this._onBeforeUnload()
     }
 
     private _onOffline = (): void => {
@@ -1754,6 +2629,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState) {
+            if (document.visibilityState === 'visible') {
+                this._documentWasEverVisible = true
+            }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})
         }
@@ -1786,7 +2664,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const isUserInteraction = this._isInteractiveEvent(event)
 
-        if (!isUserInteraction && !this._isIdle) {
+        if (!isUserInteraction && this._isIdle !== true) {
             // We check if the lastActivityTimestamp is old enough to go idle
             const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
             if (timeSinceLastActivity > this._sessionIdleThresholdMilliseconds) {
@@ -1804,12 +2682,27 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     threshold: this._sessionIdleThresholdMilliseconds,
                     bufferLength: this._buffer.data.length,
                     bufferSize: this._buffer.size,
+                    // pin the marker to the session that actually went idle: it is restamped to
+                    // lastActivityTimestamp + threshold, and if a pending rotation is adopted
+                    // before it is captured (e.g. waking from a long-suspended tab), routing it
+                    // by the live session id would backdate the rotation-born session's start
+                    // by the whole idle gap
+                    sessionId: this._sessionId,
+                    windowId: this._windowId,
                 })
 
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
         }
+
+        // Check before updating activity: rotation synchronously emits $session_ending,
+        // which must use the old session's last activity, not the waking interaction.
+        // Read-only checks still enforce the 24-hour cap in every idle state.
+        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
+            !isUserInteraction,
+            event.timestamp
+        )
 
         let returningFromIdle = false
         if (isUserInteraction) {
@@ -1830,16 +2723,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (this._isIdle) {
-            return
-        }
-
-        // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
-            !isUserInteraction,
-            event.timestamp
-        )
-
         const sessionIdChanged = this._sessionId !== sessionId
         const windowIdChanged = this._windowId !== windowId
 
@@ -1847,10 +2730,33 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this.stop()
-            this.start('session_id_changed')
-        } else if (returningFromIdle) {
-            this._scheduleFullSnapshot()
+            const holdNextEpoch = sessionIdChanged && this._isIdle !== false
+            if (holdNextEpoch) {
+                // same idle bookkeeping as the session-manager callback path: a rotation born
+                // without interaction starts its epoch in the 'unknown' state (this path can
+                // adopt a rotation with _isIdle === true now that confirmed-idle emits still
+                // run the session check for the 24-hour cap)
+                this._isIdle = 'unknown'
+            }
+            this._restartForSessionIdChange(holdNextEpoch)
+        } else {
+            if (isUserInteraction) {
+                // first interaction within a held session ships the buffer, playable from t=0
+                this._releaseHoldAndFlush()
+            }
+            if (returningFromIdle) {
+                // a trigger-pending buffer ships on activation, so it needs the heal as
+                // much as a live recording; only sampled-out and disabled states skip it
+                const bufferCanShip =
+                    ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
+                // a snapshot from _releaseHoldAndFlush above has already cleared the
+                // counter by the time this check runs, so we never take two in one tick
+                if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
+                    this._tryTakeFullSnapshot()
+                }
+                this._scheduleJsonLdScan()
+                this._scheduleFullSnapshot()
+            }
         }
     }
 
@@ -1859,21 +2765,32 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get sdkDebugProperties(): Properties {
-        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
-
         return {
             $recording_status: this.status,
+            // "active" does not mean "uploading": a held epoch keeps its buffer until the user
+            // interacts, and only this property tells a held session from a shipping one
+            $sdk_debug_replay_flush_hold_reason: this._flushHoldReason,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
-            $sdk_debug_current_session_duration: this._sessionDuration,
-            $sdk_debug_session_start: sessionStartTimestamp,
+            $sdk_debug_session_start: this._sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
-            $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
-            $snapshot_max_depth_exceeded: this._maxDepthExceeded,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
-            [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
+            [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: this._rrwebAttached,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }
+    }
+
+    /**
+     * whether rrweb is observing the page, not merely constructed. rrweb returns its
+     * stop handler synchronously even when it defers init() to a document event, so a
+     * recorder that never observed anything would otherwise report itself as attached.
+     */
+    private get _rrwebAttached(): boolean {
+        if (!this._stopRrweb) {
+            return false
+        }
+        // recorder bundles older than isRecording can only report construction
+        return getRRWebRecord()?.isRecording?.() ?? true
     }
 
     private _startRecorder() {
@@ -1895,10 +2812,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllInputs: true,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
+            maskAllElementAttributes: false,
+            maskAttributeFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            // inlining every CSSRule of every sheet is the dominant cost of a full
+            // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
+            // We cap it here (rrweb itself stays unbounded) so the budget only turns
+            // on when this config surface ships alongside the recorder; the overflow
+            // is inlined across idle callbacks. The cap is in rules, not elapsed
+            // time, so a single enormous sheet can't slip through, and ~10k rules
+            // (a couple hundred ms in Chrome, well above Bootstrap's 2-3k) keeps it
+            // inert for ordinary sites. Users can raise it, or set 0 to disable.
+            inlineStylesheetBudgetRules: 10_000,
             recordCrossOriginIframes: false,
+            sampling: undefined,
+            attributeFilter: undefined,
         }
 
         // only allows user to set our allowlisted options
@@ -1908,26 +2838,97 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 if (key === 'maskInputOptions') {
                     // ensure password config is set if not included
                     sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else if (key === 'sampling') {
+                    // only allow a narrow subset of rrweb's sampling options;
+                    // canvas sampling is owned by the canvas recording config
+                    const userSampling = (value ?? {}) as SessionRecordingSamplingConfig
+                    const sampling: recordOptions['sampling'] = {}
+                    if (!isUndefined(userSampling.mousemove)) {
+                        sampling.mousemove = userSampling.mousemove
+                    }
+                    if (!isUndefined(userSampling.mouseInteraction)) {
+                        sampling.mouseInteraction = userSampling.mouseInteraction
+                    }
+                    sessionRecordingOptions.sampling = sampling
                 } else {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // oxlint-disable-next-line typescript/ban-ts-comment
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }
             }
         }
 
+        if (
+            userSessionRecordingOptions?.captureJsonLd === true &&
+            sessionRecordingOptions.slimDOMOptions !== true &&
+            sessionRecordingOptions.slimDOMOptions !== 'all'
+        ) {
+            sessionRecordingOptions.slimDOMOptions = {
+                ...sessionRecordingOptions.slimDOMOptions,
+                script: true,
+            }
+        }
+
         if (this._canvasRecording && this._canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            // canvas fps is owned by the canvas recording config; merge so that
+            // user-provided sampling (e.g. mousemove) survives
+            sessionRecordingOptions.sampling = {
+                ...sessionRecordingOptions.sampling,
+                canvas: this._canvasRecording.fps,
+            }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
+            sessionRecordingOptions.canvasMasking = {
+                // read live like regionsFn below: when true, rrweb skips canvas pixels
+                // in DOM full snapshots, and it is re-evaluated at each snapshot so a
+                // provider registered after recording started (via set_config) is
+                // honored without a recorder restart
+                configured: () => isFunction(this._instance.config.session_recording?.canvasCapture?.maskRegionsFn),
+                // read live so a provider registered after recording started (e.g. by
+                // a plugin that boots later than posthog-js) takes effect immediately.
+                // undefined must stay distinct from null, or every canvas without a
+                // provider would fail closed
+                regionsFn: (canvas) => {
+                    const fn = this._instance.config.session_recording?.canvasCapture?.maskRegionsFn
+                    if (!isFunction(fn)) {
+                        return undefined
+                    }
+                    try {
+                        return fn(canvas) ?? null
+                    } catch (e) {
+                        if (!this._maskRegionsFnFailed) {
+                            this._maskRegionsFnFailed = true
+                            logger.warn('canvasCapture.maskRegionsFn threw, canvas frames will be skipped', e)
+                        }
+                        return null
+                    }
+                },
+            }
         }
 
         if (this._masking) {
             sessionRecordingOptions.maskAllInputs = this._masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
+            sessionRecordingOptions.maskAllElementAttributes = this._masking.maskAllElementAttributes ?? false
         }
+
+        if (sessionRecordingOptions.maskAllElementAttributes && sessionRecordingOptions.maskAttributeFn) {
+            // mutually exclusive, and the coarse option fails closed so a callback
+            // cannot accidentally unmask what it hides
+            sessionRecordingOptions.maskAttributeFn = undefined
+            if (!this._hasWarnedExclusiveAttributeMasking) {
+                this._hasWarnedExclusiveAttributeMasking = true
+                logger.warn(
+                    '`maskAllElementAttributes` and `maskAttributeFn` are mutually exclusive, and `maskAttributeFn` is being ignored. ' +
+                        'Remove one of the two. Note that `maskAllElementAttributes` can also come from your project\'s "Privacy and masking" settings. ' +
+                        'See https://posthog.com/docs/session-replay/privacy'
+                )
+            }
+        }
+
+        this._warnIfClientMaskingShadowsServer()
 
         const rrwebRecord = getRRWebRecord()
         if (!rrwebRecord) {
@@ -1950,6 +2951,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
+                onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
+                bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
+                bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
+                resyncIntervalMs: this._fullSnapshotIntervalMillis,
+                onDroppedOversizedMutation: (bytes) => {
+                    if (this._oversizedMutationsDropped === 0) {
+                        this.log(
+                            LOGGER_PREFIX +
+                                ' Dropped an oversized DOM mutation to keep the recording playable. The recording will resync with a full snapshot.',
+                            'warn'
+                        )
+                    }
+                    this._oversizedMutationsDropped += 1
+                    this._oversizedMutationBytesDropped += bytes
+                },
+                requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
         const activePlugins = this._gatherRRWebPlugins()
@@ -1958,7 +2975,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this.onRRwebEmit(event)
             },
             plugins: activePlugins,
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
+                if (!this._hasLoggedRecorderCallbackError) {
+                    this._hasLoggedRecorderCallbackError = true
+                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                }
+                return true
+            },
             ...sessionRecordingOptions,
+            // rrweb defaults to the window load event, which waits for every image, font
+            // and subframe, so a page whose load event is late or never fires records
+            // nothing. A full snapshot only needs the DOM to exist, not every resource
+            // loaded. A stylesheet still pending 5s after the snapshot keeps only its href,
+            // so replay refetches it. Set after the spread so it is not a user option.
+            recordAfter: 'DOMContentLoaded',
         })
 
         if (!this._stopRrweb) {
@@ -1970,6 +3006,35 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._rrwebError = false
+
+        if (
+            userSessionRecordingOptions?.captureJsonLd === true &&
+            document &&
+            window?.MutationObserver &&
+            !this._jsonLdCapture
+        ) {
+            this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                maskUrl: (url) => this._maskReplayUrl(url),
+                attributeFilter: sessionRecordingOptions.attributeFilter,
+                blockClass: sessionRecordingOptions.blockClass,
+                blockSelector: sessionRecordingOptions.blockSelector,
+                isRecordedElement: (element) => rrwebRecord.mirror.getId(element) > 0,
+                maskAllElementAttributes: sessionRecordingOptions.maskAllElementAttributes,
+                maskAttributeFn: sessionRecordingOptions.maskAttributeFn,
+                maskTextClass: sessionRecordingOptions.maskTextClass,
+                maskTextSelector: sessionRecordingOptions.maskTextSelector,
+                getCaptureState: () =>
+                    this._instance.config.session_recording?.captureJsonLd !== true ||
+                    this._urlTriggerMatching.urlBlocked ||
+                    this._urlTriggerMatching.isCurrentUrlBlocked()
+                        ? null
+                        : this._canCaptureJsonLd(),
+                emit: (jsonLd) => this._tryAddJsonLdEvent(jsonLd),
+            })
+            if (this._urlTriggerMatching.isCurrentUrlBlocked()) {
+                this._jsonLdCapture.scan()
+            }
+        }
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()

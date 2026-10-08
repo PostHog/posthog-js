@@ -1,5 +1,6 @@
 {
     "name": "vite-devserver",
+    "packageManager": "pnpm@11.7.0",
     "private": true,
     "version": "0.0.0",
     "type": "module",
@@ -9,7 +10,9 @@
         "preview": "vite preview"
     },
     "devDependencies": {
+        "@babel/plugin-transform-react-jsx-development": "^7.22.5",
         "@preact/preset-vite": "^2.8.2",
+        "preact": "^10.29.3",
         "typescript": "^5.2.2",
         "vite": "^5.2.0"
     }

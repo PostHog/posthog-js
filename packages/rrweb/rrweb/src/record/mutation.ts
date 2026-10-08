@@ -6,10 +6,14 @@ import {
   isShadowRoot,
   needMaskingText,
   maskInputValue,
+  maskAttributeValue,
   Mirror,
   isNativeShadowDom,
   getInputType,
   toLowerCase,
+  nowMs,
+  getSuspensionGeneration,
+  recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -134,6 +138,28 @@ class DoubleLinkedList {
 
 const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 
+const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
+const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
+
+function getSerializedAttributeName(
+  target: Element,
+  localName: string,
+  namespace: string | null,
+): string {
+  if (!namespace) return localName;
+  const attribute = target.getAttributeNodeNS(namespace, localName);
+  if (attribute) return attribute.name;
+  // Removed attributes no longer expose their prefix, so retain standard ones.
+  if (namespace === XLINK_NAMESPACE) return `xlink:${localName}`;
+  if (namespace === XML_NAMESPACE) return `xml:${localName}`;
+  if (namespace === XMLNS_NAMESPACE) {
+    return localName === 'xmlns' ? localName : `xmlns:${localName}`;
+  }
+  const prefix = target.lookupPrefix(namespace);
+  return prefix ? `${prefix}:${localName}` : localName;
+}
+
 /**
  * controls behaviour of a MutationObserver
  */
@@ -144,8 +170,11 @@ export default class MutationBuffer {
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
   private attributeMap = new WeakMap<Node, attributeCursor>();
+  private generatedAttributes = new WeakMap<Node, Set<string>>();
   private removes: removedNodeMutation[] = [];
-  private mapRemoves: Node[] = [];
+  // Repeated moves can queue the same root before any mirror cleanup runs.
+  // Keep first-seen order without traversing an identical root again at emit.
+  private mapRemoves = new Set<Node>();
 
   private movedMap: Record<string, true> = {};
 
@@ -180,8 +209,11 @@ export default class MutationBuffer {
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
+  private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
+  private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
   private recordCanvas: observerParam['recordCanvas'];
+  private canvasMaskingConfigured: observerParam['canvasMaskingConfigured'];
   private inlineImages: observerParam['inlineImages'];
   private slimDOMOptions: observerParam['slimDOMOptions'];
   private dataURLOptions: observerParam['dataURLOptions'];
@@ -195,7 +227,7 @@ export default class MutationBuffer {
   private unattachedDoc: HTMLDocument;
   private canvasManagerReleased = false;
 
-  public init(options: MutationBufferParam) {
+  public init(options: MutationBufferParam): void {
     (
       [
         'mutationCb',
@@ -207,8 +239,11 @@ export default class MutationBuffer {
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
+        'maskAllElementAttributes',
+        'maskAttributeFn',
         'keepIframeSrcFn',
         'recordCanvas',
+        'canvasMaskingConfigured',
         'inlineImages',
         'slimDOMOptions',
         'dataURLOptions',
@@ -228,40 +263,39 @@ export default class MutationBuffer {
     this.canvasManager.acquire();
   }
 
-  public freeze() {
+  public freeze(): void {
     this.frozen = true;
     this.canvasManager.freeze();
   }
 
-  public unfreeze() {
+  public unfreeze(): void {
     this.frozen = false;
     this.canvasManager.unfreeze();
     this.emit();
   }
 
-  public isFrozen() {
+  public isFrozen(): boolean {
     return this.frozen;
   }
 
-  public lock() {
+  public lock(): void {
     this.locked = true;
     this.canvasManager.lock();
   }
 
-  public unlock() {
+  public unlock(): void {
     this.locked = false;
     this.canvasManager.unlock();
     this.emit();
   }
 
-  public reset() {
-    this.shadowDomManager.reset();
+  public reset(): void {
+    // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
   }
 
-  // Releases at most once even if reset() runs twice (iframe pagehide + stop). Separate from
-  // reset() so shadow-root teardown can release without re-entering shadowDomManager.reset().
-  public releaseCanvasManager() {
+  // Idempotent so teardown can run twice (iframe pagehide + stop); shadow restore handlers call this directly, not reset(), per the recursion-guard unit test.
+  public releaseCanvasManager(): void {
     if (this.canvasManagerReleased) {
       return;
     }
@@ -278,22 +312,62 @@ export default class MutationBuffer {
     return this.doc;
   }
 
-  public destroy() {
-    while (this.mapRemoves.length) {
-      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
+  public destroy(): void {
+    for (const node of this.mapRemoves) {
+      // Consume before traversal, as shift() did, including when it throws.
+      this.mapRemoves.delete(node);
+      this.mirror.removeNodeFromMap(node);
     }
   }
 
-  public processMutations = (mutations: mutationRecord[]) => {
+  public processMutations = (mutations: mutationRecord[]): void => {
     mutations.forEach(this.processMutation); // adds mutations to the buffer
     this.emit(); // clears buffer if not locked/frozen
   };
 
-  public emit = () => {
+  public emit = (): void => {
     if (this.frozen || this.locked) {
       return;
     }
 
+    // Processing a burst serializes every added subtree inline, which on churn-heavy
+    // pages (virtualized lists, calendars) is where the recorder's main-thread time
+    // goes. Measure it so that cost is visible without a Chrome trace.
+    const startedAt = nowMs();
+    const startGeneration = getSuspensionGeneration();
+    try {
+      this.processBufferedMutations();
+    } finally {
+      recordMutationCost(nowMs() - startedAt, startGeneration);
+    }
+  };
+
+  // Queued nodes can become blocked before emission. Check the current tree,
+  // including each shadow host: closest()/parentElement do not cross that boundary.
+  private isBlockedAtEmission(node: Node | null): boolean {
+    const blockClass = this.blockClass;
+    // Match stateful patterns from zero without writing to the configured
+    // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
+    const stateful =
+      blockClass &&
+      typeof blockClass !== 'string' &&
+      (blockClass.global || blockClass.sticky)
+        ? new RegExp(blockClass)
+        : null;
+    while (node) {
+      if (stateful) stateful.lastIndex = 0;
+      if (isBlocked(node, stateful || blockClass, this.blockSelector, true))
+        return true;
+      const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
+      node =
+        root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+          ? dom.host(root as ShadowRoot)
+          : null;
+    }
+    return false;
+  }
+
+  private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
 
@@ -314,11 +388,20 @@ export default class MutationBuffer {
       }
       return nextId;
     };
+    // Reuse configuration and callbacks within this emission, not DOM values.
+    // serializeNodeWithId does not mutate the options; needsMask stays unset so
+    // each node still checks its own masking context.
+    let serializationOptions:
+      | Parameters<typeof serializeNodeWithId>[1]
+      | undefined;
     const pushAdd = (n: Node) => {
       const parent = dom.parentNode(n);
       if (!parent || !inDom(n) || (parent as Element).tagName === 'TEXTAREA') {
         return;
       }
+      // A blocked node itself still needs a placeholder, but its descendants
+      // must not be serialized from stale added/moved entries.
+      if (this.isBlockedAtEmission(parent)) return;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
@@ -326,7 +409,7 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return addList.addNode(n);
       }
-      const sn = serializeNodeWithId(n, {
+      serializationOptions ??= {
         doc: this.doc,
         mirror: this.mirror,
         blockClass: this.blockClass,
@@ -339,9 +422,12 @@ export default class MutationBuffer {
         maskInputOptions: this.maskInputOptions,
         maskTextFn: this.maskTextFn,
         maskInputFn: this.maskInputFn,
+        maskAllElementAttributes: this.maskAllElementAttributes,
+        maskAttributeFn: this.maskAttributeFn,
         slimDOMOptions: this.slimDOMOptions,
         dataURLOptions: this.dataURLOptions,
         recordCanvas: this.recordCanvas,
+        canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
         onSerialize: (currentN) => {
           if (isSerializedIframe(currentN, this.mirror)) {
@@ -352,9 +438,19 @@ export default class MutationBuffer {
               currentN as HTMLLinkElement,
             );
           }
-          if (hasShadowRoot(n)) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            this.shadowDomManager.addShadowRoot(dom.shadowRoot(n)!, this.doc);
+          if (
+            hasShadowRoot(currentN) &&
+            !isBlocked(
+              currentN,
+              this.blockClass,
+              this.blockSelector,
+              true,
+            )
+          ) {
+            this.shadowDomManager.addShadowRoot(
+              dom.shadowRoot(currentN)!,
+              this.doc,
+            );
           }
         },
         onIframeLoad: (iframe, childSn) => {
@@ -370,7 +466,8 @@ export default class MutationBuffer {
         onStylesheetLoad: (link, childSn) => {
           this.stylesheetManager.attachLinkElement(link, childSn);
         },
-      });
+      };
+      const sn = serializeNodeWithId(n, serializationOptions);
       if (sn) {
         adds.push({
           parentId,
@@ -387,8 +484,9 @@ export default class MutationBuffer {
     // `mirror.getNode` and matches it against the iframe behind the removed
     // id. Reorder this and iframe moves will look like remove+add to that
     // path, tearing down observers on a still-live iframe.
-    while (this.mapRemoves.length) {
-      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
+    for (const node of this.mapRemoves) {
+      this.mapRemoves.delete(node);
+      this.mirror.removeNodeFromMap(node);
     }
 
     for (const n of this.movedSet) {
@@ -475,6 +573,7 @@ export default class MutationBuffer {
 
     const payload = {
       texts: this.texts
+        .filter((text) => !this.isBlockedAtEmission(text.node))
         .map((text) => {
           const n = text.node;
           const parent = dom.parentNode(n);
@@ -492,9 +591,14 @@ export default class MutationBuffer {
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
       attributes: this.attributes
+        .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
         .map((attribute) => {
           const { attributes } = attribute;
-          if (typeof attributes.style === 'string') {
+          if (
+            !this.maskAllElementAttributes &&
+            !this.maskAttributeFn &&
+            typeof attributes.style === 'string'
+          ) {
             const diffAsStr = JSON.stringify(attribute.styleDiff);
             const unchangedAsStr = JSON.stringify(attribute._unchangedStyles);
             // check if the style diff is actually shorter than the regular string based mutation
@@ -510,6 +614,24 @@ export default class MutationBuffer {
               }
             }
           }
+          // Mask after synthesis and style compaction decisions. Compact style
+          // objects are disabled whenever string attribute masking is configured.
+          if (this.maskAllElementAttributes || this.maskAttributeFn) {
+            for (const [name, value] of Object.entries(attributes)) {
+              if (typeof value === 'string' || value === null) {
+                attributes[name] = maskAttributeValue({
+                  element: attribute.node as Element,
+                  name,
+                  value,
+                  maskAllElementAttributes: this.maskAllElementAttributes,
+                  maskAttributeFn: this.maskAttributeFn,
+                  isGenerated: this.generatedAttributes
+                    .get(attribute.node)
+                    ?.has(name),
+                });
+              }
+            }
+          }
           return {
             id: this.mirror.getId(attribute.node),
             attributes: attributes,
@@ -522,6 +644,20 @@ export default class MutationBuffer {
       removes: this.removes,
       adds,
     };
+
+    // Reset before the empty-payload return: these collections strongly
+    // reference DOM nodes, and payload holds its own references.
+    this.texts = [];
+    this.attributes = [];
+    this.attributeMap = new WeakMap<Node, attributeCursor>();
+    this.generatedAttributes = new WeakMap<Node, Set<string>>();
+    this.removes = [];
+    this.addedSet = new Set<Node>();
+    this.movedSet = new Set<Node>();
+    this.droppedSet = new Set<Node>();
+    this.removesSubTreeCache = new Set<Node>();
+    this.movedMap = {};
+
     // payload may be empty if the mutations happened in some blocked elements
     if (
       !payload.texts.length &&
@@ -532,21 +668,10 @@ export default class MutationBuffer {
       return;
     }
 
-    // reset
-    this.texts = [];
-    this.attributes = [];
-    this.attributeMap = new WeakMap<Node, attributeCursor>();
-    this.removes = [];
-    this.addedSet = new Set<Node>();
-    this.movedSet = new Set<Node>();
-    this.droppedSet = new Set<Node>();
-    this.removesSubTreeCache = new Set<Node>();
-    this.movedMap = {};
-
     this.mutationCb(payload);
   };
 
-  public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement) => {
+  public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement): boolean => {
     return this.doc === iframeEl.contentDocument;
   };
 
@@ -606,15 +731,25 @@ export default class MutationBuffer {
         break;
       }
       case 'attributes': {
-        const target = m.target as HTMLElement;
-        let attributeName = m.attributeName as string;
-        let value = (m.target as HTMLElement).getAttribute(attributeName);
+        const target = m.target as Element;
+        const tagNameLower = toLowerCase(target.tagName);
+        const sourceAttributeName = m.attributeName as string;
+        const attributeNamespace = m.attributeNamespace ?? null;
+        let attributeName = getSerializedAttributeName(
+          target,
+          sourceAttributeName,
+          attributeNamespace,
+        );
+        let value = attributeNamespace
+          ? target.getAttributeNS(attributeNamespace, sourceAttributeName)
+          : (m.target as Element).getAttribute(sourceAttributeName);
 
         if (attributeName === 'value') {
-          const type = getInputType(target);
+          const htmlTarget = target as HTMLElement;
+          const type = getInputType(htmlTarget);
 
           value = maskInputValue({
-            element: target,
+            element: htmlTarget,
             maskInputOptions: this.maskInputOptions,
             tagName: target.tagName,
             type,
@@ -630,50 +765,53 @@ export default class MutationBuffer {
         }
 
         let item = this.attributeMap.get(m.target);
+        const isIframeSrc =
+          tagNameLower === 'iframe' && attributeName === 'src';
         if (
-          target.tagName === 'IFRAME' &&
-          attributeName === 'src' &&
-          !this.keepIframeSrcFn(value as string)
+          isIframeSrc &&
+          !this.keepIframeSrcFn(value as string) &&
+          (target as HTMLIFrameElement).contentDocument
         ) {
-          if (!(target as HTMLIFrameElement).contentDocument) {
-            // we can't record it directly as we can't see into it
-            // preserve the src attribute so a decision can be taken at replay time
-            attributeName = 'rr_src';
-          } else {
-            return;
-          }
-        }
-        if (!item) {
-          item = {
-            node: m.target,
-            attributes: {},
-            styleDiff: {},
-            _unchangedStyles: {},
-          };
-          this.attributes.push(item);
-          this.attributeMap.set(m.target, item);
+          return;
         }
 
         // Keep this property on inputs that used to be password inputs
         // This is used to ensure we do not unmask value when using e.g. a "Show password" type button
         if (
           attributeName === 'type' &&
-          target.tagName === 'INPUT' &&
+          tagNameLower === 'input' &&
           (m.oldValue || '').toLowerCase() === 'password'
         ) {
           target.setAttribute('data-rr-is-password', 'true');
         }
 
-        if (!ignoreAttribute(target.tagName, attributeName, value)) {
-          // overwrite attribute if the mutations was triggered in same time
-          item.attributes[attributeName] = transformAttribute(
+        if (!ignoreAttribute(tagNameLower, attributeName, value)) {
+          if (!item) {
+            item = {
+              node: m.target,
+              attributes: {},
+              styleDiff: {},
+              _unchangedStyles: {},
+            };
+            this.attributes.push(item);
+            this.attributeMap.set(m.target, item);
+          }
+          // Transform with the source name before representing an inaccessible
+          // iframe's source under the final rr_src key.
+          const transformedValue = transformAttribute(
             this.doc,
-            toLowerCase(target.tagName),
+            tagNameLower,
             toLowerCase(attributeName),
             value,
             target,
             this.dataURLOptions,
           );
+          if (isIframeSrc && !this.keepIframeSrcFn(value as string)) {
+            attributeName = 'rr_src';
+          }
+          // overwrite attribute if the mutation was triggered in same time
+          item.attributes[attributeName] = transformedValue;
+          this.generatedAttributes.get(m.target)?.delete(attributeName);
           if (attributeName === 'style') {
             if (!this.unattachedDoc) {
               try {
@@ -686,12 +824,13 @@ export default class MutationBuffer {
               }
             }
             const old = this.unattachedDoc.createElement('span');
+            const targetStyle = (target as HTMLElement | SVGElement).style;
             if (m.oldValue) {
               old.style.cssText = m.oldValue;
             }
-            for (const pname of Array.from(target.style)) {
-              const newValue = target.style.getPropertyValue(pname);
-              const newPriority = target.style.getPropertyPriority(pname);
+            for (const pname of Array.from(targetStyle)) {
+              const newValue = targetStyle.getPropertyValue(pname);
+              const newPriority = targetStyle.getPropertyPriority(pname);
               if (
                 newValue !== old.style.getPropertyValue(pname) ||
                 newPriority !== old.style.getPropertyPriority(pname)
@@ -707,17 +846,23 @@ export default class MutationBuffer {
               }
             }
             for (const pname of Array.from(old.style)) {
-              if (target.style.getPropertyValue(pname) === '') {
+              if (targetStyle.getPropertyValue(pname) === '') {
                 // "if not set, returns the empty string"
                 item.styleDiff[pname] = false; // delete
               }
             }
-          } else if (attributeName === 'open' && target.tagName === 'DIALOG') {
+          } else if (attributeName === 'open' && tagNameLower === 'dialog') {
             if (target.matches('dialog:modal')) {
               item.attributes['rr_open_mode'] = 'modal';
             } else {
               item.attributes['rr_open_mode'] = 'non-modal';
             }
+            let generated = this.generatedAttributes.get(m.target);
+            if (!generated) {
+              generated = new Set();
+              this.generatedAttributes.set(m.target, generated);
+            }
+            generated.add('rr_open_mode');
           }
         }
         break;
@@ -783,7 +928,7 @@ export default class MutationBuffer {
             });
             processRemoves(n, this.removesSubTreeCache);
           }
-          this.mapRemoves.push(n);
+          this.mapRemoves.add(n);
         });
         break;
       }
@@ -800,7 +945,19 @@ export default class MutationBuffer {
     if (this.processedNodeManager.inOtherBuffer(n, this)) return;
 
     // if n is added to set, there is no need to travel it and its' children again
-    if (this.addedSet.has(n) || this.movedSet.has(n)) return;
+    if (this.addedSet.has(n)) {
+      // re-insert n so the addedSet iteration order in the `emit` phase matches
+      // the latest DOM order; a stale position makes emit's out-of-order
+      // deferral list do far more work on large batches (upstream rrweb #1302).
+      // this only moves n itself - already-present children keep their earlier
+      // positions and aren't re-appended here, but emit's addList deferral
+      // re-derives parentId/nextId, so parent-before-child order still comes
+      // out correct.
+      this.addedSet.delete(n);
+      this.addedSet.add(n);
+      return;
+    }
+    if (this.movedSet.has(n)) return;
 
     if (this.mirror.hasNode(n)) {
       if (isIgnored(n, this.mirror, this.slimDOMOptions)) {
@@ -822,13 +979,24 @@ export default class MutationBuffer {
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
-      dom.childNodes(n).forEach((childN) => this.genAdds(childN));
+      // Text nodes cannot have children or a shadow root. Keep the blocking
+      // check above: skipping it can change stateful RegExp behavior.
+      if (n.nodeType === n.TEXT_NODE) return;
+      // Avoid a callback per node on repeated subtree walks. Like forEach,
+      // capture the initial length but read each child from the live list.
+      const children = dom.childNodes(n);
+      for (let i = 0, length = children.length; i < length; i++) {
+        const childN = children[i];
+        if (childN) this.genAdds(childN);
+      }
       if (hasShadowRoot(n)) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        dom.childNodes(dom.shadowRoot(n)!).forEach((childN) => {
+        const shadowChildren = dom.childNodes(dom.shadowRoot(n)!);
+        for (let i = 0, length = shadowChildren.length; i < length; i++) {
+          const childN = shadowChildren[i];
+          if (!childN) continue;
           this.processedNodeManager.add(childN, this);
           this.genAdds(childN, n);
-        });
+        }
       }
     }
   };
@@ -841,15 +1009,24 @@ export default class MutationBuffer {
  * that.
  */
 function deepDelete(addsSet: Set<Node>, n: Node) {
-  addsSet.delete(n);
-  dom.childNodes(n).forEach((childN) => deepDelete(addsSet, childN));
+  const stack = [n];
+
+  while (stack.length) {
+    const next = stack.pop()!;
+    addsSet.delete(next);
+    if (next.nodeType === next.TEXT_NODE) continue;
+    const children = dom.childNodes(next);
+    for (let i = 0, length = children.length; i < length; i++) {
+      const childN = children[i];
+      if (childN) stack.push(childN);
+    }
+  }
 }
 
 function processRemoves(n: Node, cache: Set<Node>) {
   const queue = [n];
 
   while (queue.length) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const next = queue.pop()!;
     if (cache.has(next)) continue;
     cache.add(next);
@@ -876,16 +1053,11 @@ function _isParentRemoved(
 
 function isAncestorInSet(set: Set<Node>, n: Node): boolean {
   if (set.size === 0) return false;
-  return _isAncestorInSet(set, n);
-}
 
-function _isAncestorInSet(set: Set<Node>, n: Node): boolean {
-  const parent = dom.parentNode(n);
-  if (!parent) {
-    return false;
+  let parent = dom.parentNode(n);
+  while (parent) {
+    if (set.has(parent)) return true;
+    parent = dom.parentNode(parent);
   }
-  if (set.has(parent)) {
-    return true;
-  }
-  return _isAncestorInSet(set, parent);
+  return false;
 }

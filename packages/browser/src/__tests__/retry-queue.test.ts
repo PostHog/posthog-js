@@ -1,32 +1,46 @@
-/* eslint-disable compat/compat */
-
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import { assignableWindow } from '../utils/globals'
+import type { TransportCallback } from '../request'
+import type { PostHog } from '../posthog-core'
+import type { RequestWithOptions } from '../types'
+
+const mockTransport = vi.hoisted(() => vi.fn())
+vi.mock('../request-dispatch', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../request-dispatch')>()),
+    sendRequest: (_instance: PostHog, options: RequestWithOptions, callback: TransportCallback) =>
+        mockTransport({ ...options, callback }),
+}))
 
 describe('RetryQueue', () => {
     const mockPosthog = {
-        _send_request: jest.fn(),
+        _send_request: mockTransport,
     }
     let retryQueue: RetryQueue
     let now = Date.now()
 
     beforeEach(() => {
+        mockTransport.mockReset()
         retryQueue = new RetryQueue(mockPosthog as any)
 
-        jest.useFakeTimers()
-        jest.setSystemTime(now)
+        vi.useFakeTimers()
+        vi.setSystemTime(now)
         assignableWindow.POSTHOG_DEBUG = false
-        jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
+        vi.spyOn(assignableWindow.console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        retryQueue.unload()
+        vi.useRealTimers()
     })
 
     const fastForwardTimeAndRunTimer = (time = 3500) => {
         now += time
-        jest.setSystemTime(now)
-        jest.runOnlyPendingTimers()
+        vi.setSystemTime(now)
+        vi.runOnlyPendingTimers()
     }
 
     const enqueueRequests = () => {
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockTransport.mockImplementation(({ callback }) => {
             // Force a retry
             callback?.({ statusCode: 502 })
         })
@@ -48,12 +62,12 @@ describe('RetryQueue', () => {
             data: { event: 'fizz', timestamp: now },
         })
 
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 200 })
         })
 
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
-        mockPosthog._send_request.mockClear()
+        expect(mockTransport).toHaveBeenCalledTimes(4)
+        mockTransport.mockClear()
     }
 
     it('processes retry requests', () => {
@@ -100,9 +114,9 @@ describe('RetryQueue', () => {
 
         // clears queue
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockTransport).toHaveBeenCalledTimes(4)
         // Check the retry count is added
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+        expect(mockTransport.mock.calls.map(([arg1]) => arg1.url)).toEqual([
             '/e?retry_count=1',
             '/e?retry_count=1',
             '/e?retry_count=1',
@@ -110,11 +124,34 @@ describe('RetryQueue', () => {
         ])
     })
 
+    it.each([undefined, 'fetch', 'XHR'] as const)('restores transport %s after a one-attempt override', (transport) => {
+        const callback = vi.fn()
+        const data = { event: 'conversion', uuid: 'event-id' }
+        mockTransport.mockImplementation(({ callback }) => callback({ statusCode: 503 }))
+
+        retryQueue.retriableRequest({ url: '/e', data, transport, callback }, 'sendBeacon')
+
+        expect(mockTransport).toHaveBeenLastCalledWith(expect.objectContaining({ transport: 'sendBeacon', data }))
+        expect(retryQueue.length).toBe(1)
+        expect(retryQueue['_queue'][0].requestOptions.transport).toBe(transport)
+        expect(callback).not.toHaveBeenCalled()
+
+        mockTransport.mockImplementation(({ callback }) => callback({ statusCode: 200 }))
+        fastForwardTimeAndRunTimer()
+
+        expect(mockTransport).toHaveBeenLastCalledWith(
+            expect.objectContaining({ transport, data, url: '/e?retry_count=1' })
+        )
+        expect(retryQueue.length).toBe(0)
+        expect(callback).toHaveBeenCalledOnce()
+        expect(callback).toHaveBeenCalledWith({ statusCode: 200 })
+    })
+
     it('adds the retry_count to the url', () => {
         enqueueRequests()
         fastForwardTimeAndRunTimer(3500)
 
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+        expect(mockTransport.mock.calls.map(([arg1]) => arg1.url)).toEqual([
             '/e?retry_count=1',
             '/e?retry_count=1',
             '/e?retry_count=1',
@@ -128,13 +165,29 @@ describe('RetryQueue', () => {
         retryQueue.unload()
 
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
-        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
+        expect(mockTransport).toHaveBeenCalledTimes(4)
+        expect(mockTransport.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
             'sendBeacon',
             'sendBeacon',
             'sendBeacon',
             'sendBeacon',
         ])
+    })
+
+    it('strips batch callbacks on unload without stripping single-event callbacks', () => {
+        const batchCallback = vi.fn()
+        const singleCallback = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => callback?.({ statusCode: 503 }))
+        retryQueue.retriableRequest({ url: '/e', data: [{ event: 'batched' }], callback: batchCallback })
+        retryQueue.retriableRequest({ url: '/e', data: { event: 'single' }, callback: singleCallback })
+        mockTransport.mockReset()
+
+        retryQueue.unload()
+
+        expect(mockTransport).toHaveBeenCalledTimes(2)
+        expect(mockTransport.mock.calls[0][0].callback).toBeUndefined()
+        expect(mockTransport.mock.calls[1][0].callback).toBe(singleCallback)
+        expect(mockTransport.mock.calls.every(([request]) => request.transport === 'sendBeacon')).toBe(true)
     })
 
     it('enqueues requests when offline and flushes immediately when online again', () => {
@@ -145,7 +198,7 @@ describe('RetryQueue', () => {
         fastForwardTimeAndRunTimer()
 
         // requests aren't attempted when we're offline
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
+        expect(mockTransport).toHaveBeenCalledTimes(0)
 
         // queue stays the same
         expect(retryQueue.length).toEqual(4)
@@ -154,17 +207,30 @@ describe('RetryQueue', () => {
 
         expect(retryQueue['_areWeOnline']).toEqual(true)
         expect(retryQueue.length).toEqual(0)
-        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockTransport).toHaveBeenCalledTimes(4)
     })
 
-    it('does not enqueue a request after 10 retries', () => {
+    it.each([9, 10, 11])('enforces the retry limit after %i failed retries', (retriesPerformedSoFar) => {
+        const callback = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => callback({ statusCode: 503 }))
+
         retryQueue.retriableRequest({
             url: '/e',
             data: { event: 'maxretries', timestamp: now },
-            retriesPerformedSoFar: 10,
+            retriesPerformedSoFar,
+            callback,
         })
 
-        expect(retryQueue.length).toEqual(0)
+        expect(mockTransport).toHaveBeenCalledOnce()
+        if (retriesPerformedSoFar === 9) {
+            expect(retryQueue.length).toBe(1)
+            expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toBe(10)
+            expect(callback).not.toHaveBeenCalled()
+        } else {
+            expect(retryQueue.length).toBe(0)
+            expect(callback).toHaveBeenCalledOnce()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 503 })
+        }
     })
 
     it.each([
@@ -173,8 +239,8 @@ describe('RetryQueue', () => {
         { retriesPerformedSoFar: 5, expectedQueueLength: 0, expectedLogRetries: 5 },
     ])('handles statusCode 0 requests after $retriesPerformedSoFar retries', (testCase) => {
         assignableWindow.POSTHOG_DEBUG = !!testCase.expectedLogRetries
-        const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        const cb = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 0 })
         })
 
@@ -201,8 +267,8 @@ describe('RetryQueue', () => {
     })
 
     it('only calls the callback when successful', () => {
-        const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        const cb = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -212,7 +278,7 @@ describe('RetryQueue', () => {
             callback: cb,
         })
 
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 200, text: 'it worked!' })
         })
 
@@ -224,8 +290,8 @@ describe('RetryQueue', () => {
     })
 
     it('only calls the callback when retries are exhausted', () => {
-        const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        const cb = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -242,8 +308,8 @@ describe('RetryQueue', () => {
     })
 
     it('increments the retry count each attempt', () => {
-        const cb = jest.fn()
-        mockPosthog._send_request.mockImplementation(({ callback }) => {
+        const cb = vi.fn()
+        mockTransport.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
 
@@ -259,31 +325,36 @@ describe('RetryQueue', () => {
     })
 
     describe('backoff calculation', () => {
-        const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
-        })
-        const retryDelaysTwo = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
-        })
-        const retryDelaysThree = Array.from({ length: 10 }, (_, i) => i).map((i) => {
-            return pickNextRetryDelay(i + 1)
+        it.each([
+            [0, 0, 2250],
+            [0, 0.5, 3000],
+            [0, 0.999, 3749],
+            [1, 0, 4500],
+            [1, 0.5, 6000],
+            [1, 0.999, 7497],
+            [2, 0.5, 12000],
+            [9, 0.5, 1536000],
+            [10, 0.5, 1800000],
+        ])('uses exponential backoff for attempt %i and draw %f', (attempt, draw, expected) => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(draw)
+            try {
+                expect(pickNextRetryDelay(attempt)).toBe(expected)
+                expect(pickNextRetryDelay(attempt)).toBe(expected)
+            } finally {
+                random.mockRestore()
+            }
         })
 
-        it('retry times are not identical each time they are generated', () => {
-            retryDelaysOne.forEach((delay, i) => {
-                expect(delay).not.toEqual(retryDelaysTwo[i])
-                expect(delay).not.toEqual(retryDelaysThree[i])
-            })
-        })
-
-        it('retry times are within bounds +/- jitter of 50%', () => {
-            retryDelaysOne
-                .concat(retryDelaysTwo)
-                .concat(retryDelaysThree)
-                .forEach((delay) => {
-                    expect(delay).toBeGreaterThanOrEqual(6000 * 0.5)
-                    expect(delay).toBeLessThanOrEqual(30 * 60 * 1000 * 1.5)
-                })
+        it.each([0, 0.5, 0.999])('keeps retry delays bounded for draw %f', (draw) => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(draw)
+            try {
+                for (let attempt = 0; attempt <= 10; attempt++) {
+                    expect(pickNextRetryDelay(attempt)).toBeGreaterThanOrEqual(2250)
+                    expect(pickNextRetryDelay(attempt)).toBeLessThanOrEqual(2700000)
+                }
+            } finally {
+                random.mockRestore()
+            }
         })
     })
 
@@ -309,7 +380,7 @@ describe('RetryQueue', () => {
             expect(retryQueue['_isPolling']).toBe(false)
             expect(retryQueue['_poller']).toBeUndefined()
 
-            mockPosthog._send_request.mockImplementation(({ callback }) => {
+            mockTransport.mockImplementation(({ callback }) => {
                 callback?.({ statusCode: 502 })
             })
 

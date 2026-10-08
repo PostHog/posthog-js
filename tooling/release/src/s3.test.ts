@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict'
+import type { ReadStream } from 'node:fs'
 import test from 'node:test'
-import { createS3ClientConfig } from './s3.ts'
+import { fileURLToPath } from 'node:url'
+import { createPutObjectInput, createS3ClientConfig } from './s3.ts'
+
+test('createPutObjectInput passes an atomic no-overwrite condition to S3', () => {
+    const input = createPutObjectInput(
+        'us-assets.i.posthog.com',
+        'static/1.370.0/array.js',
+        fileURLToPath(import.meta.url),
+        {
+            cacheControl: 'public, max-age=31536000, immutable',
+            contentType: 'application/javascript',
+            ifNoneMatch: '*',
+        }
+    )
+
+    assert.equal(input.Bucket, 'us-assets.i.posthog.com')
+    assert.equal(input.Key, 'static/1.370.0/array.js')
+    assert.equal(input.IfNoneMatch, '*')
+    ;(input.Body as ReadStream).destroy()
+})
 
 test('createS3ClientConfig always enables path-style addressing for dotted bucket names', () => {
     const originalAwsRegion = process.env.AWS_REGION

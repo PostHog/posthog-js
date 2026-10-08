@@ -1,12 +1,41 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
 import { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
-import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
-import { createLogger } from './utils/logger'
-import { propertyComparisons } from './utils/property-utils'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfigResult } from './types'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
+import { isStackOverflowError } from './utils/stack-overflow'
 
 const logger = createLogger('[Error tracking]')
+
+// Safari masks the URL of extension content scripts as `webkit-masked-url://hidden/`. It masks
+// some of the page's own scripts the same way, so a masked frame alone does not prove the
+// exception came from an extension (see _isExtensionException).
+const MASKED_URL_PREFIX = 'webkit-masked-url:'
+
+const MASKED_EXTENSION_EXCEPTION_VALUE = [
+    { value: 'isolatedAPI.contexts.topHostname', exact: false },
+    { value: 'No response from target', exact: true },
+]
+
+// Browser extensions serve their content scripts from these schemes. `safari-extension:` and
+// `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
+// rather than being real URLs, but they mark the frame just as definitively.
+const EXTENSION_URL_PREFIXES = [
+    'chrome-extension://',
+    'moz-extension://',
+    'safari-extension:',
+    'safari-web-extension:',
+    MASKED_URL_PREFIX,
+]
+
+// Some mobile browsers inject their own user scripts into every page. These scripts read
+// browser-private globals, and when a script runs before its global exists it throws. The
+// browser attributes the injected script to the host document, so the frame filename is the
+// page URL and EXTENSION_URL_PREFIXES cannot catch it. We match the private global in the
+// exception value instead. No page or SDK code references these names.
+const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
 
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
@@ -42,7 +71,13 @@ export class PostHogExceptions implements Extension {
         this._exceptionStepsBuffer.setConfig(this._exceptionStepsConfig)
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without an errorTracking key.
+            return
+        }
+
+        const response = result.config
         if (!('errorTracking' in response)) {
             return
         }
@@ -125,6 +160,12 @@ export class PostHogExceptions implements Extension {
                     return
                 }
 
+                if (!this._captureExtensionExceptions && this._isInjectedBrowserScriptException(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by an injected browser script')
+                    logger.info('Skipping exception capture because it was thrown by an injected browser script')
+                    return
+                }
+
                 if (
                     !this._instance.config.error_tracking.__capturePostHogExceptions &&
                     this._isPostHogException(exceptionList)
@@ -140,6 +181,11 @@ export class PostHogExceptions implements Extension {
                     ? this._addBufferedExceptionSteps(properties)
                     : properties
 
+            const injectedReleaseId = ErrorTracking.getInjectedReleaseId()
+            if (injectedReleaseId) {
+                propertiesForExceptionCapture.$release_id = injectedReleaseId
+            }
+
             try {
                 const result = this._instance.capture('$exception', propertiesForExceptionCapture, {
                     _noTruncate: true,
@@ -153,12 +199,16 @@ export class PostHogExceptions implements Extension {
 
                 return result
             } catch (error) {
-                logger.error('Failed to capture exception event. Dropping this exception.', error)
+                if (!isStackOverflowError(error)) {
+                    logger.error('Failed to capture exception event. Dropping this exception.', error)
+                }
                 this._exceptionStepsBuffer.clear()
                 return
             }
         } catch (error) {
-            logger.error('Failed to process exception event. Ignoring this exception.', error)
+            if (!isStackOverflowError(error)) {
+                logger.error('Failed to process exception event. Ignoring this exception.', error)
+            }
             return
         }
     }
@@ -207,36 +257,85 @@ export class PostHogExceptions implements Extension {
             return false
         }
 
-        const exceptionValues = exceptionList.reduce(
-            (acc, { type, value }) => {
-                if (isString(type) && type.length > 0) {
-                    acc['$exception_types'].push(type)
+        try {
+            const exceptionValues = exceptionList.reduce(
+                (acc, { type, value }) => {
+                    if (isString(type) && type.length > 0) {
+                        acc['$exception_types'].push(type)
+                    }
+                    if (isString(value) && value.length > 0) {
+                        acc['$exception_values'].push(value)
+                    }
+                    return acc
+                },
+                {
+                    $exception_types: [] as string[],
+                    $exception_values: [] as string[],
                 }
-                if (isString(value) && value.length > 0) {
-                    acc['$exception_values'].push(value)
-                }
-                return acc
-            },
-            {
-                $exception_types: [] as string[],
-                $exception_values: [] as string[],
-            }
-        )
+            )
 
-        return this._suppressionRules.some((rule) => {
-            const results = rule.values.map((v) => {
-                const compare = propertyComparisons[v.operator]
-                const targets = isArray(v.value) ? v.value : [v.value]
-                const values = exceptionValues[v.key] ?? []
-                return targets.length > 0 ? compare(targets, values) : false
+            return this._suppressionRules.some((rule) => {
+                const results = rule.values.map((v) => {
+                    const compare: ((targets: string[], values: string[]) => boolean) | undefined =
+                        propertyComparisons[v.operator]
+                    const values: string[] | undefined = exceptionValues[v.key]
+
+                    if (!compare || !values) {
+                        return false
+                    }
+
+                    const targets = isArray(v.value) ? v.value : [v.value]
+                    return targets.length > 0 ? compare(targets, values) : false
+                })
+                return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
             })
-            return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
-        })
+        } catch (error) {
+            // Suppression only ever filters what we capture, so failing to evaluate it must not cost
+            // us the exception. Letting this throw reaches the handler in sendExceptionEvent, which
+            // drops the event entirely.
+            logger.warn('Failed to evaluate suppression rules. Capturing the exception.', error)
+            return false
+        }
     }
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        const extensionFrames = frames.filter(
+            ({ filename }) => !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        )
+        if (extensionFrames.length === 0) {
+            return false
+        }
+
+        // Safari also masks blob, eval'd, and injected application code, so a masked URL alone does
+        // not prove the exception came from an extension. For an all-masked stack, require a known
+        // extension-only signature and no remaining page frame. Ignore masked frames when checking
+        // for page code because the Sentry integration may forward them with `in_app: true`.
+        const onlyMaskedExtensionFrames = extensionFrames.every(
+            ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
+        )
+        if (onlyMaskedExtensionFrames) {
+            const hasKnownExtensionSignature = exceptionList.some(
+                ({ type, value }) =>
+                    type === 'NoResponse' ||
+                    (isString(value) &&
+                        MASKED_EXTENSION_EXCEPTION_VALUE.some(({ value: signature, exact }) =>
+                            exact ? value === signature : value.includes(signature)
+                        ))
+            )
+            return (
+                hasKnownExtensionSignature &&
+                !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
+            )
+        }
+
+        return true
+    }
+
+    private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        return exceptionList.some(({ value }) => {
+            return isString(value) && INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))
+        })
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {

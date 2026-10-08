@@ -24,11 +24,23 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium-compat',
+            testIgnore: '**/error-tracking/legacy-autocapture.spec.ts',
             use: {
                 ...devices['Desktop Chrome'],
                 staticOverrides: {
                     'array.js': 'array.npm-latest.js',
                     'array.full.js': 'array.full.npm-latest.js',
+                },
+            },
+        },
+        {
+            name: 'chromium-legacy-exception-autocapture',
+            testMatch: '**/error-tracking/legacy-autocapture.spec.ts',
+            use: {
+                ...devices['Desktop Chrome'],
+                staticOverrides: {
+                    'array.js': 'array.npm-legacy-exception-autocapture.js',
+                    'array.full.js': 'array.full.npm-legacy-exception-autocapture.js',
                 },
             },
         },

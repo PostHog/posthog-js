@@ -30,6 +30,8 @@ export type FeatureFlagMetadata = {
     version: number | undefined
     description: string | undefined
     payload: JsonType | undefined
+    /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+    has_experiment?: boolean
     // Only used when overriding a flag payload.
     original_payload?: JsonType | undefined
 }
@@ -62,7 +64,7 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 export type FeatureFlagResult = {
     /** The key of the feature flag */
     readonly key: string
-    /** Whether the feature flag is enabled (truthy value) */
+    /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
     readonly enabled: boolean
     /** The variant key if this is a multivariate flag, undefined for boolean flags */
     readonly variant: string | undefined
@@ -102,6 +104,16 @@ export type FeatureFlagOptions = {
      * Defaults to false.
      */
     fresh?: boolean
+}
+
+/**
+ * Options for isFeatureEnabled.
+ */
+export type IsFeatureEnabledOptions = FeatureFlagOptions & {
+    /**
+     * Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
+     */
+    defaultValue?: boolean
 }
 
 /**

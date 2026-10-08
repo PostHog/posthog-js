@@ -342,7 +342,7 @@ describe('Tool Handling Tests', () => {
       ])
     })
 
-    it('should convert Uint8Array inline data to base64', () => {
+    it('should redact Uint8Array inline data after converting it to base64', () => {
       const bytes = new Uint8Array([72, 101, 108, 108, 111]) // "Hello"
       const response = {
         candidates: [
@@ -362,24 +362,19 @@ describe('Tool Handling Tests', () => {
             {
               type: 'audio',
               mime_type: 'audio/pcm',
-              data: 'SGVsbG8=', // base64 of "Hello"
+              data: '[base64 audio/pcm redacted]',
             },
           ],
         },
       ])
     })
 
-    // Long enough that redactBase64DataUrl flags it as raw base64 when multimodal is off.
-    // The redactor uses the weak (1024) threshold here because formatResponseGemini calls
-    // redactBase64DataUrl on the bare string — no parent context, so the placeholder is
-    // the generic '[base64 redacted]' regardless of the surrounding mime_type.
     const longBase64 = 'A'.repeat(1024)
-    const redacted = '[base64 redacted]'
 
     it.each([
-      ['image/jpeg', 'image', { mime_type: 'image/jpeg', data: redacted }],
-      ['application/pdf', 'document', { mime_type: 'application/pdf', data: redacted }],
-      [undefined, 'document', { mime_type: 'application/octet-stream', data: redacted }],
+      ['image/jpeg', 'image', { mime_type: 'image/jpeg', data: '[base64 image/jpeg redacted]' }],
+      ['application/pdf', 'document', { mime_type: 'application/pdf', data: '[base64 application/pdf redacted]' }],
+      [undefined, 'document', { mime_type: 'application/octet-stream', data: '[base64 file redacted]' }],
     ])('inlineData with mimeType %s emits type %s with inline_data', (mimeType, expectedType, expectedInlineData) => {
       const response = {
         candidates: [

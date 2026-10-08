@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { usePostHog } from 'posthog-js/react'
 import { useState, useCallback } from 'react'
 

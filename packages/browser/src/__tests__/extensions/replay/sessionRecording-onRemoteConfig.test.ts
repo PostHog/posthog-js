@@ -3,19 +3,20 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { FlagsResponse, PostHogConfig, Property } from '../../../types'
-import { uuidv7 } from '../../../uuidv7'
+import { FlagsResponse, PostHogConfig, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SessionRecording } from '../../../extensions/replay/session-recording'
-import { assignableWindow, window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/replay/types/rrweb-types'
-import Mock = jest.Mock
+import type { Mock } from 'vitest'
 import { ConsentManager } from '../../../consent'
-import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
 import {
     LazyLoadedSessionRecording,
@@ -25,7 +26,15 @@ import { createMockPostHog, createMockConfig } from '../../helpers/posthog-insta
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
+vi.mock('../../../config', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../config')>()
+    return {
+        ...actual,
+        default: { ...actual.default, LIB_VERSION: '0.0.1', LIB_NAME: 'web' },
+        LIB_VERSION: '0.0.1',
+        LIB_NAME: 'web',
+    }
+})
 
 const EMPTY_BUFFER = {
     data: [],
@@ -51,15 +60,16 @@ const createFullSnapshot = (event = {}): fullSnapshotEvent =>
         ...event,
     }) as fullSnapshotEvent
 
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
+    return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
 
 const originalLocation = window!.location
 
 describe('SessionRecording', () => {
-    const _addCustomEvent = jest.fn()
-    const loadScriptMock = jest.fn()
+    const _addCustomEvent = vi.fn()
+    const loadScriptMock = vi.fn()
+    const registerForSessionMock = vi.fn()
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
@@ -73,25 +83,25 @@ describe('SessionRecording', () => {
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
-            record: jest.fn(({ emit }) => {
+            record: vi.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             }),
             version: 'fake',
         }
-        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
+        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
-            getRecordConsolePlugin: jest.fn(),
+            getRecordConsolePlugin: vi.fn(),
         }
     }
 
     beforeEach(() => {
-        removePageviewCaptureHookMock = jest.fn()
+        removePageviewCaptureHookMock = vi.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
@@ -114,14 +124,14 @@ describe('SessionRecording', () => {
             },
         }
 
-        sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
-        windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
+        sessionIdGeneratorMock = vi.fn().mockImplementation(() => sessionId)
+        windowIdGeneratorMock = vi.fn().mockImplementation(() => 'windowId')
 
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
 
         sessionManager = new SessionIdManager(
-            createMockPostHog({ config, persistence: postHogPersistence, register: jest.fn() }),
+            createMockPostHog({ config, persistence: postHogPersistence, register: vi.fn() }),
             sessionIdGeneratorMock,
             windowIdGeneratorMock
         )
@@ -133,8 +143,9 @@ describe('SessionRecording', () => {
                 return postHogPersistence?.['props'][property_key]
             },
             config: config,
-            capture: jest.fn(),
+            capture: vi.fn(),
             persistence: postHogPersistence,
+            register: vi.fn(),
             onFeatureFlags: (): (() => void) => {
                 return () => {}
             },
@@ -145,9 +156,10 @@ describe('SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
-            register_for_session() {},
+            register_for_session: registerForSessionMock,
+            _onRemoteConfig: vi.fn(),
             _internalEventEmitter: simpleEventEmitter,
-            on: jest.fn().mockImplementation((event, cb) => {
+            on: vi.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
                 return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
             }),
@@ -168,13 +180,17 @@ describe('SessionRecording', () => {
     })
 
     afterEach(() => {
+        posthog.sessionManager?.destroy()
+        if (posthog.sessionManager !== sessionManager) {
+            sessionManager.destroy()
+        }
         // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
 
     describe('onRemoteConfig()', () => {
         beforeEach(() => {
-            jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+            vi.spyOn(sessionRecording, 'startIfEnabledOrStop')
         })
 
         it('loads script based on script config', () => {
@@ -184,6 +200,75 @@ describe('SessionRecording', () => {
                 })
             )
             expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'experimental-recorder', expect.any(Function))
+        })
+
+        it('does not load the script when the recorder is already bundled in', () => {
+            // this is what the `.full` bundles do at import time
+            addRRwebToWindow()
+            assignableWindow.__PosthogExtensions__.initSessionRecording = () => new LazyLoadedSessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(loadScriptMock).not.toHaveBeenCalled()
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('still loads the script when only rrweb is bundled in', () => {
+            // `posthog-js/dist/recorder` defines rrweb but not initSessionRecording
+            addRRwebToWindow()
+            assignableWindow.__PosthogExtensions__.initSessionRecording = undefined
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'lazy-recorder', expect.any(Function))
+        })
+
+        it('flags the session when the recorder script cannot be loaded', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => callback('blocked'))
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(registerForSessionMock).toHaveBeenCalledWith({
+                [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+            })
+        })
+
+        it('does not flag the session when a stale recorder script load fails', () => {
+            let finishLoading: ((error?: string) => void) | undefined
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                finishLoading = callback
+            })
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            posthog.sessionManager = undefined
+            finishLoading?.('blocked')
+
+            expect(registerForSessionMock).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+        })
+
+        it.each([
+            ['consent is opted out', () => vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)],
+            ['the session manager is unavailable', () => (posthog.sessionManager = undefined)],
+            ['the session manager is replaced', () => (posthog.sessionManager = new SessionIdManager(posthog))],
+        ])('does not initialize after %s while the recorder script is loading', (_condition, disableRecording) => {
+            let finishLoading: (() => void) | undefined
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                finishLoading = callback
+            })
+            const initSessionRecording = vi.fn(() => new LazyLoadedSessionRecording(posthog))
+            assignableWindow.__PosthogExtensions__.initSessionRecording = initSessionRecording
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            expect(finishLoading).toBeDefined()
+
+            disableRecording()
+            addRRwebToWindow()
+
+            expect(() => finishLoading?.()).not.toThrow()
+            expect(initSessionRecording).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeUndefined()
+            expect(sessionRecording.status).toBe('disabled')
         })
 
         it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {
@@ -356,8 +441,8 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
-            const discardSpy = jest.spyOn(lazyRecorder!, 'discard')
-            const flushSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+            const discardSpy = vi.spyOn(lazyRecorder!, 'discard')
+            const flushSpy = vi.spyOn(lazyRecorder as any, '_flushBuffer')
 
             // Server responds with recording disabled
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
@@ -476,6 +561,7 @@ describe('SessionRecording', () => {
             // Should fall back to persisted config and start recording
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording.status).toBe('active')
+            expect(registerForSessionMock).not.toHaveBeenCalledWith({ $sdk_debug_replay_stale_config: true })
         })
 
         it('does not start recording when config fetch fails and no persisted config exists', () => {
@@ -487,6 +573,7 @@ describe('SessionRecording', () => {
             // No persisted config to fall back to
             expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording.status).toBe('disabled')
+            expect(registerForSessionMock).not.toHaveBeenCalledWith({ $sdk_debug_replay_stale_config: true })
         })
 
         it('awaits config when config fetch fails and persisted config is stale', () => {
@@ -506,26 +593,73 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('awaiting_config')
         })
 
-        it('transitions to missing_config when config refresh fails', () => {
+        it('awaits config when config fetch fails and persisted config has no cache_timestamp', () => {
+            // configs persisted by pre-cache_timestamp SDK versions can be arbitrarily old,
+            // so they must not start recording under their stale trigger/sampling settings
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
                     endpoint: '/s/',
-                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
                 },
             })
 
-            // First failure: triggers refresh
+            // Remote config fetch fails
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+
+            expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording.status).toBe('awaiting_config')
+        })
 
-            // Second failure: refresh came back empty, now missing
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+        describe.each(['expired', 'undated'])('%s persisted config', (age) => {
+            beforeEach(() => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: true,
+                        endpoint: '/s/',
+                        ...(age === 'expired'
+                            ? { cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000 }
+                            : {}),
+                    },
+                })
+                sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+                expect(sessionRecording.status).toBe('awaiting_config')
+                expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                    $sdk_debug_replay_stale_config: true,
+                })
+            })
 
-            // Third failure: stays missing
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+            it.each<RemoteConfigResult>([{ ok: false }, makeFlagsResponse({})])(
+                'tags the session without starting recording when refresh returns %j',
+                (result) => {
+                    sessionRecording.onRemoteConfig(result)
+                    expect(sessionRecording.status).toBe('missing_config')
+                    expect(registerForSessionMock).toHaveBeenCalledWith({
+                        $sdk_debug_replay_stale_config: true,
+                    })
+                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+
+                    registerForSessionMock.mockClear()
+                    sessionRecording.onRemoteConfig(result)
+                    expect(sessionRecording.status).toBe('missing_config')
+                    expect(registerForSessionMock).not.toHaveBeenCalled()
+                    expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                }
+            )
+
+            it.each([false as const, { endpoint: '/s/' }])(
+                'does not tag a successful refresh: %j',
+                (sessionRecordingConfig) => {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: sessionRecordingConfig }))
+                    expect(registerForSessionMock).not.toHaveBeenCalledWith({
+                        $sdk_debug_replay_stale_config: true,
+                    })
+                    if (sessionRecordingConfig === false) {
+                        expect(assignableWindow.__PosthogExtensions__.rrweb.record).not.toHaveBeenCalled()
+                    } else {
+                        expect(sessionRecording.status).toBe('active')
+                    }
+                }
+            )
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {
@@ -548,8 +682,11 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
-            const clearBufferSpy = jest.spyOn(lazyRecorder as any, '_clearBuffer')
-            const flushBufferSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+            _emit(createFullSnapshot({ timestamp: Date.now() }))
+            expect((lazyRecorder as any)._buffer.data).toHaveLength(1)
+            ;(posthog.capture as Mock).mockClear()
+            const clearBufferSpy = vi.spyOn(lazyRecorder as any, '_clearBuffer')
+            const flushBufferSpy = vi.spyOn(lazyRecorder as any, '_flushBuffer')
 
             // Trigger beforeunload
             window.dispatchEvent(new Event('beforeunload'))
@@ -557,6 +694,8 @@ describe('SessionRecording', () => {
             // Should have cleared buffer, not flushed it
             expect(clearBufferSpy).toHaveBeenCalled()
             expect(flushBufferSpy).not.toHaveBeenCalled()
+            expect((lazyRecorder as any)._buffer.data).toEqual([])
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 })

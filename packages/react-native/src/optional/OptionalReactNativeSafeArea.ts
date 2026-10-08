@@ -14,6 +14,7 @@ function createDefaultInsets(): RNSafeAreaContext.EdgeInsets {
 export const useOptionalSafeAreaInsets = (): RNSafeAreaContext.EdgeInsets => {
   const useSafeAreaInsets = OptionalRNSafeArea?.useSafeAreaInsets ?? createDefaultInsets
   try {
+    // oxlint-disable-next-line react-hooks/rules-of-hooks -- The selected function is always a hook or a hook-free fallback.
     return useSafeAreaInsets()
   } catch (err) {
     return createDefaultInsets()

@@ -3,12 +3,14 @@ import {
   maskInputValue,
   Mirror,
   getInputType,
+  stringifyStylesheet,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
 import {
   throttle,
   on,
+  callAllSafely,
   hookSetter,
   getWindowScroll,
   getWindowHeight,
@@ -83,23 +85,43 @@ export function initMutationObserver(
   rootEl: Node,
 ): { observer: MutationObserver; buffer: MutationBuffer } {
   const mutationBuffer = new MutationBuffer();
-  mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  const observer = new (mutationObserverCtor() as new (
-    callback: MutationCallback,
-  ) => MutationObserver)(
-    callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
-  );
-  observer.observe(rootEl, {
-    attributes: true,
-    attributeOldValue: true,
-    characterData: true,
-    characterDataOldValue: true,
-    childList: true,
-    subtree: true,
-  });
-  return { observer, buffer: mutationBuffer };
+  let observer: MutationObserver | undefined;
+  try {
+    observer = new (mutationObserverCtor() as new (
+      callback: MutationCallback,
+    ) => MutationObserver)(
+      callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
+    );
+    const mutationObserverInit: MutationObserverInit = {
+      attributes: true,
+      attributeOldValue: true,
+      characterData: true,
+      characterDataOldValue: true,
+      childList: true,
+      subtree: true,
+    };
+    // Delegate attribute filtering to the native MutationObserver: unlisted
+    // attributes never fire the callback, so they cost no recording CPU.
+    // An empty array would mean "observe no attributes at all", which is never
+    // what a caller wants and could come from bad config, so treat it as unset.
+    if (options.attributeFilter && options.attributeFilter.length > 0) {
+      mutationObserverInit.attributeFilter = options.attributeFilter;
+    }
+    observer.observe(rootEl, mutationObserverInit);
+    mutationBuffers.push(mutationBuffer);
+    return { observer, buffer: mutationBuffer };
+  } catch (error) {
+    try {
+      observer?.disconnect();
+      mutationBuffer.destroy();
+      mutationBuffer.reset();
+    } catch {
+      // Preserve the initialization error if best-effort cleanup also fails.
+    }
+    throw error;
+  }
 }
 
 function initMoveObserver({
@@ -388,7 +410,7 @@ function initViewportResizeObserver(
 export function findAndRemoveIframeBuffer(
   iframeEl: HTMLIFrameElement,
   knownDocs?: Set<Document>,
-) {
+): void {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
     if (!buf) continue;
@@ -403,7 +425,7 @@ export function findAndRemoveIframeBuffer(
   }
 }
 
-export const INPUT_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
 function initInputObserver({
   inputCb,
@@ -421,6 +443,14 @@ function initInputObserver({
   function eventHandler(event: Event) {
     let target = getEventTarget(event) as HTMLElement | null;
     const userTriggered = event.isTrusted;
+    // Reading a native accessor (tagName/value/checked/type) on a non-native
+    // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
+    // through the hooked setter's mock event — throws 'Illegal invocation'.
+    // Bail out unless the target is a genuine element in this document's realm.
+    const view = doc.defaultView;
+    if (target && view && !(target instanceof view.HTMLElement)) {
+      return;
+    }
     const tagName = target && target.tagName;
 
     /**
@@ -549,7 +579,11 @@ function initInputObserver({
     );
   }
   return callbackWrapper(() => {
-    handlers.forEach((h) => h());
+    // the hook resetters below restore shared DOM prototype accessors through a
+    // bare `Object.defineProperty`, which throws if the page made one of them
+    // non-configurable after we hooked it. Run them all: a leaked hook keeps
+    // intercepting every `value`/`checked` write for the life of the page.
+    callAllSafely(handlers);
   });
 }
 
@@ -615,9 +649,121 @@ function getIdAndStyleId(
   };
 }
 
+type QueuedStyleSheetMutation = {
+  emit?: () => void;
+  ready: boolean;
+};
+
+type StyleSheetMutationQueue = ReturnType<
+  typeof createStyleSheetMutationQueue
+>;
+
+const STYLESHEET_REPLACE_TIMEOUT = 5_000;
+
+function createStyleSheetMutationQueue(win: IWindow) {
+  const queuedMutations = new Map<
+    CSSStyleSheet,
+    QueuedStyleSheetMutation[]
+  >();
+  const pendingTimeouts = new Set<number>();
+  let active = true;
+  const safeEmit = (emit: () => void) => {
+    if (!active) return;
+    try {
+      emit();
+    } catch {
+      // Recorder errors must not affect native CSSOM operations.
+    }
+  };
+  const flush = (sheet: CSSStyleSheet) => {
+    const queue = queuedMutations.get(sheet);
+    if (!queue) return;
+
+    while (queue[0]?.ready) {
+      const mutation = queue.shift();
+      if (mutation?.emit) safeEmit(mutation.emit);
+    }
+    if (queue.length === 0) queuedMutations.delete(sheet);
+  };
+  const queueMutation = (
+    sheet: CSSStyleSheet | null | undefined,
+    emit: () => void,
+  ) => {
+    if (!sheet) {
+      safeEmit(emit);
+      return;
+    }
+    const queue = queuedMutations.get(sheet);
+    if (!queue) {
+      safeEmit(emit);
+      return;
+    }
+    queue.push({ emit, ready: true });
+    flush(sheet);
+  };
+  const queuePendingMutation = (
+    sheet: CSSStyleSheet,
+    emit: () => void,
+    emitLate: () => void,
+  ) => {
+    if (!active) return () => undefined;
+    let queue = queuedMutations.get(sheet);
+    if (!queue) {
+      queue = [];
+      queuedMutations.set(sheet, queue);
+    }
+    const mutation: QueuedStyleSheetMutation = { emit, ready: false };
+    queue.push(mutation);
+    let expired = false;
+    let settled = false;
+    let timeoutId: number | undefined;
+    const expire = () => {
+      if (expired || settled) return;
+      expired = true;
+      if (timeoutId !== undefined) pendingTimeouts.delete(timeoutId);
+      mutation.ready = true;
+      mutation.emit = undefined;
+      flush(sheet);
+    };
+    const complete = (success: boolean) => {
+      if (settled || !active) return;
+      settled = true;
+      if (timeoutId !== undefined) {
+        win.clearTimeout(timeoutId);
+        pendingTimeouts.delete(timeoutId);
+      }
+      if (expired) {
+        if (success) safeEmit(emitLate);
+        return;
+      }
+      mutation.ready = true;
+      if (!success) mutation.emit = undefined;
+      flush(sheet);
+    };
+    try {
+      timeoutId = win.setTimeout(expire, STYLESHEET_REPLACE_TIMEOUT);
+      if (expired || settled) win.clearTimeout(timeoutId);
+      else pendingTimeouts.add(timeoutId);
+    } catch {
+      expire();
+    }
+    return complete;
+  };
+  const reset = () => {
+    active = false;
+    pendingTimeouts.forEach((timeoutId) => win.clearTimeout(timeoutId));
+    pendingTimeouts.clear();
+    queuedMutations.clear();
+  };
+  return { queueMutation, queuePendingMutation, reset };
+}
+
 function initStyleSheetObserver(
   { styleSheetRuleCb, mirror, stylesheetManager }: observerParam,
-  { win }: { win: IWindow },
+  {
+    win,
+    mutationQueue,
+  }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
   if (!win.CSSStyleSheet || !win.CSSStyleSheet.prototype) {
     // If, for whatever reason, CSSStyleSheet is not available, we skip the observation of stylesheets.
@@ -626,7 +772,6 @@ function initStyleSheetObserver(
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const insertRule = win.CSSStyleSheet.prototype.insertRule;
   win.CSSStyleSheet.prototype.insertRule = new Proxy(insertRule, {
     apply: callbackWrapper(
@@ -635,7 +780,13 @@ function initStyleSheetObserver(
         thisArg: CSSStyleSheet,
         argumentsList: [string, number | undefined],
       ) => {
-        const [rule, index] = argumentsList;
+        const [rule] = argumentsList;
+
+        const insertedIndex = target.apply(thisArg, argumentsList);
+
+        // A pending budget-deferred inlining of this sheet must not emit its
+        // defer-time text over the successful mutation.
+        stylesheetManager.onCssomSheetMutation(thisArg);
 
         const { id, styleId } = getIdAndStyleId(
           thisArg,
@@ -644,14 +795,17 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleSheetRuleCb({
-            id,
-            styleId,
-            adds: [{ rule, index }],
-          });
+          mutationQueue.queueMutation(thisArg, () =>
+            styleSheetRuleCb({
+              id,
+              styleId,
+              adds: [{ rule, index: insertedIndex }],
+            }),
+          );
         }
-        return target.apply(thisArg, argumentsList);
+        return insertedIndex;
       },
+      'host',
     ),
   });
 
@@ -666,7 +820,6 @@ function initStyleSheetObserver(
     return win.CSSStyleSheet.prototype.insertRule.apply(this, [rule, index]);
   };
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const deleteRule = win.CSSStyleSheet.prototype.deleteRule;
   win.CSSStyleSheet.prototype.deleteRule = new Proxy(deleteRule, {
     apply: callbackWrapper(
@@ -677,6 +830,10 @@ function initStyleSheetObserver(
       ) => {
         const [index] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
+        stylesheetManager.onCssomSheetMutation(thisArg);
+
         const { id, styleId } = getIdAndStyleId(
           thisArg,
           mirror,
@@ -684,14 +841,17 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleSheetRuleCb({
-            id,
-            styleId,
-            removes: [{ index }],
-          });
+          mutationQueue.queueMutation(thisArg, () =>
+            styleSheetRuleCb({
+              id,
+              styleId,
+              removes: [{ index }],
+            }),
+          );
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
+      'host',
     ),
   });
 
@@ -706,7 +866,6 @@ function initStyleSheetObserver(
   let replace: (text: string) => Promise<CSSStyleSheet>;
 
   if (win.CSSStyleSheet.prototype.replace) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     replace = win.CSSStyleSheet.prototype.replace;
     win.CSSStyleSheet.prototype.replace = new Proxy(replace, {
       apply: callbackWrapper(
@@ -716,29 +875,71 @@ function initStyleSheetObserver(
           argumentsList: [string],
         ) => {
           const [text] = argumentsList;
+          const result = target.apply(thisArg, argumentsList);
 
-          const { id, styleId } = getIdAndStyleId(
-            thisArg,
-            mirror,
-            stylesheetManager.styleMirror,
-          );
+          try {
+            const then = result?.then;
+            if (
+              thisArg.ownerNode ||
+              !result ||
+              typeof then !== 'function'
+            ) {
+              return result;
+            }
 
-          if ((id && id !== -1) || (styleId && styleId !== -1)) {
-            styleSheetRuleCb({
-              id,
-              styleId,
-              replace: text,
-            });
+            stylesheetManager.onCssomSheetMutation(thisArg);
+            const { id, styleId } = getIdAndStyleId(
+              thisArg,
+              mirror,
+              stylesheetManager.styleMirror,
+            );
+            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
+              return result;
+            }
+
+            const completeMutation = mutationQueue.queuePendingMutation(
+              thisArg,
+              () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  replace: text,
+                }),
+              () => {
+                const lateStyleSheetText = stringifyStylesheet(thisArg);
+                if (lateStyleSheetText !== null) {
+                  styleSheetRuleCb({
+                    id,
+                    styleId,
+                    replace: lateStyleSheetText,
+                  });
+                }
+              },
+            );
+            try {
+              // Observing fulfillment requires a rejection handler; omitting it
+              // creates a second unhandled rejection even when the caller handles
+              // the original promise. Prefer not to introduce a new host error.
+              void then.call(
+                result,
+                () => completeMutation(true),
+                () => completeMutation(false),
+              );
+            } catch {
+              completeMutation(false);
+            }
+          } catch {
+            // Recorder errors must not affect the native promise result.
           }
-          return target.apply(thisArg, argumentsList);
+          return result;
         },
+        'host',
       ),
     });
   }
 
   let replaceSync: (text: string) => void;
   if (win.CSSStyleSheet.prototype.replaceSync) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     replaceSync = win.CSSStyleSheet.prototype.replaceSync;
     win.CSSStyleSheet.prototype.replaceSync = new Proxy(replaceSync, {
       apply: callbackWrapper(
@@ -748,7 +949,9 @@ function initStyleSheetObserver(
           argumentsList: [string],
         ) => {
           const [text] = argumentsList;
+          const result = target.apply(thisArg, argumentsList);
 
+          stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
             thisArg,
             mirror,
@@ -756,14 +959,17 @@ function initStyleSheetObserver(
           );
 
           if ((id && id !== -1) || (styleId && styleId !== -1)) {
-            styleSheetRuleCb({
-              id,
-              styleId,
-              replaceSync: text,
-            });
+            mutationQueue.queueMutation(thisArg, () =>
+              styleSheetRuleCb({
+                id,
+                styleId,
+                replaceSync: text,
+              }),
+            );
           }
-          return target.apply(thisArg, argumentsList);
+          return result;
         },
+        'host',
       ),
     });
   }
@@ -798,9 +1004,7 @@ function initStyleSheetObserver(
 
   Object.entries(supportedNestedCSSRuleTypes).forEach(([typeKey, type]) => {
     unmodifiedFunctions[typeKey] = {
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       insertRule: type.prototype.insertRule,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       deleteRule: type.prototype.deleteRule,
     };
 
@@ -813,7 +1017,11 @@ function initStyleSheetObserver(
             thisArg: CSSRule,
             argumentsList: [string, number | undefined],
           ) => {
-            const [rule, index] = argumentsList;
+            const [rule] = argumentsList;
+
+            const insertedIndex = target.apply(thisArg, argumentsList);
+
+            stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
             const { id, styleId } = getIdAndStyleId(
               thisArg.parentStyleSheet,
@@ -821,23 +1029,25 @@ function initStyleSheetObserver(
               stylesheetManager.styleMirror,
             );
 
-            if ((id && id !== -1) || (styleId && styleId !== -1)) {
-              styleSheetRuleCb({
-                id,
-                styleId,
-                adds: [
-                  {
-                    rule,
-                    index: [
-                      ...getNestedCSSRulePositions(thisArg),
-                      index || 0, // defaults to 0
-                    ],
-                  },
-                ],
-              });
+            if (
+              thisArg.parentStyleSheet &&
+              ((id && id !== -1) || (styleId && styleId !== -1))
+            ) {
+              const index = [
+                ...getNestedCSSRulePositions(thisArg),
+                insertedIndex,
+              ];
+              mutationQueue.queueMutation(thisArg.parentStyleSheet, () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  adds: [{ rule, index }],
+                }),
+              );
             }
-            return target.apply(thisArg, argumentsList);
+            return insertedIndex;
           },
+          'host',
         ),
       },
     );
@@ -853,23 +1063,35 @@ function initStyleSheetObserver(
           ) => {
             const [index] = argumentsList;
 
+            const result = target.apply(thisArg, argumentsList);
+
+            stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
+
             const { id, styleId } = getIdAndStyleId(
               thisArg.parentStyleSheet,
               mirror,
               stylesheetManager.styleMirror,
             );
 
-            if ((id && id !== -1) || (styleId && styleId !== -1)) {
-              styleSheetRuleCb({
-                id,
-                styleId,
-                removes: [
-                  { index: [...getNestedCSSRulePositions(thisArg), index] },
-                ],
-              });
+            if (
+              thisArg.parentStyleSheet &&
+              ((id && id !== -1) || (styleId && styleId !== -1))
+            ) {
+              const nestedIndex = [
+                ...getNestedCSSRulePositions(thisArg),
+                index,
+              ];
+              mutationQueue.queueMutation(thisArg.parentStyleSheet, () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  removes: [{ index: nestedIndex }],
+                }),
+              );
             }
-            return target.apply(thisArg, argumentsList);
+            return result;
           },
+          'host',
         ),
       },
     );
@@ -928,7 +1150,38 @@ export function initAdoptedStyleSheetObserver(
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
     },
     set(sheets: CSSStyleSheet[]) {
-      const result = originalPropertyDescriptor.set?.call(this, sheets);
+      let result: unknown;
+      try {
+        result = originalPropertyDescriptor.set?.call(this, sheets);
+      } catch (e) {
+        // Assigning a `CSSStyleSheet` that was constructed in a different
+        // document/realm makes the browser reject the assignment with
+        // `NotAllowedError` ("Sharing constructed stylesheets in multiple
+        // documents is not allowed"). That is the host page's own invalid
+        // operation, but because our patched setter sits on the call stack
+        // the exception would otherwise be attributed to the recorder and
+        // churn fingerprints in error tracking. The browser rejects the
+        // assignment atomically, so recording simply degrades (we skip the
+        // adoption below). Contain only this specific, unactionable case;
+        // re-throw everything else so genuine host-page failures are
+        // preserved (mirrors `callSafely` in ../utils).
+        //
+        // Match on the standardized `name` rather than `instanceof
+        // DOMException`: when this observer is installed on a (same-origin)
+        // iframe document the native setter throws the iframe realm's
+        // `DOMException`, which fails an `instanceof` check against the
+        // recorder realm's constructor. The cross-document sharing error we
+        // want to contain is exactly that cross-realm case, so a name check
+        // is what keeps iframe recordings protected too.
+        if (
+          !!e &&
+          typeof e === 'object' &&
+          (e as { name?: unknown }).name === 'NotAllowedError'
+        ) {
+          return;
+        }
+        throw e;
+      }
       if (hostId !== null && hostId !== -1) {
         try {
           stylesheetManager.adoptStyleSheets(sheets, hostId);
@@ -944,9 +1197,7 @@ export function initAdoptedStyleSheetObserver(
     Object.defineProperty(host, 'adoptedStyleSheets', {
       configurable: originalPropertyDescriptor.configurable,
       enumerable: originalPropertyDescriptor.enumerable,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       get: originalPropertyDescriptor.get,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       set: originalPropertyDescriptor.set,
     });
   });
@@ -959,9 +1210,11 @@ function initStyleDeclarationObserver(
     ignoreCSSAttributes,
     stylesheetManager,
   }: observerParam,
-  { win }: { win: IWindow },
+  {
+    win,
+    mutationQueue,
+  }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const setProperty = win.CSSStyleDeclaration.prototype.setProperty;
   win.CSSStyleDeclaration.prototype.setProperty = new Proxy(setProperty, {
     apply: callbackWrapper(
@@ -972,34 +1225,40 @@ function initStyleDeclarationObserver(
       ) => {
         const [property, value, priority] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
-          return setProperty.apply(thisArg, [property, value, priority]);
+          return result;
         }
+        const sheet = thisArg.parentRule?.parentStyleSheet;
+        stylesheetManager.onCssomSheetMutation(sheet);
         const { id, styleId } = getIdAndStyleId(
-          thisArg.parentRule?.parentStyleSheet,
+          sheet,
           mirror,
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleDeclarationCb({
-            id,
-            styleId,
-            set: {
-              property,
-              value,
-              priority,
-            },
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            index: getNestedCSSRulePositions(thisArg.parentRule!),
-          });
+          const index = getNestedCSSRulePositions(thisArg.parentRule!);
+          mutationQueue.queueMutation(sheet, () =>
+            styleDeclarationCb({
+              id,
+              styleId,
+              set: {
+                property,
+                value,
+                priority,
+              },
+              index,
+            }),
+          );
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
+      'host',
     ),
   });
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const removeProperty = win.CSSStyleDeclaration.prototype.removeProperty;
   win.CSSStyleDeclaration.prototype.removeProperty = new Proxy(removeProperty, {
     apply: callbackWrapper(
@@ -1010,28 +1269,35 @@ function initStyleDeclarationObserver(
       ) => {
         const [property] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
-          return removeProperty.apply(thisArg, [property]);
+          return result;
         }
+        const sheet = thisArg.parentRule?.parentStyleSheet;
+        stylesheetManager.onCssomSheetMutation(sheet);
         const { id, styleId } = getIdAndStyleId(
-          thisArg.parentRule?.parentStyleSheet,
+          sheet,
           mirror,
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleDeclarationCb({
-            id,
-            styleId,
-            remove: {
-              property,
-            },
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            index: getNestedCSSRulePositions(thisArg.parentRule!),
-          });
+          const index = getNestedCSSRulePositions(thisArg.parentRule!);
+          mutationQueue.queueMutation(sheet, () =>
+            styleDeclarationCb({
+              id,
+              styleId,
+              remove: {
+                property,
+              },
+              index,
+            }),
+          );
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
+      'host',
     ),
   });
 
@@ -1197,7 +1463,6 @@ function initCustomElementObserver({
   customElementCb,
 }: observerParam): listenerHandler {
   const win = doc.defaultView as IWindow;
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   if (!win || !win.customElements) return () => {};
   const restoreHandler = patch(
     win.customElements,
@@ -1326,6 +1591,21 @@ function mergeHooks(o: observerParam, hooks: hooksParam) {
   };
 }
 
+/**
+ * Observers whose setup threw, for the lifetime of the page. An error handler that
+ * swallows the failure otherwise leaves it invisible: the recorder keeps running and
+ * reports itself as healthy while it captures less than it should. A set, because a
+ * broken host API breaks the same observer again on every restart and in every frame,
+ * and undefined while empty, so the healthy page allocates nothing.
+ */
+const observerInitFailures = new Set<string>();
+
+export function getObserverInitFailures(): string[] | undefined {
+  return observerInitFailures.size
+    ? Array.from(observerInitFailures)
+    : undefined;
+}
+
 export function initObservers(
   o: observerParam,
   hooks: hooksParam = {},
@@ -1340,75 +1620,118 @@ export function initObservers(
   mergeHooks(o, hooks);
   let mutationObserver: MutationObserver | undefined;
   let mutationBuffer: MutationBuffer | undefined;
-  if (o.recordDOM) {
-    const result = initMutationObserver(o, o.doc);
-    mutationObserver = result.observer;
-    mutationBuffer = result.buffer;
-  }
-  const mousemoveHandler = initMoveObserver(o);
-  const mouseInteractionHandler = initMouseInteractionObserver(o);
-  const scrollHandler = initScrollObserver(o);
-  const viewportResizeHandler = initViewportResizeObserver(o, {
-    win: currentWindow,
-  });
-  const inputHandler = initInputObserver(o);
-  const mediaInteractionHandler = initMediaInteractionObserver(o);
+  const handlers: listenerHandler[] = [];
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let styleSheetObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let adoptedStyleSheetObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let styleDeclarationObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let fontObserver = () => {};
-  if (o.recordDOM) {
-    styleSheetObserver = initStyleSheetObserver(o, { win: currentWindow });
-    adoptedStyleSheetObserver = initAdoptedStyleSheetObserver(o, o.doc);
-    styleDeclarationObserver = initStyleDeclarationObserver(o, {
-      win: currentWindow,
-    });
-    if (o.collectFonts) {
-      fontObserver = initFontObserver(o);
+  const cleanup = callbackWrapper(() => {
+    try {
+      // Clean up this observer's mutation buffer
+      if (mutationBuffer) {
+        try {
+          mutationBuffer.destroy();
+          mutationBuffer.reset();
+        } finally {
+          // Remove only this buffer from the global array. In a finally: a throw
+          // above would otherwise leave it pinned there, holding this document
+          // and its canvas manager alive.
+          const index = mutationBuffers.indexOf(mutationBuffer);
+          if (index !== -1) {
+            mutationBuffers.splice(index, 1);
+          }
+        }
+      }
+      // Disconnect the shadow observers owned by this document (e.g. an iframe being
+      // torn down) without touching the rest of the page's shadow observation.
+      o.shadowDomManager.resetForDoc(o.doc);
+      mutationObserver?.disconnect();
+    } finally {
+      // Releasing this document's listeners and patched APIs is the whole point
+      // of teardown, so it runs even when a step above throws.
+      callAllSafely(handlers);
     }
-  }
-  const selectionObserver = initSelectionObserver(o);
-  const customElementObserver = initCustomElementObserver(o);
+  });
 
-  // plugins
-  const pluginHandlers: listenerHandler[] = [];
-  for (const plugin of o.plugins) {
-    pluginHandlers.push(
-      plugin.observer(plugin.callback, currentWindow, plugin.options),
+  // One observer that cannot start must not silence the ones that can. A third-party
+  // script or a restricted host API breaks a single observer on some pages, and the
+  // frame must degrade to partial recording instead of no recording at all. The error
+  // still reaches the configured error handler, which decides whether to swallow it.
+  const startObserver = (
+    name: string,
+    start: () => listenerHandler | void,
+  ): void => {
+    const handler = callbackWrapper(() => {
+      try {
+        return start();
+      } catch (error) {
+        observerInitFailures.add(name);
+        throw error;
+      }
+    })();
+    if (typeof handler === 'function') {
+      handlers.push(handler);
+    }
+  };
+
+  try {
+    if (o.recordDOM) {
+      startObserver('mutation', () => {
+        const result = initMutationObserver(o, o.doc);
+        mutationObserver = result.observer;
+        mutationBuffer = result.buffer;
+      });
+    }
+    startObserver('move', () => initMoveObserver(o));
+    startObserver('mouseInteraction', () => initMouseInteractionObserver(o));
+    startObserver('scroll', () => initScrollObserver(o));
+    startObserver('viewportResize', () =>
+      initViewportResizeObserver(o, {
+        win: currentWindow,
+      }),
     );
-  }
+    startObserver('input', () => initInputObserver(o));
+    startObserver('mediaInteraction', () => initMediaInteractionObserver(o));
 
-  return callbackWrapper(() => {
-    // Clean up this observer's mutation buffer
-    if (mutationBuffer) {
-      mutationBuffer.destroy();
-      mutationBuffer.reset();
-      // Remove only this buffer from the global array
-      const index = mutationBuffers.indexOf(mutationBuffer);
-      if (index !== -1) {
-        mutationBuffers.splice(index, 1);
+    if (o.recordDOM) {
+      const styleSheetMutationQueue =
+        createStyleSheetMutationQueue(currentWindow);
+      handlers.push(styleSheetMutationQueue.reset);
+      startObserver('styleSheet', () =>
+        initStyleSheetObserver(o, {
+          win: currentWindow,
+          mutationQueue: styleSheetMutationQueue,
+        }),
+      );
+      startObserver('adoptedStyleSheet', () =>
+        initAdoptedStyleSheetObserver(o, o.doc),
+      );
+      startObserver('styleDeclaration', () =>
+        initStyleDeclarationObserver(o, {
+          win: currentWindow,
+          mutationQueue: styleSheetMutationQueue,
+        }),
+      );
+      if (o.collectFonts) {
+        startObserver('font', () => initFontObserver(o));
       }
     }
-    mutationObserver?.disconnect();
-    mousemoveHandler();
-    mouseInteractionHandler();
-    scrollHandler();
-    viewportResizeHandler();
-    inputHandler();
-    mediaInteractionHandler();
-    styleSheetObserver();
-    adoptedStyleSheetObserver();
-    styleDeclarationObserver();
-    fontObserver();
-    selectionObserver();
-    customElementObserver();
-    pluginHandlers.forEach((h) => h());
-  });
+    startObserver('selection', () => initSelectionObserver(o));
+    startObserver('customElement', () => initCustomElementObserver(o));
+
+    // plugins
+    for (const plugin of o.plugins) {
+      startObserver(`plugin:${plugin.name}`, () =>
+        plugin.observer(plugin.callback, currentWindow, plugin.options),
+      );
+    }
+  } catch (error) {
+    try {
+      cleanup();
+    } catch {
+      // Preserve the initialization error if best-effort cleanup also fails.
+    }
+    throw error;
+  }
+
+  return cleanup;
 }
 
 type CSSGroupingProp =

@@ -1,22 +1,25 @@
+import type { Mock as VitestMock } from 'vitest'
+import type { Client } from '@posthog/browser-common'
+
 import { assignableWindow } from '../../utils/globals'
+import { LogsExtension } from '../../extension-tokens'
 import { PostHog } from '../../posthog-core'
 
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    // Console capture routes through the core pipeline via
-    // `posthog.logs._captureConsoleLog`; assert against that seam.
-    let mockEmit: jest.Mock
+    // Console capture routes through the core logs API; assert against that seam.
+    let mockEmit: VitestMock
 
     beforeEach(() => {
-        jest.resetModules()
-        jest.clearAllMocks()
+        vi.resetModules()
+        vi.clearAllMocks()
 
         // Store original console
         originalConsole = { ...console }
 
         // Set up capture spy
-        mockEmit = jest.fn()
+        mockEmit = vi.fn()
 
         // Mock PostHog instance
         mockPostHog = {
@@ -25,16 +28,17 @@ describe('logs entrypoint', () => {
                 token: 'test-token',
             },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
-            logs: { _captureConsoleLog: mockEmit },
+            get_distinct_id: vi.fn(() => 'user-123'),
+            is_capturing: vi.fn(() => true),
+            version: '1.392.0',
+            logs: { captureLog: mockEmit, captureConsoleLog: mockEmit, le: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -48,11 +52,11 @@ describe('logs entrypoint', () => {
 
         Object.defineProperty(assignableWindow, 'console', {
             value: {
-                log: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                debug: jest.fn(),
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
             },
             writable: true,
         })
@@ -76,7 +80,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should preserve existing PostHog extensions', async () => {
-            const existingExtension = jest.fn()
+            const existingExtension = vi.fn()
             assignableWindow.__PosthogExtensions__ = { logs: { initializeLogs: undefined } } as any
             ;(assignableWindow.__PosthogExtensions__ as any).existingExtension = existingExtension
 
@@ -118,6 +122,28 @@ describe('logs entrypoint', () => {
             expect(assignableWindow.console.debug).not.toBe(originalMethods.debug)
         })
 
+        it('should restore the console methods it wrapped', () => {
+            const originalMethods = {
+                log: assignableWindow.console.log,
+                info: assignableWindow.console.info,
+                warn: assignableWindow.console.warn,
+                error: assignableWindow.console.error,
+                debug: assignableWindow.console.debug,
+            }
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            const dispose = initializeLogs(mockPostHog)
+            dispose()
+            assignableWindow.console.log('after dispose')
+
+            expect(assignableWindow.console.log).toBe(originalMethods.log)
+            expect(assignableWindow.console.info).toBe(originalMethods.info)
+            expect(assignableWindow.console.warn).toBe(originalMethods.warn)
+            expect(assignableWindow.console.error).toBe(originalMethods.error)
+            expect(assignableWindow.console.debug).toBe(originalMethods.debug)
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
         it('should not throw when called without a session manager', () => {
             const postHogWithoutSession = {
                 ...mockPostHog,
@@ -138,6 +164,92 @@ describe('logs entrypoint', () => {
             initializeLogs(postHogWithoutLogs)
 
             expect(() => assignableWindow.console.log('test')).not.toThrow()
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
+        it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.18', '1.419.3', '1.420.0'])(
+            'should not select a capture method for unsupported PostHog version %s',
+            (version) => {
+                const captures = {
+                    captureLog: vi.fn(),
+                    captureConsoleLog: vi.fn(),
+                    le: vi.fn(),
+                    de: vi.fn(),
+                    he: vi.fn(),
+                    ui: vi.fn(),
+                    ci: vi.fn(),
+                    vi: vi.fn(),
+                }
+                const legacyPostHog = {
+                    ...mockPostHog,
+                    version,
+                    logs: captures,
+                } as unknown as PostHog
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(legacyPostHog)
+
+                assignableWindow.console.warn('not captured')
+
+                for (const capture of Object.values(captures)) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
+        )
+
+        it('should resolve the console capture path from a shared client', () => {
+            const captureLog = vi.fn()
+            const captureConsoleLog = vi.fn()
+            const client = {
+                canCapture: true,
+                getExtension: vi.fn(() => ({ captureLog, captureConsoleLog })),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.warn('from shared client')
+
+            expect(client.getExtension).toHaveBeenCalledWith(LogsExtension)
+            expect(captureConsoleLog).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    level: 'warn',
+                    body: '"from shared client"',
+                })
+            )
+            expect(captureLog).not.toHaveBeenCalled()
+            expect(mockPostHog.is_capturing).not.toHaveBeenCalled()
+        })
+
+        it('should skip extension lookup for empty and re-entrant console calls', () => {
+            const captureConsoleLog = vi.fn(() => {
+                assignableWindow.console.warn('nested call')
+            })
+            const client = {
+                canCapture: true,
+                getExtension: vi.fn(() => ({ captureConsoleLog })),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.warn()
+            expect(client.getExtension).not.toHaveBeenCalled()
+
+            assignableWindow.console.warn('outer call')
+            expect(client.getExtension).toHaveBeenCalledTimes(1)
+            expect(client.getExtension).toHaveBeenCalledWith(LogsExtension)
+            expect(captureConsoleLog).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not resolve the logs extension when a shared client cannot capture', () => {
+            const client = {
+                canCapture: false,
+                getExtension: vi.fn(() => mockPostHog.logs),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.log('not captured')
+
+            expect(client.getExtension).not.toHaveBeenCalled()
             expect(mockEmit).not.toHaveBeenCalled()
         })
     })
@@ -185,10 +297,10 @@ describe('logs entrypoint', () => {
         })
 
         it('should still call originalConsoleLog when no arguments are provided', () => {
-            // The originalConsoleLog (the jest.fn() mock installed before initializeLogs
+            // The originalConsoleLog (the vi.fn() mock installed before initializeLogs
             // wrapped it) must always run, even when capture is skipped due to empty args.
             // We recover the original by re-installing a fresh mock and re-wrapping.
-            const originalLog = jest.fn()
+            const originalLog = vi.fn()
             assignableWindow.console.log = originalLog
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -514,20 +626,58 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should route console capture through posthog.logs._captureConsoleLog', () => {
+        it.each([
+            ['1.392.0', 'le'],
+            ['1.410.4', 'le'],
+            ['1.410.5', 'de'],
+            ['1.410.10', 'de'],
+            ['1.411.0', 'he'],
+            ['1.418.3', 'he'],
+            ['1.418.4', 'ui'],
+            ['1.418.10', 'ui'],
+            ['1.418.11', 'ci'],
+            ['1.418.14', 'ci'],
+            ['1.418.15', 'vi'],
+            ['1.418.17', 'vi'],
+            ['1.419.0', 'vi'],
+            ['1.419.2', 'vi'],
+        ] as const)('should route PostHog %s through the historical %s console method', (version, expectedName) => {
+            const captureLog = vi.fn()
+            const currentConsoleCapture = vi.fn()
+            const historicalCaptures = {
+                le: vi.fn(),
+                de: vi.fn(),
+                he: vi.fn(),
+                ui: vi.fn(),
+                ci: vi.fn(),
+                vi: vi.fn(),
+            }
+            mockPostHog.version = version
+            mockPostHog.logs = {
+                captureLog,
+                captureConsoleLog: currentConsoleCapture,
+                ...historicalCaptures,
+            } as unknown as NonNullable<PostHog['logs']>
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
             assignableWindow.console.log('Test message')
 
-            expect(mockEmit).toHaveBeenCalledTimes(1)
-            expect(mockEmit).toHaveBeenCalledWith({
+            expect(captureLog).not.toHaveBeenCalled()
+            expect(currentConsoleCapture).not.toHaveBeenCalled()
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledTimes(1)
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledWith({
                 level: 'info',
                 body: '"Test message"',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
                 }),
             })
+            for (const [name, capture] of Object.entries(historicalCaptures)) {
+                if (name !== expectedName) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
         })
 
         it('should not set distinct_id or location.href — core adds posthogDistinctId/url.full', () => {

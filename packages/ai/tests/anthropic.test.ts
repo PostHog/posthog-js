@@ -1,7 +1,9 @@
 import { PostHog } from 'posthog-node'
 import PostHogAnthropic, { WrappedMessages } from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
+import { Stream as AnthropicStream } from '@anthropic-ai/sdk/streaming'
 import { version } from '../package.json'
+import { collectUnhandledRejections } from './test-utils'
 
 // Type definitions
 interface MockAnthropicResponseOptions {
@@ -16,6 +18,10 @@ interface MockAnthropicResponseOptions {
     output_tokens: number
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
+    cache_creation?: {
+      ephemeral_5m_input_tokens: number
+      ephemeral_1h_input_tokens: number
+    }
     server_tool_use?: {
       web_search_requests?: number
     }
@@ -64,19 +70,19 @@ interface MockAsyncIterator<T> {
   [Symbol.asyncIterator](): AsyncIterator<T>
 }
 
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(() => {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false, // Note: This is the correct property name per PostHog Node SDK
       }
     }),
   }
 })
 
-jest.mock('@anthropic-ai/sdk', () => {
+vi.mock('@anthropic-ai/sdk', () => {
   // Mock Messages class
   class MockMessages {
     create(..._args: any[]): any {
@@ -158,6 +164,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         input_tokens: options.usage?.input_tokens || 20,
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
+        ...(options.usage?.cache_creation ? { cache_creation: options.usage.cache_creation } : {}),
         output_tokens: 0,
         ...(options.usage?.server_tool_use?.web_search_requests
           ? {
@@ -230,7 +237,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
  * @param expectations - Object containing expected values for the capture call
  */
 const assertPostHogCapture = (mockClient: PostHog, expectations: CaptureExpectations): void => {
-  const captureMock = mockClient.capture as jest.Mock
+  const captureMock = mockClient.capture as vi.Mock
   expect(captureMock).toHaveBeenCalledTimes(1)
 
   const [captureArgs] = captureMock.mock.calls
@@ -322,7 +329,7 @@ describe('PostHogAnthropic', () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
@@ -342,15 +349,10 @@ describe('PostHogAnthropic', () => {
     })
 
     // Mock the create method
-    const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation((params: any) => {
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockImplementation((params: any) => {
       if (params.stream) {
-        // Return a mock stream
-        const mockStream = {
-          tee: jest
-            .fn()
-            .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
-        }
+        const mockStream = createMockAsyncIterator(mockStreamChunks)
         return Promise.resolve(mockStream)
       }
       return Promise.resolve(mockResponse)
@@ -385,11 +387,52 @@ describe('PostHogAnthropic', () => {
         properties: { custom_prop: 'test_value' },
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
       expect(properties['$ai_usage']).toBeDefined()
       expect(properties['$ai_tokens_source']).toBe('sdk')
+    })
+
+    conditionalTest('preserves images when the client enables multimodal capture', async () => {
+      Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+      const dataUrl = 'a'.repeat(80)
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl } }],
+          } as any,
+        ],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      const [captureArgs] = captureMock.mock.calls
+      expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain(dataUrl)
+    })
+
+    conditionalTest('redacts images when the client does not enable multimodal capture', async () => {
+      const dataUrl = 'a'.repeat(80)
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl } }],
+          } as any,
+        ],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      const [captureArgs] = captureMock.mock.calls
+      expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain('redacted')
     })
 
     conditionalTest('should set tokens_source to passthrough when token properties are overridden', async () => {
@@ -403,7 +446,7 @@ describe('PostHogAnthropic', () => {
 
       expect(response).toEqual(mockResponse)
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
       expect(properties['$ai_tokens_source']).toBe('passthrough')
@@ -423,7 +466,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -448,7 +491,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -509,7 +552,7 @@ describe('PostHogAnthropic', () => {
       // Allow async capture to complete
       await waitForAsyncCapture()
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       expect(captureMock).toHaveBeenCalledTimes(1)
 
       const [captureArgs] = captureMock.mock.calls
@@ -563,7 +606,7 @@ describe('PostHogAnthropic', () => {
       // Allow async capture to complete
       await waitForAsyncCapture()
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -581,6 +624,66 @@ describe('PostHogAnthropic', () => {
                 name: 'get_weather',
                 arguments: { location: 'San Francisco', units: 'celsius' },
               },
+            },
+          ],
+        },
+      ])
+    })
+
+    it('should capture tool call arguments that follow a thinking block', async () => {
+      mockStreamChunks = [
+        {
+          type: 'message_start',
+          message: { id: 'msg_test_123', type: 'message', role: 'assistant', usage: { input_tokens: 20 } as any },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Use the tool.' } as any },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } as any },
+        { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Checking.' } },
+        { type: 'content_block_stop', index: 1 },
+        {
+          type: 'content_block_start',
+          index: 2,
+          content_block: { type: 'tool_use', id: 'tool_123', name: 'get_weather' } as any,
+        },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '{"location":' } },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '"Paris"}' } },
+        { type: 'content_block_stop', index: 2 },
+        {
+          type: 'message_delta',
+          delta: { type: 'stop_reason', stop_reason: 'tool_use' },
+          usage: { output_tokens: 10 },
+        },
+        { type: 'message_stop' },
+      ]
+
+      const stream = await client.messages.create({
+        model: 'claude-sonnet-4-5',
+        messages: [{ role: 'user', content: 'What is the weather?' }],
+        max_tokens: 2048,
+        thinking: { type: 'enabled', budget_tokens: 1024 },
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch sees every block.
+      }
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      const [captureArgs] = captureMock.mock.calls
+
+      expect(captureArgs[0].properties['$ai_output_choices']).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Checking.' },
+            {
+              type: 'function',
+              id: 'tool_123',
+              function: { name: 'get_weather', arguments: { location: 'Paris' } },
             },
           ],
         },
@@ -620,7 +723,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -679,7 +782,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -807,6 +910,86 @@ describe('PostHogAnthropic', () => {
         cacheReadInputTokens: 5,
       })
     })
+
+    it('should retain cache creation TTL usage after the final streaming delta', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Streaming response',
+        usage: {
+          input_tokens: 75,
+          output_tokens: 40,
+          cache_creation_input_tokens: 30,
+          cache_read_input_tokens: 5,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 10,
+            ephemeral_1h_input_tokens: 20,
+          },
+        },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch reaches message_delta.
+      }
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      const [captureArgs] = captureMock.mock.calls
+
+      expect(captureArgs[0].properties['$ai_usage']).toEqual({
+        input_tokens: 75,
+        output_tokens: 40,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 5,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 10,
+          ephemeral_1h_input_tokens: 20,
+        },
+      })
+      expect(captureArgs[0].properties['$ai_cache_creation_input_tokens']).toBe(30)
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(40)
+    })
+  })
+
+  describe('Telemetry failure isolation', () => {
+    test('preserves the provider result when captureImmediate rejects', async () => {
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const response = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogCaptureImmediate: true,
+      })
+
+      expect(response).toBe(mockResponse)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    test('preserves the provider error when captureImmediate rejects', async () => {
+      const providerError = new Error('provider failed')
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(providerError)
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const rejection = await client.messages
+        .create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          posthogCaptureImmediate: true,
+        })
+        .catch((error: unknown) => error)
+
+      expect(rejection).toBe(providerError)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('Error Handling', () => {
@@ -814,8 +997,8 @@ describe('PostHogAnthropic', () => {
       const apiError = new Error('API Error') as Error & { status: number }
       apiError.status = 429
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(apiError)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(apiError)
 
       await expect(
         client.messages.create({
@@ -828,15 +1011,15 @@ describe('PostHogAnthropic', () => {
 
       assertPostHogCapture(mockPostHogClient, {
         httpStatus: 429,
-        inputTokens: 0,
-        outputTokens: 0,
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_error']).toBeDefined()
+      expect(properties['$ai_input_tokens']).toBeUndefined()
+      expect(properties['$ai_output_tokens']).toBeUndefined()
     })
 
     conditionalTest('should handle streaming errors', async () => {
@@ -845,24 +1028,14 @@ describe('PostHogAnthropic', () => {
 
       // Create a mock stream that throws an error
       const errorStream = {
-        tee: jest.fn().mockReturnValue([
-          {
-            async *[Symbol.asyncIterator]() {
-              throw streamError
-              yield
-            },
-          },
-          {
-            async *[Symbol.asyncIterator]() {
-              throw streamError
-              yield
-            },
-          },
-        ]),
+        async *[Symbol.asyncIterator]() {
+          throw streamError
+          yield
+        },
       }
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(errorStream)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(errorStream)
 
       const stream = await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -884,9 +1057,13 @@ describe('PostHogAnthropic', () => {
 
       assertPostHogCapture(mockPostHogClient, {
         httpStatus: 500,
-        inputTokens: 0,
-        outputTokens: 0,
       })
+
+      const [errorCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+      expect(errorCall[0].properties['$ai_input_tokens']).toBeUndefined()
+      expect(errorCall[0].properties['$ai_output_tokens']).toBeUndefined()
+      // Died before message_start, so there is no raw usage to report either.
+      expect(errorCall[0].properties['$ai_usage']).toBeUndefined()
     })
   })
 
@@ -914,7 +1091,7 @@ describe('PostHogAnthropic', () => {
         posthogCaptureImmediate: true,
       })
 
-      const captureImmediateMock = mockPostHogClient.captureImmediate as jest.Mock
+      const captureImmediateMock = mockPostHogClient.captureImmediate as vi.Mock
       expect(captureImmediateMock).toHaveBeenCalledTimes(1)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
     })
@@ -929,7 +1106,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -948,7 +1125,7 @@ describe('PostHogAnthropic', () => {
         posthogTraceId: 'trace-789',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { distinctId, properties } = captureArgs[0]
 
@@ -965,7 +1142,7 @@ describe('PostHogAnthropic', () => {
         posthogTraceId: 'trace-789',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { distinctId, properties } = captureArgs[0]
 
@@ -1066,7 +1243,7 @@ describe('PostHogAnthropic', () => {
         posthogDistinctId: 'test-user-123',
       })
 
-      const captureMock = mockPostHogClient.capture as jest.Mock
+      const captureMock = mockPostHogClient.capture as vi.Mock
       const [captureArgs] = captureMock.mock.calls
       const { properties } = captureArgs[0]
 
@@ -1149,7 +1326,7 @@ describe('PostHogAnthropic', () => {
 describe('PostHogAnthropic - $ai_base_url', () => {
   it('emits the wrapped client base URL', async () => {
     const ph = new (PostHog as any)()
-    ;(AnthropicOriginal.Messages.prototype.create as jest.Mock) = jest
+    ;(AnthropicOriginal.Messages.prototype.create as unknown as vi.Mock) = vi
       .fn()
       .mockResolvedValue(createMockResponse({ content: 'hi' }))
 
@@ -1160,7 +1337,129 @@ describe('PostHogAnthropic - $ai_base_url', () => {
       messages: [{ role: 'user', content: 'hi' }],
     } as any)
 
-    const { properties } = (ph.capture as jest.Mock).mock.calls[0][0]
+    const { properties } = (ph.capture as vi.Mock).mock.calls[0][0]
     expect(properties['$ai_base_url']).toBe('https://gateway.posthog.com/anthropic')
+  })
+})
+
+describe('PostHogAnthropic - streaming error safety', () => {
+  let safetyMockPostHogClient: PostHog
+  let safetyClient: PostHogAnthropic
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    safetyMockPostHogClient = new (PostHog as any)()
+    safetyClient = new PostHogAnthropic({
+      apiKey: 'test-api-key',
+      posthog: safetyMockPostHogClient as any,
+    })
+  })
+
+  test('break after first chunk cancels the real Anthropic stream and captures only partial output', async () => {
+    const sourceController = new AbortController()
+    let pulls = 0
+    let sourceReturned = false
+    const messageStart = {
+      type: 'message_start',
+      message: { usage: { input_tokens: 42 } },
+    } as unknown as AnthropicOriginal.Messages.RawMessageStreamEvent
+    const firstChunk = {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text: 'partial' },
+    } as AnthropicOriginal.Messages.RawMessageStreamEvent
+    const source = new AnthropicStream<AnthropicOriginal.Messages.RawMessageStreamEvent>(() => {
+      const iterator = (async function* () {
+        try {
+          pulls += 1
+          yield messageStart
+          pulls += 1
+          yield firstChunk
+          pulls += 1
+          yield {
+            ...firstChunk,
+            delta: { type: 'text_delta', text: 'unobserved' },
+          } as AnthropicOriginal.Messages.RawMessageStreamEvent
+        } finally {
+          sourceReturned = true
+          sourceController.abort()
+        }
+      })()
+      return iterator
+    }, sourceController)
+
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(source)
+    const stream = await safetyClient.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: 'Stop early' }],
+      stream: true,
+      posthogDistinctId: 'anthropic-break-user',
+    } as any)
+
+    expect(stream).toBeInstanceOf(AnthropicStream)
+    expect(pulls).toBe(0)
+    let consumed = 0
+    for await (const _chunk of stream as unknown as AsyncIterable<AnthropicOriginal.Messages.RawMessageStreamEvent>) {
+      consumed += 1
+      if (consumed === 2) {
+        break
+      }
+    }
+    await new Promise(process.nextTick)
+
+    expect(pulls).toBe(2)
+    expect(sourceReturned).toBe(true)
+    expect(sourceController.signal.aborted).toBe(true)
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (safetyMockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_output_choices'][0].content[0].text).toBe('partial')
+    expect(properties['$ai_input_tokens']).toBe(42)
+    expect(properties['$ai_output_tokens']).toBeUndefined()
+  })
+
+  test('messages stream error is not rethrown unhandled', async () => {
+    const streamError = new Error('provider error injected into SSE stream')
+    const createErroringIterator = (): { [Symbol.asyncIterator](): AsyncIterator<unknown> } => ({
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'message_start', message: { usage: { input_tokens: 42 } } }
+        yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'partial' } }
+        throw streamError
+      },
+    })
+
+    const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(createErroringIterator()))
+
+    const unhandledRejections = await collectUnhandledRejections(async () => {
+      const stream = await safetyClient.messages.create({
+        model: 'claude-3-5-sonnet-20240620',
+        max_tokens: 100,
+        messages: [{ role: 'user', content: 'Tell me about streaming' }],
+        stream: true,
+        posthogDistinctId: 'test-stream-error-user',
+      } as any)
+
+      // The caller's copy of the stream must still surface the error
+      await expect(async () => {
+        for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
+          // consume until the error
+        }
+      }).rejects.toThrow(streamError)
+    })
+
+    // The analytics error event is still captured, with the usage the stream
+    // reported before it died
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const errorProperties = (safetyMockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+    expect(errorProperties['$ai_input_tokens']).toBe(42)
+    expect(errorProperties['$ai_output_tokens']).toBeUndefined()
+    expect(errorProperties['$ai_usage']).toEqual({ input_tokens: 42 })
+
+    // The detached analytics consumer must not crash the host process
+    expect(unhandledRejections).toEqual([])
   })
 })

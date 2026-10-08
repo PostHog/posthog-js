@@ -1,4 +1,4 @@
-import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from '../request-queue'
+import { RequestQueue } from '../request-queue'
 import { QueuedRequestWithOptions } from '../types'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
@@ -6,48 +6,62 @@ const EPOCH = 1_600_000_000
 
 describe('RequestQueue', () => {
     describe('setting flush timeout', () => {
-        it('can override the flush timeout', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 1000 })
-            expect(queue['_flushTimeoutMs']).toEqual(1000)
-        })
+        const expectDeliveryAt = (queue: RequestQueue, interval: number) => {
+            const send = vi.spyOn(queue as any, '_sendRequest').mockImplementation(() => {})
+            queue.unload()
+            send.mockClear()
+            vi.useFakeTimers()
+            try {
+                queue.enqueue({ url: '/e', data: { event: 'interval-probe' } })
+                queue.enable()
+                vi.advanceTimersByTime(interval - 1)
+                expect(send).not.toHaveBeenCalled()
+                vi.advanceTimersByTime(1)
+                expect(send).toHaveBeenCalledTimes(1)
+                expect(send).toHaveBeenCalledWith(
+                    expect.objectContaining({ url: '/e', data: [{ event: 'interval-probe' }] }),
+                    undefined
+                )
+            } finally {
+                queue.unload()
+                send.mockRestore()
+                vi.useRealTimers()
+            }
+        }
 
-        it('defaults to 3000 when not configured', () => {
-            const queue = new RequestQueue(jest.fn(), {})
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('defaults to 3000 when no config', () => {
-            const queue = new RequestQueue(jest.fn())
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('cannot set below 250', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 249 })
-            expect(queue['_flushTimeoutMs']).toEqual(250)
-        })
-
-        it('cannot set above 5000', () => {
-            const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 5001 })
-            expect(queue['_flushTimeoutMs']).toEqual(5000)
+        it.each([
+            ['explicit override', { flush_interval_ms: 1000 }, 1000],
+            ['empty config', {}, 3000],
+            ['omitted config', undefined, 3000],
+            ['lower clamp', { flush_interval_ms: 249 }, 250],
+            ['upper clamp', { flush_interval_ms: 5001 }, 5000],
+        ] as const)('delivers at the configured interval: %s', (_, config, expected) => {
+            const queue = new RequestQueue(vi.fn(), config)
+            expect(queue['_flushTimeoutMs']).toBe(expected)
+            expectDeliveryAt(queue, expected)
         })
 
         it('can be passed in from posthog config', async () => {
             const posthog = await createPosthogInstance('token', { request_queue_config: { flush_interval_ms: 1000 } })
             expect(posthog.config.request_queue_config.flush_interval_ms).toEqual(1000)
             expect(posthog['_requestQueue']['_flushTimeoutMs']).toEqual(1000)
+            expectDeliveryAt(posthog['_requestQueue'], 1000)
         })
     })
 
     describe('with default config', () => {
-        let sendRequest: (options: QueuedRequestWithOptions) => void
+        let sendRequest: (
+            options: QueuedRequestWithOptions,
+            transportOverride?: QueuedRequestWithOptions['transport']
+        ) => void
         let queue: RequestQueue
 
         beforeEach(() => {
-            sendRequest = jest.fn()
+            sendRequest = vi.fn()
             queue = new RequestQueue(sendRequest, {})
-            jest.useFakeTimers()
-            jest.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
-            jest.spyOn(console, 'warn').mockImplementation(() => {})
+            vi.useFakeTimers()
+            vi.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
+            vi.spyOn(console, 'warn').mockImplementation(() => {})
         })
 
         it('handles poll after enqueueing requests', () => {
@@ -74,67 +88,207 @@ describe('RequestQueue', () => {
 
             expect(sendRequest).toHaveBeenCalledTimes(0)
 
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
-            expect(jest.mocked(sendRequest).mock.calls).toEqual([
+            expect(vi.mocked(sendRequest).mock.calls).toEqual([
                 [
                     {
                         url: '/e',
                         data: [
-                            { event: 'foo', offset: 3000 },
-                            { event: 'bar', offset: 1000 },
+                            { event: 'foo', timestamp: EPOCH - 3000 },
+                            { event: 'bar', timestamp: EPOCH - 1000 },
                         ],
                         transport: 'XHR',
                     },
+                    undefined,
                 ],
                 [
                     {
                         url: '/identify',
-                        data: [{ event: '$identify', offset: 2000 }],
+                        data: [{ event: '$identify', timestamp: EPOCH - 2000 }],
                     },
+                    undefined,
                 ],
                 [
                     {
                         url: '/e',
-                        data: [{ event: 'zeta', offset: 0 }],
+                        data: [{ event: 'zeta', timestamp: EPOCH }],
                         batchKey: 'sessionRecording',
                     },
+                    undefined,
+                ],
+            ])
+        })
+
+        it.each([true, false])(
+            'notifies every batch callback when the first request has a callback: %s',
+            (firstHasCallback) => {
+                const first = vi.fn()
+                const second = vi.fn()
+                const otherBatch = vi.fn()
+                queue.enqueue({
+                    url: '/e',
+                    data: { event: 'first' },
+                    ...(firstHasCallback ? { callback: first, fireCallbackOnDrop: true } : {}),
+                })
+                queue.enqueue({ url: '/e', data: { event: 'second' }, callback: second })
+                queue.enqueue({ url: '/s', data: { event: 'other-batch' }, callback: otherBatch })
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+
+                const batch = vi.mocked(sendRequest).mock.calls[0][0]
+                expect(batch.data).toEqual([{ event: 'first' }, { event: 'second' }])
+                expect(batch.fireCallbackOnDrop).toBeUndefined()
+                expect(batch.callback).toBeDefined()
+                const response = { statusCode: 200 }
+                batch.callback!(response)
+                expect(first).toHaveBeenCalledTimes(firstHasCallback ? 1 : 0)
+                expect(second).toHaveBeenCalledTimes(1)
+                expect(second).toHaveBeenCalledWith(response)
+                expect(otherBatch).not.toHaveBeenCalled()
+            }
+        )
+
+        it('does not merge requests that share a batch key but not a batch group', () => {
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 2000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 1000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-two-window-two',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls.map(([req]) => [req.batchGroup, req.data?.length])).toEqual([
+                ['session-one-window-one', 2],
+                ['session-two-window-two', 1],
+            ])
+        })
+
+        it('preserves event timestamps and leaves timestamp-free recording payloads unchanged', () => {
+            const timestamp = new Date(EPOCH - 60_000)
+            const event = { event: 'backdated', timestamp }
+            const recording = { recording_payload: 'example' }
+            queue.enqueue({ url: '/e', data: event })
+            queue.enqueue({ url: '/s', data: recording })
+            queue.enable()
+
+            vi.runOnlyPendingTimers()
+
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                { url: '/e', data: [{ event: 'backdated', timestamp }] },
+                undefined
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                { url: '/s', data: [{ recording_payload: 'example' }] },
+                undefined
+            )
+            expect(event.timestamp).toBe(timestamp)
+            expect(event).not.toHaveProperty('offset')
+            expect(recording).not.toHaveProperty('offset')
+        })
+
+        it('sends requests with the same batchKey but different batchGroup separately', () => {
+            queue.enqueue({
+                data: { event: 'a1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'a2', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'b1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'b',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls).toEqual([
+                [
+                    {
+                        url: '/s',
+                        data: [
+                            { event: 'a1', timestamp: EPOCH },
+                            { event: 'a2', timestamp: EPOCH },
+                        ],
+                        batchKey: 'recordings',
+                        batchGroup: 'a',
+                    },
+                    undefined,
+                ],
+                [
+                    { url: '/s', data: [{ event: 'b1', timestamp: EPOCH }], batchKey: 'recordings', batchGroup: 'b' },
+                    undefined,
                 ],
             ])
         })
 
         it('handles unload', () => {
+            const callback = vi.fn()
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
-            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, callback })
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
             queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
             queue.unload()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
-            expect(sendRequest).toHaveBeenNthCalledWith(1, {
-                url: '/e',
-                data: [
-                    { event: 'foo', timestamp: 1_610_000_000 },
-                    { event: 'bar', timestamp: 1_630_000_000 },
-                ],
-                transport: 'sendBeacon',
-            })
+            expect(vi.mocked(sendRequest).mock.calls[0][0].callback).toBeUndefined()
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                {
+                    url: '/e',
+                    data: [
+                        { event: 'foo', timestamp: 1_610_000_000 },
+                        { event: 'bar', timestamp: 1_630_000_000 },
+                    ],
+                },
+                'sendBeacon'
+            )
 
-            expect(sendRequest).toHaveBeenNthCalledWith(2, {
-                url: '/s',
-                data: [{ recording_payload: 'example' }],
-                transport: 'sendBeacon',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(3, {
-                url: '/identify',
-                data: [{ event: '$identify', timestamp: 1_620_000_000 }],
-                transport: 'sendBeacon',
-            })
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                {
+                    url: '/s',
+                    data: [{ recording_payload: 'example' }],
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                3,
+                {
+                    url: '/identify',
+                    data: [{ event: '$identify', timestamp: 1_620_000_000 }],
+                },
+                'sendBeacon'
+            )
         })
 
         it('keeps flushing queued requests if one request throws', () => {
-            sendRequest = jest.fn((req) => {
+            sendRequest = vi.fn((req) => {
                 if (req.url === '/e') {
                     throw new RangeError('Invalid string length')
                 }
@@ -144,7 +298,7 @@ describe('RequestQueue', () => {
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: EPOCH - 2000 } })
 
             queue.enable()
-            expect(() => jest.runOnlyPendingTimers()).not.toThrow()
+            expect(() => vi.runOnlyPendingTimers()).not.toThrow()
 
             expect(sendRequest).toHaveBeenCalledTimes(2)
 
@@ -153,7 +307,7 @@ describe('RequestQueue', () => {
         })
 
         it('keeps sending unload requests if one request throws', () => {
-            sendRequest = jest.fn((req) => {
+            sendRequest = vi.fn((req) => {
                 if (req.url === '/e') {
                     throw new RangeError('Invalid string length')
                 }
@@ -184,25 +338,35 @@ describe('RequestQueue', () => {
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
 
-            expect(sendRequest).toHaveBeenNthCalledWith(1, {
-                data: [
-                    { event: 'foo', timestamp: 1610000000 },
-                    { event: 'bar', timestamp: 1630000000 },
-                ],
-                transport: 'sendBeacon',
-                url: '/e',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(2, {
-                batchKey: 'sessionRecording',
-                data: [{ event: 'zeta', timestamp: 1640000000 }],
-                transport: 'sendBeacon',
-                url: '/e',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(3, {
-                data: [{ event: '$identify', timestamp: 1620000000 }],
-                transport: 'sendBeacon',
-                url: '/identify',
-            })
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                {
+                    data: [
+                        { event: 'foo', timestamp: 1610000000 },
+                        { event: 'bar', timestamp: 1630000000 },
+                    ],
+                    transport: 'XHR',
+                    url: '/e',
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                {
+                    batchKey: 'sessionRecording',
+                    data: [{ event: 'zeta', timestamp: 1640000000 }],
+                    url: '/e',
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                3,
+                {
+                    data: [{ event: '$identify', timestamp: 1620000000 }],
+                    url: '/identify',
+                },
+                'sendBeacon'
+            )
         })
     })
 })

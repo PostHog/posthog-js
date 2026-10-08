@@ -1,19 +1,28 @@
+import path from 'path'
+import { typeContractDiagnostics } from './helpers/type-contract'
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig } from '../types'
-import { AllExtensions } from '../extensions/extension-bundles'
-import { Autocapture } from '../autocapture'
+import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
+import {
+    AllExtensions,
+    FeatureFlagsExtensions,
+    LogsExtensions,
+    SurveysExtensions,
+} from '../extensions/extension-bundles'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { FeatureFlagsExtension } from '../extension-tokens'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 describe('__extensionClasses enrollment', () => {
     let savedDefaults: PostHogConfig['__extensionClasses']
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -25,7 +34,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: Autocapture, sessionRecording: SessionRecording },
+            __extensionClasses: { autocapture: BrowserAutocapture, sessionRecording: SessionRecording },
             capture_pageview: false,
         })
 
@@ -72,16 +81,241 @@ describe('__extensionClasses enrollment', () => {
 
     it('__extensionClasses overrides __defaultExtensionClasses', async () => {
         PostHog.__defaultExtensionClasses = AllExtensions
+        let constructorArgument: PostHog | undefined
 
-        class MockAutocapture extends Autocapture {}
+        class MockAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {}
+        }
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: MockAutocapture },
+            __extensionClasses: { autocapture: MockAutocapture as any },
             capture_pageview: false,
         })
 
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
+        expect(constructorArgument).toBe(posthog)
+    })
+
+    it('preserves the PostHog lifecycle contract for custom feature flags classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const posthog = new PostHog()
+        const initialize = vi.fn()
+        const destroy = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyFeatureFlags {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {
+                initialize()
+            }
+
+            destroy(): void {
+                destroy()
+            }
+        }
+
+        posthog.config.__extensionClasses = { featureFlags: LegacyFeatureFlags as any }
+        posthog['_enrollFeatureFlags']()
+        posthog.__loaded = true
+        await posthog.shutdown()
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom surveys classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = vi.fn()
+        const setup = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacySurveys {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: LegacySurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared surveys exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = vi.fn()
+        const initialize = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedSurveys {
+            readonly name = 'surveys'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: SharedSurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('keeps surveys bundled with feature flags for targeting', () => {
+        expect(SurveysExtensions).toEqual(
+            expect.objectContaining({ surveys: expect.any(Function), featureFlags: PostHogFeatureFlags })
+        )
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = vi.fn()
+        const setup = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyLogs {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: LegacyLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared logs exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = vi.fn()
+        const initialize = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedLogs {
+            readonly name = 'logs'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: SharedLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('logs cleanup errors when shared extension enrollment fails', async () => {
+        const posthog = new PostHog()
+        const disposeError = new Error('dispose failed')
+        const dispose = vi.fn(() => {
+            throw disposeError
+        })
+        const loggerError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+        vi.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const initTasks: Array<() => void> = []
+
+        posthog['_enrollExtension']({ name: 'logs', setup: vi.fn(), dispose } as any, initTasks)
+        initTasks[0]?.()
+
+        await vi.waitFor(() => {
+            expect(dispose).toHaveBeenCalledTimes(1)
+        })
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
+    })
+
+    it('bundles logs through the shared lifecycle', () => {
+        PostHog.__defaultExtensionClasses = {}
+        const logs = new LogsExtensions.logs(new PostHog())
+
+        expect(logs.name).toBe('logs')
+        expect(logs.setup).toEqual(expect.any(Function))
+        logs.dispose()
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = vi.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __extensionClasses: { autocapture: LegacyAutocapture as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
     })
 
     it('eagerly constructs extensions from defaults before init()', () => {
@@ -110,6 +344,123 @@ describe('__extensionClasses enrollment', () => {
         expect(posthog.logs).toBeUndefined()
         expect(posthog.experiments).toBeUndefined()
         expect(posthog.exceptions).toBeUndefined()
+    })
+
+    it('preserves feature flag reloading subscriptions across slim initialization', async () => {
+        vi.useFakeTimers()
+        try {
+            PostHog.__defaultExtensionClasses = {}
+            const token = uuidv7()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: { config: { hasFeatureFlags: true }, siteApps: [] },
+            } as any
+
+            const posthog = new PostHog()
+            const beforeInitCallback = vi.fn()
+            const unsubscribeBeforeInit = posthog.on('featureFlagsReloading', beforeInitCallback)
+
+            expect(posthog.featureFlags).toBeUndefined()
+
+            posthog.init(token, {
+                __extensionClasses: FeatureFlagsExtensions,
+                capture_pageview: false,
+                remote_config_refresh_interval_ms: 0,
+                loaded: () => {
+                    posthog._send_request = vi.fn(({ callback }) =>
+                        callback?.({ statusCode: 200, json: { flags: [] } })
+                    )
+                },
+            })
+
+            expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
+            expect(posthog.getExtension(FeatureFlagsExtension)).toBe(posthog.featureFlags)
+            expect(beforeInitCallback).toHaveBeenCalledTimes(1)
+            expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
+
+            const afterInitCallback = vi.fn()
+            const unsubscribeAfterInit = posthog.on('featureFlagsReloading', afterInitCallback)
+
+            await vi.advanceTimersByTimeAsync(10)
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
+            expect(afterInitCallback).toHaveBeenCalledTimes(1)
+            expect(afterInitCallback).toHaveBeenLastCalledWith(true)
+
+            await vi.advanceTimersByTimeAsync(10)
+            unsubscribeBeforeInit()
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenLastCalledWith(true)
+
+            await vi.advanceTimersByTimeAsync(10)
+            unsubscribeAfterInit()
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenCalledTimes(2)
+            posthog.featureFlags.reset()
+        } finally {
+            vi.clearAllTimers()
+            vi.useRealTimers()
+        }
+    })
+
+    it('emits feature flag reloading once for default extensions after init', async () => {
+        vi.useFakeTimers()
+        try {
+            PostHog.__defaultExtensionClasses = AllExtensions
+            const token = uuidv7()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: { config: { hasFeatureFlags: true }, siteApps: [] },
+            } as any
+
+            const posthog = new PostHog()
+            posthog.init(token, {
+                capture_pageview: false,
+                remote_config_refresh_interval_ms: 0,
+                loaded: () => {
+                    posthog._send_request = vi.fn(({ callback }) =>
+                        callback?.({ statusCode: 200, json: { flags: [] } })
+                    )
+                },
+            })
+            await vi.advanceTimersByTimeAsync(10)
+
+            const callback = vi.fn()
+            posthog.on('featureFlagsReloading', callback)
+            posthog.reloadFeatureFlags()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith(true)
+            posthog.featureFlags.reset()
+        } finally {
+            vi.clearAllTimers()
+            vi.useRealTimers()
+        }
+    })
+
+    it('keeps one reloading bridge when feature flags are enrolled repeatedly', () => {
+        PostHog.__defaultExtensionClasses = FeatureFlagsExtensions
+        const posthog = new PostHog()
+        const add = vi.fn().mockResolvedValue(undefined)
+        posthog._getBrowserClientAdapter = vi.fn().mockReturnValue({ add }) as any
+
+        const enrollFeatureFlags = () => (posthog as any)._enrollFeatureFlags()
+        enrollFeatureFlags()
+        enrollFeatureFlags()
+
+        const callback = vi.fn()
+        posthog.on('featureFlagsReloading', callback)
+        posthog.featureFlags.reloadFeatureFlags()
+
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith(true)
+        expect(add).toHaveBeenCalledTimes(1)
+        posthog.featureFlags.reset()
     })
 
     it('default extensions are used when __extensionClasses is not provided', async () => {
@@ -142,7 +493,7 @@ describe('extension lifecycle', () => {
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -153,6 +504,15 @@ describe('extension lifecycle', () => {
         it('has an entry for every key in the __extensionClasses type', () => {
             // If a new key is added to __extensionClasses but not to AllExtensions,
             // this test will fail because the full bundle would silently omit it.
+            const fixture = path.resolve(__dirname, '__audit_contract__.ts')
+            const source = `import type { PostHogConfig } from '../types'
+import { AllExtensions } from '../extensions/extension-bundles'
+type Expected = keyof NonNullable<PostHogConfig['__extensionClasses']>
+type Actual = keyof typeof AllExtensions
+const exact: [Exclude<Expected, Actual>, Exclude<Actual, Expected>] extends [never, never] ? true : false = true
+void exact`
+            expect(typeContractDiagnostics(fixture, source)).toEqual([])
+            expect(typeContractDiagnostics(fixture, source.replace('= true\n', '= false\n'))).not.toEqual([])
             const allKeys = Object.keys(AllExtensions).sort()
             expect(allKeys).toEqual([
                 'autocapture',
@@ -165,12 +525,14 @@ describe('extension lifecycle', () => {
                 'heatmaps',
                 'historyAutocapture',
                 'logs',
+                'metrics',
                 'productTours',
                 'sessionRecording',
                 'siteApps',
                 'surveys',
                 'toolbar',
                 'tracingHeaders',
+                'webMCP',
                 'webVitalsAutocapture',
             ])
         })
@@ -180,7 +542,7 @@ describe('extension lifecycle', () => {
         it('calls initialize() on extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const initializeSpy = jest.fn()
+            const initializeSpy = vi.fn()
 
             class SpyExtension {
                 constructor() {}
@@ -214,18 +576,71 @@ describe('extension lifecycle', () => {
 
             expect(posthog.autocapture).toBeInstanceOf(MinimalExtension)
         })
+
+        it('does not treat a legacy setup method as the shared lifecycle without a name', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = vi.fn()
+            const initialize = vi.fn()
+
+            class LegacyExtension {
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: LegacyExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(initialize).toHaveBeenCalledTimes(1)
+            expect(setup).not.toHaveBeenCalled()
+        })
+
+        it('enrolls an extension with name and setup through the shared lifecycle', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = vi.fn()
+            const initialize = vi.fn()
+
+            class SharedExtension {
+                readonly name = 'autocapture'
+
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: SharedExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(setup).toHaveBeenCalledTimes(1)
+            expect(initialize).not.toHaveBeenCalled()
+        })
     })
 
     describe('onRemoteConfig dispatching', () => {
         it('calls onRemoteConfig on all extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const onRemoteConfigSpy = jest.fn()
+            const toolbarConfig = vi.fn()
+            const conversationsConfig = vi.fn()
 
             class SpyExtension {
                 constructor() {}
-                onRemoteConfig(config: RemoteConfig) {
-                    onRemoteConfigSpy(config)
+                onRemoteConfig(result: RemoteConfigResult) {
+                    toolbarConfig(result)
                 }
             }
 
@@ -233,20 +648,25 @@ describe('extension lifecycle', () => {
                 __preview_deferred_init_extensions: false,
                 __extensionClasses: {
                     toolbar: SpyExtension as any,
-                    conversations: SpyExtension as any,
+                    conversations: class {
+                        onRemoteConfig = conversationsConfig
+                    } as any,
                 },
                 capture_pageview: false,
             })
 
             // Clear any calls from the init/loaded flow
-            onRemoteConfigSpy.mockClear()
+            toolbarConfig.mockClear()
+            conversationsConfig.mockClear()
 
             const remoteConfig = { supportedCompression: [] } as unknown as RemoteConfig
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Two extensions, each should get onRemoteConfig called once
-            expect(onRemoteConfigSpy).toHaveBeenCalledTimes(2)
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            expect(toolbarConfig).toHaveBeenCalledTimes(1)
+            expect(toolbarConfig).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            expect(conversationsConfig).toHaveBeenCalledTimes(1)
+            expect(conversationsConfig).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
         })
     })
 
@@ -259,7 +679,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.onSurveysLoaded(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -273,7 +693,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -287,10 +707,25 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getActiveMatchingSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
+        })
+
+        it('onActiveMatchingSurveysChanged calls back with error when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            const callback = vi.fn()
+            const unsubscribe = posthog.onActiveMatchingSurveysChanged(callback)
+
+            expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
+            expect(unsubscribe).toEqual(expect.any(Function))
         })
 
         it('featureFlags is undefined when extension is not loaded', async () => {
@@ -312,7 +747,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             const unsubscribe = posthog.onFeatureFlags(callback)
 
             expect(callback).toHaveBeenCalledWith([], {}, { errorsLoading: true })
@@ -377,8 +812,7 @@ describe('extension lifecycle', () => {
 
             expect(posthog.getFeatureFlag('test-flag')).toBe(true)
             expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
-            // Disabled flags should not be returned
-            expect(posthog.getFeatureFlag('disabled-flag')).toBeUndefined()
+            expect(posthog.getFeatureFlag('disabled-flag')).toBe(false)
             expect(posthog.flagsEndpointWasHit).toBe(true)
         })
     })

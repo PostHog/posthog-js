@@ -1,4 +1,9 @@
-import { canActivateRepeatedly, hasEvents, surveyValidationMap } from './surveys-utils'
+import {
+  canSurveyActivateRepeatedly,
+  doesSurveyActivateByEvent,
+  getSurveyIterationKey,
+  propertyComparisons,
+} from '@posthog/core/surveys'
 import { currentDeviceType } from '../native-deps'
 import { FeatureFlagValue, Survey, SurveyMatchType } from '@posthog/core'
 
@@ -13,7 +18,7 @@ function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     return true
   }
 
-  return surveyValidationMap[defaultMatchType(survey.conditions.deviceTypesMatchType)](survey.conditions.deviceTypes, [
+  return propertyComparisons[defaultMatchType(survey.conditions.deviceTypesMatchType)](survey.conditions.deviceTypes, [
     currentDeviceType,
   ])
 }
@@ -27,9 +32,11 @@ export function getActiveMatchingSurveys(
   flags: Record<string, FeatureFlagValue>,
   seenSurveys: string[],
   activatedSurveys: ReadonlySet<string>,
-  lastSeenSurveyDate: Date | undefined
+  lastSeenSurveyDate: Date | undefined,
+  inProgressSurveys: ReadonlySet<string> = new Set()
 ): Survey[] {
   return surveys.filter((survey: Survey) => {
+    const hasProgress = inProgressSurveys.has(getSurveyIterationKey(survey))
     // Is Active
     if (!survey.start_date || survey.end_date) {
       return false
@@ -40,7 +47,7 @@ export function getActiveMatchingSurveys(
       return false
     }
 
-    if (seenSurveys.includes(survey.id) && !canActivateRepeatedly(survey)) {
+    if (seenSurveys.includes(getSurveyIterationKey(survey)) && !canSurveyActivateRepeatedly(survey) && !hasProgress) {
       return false
     }
 
@@ -66,6 +73,10 @@ export function getActiveMatchingSurveys(
       return false
     }
 
+    const eventBasedTargetingFlagCheck =
+      !doesSurveyActivateByEvent(survey) || hasProgress || activatedSurveys.has(survey.id)
+    if (!eventBasedTargetingFlagCheck) return false
+
     if (
       !survey.linked_flag_key &&
       !survey.targeting_flag_key &&
@@ -88,10 +99,8 @@ export function getActiveMatchingSurveys(
 
     const targetingFlagCheck = isSurveyFlagEnabled(survey.targeting_flag_key, flags)
 
-    const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys.has(survey.id) : true
-
     const internalTargetingFlagCheck =
-      survey.internal_targeting_flag_key && !canActivateRepeatedly(survey)
+      survey.internal_targeting_flag_key && !canSurveyActivateRepeatedly(survey) && !hasProgress
         ? isSurveyFlagEnabled(survey.internal_targeting_flag_key, flags)
         : true
     const flagsCheck = survey.feature_flag_keys?.length

@@ -119,8 +119,13 @@ export class PostHog {
     const fns = Array.isArray(this.beforeSend) ? this.beforeSend : [this.beforeSend]
     let result: PostHogEvent | null = event
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) return null
+      try {
+        result = fn(result)
+        if (!result) return null
+      } catch (e) {
+        console.warn(`[PostHog] Error in beforeSend function for event '${event.event}':`, e)
+        return null
+      }
     }
     return result
   }
@@ -166,6 +171,7 @@ export class PostHog {
       properties?: Record<string, unknown>
       groups?: Record<string, string | number>
       sendFeatureFlags?: boolean
+      /** UTC is preferred; non-UTC input is converted to UTC before capture. */
       timestamp?: Date
       uuid?: string
       disableGeoip?: boolean

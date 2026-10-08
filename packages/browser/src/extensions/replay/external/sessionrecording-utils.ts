@@ -7,7 +7,10 @@ import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
 export function circularReferenceReplacer() {
     const ancestors: any[] = []
     return function (this: any, _key: string, value: any) {
-        if (isObject(value)) {
+        // arrays must be tracked as ancestors too - isObject excludes them, and an
+        // untracked array in the path empties the ancestor stack, so a cycle passing
+        // through an array would be missed and JSON.stringify would throw
+        if (isObject(value) || isArray(value)) {
             // `this` is the object that value is contained in,
             // i.e., its direct parent.
             while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
@@ -24,8 +27,23 @@ export function circularReferenceReplacer() {
     }
 }
 
+function estimateStringBytes(data: string): number {
+    return new Blob([data]).size
+}
+
+// an event whose JSON is longer than the engine's maximum string length makes JSON.stringify
+// throw `RangeError: Invalid string length`. Such an event can never reach the server either -
+// the request encoder stringifies the whole batch - so estimateSize reports the failure with
+// this size instead of throwing, and the caller drops that one event.
+export const UNSTRINGIFIABLE_EVENT_SIZE = -1
+
 export function estimateSize(sizeable: unknown): number {
-    return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
+    try {
+        const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
+        return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+    } catch {
+        return UNSTRINGIFIABLE_EVENT_SIZE
+    }
 }
 
 // Lightweight size estimate for compressed events without allocating a JSON string.
@@ -99,13 +117,15 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
     // but we're assuming most of the size is from a data uri which
     // is unlikely to be compressed further
 
-    if (stringifiedData.length > MAX_MESSAGE_SIZE) {
+    let size = estimateStringBytes(stringifiedData)
+    if (size > MAX_MESSAGE_SIZE) {
         // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
         // 2) Extracts the mime type of the data uri in the first group
         // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
         const dataURIRegex = /data:([\w/\-.]+);(\w+),([^)"]*)/gim
         const matches = stringifiedData.matchAll(dataURIRegex)
+        const unfilteredStringifiedData = stringifiedData
         for (const match of matches) {
             if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {
                 stringifiedData = stringifiedData.replace(match[0], replacementImageURI)
@@ -113,8 +133,11 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
                 stringifiedData = stringifiedData.replace(match[0], '')
             }
         }
+        if (stringifiedData !== unfilteredStringifiedData) {
+            size = estimateStringBytes(stringifiedData)
+        }
     }
-    return { event: JSON.parse(stringifiedData), size: stringifiedData.length }
+    return { event: JSON.parse(stringifiedData), size }
 }
 
 export const CONSOLE_LOG_PLUGIN_NAME = 'rrweb/console@1' // The name of the rr-web plugin that emits console logs

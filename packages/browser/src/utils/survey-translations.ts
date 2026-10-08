@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
-import { createLogger } from './logger'
-import { getBrowserLanguage } from './event-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { getBrowserLanguage } from '@posthog/browser-common/utils/event-utils'
 import { isFunction } from '@posthog/core'
 import { applySurveyTranslation, detectSurveyLanguage } from '@posthog/core/surveys'
 

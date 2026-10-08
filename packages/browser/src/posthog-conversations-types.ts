@@ -1,83 +1,4 @@
-/**
- * Position of the widget on the screen
- */
-export type WidgetPosition = 'bottom_left' | 'bottom_right' | 'top_left' | 'top_right'
-
-/**
- * Remote configuration for conversations from the PostHog server
- */
-export interface ConversationsRemoteConfig {
-    /**
-     * Whether conversations are enabled for this team
-     * When true, the conversations API is available (posthog.conversations.*)
-     */
-    enabled: boolean
-
-    /**
-     * Whether the widget UI (button + chat panel) should be shown
-     * Only takes effect when enabled is true
-     * @default false
-     */
-    widgetEnabled?: boolean
-
-    /**
-     * Public token for authenticating conversations API requests
-     * This token is team-scoped and meant to be embedded in client code
-     */
-    token: string
-
-    /**
-     * Greeting text to show when widget is first opened
-     */
-    greetingText?: string
-
-    /**
-     * Primary color for the widget UI
-     */
-    color?: string
-
-    /**
-     * Placeholder text for the message input
-     */
-    placeholderText?: string
-
-    /**
-     * Whether to require email before starting a conversation
-     * @default false
-     */
-    requireEmail?: boolean
-
-    /**
-     * Whether to show the name field in the identification form
-     * @default true (when requireEmail is true)
-     */
-    collectName?: boolean
-
-    /**
-     * Title for the identification form
-     * @default "Before we start..."
-     */
-    identificationFormTitle?: string
-
-    /**
-     * Description for the identification form
-     * @default "Please provide your details so we can help you better."
-     */
-    identificationFormDescription?: string
-
-    /**
-     * List of allowed domains where the widget should be shown.
-     * Supports wildcards like "https://*.example.com"
-     * Empty array or not present means show on all domains.
-     */
-    domains?: string[]
-
-    /**
-     * Position of the widget on the screen
-     * @default 'bottom_right'
-     */
-    widgetPosition?: WidgetPosition
-}
+export type { ConversationsRemoteConfig, WidgetPosition } from '@posthog/browser-common'
 
 /**
  * Author types for messages in a conversation
@@ -472,7 +393,25 @@ export interface SendMessagePayload {
     identity_distinct_id?: string
 
     /**
-     * HMAC-SHA256 of identity_distinct_id using team secret_api_token
+     * HMAC-SHA256 of identity_distinct_id, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      */
     identity_hash?: string
 }
+
+// Discrete causes behind `posthog.conversations.isAvailable()` being false, so a caller that falls
+// back to another channel can record the specific cause instead of collapsing every case into
+// "unavailable". Lives here rather than beside the class so consumers can import the name: the
+// entry points re-export this module, not the extension.
+export type ConversationsUnavailableReason =
+    | 'disabled_by_config'
+    | 'consent_opted_out'
+    | 'disabled_for_toolbar'
+    | 'remote_config_pending'
+    | 'remote_config_failed'
+    | 'disabled_in_project'
+    | 'missing_token'
+    | 'extensions_unavailable'
+    | 'load_failed'
+    | 'initializing'
+    | 'not_loaded'

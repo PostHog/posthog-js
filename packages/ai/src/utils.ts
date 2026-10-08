@@ -12,6 +12,7 @@ import type {
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
+import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -28,11 +29,16 @@ const TOKEN_PROPERTY_KEYS = new Set([
   '$ai_reasoning_tokens',
 ])
 
+/**
+ * Whether the caller supplied their own token counts, which override the ones the SDK
+ * derived from the provider response.
+ */
+export function hasTokenOverrides(posthogProperties?: Record<string, unknown>): boolean {
+  return !!posthogProperties && Object.keys(posthogProperties).some((key) => TOKEN_PROPERTY_KEYS.has(key))
+}
+
 export function getTokensSource(posthogProperties?: Record<string, unknown>): string {
-  if (posthogProperties && Object.keys(posthogProperties).some((key) => TOKEN_PROPERTY_KEYS.has(key))) {
-    return 'passthrough'
-  }
-  return 'sdk'
+  return hasTokenOverrides(posthogProperties) ? 'passthrough' : 'sdk'
 }
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -66,7 +72,12 @@ export function toContentString(content: unknown): string {
       return JSON.stringify(content)
     } catch {
       // Fallback for circular refs, BigInt, or objects with throwing toJSON
-      return String(content)
+      try {
+        return String(content)
+      } catch {
+        // Custom coercion can throw, and null-prototype objects may have none.
+        return ''
+      }
     }
   }
   return String(content)
@@ -106,7 +117,8 @@ export const getModelParams = (
         | TranscriptionCreateParams
       ) &
         MonitoringParams)
-    | null
+    | null,
+  responseServiceTier?: string | null
 ): Record<string, any> => {
   if (!params) {
     return {}
@@ -133,24 +145,12 @@ export const getModelParams = (
       modelParams[key] = (params as any)[key]
     }
   }
+  // Only the tier the provider served may appear here: a requested tier can be refused,
+  // and cost processing prices from this value.
+  if (responseServiceTier != null) {
+    modelParams.service_tier = responseServiceTier
+  }
   return modelParams
-}
-
-/**
- * Helper to format responses (non-streaming) for consumption
- */
-export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
-  if (!response) {
-    return []
-  }
-  if (provider === 'anthropic') {
-    return formatResponseAnthropic(response)
-  } else if (provider === 'openai') {
-    return formatResponseOpenAI(response)
-  } else if (provider === 'gemini') {
-    return formatResponseGemini(response)
-  }
-  return []
 }
 
 export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
@@ -264,6 +264,8 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
             arguments: item.arguments || {},
           },
         })
+      } else if (item.type === 'image_generation_call' && item.result) {
+        content.push({ type: 'image', image: item.result })
       }
     }
 
@@ -291,7 +293,30 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
-export const formatResponseGemini = (response: any): FormattedMessage[] => {
+export const formatInlineDataBlock = (
+  inlineData: { mimeType?: string; mime_type?: string; data?: unknown },
+  client?: FullAiCaptureGate
+): FormattedAudioContent | FormattedImageContent | FormattedDocumentContent => {
+  const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
+  let data = inlineData.data
+
+  if (data instanceof Uint8Array) {
+    if (typeof Buffer !== 'undefined') {
+      data = Buffer.from(data).toString('base64')
+    } else {
+      let binary = ''
+      for (let i = 0; i < data.length; i++) {
+        binary += String.fromCharCode(data[i])
+      }
+      data = btoa(binary)
+    }
+  }
+
+  data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)
+  return buildInlineDataBlock(mimeType, String(data ?? ''))
+}
+
+export const formatResponseGemini = (response: any, client?: FullAiCaptureGate): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
@@ -305,33 +330,14 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
           } else if (part.functionCall) {
             content.push({
               type: 'function',
+              ...(part.functionCall.id != null ? { id: part.functionCall.id } : {}),
               function: {
                 name: part.functionCall.name,
                 arguments: part.functionCall.args,
               },
             })
           } else if (part.inlineData) {
-            // Handle inline data (images, audio, documents)
-            const mimeType = part.inlineData.mimeType || part.inlineData.mime_type || 'application/octet-stream'
-            let data = part.inlineData.data
-
-            // Handle binary data (Uint8Array/Buffer -> base64)
-            if (data instanceof Uint8Array) {
-              if (typeof Buffer !== 'undefined') {
-                data = Buffer.from(data).toString('base64')
-              } else {
-                let binary = ''
-                for (let i = 0; i < data.length; i++) {
-                  binary += String.fromCharCode(data[i])
-                }
-                data = btoa(binary)
-              }
-            }
-
-            // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data)
-
-            content.push(buildInlineDataBlock(mimeType, data))
+            content.push(formatInlineDataBlock(part.inlineData, client))
           }
         }
 
@@ -389,22 +395,26 @@ function toSafeString(input: unknown): string {
   }
 }
 
-export const truncate = (input: unknown): string => {
+export const truncate = (input: unknown, client?: FullAiCaptureGate, maxBytes = MAX_OUTPUT_SIZE): string => {
   const str = toSafeString(input)
   if (str === '') {
     return ''
   }
 
+  if (isFullAiCaptureEnabled(client)) {
+    return str
+  }
+
   // Check if we need to truncate and ensure STRING_FORMAT is respected
   const buffer = sharedTextEncoder.encode(str)
-  if (buffer.length <= MAX_OUTPUT_SIZE) {
+  if (buffer.length <= maxBytes) {
     // Ensure STRING_FORMAT is respected
     return sharedTextDecoder.decode(buffer)
   }
 
   // Truncate the buffer and ensure a valid string is returned.
   // fatal: false means we get U+FFFD at the end if truncation broke the encoding.
-  const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
+  const truncatedBuffer = buffer.slice(0, maxBytes)
   let truncatedStr = sharedTextDecoder.decode(truncatedBuffer)
   if (truncatedStr.endsWith('\uFFFD')) {
     truncatedStr = truncatedStr.slice(0, -1)

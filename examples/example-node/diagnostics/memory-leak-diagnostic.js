@@ -35,7 +35,7 @@ loadEnvFile()
 
 const CONFIG = {
     PROJECT_API_KEY: process.env.POSTHOG_PROJECT_API_KEY || '',
-    PERSONAL_API_KEY: process.env.POSTHOG_PERSONAL_API_KEY || '',
+    SECRET_KEY: process.env.POSTHOG_SECRET_KEY || '',
     HOST: process.env.POSTHOG_HOST || 'https://app.posthog.com',
     FLAG_KEY: process.env.POSTHOG_TEST_FLAG_KEY || 'beta-feature',
     TEST_ITERATIONS: 5000, // Smaller iterations for isolated testing
@@ -47,7 +47,7 @@ class MemoryLeakDiagnostic {
         this.testResults = []
 
         this.posthog = new PostHog(CONFIG.PROJECT_API_KEY, {
-            personalApiKey: CONFIG.PERSONAL_API_KEY,
+            secretKey: CONFIG.SECRET_KEY,
             host: CONFIG.HOST,
             maxCacheSize: 1000,
             debug: false,
@@ -105,13 +105,13 @@ class MemoryLeakDiagnostic {
         console.log('Configuration:', {
             host: CONFIG.HOST,
             projectApiKey: CONFIG.PROJECT_API_KEY.substring(0, 9) + '...',
-            personalApiKey: CONFIG.PERSONAL_API_KEY ? '[REDACTED]' : '[NOT PROVIDED]',
+            secretKey: CONFIG.SECRET_KEY ? '[REDACTED]' : '[NOT PROVIDED]',
             flagKey: CONFIG.FLAG_KEY,
             iterations: CONFIG.TEST_ITERATIONS,
         })
 
         // Wait for local evaluation to be ready
-        if (CONFIG.PERSONAL_API_KEY) {
+        if (CONFIG.SECRET_KEY) {
             console.log('\n⏳ Waiting for local evaluation to be ready...')
             const isReady = await this.posthog.waitForLocalEvaluationReady(10000)
             console.log(`Local evaluation ready: ${isReady}`)

@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Error conversion > should use cause when it is an error 1`] = `
+{
+  "$exception_level": "error",
+  "$exception_list": [
+    {
+      "mechanism": {
+        "exception_id": 0,
+        "handled": true,
+        "synthetic": false,
+        "type": "generic",
+      },
+      "stacktrace": {
+        "frames": "<normalized stack frames>",
+        "type": "raw",
+      },
+      "type": "Error",
+      "value": "my error",
+    },
+    {
+      "mechanism": {
+        "exception_id": 1,
+        "parent_id": 0,
+        "source": "cause",
+        "synthetic": false,
+        "type": "chained",
+      },
+      "stacktrace": {
+        "frames": "<normalized stack frames>",
+        "type": "raw",
+      },
+      "type": "CustomError",
+      "value": "my original error",
+    },
+  ],
+}
+`;

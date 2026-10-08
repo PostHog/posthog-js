@@ -1,5 +1,5 @@
-import { doesDeviceTypeMatch } from '../../extensions/utils/matcher-utils'
-import * as globals from '../../utils/globals'
+import { doesDeviceTypeMatch } from '@posthog/browser-common/utils/matcher-utils'
+import * as globals from '@posthog/browser-common/utils/globals'
 
 const DESKTOP_UA =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'
@@ -9,13 +9,13 @@ const TABLET_UA =
     'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
 
 function setUserAgent(ua: string | undefined) {
-    // @ts-expect-error - overriding readonly export for testing
-    globals['userAgent'] = ua
+    vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
 }
 
 describe('doesDeviceTypeMatch', () => {
-    const originalUA = globals.userAgent
-    afterEach(() => setUserAgent(originalUA as string | undefined))
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     it.each([
         ['no device types', undefined, DESKTOP_UA, true],

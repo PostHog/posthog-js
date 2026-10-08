@@ -3,10 +3,12 @@ import { JSDOM } from 'jsdom';
 import record from '../../src/record';
 import {
   findAndRemoveIframeBuffer,
+  initMutationObserver,
   mutationBuffers,
 } from '../../src/record/observer';
 import { IframeManager } from '../../src/record/iframe-manager';
 import type { eventWithTime } from '@posthog/rrweb-types';
+import type { MutationBufferParam } from '../../src/types';
 import { createMirror } from '@posthog/rrweb-snapshot';
 
 describe('memory leak prevention', () => {
@@ -44,6 +46,24 @@ describe('memory leak prevention', () => {
   });
 
   describe('mutationBuffers cleanup', () => {
+    it('does not retain a buffer when mutation observer initialization fails', () => {
+      const canvasManager = {
+        acquire: vi.fn(),
+        reset: vi.fn(),
+      };
+
+      expect(() =>
+        initMutationObserver(
+          { canvasManager } as unknown as MutationBufferParam,
+          null as unknown as Node,
+        ),
+      ).toThrow();
+
+      expect(mutationBuffers).toHaveLength(0);
+      expect(canvasManager.acquire).toHaveBeenCalledOnce();
+      expect(canvasManager.reset).toHaveBeenCalledOnce();
+    });
+
     it('should clear mutationBuffers array after stopping recording', () => {
       const emit = (event: eventWithTime) => {
         events.push(event);
@@ -114,6 +134,90 @@ describe('memory leak prevention', () => {
 
       // Verify buffers are cleared
       expect(mutationBuffers.length).toBe(0);
+    });
+  });
+
+  describe('MutationBuffer empty-payload cleanup', () => {
+    it('releases node references even when a batch normalizes to an empty payload', async () => {
+      const emit = (event: eventWithTime) => {
+        events.push(event);
+      };
+
+      const stopRecording = record({ emit });
+
+      try {
+        // Let the initial full snapshot settle.
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        const buffer = mutationBuffers[0] as unknown as {
+          addedSet: Set<Node>;
+          movedSet: Set<Node>;
+          droppedSet: Set<Node>;
+          texts: unknown[];
+          attributes: unknown[];
+        };
+        expect(buffer).toBeDefined();
+
+        const eventCountBefore = events.length;
+
+        // Append and remove in one task so the batch becomes empty after
+        // addedSet/droppedSet bookkeeping.
+        const el = document.createElement('div');
+        document.body.appendChild(el);
+        document.body.removeChild(el);
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        // An empty payload must not be emitted.
+        expect(events.length).toBe(eventCountBefore);
+
+        // The buffer must still release its node references.
+        expect(buffer.addedSet.size).toBe(0);
+        expect(buffer.movedSet.size).toBe(0);
+        expect(buffer.droppedSet.size).toBe(0);
+        expect(buffer.texts.length).toBe(0);
+        expect(buffer.attributes.length).toBe(0);
+      } finally {
+        stopRecording?.();
+      }
+    });
+
+    it('releases text/attribute buffer entries for nodes that never reached the mirror', async () => {
+      const emit = (event: eventWithTime) => {
+        events.push(event);
+      };
+
+      const stopRecording = record({ emit });
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        const buffer = mutationBuffers[0] as unknown as {
+          texts: unknown[];
+          attributes: unknown[];
+        };
+        expect(buffer).toBeDefined();
+
+        const eventCountBefore = events.length;
+
+        // Mutate a new node before removing it in the same task. The missing
+        // mirror id filters its text and attribute entries from the payload.
+        const el = document.createElement('div');
+        const textNode = document.createTextNode('before');
+        el.appendChild(textNode);
+        document.body.appendChild(el);
+        el.setAttribute('data-x', '1');
+        textNode.data = 'after';
+        document.body.removeChild(el);
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(events.length).toBe(eventCountBefore);
+        expect(buffer.texts.length).toBe(0);
+        expect(buffer.attributes.length).toBe(0);
+      } finally {
+        stopRecording?.();
+      }
     });
   });
 
@@ -575,6 +679,41 @@ describe('memory leak prevention', () => {
             get: () => crossOriginWin,
           });
           manager.nestedIframeListeners.set(crossOriginWin, vi.fn());
+          expect(() => iframeManager.removeIframeById(iframeId)).not.toThrow();
+          document.body.removeChild(iframe);
+        }
+      },
+    );
+
+    it.each([
+      { method: 'destroy' as const },
+      { method: 'removeIframeById' as const },
+    ])(
+      '$method should not throw when contentWindow.removeEventListener is missing',
+      ({ method }) => {
+        const { iframeManager, mirror } = createIframeManager();
+        const manager = iframeManager as any;
+        const win = {} as unknown as Window;
+
+        manager.nestedIframeListeners.set(win, vi.fn());
+
+        if (method === 'destroy') {
+          expect(() => iframeManager.destroy()).not.toThrow();
+        } else {
+          const iframe = document.createElement('iframe');
+          document.body.appendChild(iframe);
+          const iframeId = 44;
+          mirror.add(iframe, {
+            type: 2,
+            tagName: 'iframe',
+            attributes: {},
+            childNodes: [],
+            id: iframeId,
+          });
+          Object.defineProperty(iframe, 'contentWindow', {
+            get: () => win,
+          });
+          manager.nestedIframeListeners.set(win, vi.fn());
           expect(() => iframeManager.removeIframeById(iframeId)).not.toThrow();
           document.body.removeChild(iframe);
         }

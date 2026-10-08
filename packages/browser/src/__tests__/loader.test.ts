@@ -5,11 +5,40 @@
  * currently not supported in the browser lib).
  */
 
-import { PostHog } from '../posthog-core'
+import { execFileSync } from 'child_process'
+import path from 'path'
+import { init_from_snippet, PostHog } from '../posthog-core'
+
+const runWithoutBrowser = (method: 'identify' | 'capture') => {
+    execFileSync(
+        process.execPath,
+        [
+            '-e',
+            `
+        const assert = require('node:assert/strict')
+        assert.equal(typeof window, 'undefined')
+        assert.equal(typeof document, 'undefined')
+        global.fetch = () => { throw new Error('Unexpected network request in SSR fixture') }
+        const sdk = require(${JSON.stringify(path.resolve(__dirname, '../../dist/module.js'))})
+        const ph = sdk.default || sdk
+        ph.init('node-fixture', {
+            persistence: 'memory', bootstrap: { distinctID: 'node-fixture-user' },
+            capture_pageview: false, advanced_disable_flags: true,
+            before_send: () => null, disable_session_recording: true, disable_surveys: true,
+        })
+        ph[${JSON.stringify(method)}]('Pat')
+        // This smoke test checks synchronous SSR API safety, not browser timer lifecycle in Node.
+        process.exit(0)
+    `,
+        ],
+        { timeout: 10000 }
+    )
+}
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
-import { assignableWindow, window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
@@ -24,9 +53,15 @@ describe(`Module-based loader in Node env`, () => {
         } as any
         // assignableWindow.__PosthogExtensions__ = {}
 
-        jest.useFakeTimers()
-        jest.spyOn(posthog, '_send_request').mockReturnValue()
-        jest.spyOn(window!.console, 'log').mockImplementation()
+        vi.useFakeTimers()
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        vi.clearAllTimers()
+        vi.restoreAllMocks()
+        assignableWindow.POSTHOG_DEBUG = false
     })
 
     it('should load and capture the pageview event', () => {
@@ -45,7 +80,7 @@ describe(`Module-based loader in Node env`, () => {
             },
         })
 
-        jest.runOnlyPendingTimers()
+        vi.runOnlyPendingTimers()
 
         sinon.assert.calledOnce(posthog.capture as sinon.SinonSpy<any>)
         const captureArgs = (posthog.capture as sinon.SinonSpy<any>).args[0]
@@ -58,15 +93,17 @@ describe(`Module-based loader in Node env`, () => {
 
     it(`supports identify()`, () => {
         expect(() => posthog.identify(`Pat`)).not.toThrow()
+        runWithoutBrowser('identify')
     })
 
     it(`supports capture()`, () => {
         expect(() => posthog.capture(`Pat`)).not.toThrow()
+        runWithoutBrowser('capture')
     })
 
     it(`always returns posthog from init`, () => {
-        console.error = jest.fn()
-        console.warn = jest.fn()
+        console.error = vi.fn()
+        console.warn = vi.fn()
 
         expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
             PostHog
@@ -99,5 +136,151 @@ describe(`Module-based loader in Node env`, () => {
             '[PostHog.js]',
             'You have already initialized PostHog! Re-initializing is a no-op'
         )
+    })
+
+    it(`names the token mismatch when re-initializing with a different token`, () => {
+        console.warn = vi.fn()
+
+        const instance = new PostHog()
+        instance.init(`phc_first`, { disable_surveys: true, disable_conversations: true })
+        expect(instance.config.token).toBe('phc_first')
+
+        const second = instance.init(`phc_second`, { disable_surveys: true, disable_conversations: true })
+        expect(second).toBe(instance)
+        expect(second.config.token).toBe('phc_first')
+
+        expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            "You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('phc_second', { ... }, 'project2')"
+        )
+    })
+})
+
+describe('Snippet loader', () => {
+    const snippetConfig = () => ({
+        advanced_disable_feature_flags: true,
+        autocapture: false,
+        capture_pageview: false,
+        disable_conversations: true,
+        disable_session_recording: true,
+        disable_surveys: true,
+    })
+
+    afterEach(() => {
+        assignableWindow.posthog = undefined as any
+        vi.restoreAllMocks()
+    })
+
+    it.each([undefined, {}, { init: 'placeholder' }])('loads over an uninitialized global %j', (placeholder) => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        assignableWindow.posthog = placeholder as any
+
+        init_from_snippet()
+
+        const posthog = assignableWindow.posthog
+        expect(posthog).toBeInstanceOf(PostHog)
+        expect(typeof posthog.init).toBe('function')
+        posthog.init('phc_placeholder', snippetConfig())
+        expect(posthog.__loaded).toBe(true)
+        expect(posthog.config.token).toBe('phc_placeholder')
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(posthog)
+    })
+
+    it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        const queuedCall = vi.fn()
+        const snippetPostHog = [queuedCall] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'posthog'],
+            ['phc_second', snippetConfig(), 'posthog'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        expect(loadedPostHog.__loaded).toBe(true)
+        expect(loadedPostHog.config.token).toBe('phc_first')
+        expect(queuedCall).toHaveBeenCalledTimes(1)
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.__loaded).toBe(true)
+        expect(assignableWindow.posthog.config.token).toBe('phc_first')
+        expect(queuedCall).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves primary and named instances when array.js executes twice', () => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+
+        const primaryQueuedCall = vi.fn()
+        const namedQueuedCall = vi.fn()
+        const snippetPostHog = [primaryQueuedCall] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog.project2 = [namedQueuedCall]
+        snippetPostHog.project2.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'posthog'],
+            ['phc_second', snippetConfig(), 'project2'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        const project2 = loadedPostHog.project2
+        expect(loadedPostHog.__SV).toBe(1)
+        expect(loadedPostHog.config.token).toBe('phc_first')
+        expect(project2.config.token).toBe('phc_second')
+        expect(primaryQueuedCall).toHaveBeenCalledTimes(1)
+        expect(namedQueuedCall).toHaveBeenCalledTimes(1)
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.project2).toBe(project2)
+        expect(primaryQueuedCall).toHaveBeenCalledTimes(1)
+        expect(namedQueuedCall).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves named instances when the primary instance is not initialized', () => {
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+
+        const snippetPostHog = [] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog.namedOnly1 = []
+        snippetPostHog.namedOnly1.people = []
+        snippetPostHog.namedOnly2 = []
+        snippetPostHog.namedOnly2.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'namedOnly1'],
+            ['phc_second', snippetConfig(), 'namedOnly2'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        const namedOnly1 = loadedPostHog.namedOnly1
+        const namedOnly2 = loadedPostHog.namedOnly2
+        expect(loadedPostHog.__loaded).toBe(false)
+        expect(namedOnly1.config.token).toBe('phc_first')
+        expect(namedOnly2.config.token).toBe('phc_second')
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.namedOnly1).toBe(namedOnly1)
+        expect(assignableWindow.posthog.namedOnly2).toBe(namedOnly2)
     })
 })

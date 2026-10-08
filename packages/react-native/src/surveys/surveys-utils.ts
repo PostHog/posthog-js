@@ -5,97 +5,17 @@ import {
   SurveyQuestionType,
   SurveyRatingDisplay,
   RatingSurveyQuestion,
-  MultipleSurveyQuestion,
-  SurveyAppearance,
+  SurveyAppearance as CoreSurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
-  SurveyMatchType,
-  SurveySchedule,
 } from '@posthog/core'
 
-// Extended operator type to include numeric operators not in core SurveyMatchType
-export type PropertyOperator = SurveyMatchType | 'gt' | 'lt'
-
-export type PropertyFilters = {
-  [propertyName: string]: {
-    values: string[]
-    operator: PropertyOperator
-  }
-}
-
-export interface SurveyEventWithFilters {
-  name: string
-  propertyFilters?: PropertyFilters
-}
-
-const isValidRegex = (str: string): boolean => {
-  try {
-    new RegExp(str)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export const isMatchingRegex = (value: string, pattern: string): boolean => {
-  if (!isValidRegex(pattern)) {
-    return false
-  }
-  try {
-    return new RegExp(pattern).test(value)
-  } catch {
-    return false
-  }
-}
-
-export const surveyValidationMap: Record<PropertyOperator, (targets: string[], values: string[]) => boolean> = {
-  [SurveyMatchType.Icontains]: (targets, values) =>
-    values.some((value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase()))),
-  [SurveyMatchType.NotIcontains]: (targets, values) =>
-    values.every((value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase()))),
-  [SurveyMatchType.Regex]: (targets, values) =>
-    values.some((value) => targets.some((target) => isMatchingRegex(value, target))),
-  [SurveyMatchType.NotRegex]: (targets, values) =>
-    values.every((value) => targets.every((target) => !isMatchingRegex(value, target))),
-  [SurveyMatchType.Exact]: (targets, values) => values.some((value) => targets.some((target) => value === target)),
-  [SurveyMatchType.IsNot]: (targets, values) => values.every((value) => targets.every((target) => value !== target)),
-  gt: (targets, values) =>
-    values.some((value) => {
-      const numValue = parseFloat(value)
-      return !isNaN(numValue) && targets.some((t) => numValue > parseFloat(t))
-    }),
-  lt: (targets, values) =>
-    values.some((value) => {
-      const numValue = parseFloat(value)
-      return !isNaN(numValue) && targets.some((t) => numValue < parseFloat(t))
-    }),
-}
-
-export function matchPropertyFilters(
-  propertyFilters: PropertyFilters | undefined,
-  eventProperties: Record<string, unknown> | undefined
-): boolean {
-  if (!propertyFilters) {
-    return true
-  }
-
-  return Object.entries(propertyFilters).every(([propertyName, filter]) => {
-    const eventPropertyValue = eventProperties?.[propertyName]
-
-    if (eventPropertyValue === undefined || eventPropertyValue === null) {
-      return false
-    }
-
-    const values = [String(eventPropertyValue)]
-
-    const comparisonFunction = surveyValidationMap[filter.operator]
-    if (!comparisonFunction) {
-      return false
-    }
-
-    return comparisonFunction(filter.values, values)
-  })
-}
+export type { PropertyFilters, PropertyOperator, SurveyEventWithFilters } from '@posthog/core'
+export {
+  isMatchingRegex,
+  matchPropertyFilters,
+  propertyComparisons as surveyValidationMap,
+} from '@posthog/core/surveys'
 
 function isInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value)
@@ -121,13 +41,113 @@ export const defaultBackgroundColor = '#eeeded' as const
 export const defaultDescriptionOpacity = 0.8
 export const defaultRatingLabelOpacity = 0.7
 
+/**
+ * Side of the circular close button. The button is absolutely positioned in the modal's
+ * top-right corner, so the content containers underneath it reserve this much padding on
+ * their right edge to keep long text from wrapping into it.
+ */
+export const closeButtonSize = 40
+
+/**
+ * The distinct kinds of text a survey renders, each at its own base size. They
+ * are separate because one ceiling cannot serve all of them: `question` is an
+ * 18pt headline that can wrap freely, while `ratingNumber` sits inside a
+ * fixed-width button and has nowhere to grow.
+ */
+export type SurveyTextRole =
+  /** The question headline. */
+  | 'question'
+  /** Body copy under a question, an intro screen, or the thank-you screen. */
+  | 'description'
+  /** The intro-screen and thank-you-screen headers. */
+  | 'header'
+  /** A choice label in a single- or multiple-choice question. */
+  | 'choice'
+  /** Text the user types - the open-text answer and the open-choice field. */
+  | 'input'
+  /** The submit / next button label. */
+  | 'button'
+  /** The lower- and upper-bound labels under a rating scale. */
+  | 'ratingLabel'
+  /** The numeral inside a rating button, which cannot grow past the button. */
+  | 'ratingNumber'
+  /** The validation hint under an open-text answer. */
+  | 'validationHint'
+
+/** React Native survey appearance, including native-only text scaling options. */
+export interface SurveyAppearance extends CoreSurveyAppearance {
+  /**
+   * Caps how far survey text may grow under the OS text-size setting, as a
+   * multiple of its base size - React Native's `maxFontSizeMultiplier`, applied
+   * to every semantic `Text` and `TextInput` the survey renders. Icon-only text
+   * fallbacks do not scale because they occupy fixed-size icon boxes.
+   *
+   * Pass a number to cap every role at once, or an object to cap them
+   * separately: a survey headline can usually take more scaling than a numeral
+   * inside a rating button, and a host app that already caps its own text by
+   * role will want to match those ceilings here.
+   *
+   * ```ts
+   * maxFontSizeMultiplier: 1.6
+   * // or
+   * maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }
+   * ```
+   *
+   * Roles left out of the object are uncapped, as they are today. Use `0` for
+   * no maximum, or a value of `1` or greater to set a cap. Other values below
+   * `1` (such as `0.8`) do not shrink text and are unsupported by React Native;
+   * depending on the platform and version, they may be ignored or rejected.
+   *
+   * Leave it unset (the default) and survey text scales without a ceiling. That
+   * is what the OS asks for, but not always what a fixed-size survey card can
+   * hold - at the largest accessibility sizes an unbounded 18pt headline renders
+   * roughly one word per line.
+   *
+   * React Native only inherits this prop through nested `Text`, so a host app
+   * cannot apply it from the outside - it has to come in here.
+   *
+   * @default undefined (no ceiling)
+   */
+  maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
+}
+
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)
+// placeholder is optional too: open text questions only show placeholder text when the survey's
+// appearance sets one, so clearing the field in the survey editor clears it here too.
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
-  'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'
+  | 'widgetSelector'
+  | 'widgetType'
+  | 'widgetColor'
+  | 'widgetLabel'
+  | 'shuffleQuestions'
+  | 'textColor'
+  | 'inputTextColor'
+  | 'placeholder'
+  | 'maxFontSizeMultiplier'
 > & {
   textColor?: string
   inputTextColor?: string
+  placeholder?: string
+  maxFontSizeMultiplier?: SurveyAppearance['maxFontSizeMultiplier']
+}
+
+/**
+ * The ceiling for one role, from either form of `maxFontSizeMultiplier`.
+ *
+ * Returns `undefined` when nothing is configured for that role, which is also
+ * React Native's "no ceiling" - so an unset appearance renders exactly as it
+ * did before this option existed.
+ */
+export function getMaxFontSizeMultiplier(
+  appearance: Pick<SurveyAppearance, 'maxFontSizeMultiplier'>,
+  role: SurveyTextRole
+): number | undefined {
+  const configured = appearance.maxFontSizeMultiplier
+  if (typeof configured === 'number') {
+    return configured
+  }
+  return configured?.[role]
 }
 export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backgroundColor: defaultBackgroundColor,
@@ -137,7 +157,6 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   ratingButtonActiveColor: 'black',
   inputBackground: 'white',
   borderColor: '#c9c6c6',
-  placeholder: 'Start typing...',
   displayThankYouMessage: true,
   thankYouMessageHeader: 'Thank you for your feedback!',
   position: SurveyPosition.Center,
@@ -146,6 +165,11 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   thankYouMessageDescription: '',
   thankYouMessageDescriptionContentType: SurveyQuestionDescriptionContentType.Text,
   thankYouMessageCloseButtonText: 'Close',
+  displayIntroScreen: false,
+  introScreenHeader: '',
+  introScreenDescription: '',
+  introScreenDescriptionContentType: SurveyQuestionDescriptionContentType.Text,
+  introScreenButtonText: 'Get started',
   surveyPopupDelaySeconds: 0,
   allowGoBack: false,
   backButtonText: 'Back',
@@ -155,6 +179,12 @@ export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'
 
 const KNOWN_SURVEY_POSITIONS: ReadonlySet<string> = new Set(Object.values(SurveyPosition))
 const warnedUnknownPositions = new Set<string>()
+
+// Some survey API clients use CSS-style names such as `bottom-right`, while
+// SurveyPosition represents the bottom row as `left`, `center`, and `right`.
+function normalizeSurveyPosition(position: string): string {
+  return position.replace(/-/g, '_').replace(/^bottom_/, '')
+}
 
 // Mirrors web SDK semantics: `.ph-survey` is bottom-anchored by default and
 // getPopoverPosition only overrides `top` for top_* / middle_* variants. So
@@ -166,11 +196,11 @@ export function resolveSurveyAlignment(position: string | undefined): {
 } {
   let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
   if (position) {
-    if (KNOWN_SURVEY_POSITIONS.has(position)) {
-      resolvedPosition = position as SurveyPosition
-    } else if (!warnedUnknownPositions.has(position)) {
-      warnedUnknownPositions.add(position)
-      // eslint-disable-next-line no-console
+    const normalizedPosition = typeof position === 'string' ? normalizeSurveyPosition(position) : ''
+    if (KNOWN_SURVEY_POSITIONS.has(normalizedPosition)) {
+      resolvedPosition = normalizedPosition as SurveyPosition
+    } else if (!warnedUnknownPositions.has(normalizedPosition)) {
+      warnedUnknownPositions.add(normalizedPosition)
       console.warn(
         `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
       )
@@ -214,20 +244,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
   // return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-export const hasEvents = (survey: Survey): boolean => {
-  return survey.conditions?.events?.values !== undefined && survey.conditions.events.values.length > 0
-}
-
-// export const hasActions = (survey: Survey): boolean => {
-//   return survey.conditions?.actions?.values.length !== undefined && survey.conditions.actions.values.length > 0
-// }
-
-export const canActivateRepeatedly = (survey: Survey): boolean => {
-  return (
-    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) || survey.schedule === SurveySchedule.Always
-  )
-}
-
 /**
  * Use the Fisher-yates algorithm to shuffle this array
  * https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
@@ -246,31 +262,6 @@ export const canActivateRepeatedly = (survey: Survey): boolean => {
 
 //   return shuffled
 // }
-
-export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
-  // TODO: shuffle choices
-  return question.choices
-
-  // if (!question.shuffleOptions) {
-  //   return question.choices
-  // }
-
-  // const displayOrderChoices = question.choices
-  // let openEndedChoice = ''
-  // if (question.hasOpenChoice && displayOrderChoices.length > 0) {
-  // if the question has an open-ended choice, its always the last element in the choices array.
-  // openEndedChoice = displayOrderChoices.pop()!
-  // }
-
-  // const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
-
-  // if (question.hasOpenChoice) {
-  //   question.choices.push(openEndedChoice)
-  //   shuffledOptions.push(openEndedChoice)
-  // }
-
-  // return shuffledOptions
-}
 
 /**
  * Get the rating bucket for a response value based on the scale

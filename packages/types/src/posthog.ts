@@ -5,7 +5,7 @@
  * It can be used to type `window.posthog` when loading PostHog via a script tag.
  */
 
-import type { PostHogConfig } from './posthog-config'
+import type { PostHogConfig, ResetOptions } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
 import type { CaptureLogOptions, Logger } from './capture-log'
@@ -15,6 +15,7 @@ import type {
     EarlyAccessFeatureStage,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     OverrideFeatureFlagsOptions,
 } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
@@ -134,17 +135,17 @@ export interface PostHog {
     /**
      * Identify a user with a distinct ID and optionally set person properties.
      *
-     * @param new_distinct_id - The new distinct ID for the user
+     * @param new_distinct_id - A non-empty distinct ID for the user
      * @param userPropertiesToSet - Properties to set on the user (using $set)
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+    identify(new_distinct_id: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
      * Set HMAC-based identity verification.
      *
      * @param distinctId - The verified user distinct_id
-     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     * @param hash - HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings
      */
     setIdentity(distinctId: string, hash: string): void
 
@@ -186,9 +187,26 @@ export interface PostHog {
     /**
      * Reset the user's identity and start a new session.
      *
-     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
+     * @remarks
+     * This also clears the stored consent, so with `opt_out_capturing_by_default` the instance
+     * is opted out again afterwards — call `reset()` before `opt_in_capturing()`, not after.
+     *
+     * @param options - Boolean to reset the device ID (legacy), or reset options including bootstrap values.
      */
-    reset(reset_device_id?: boolean): void
+    reset(options?: boolean | ResetOptions): void
+
+    /**
+     * Flush any queued events and gracefully tear down the SDK.
+     *
+     * @remarks
+     * Provided for parity with the server-side Node.js SDK. In the browser the SDK
+     * already flushes on page unload, so this best-effort flushes queued events and
+     * always resolves — it never throws — which makes isomorphic teardown safe.
+     *
+     * @param {number} [shutdownTimeoutMs] Accepted for parity with the Node.js SDK; unused in the browser.
+     * @returns {Promise<void>} Resolves once teardown is complete.
+     */
+    shutdown(shutdownTimeoutMs?: number): Promise<void>
 
     /**
      * Create a person profile for the current user.
@@ -318,9 +336,11 @@ export interface PostHog {
      * @param options - Options for the feature flag lookup
      * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
      * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
+     * @param options.defaultValue - Value to return when the flag has no value (default: undefined)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
 
     /**
      * Reload feature flags from the server.
@@ -609,6 +629,20 @@ export interface PostHog {
      * @param forceReload - Whether to force a reload from the server
      */
     getActiveMatchingSurveys(callback: (surveys: any[]) => void, forceReload?: boolean): void
+
+    /**
+     * Observe the initial matching surveys and updates after event/action and survey lifecycle
+     * changes, definitions refreshes, captured pageviews, feature-flag updates, and reset.
+     * URL changes require a captured pageview; arbitrary DOM mutations and elapsed time
+     * are not observed. Unchanged results are suppressed. Recoverable load errors are
+     * reported through the optional context without ending the subscription.
+     *
+     * @param callback - Callback to receive the active matching surveys
+     * @returns A function to unsubscribe
+     */
+    onActiveMatchingSurveysChanged(
+        callback: (surveys: any[], context?: { isLoaded: boolean; error?: string }) => void
+    ): () => void
 
     /**
      * Render a survey in a specific container.

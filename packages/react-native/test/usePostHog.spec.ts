@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { renderHook } from '@testing-library/react'
 import { PostHogContext } from '../src/PostHogContext'
@@ -7,7 +7,7 @@ import type { PostHog } from '../src/posthog-rn'
 
 describe('usePostHog', () => {
   afterEach(() => {
-    jest.resetAllMocks()
+    vi.resetAllMocks()
   })
 
   it('should return the client from context', () => {
@@ -21,7 +21,7 @@ describe('usePostHog', () => {
   })
 
   it('should log error when used outside a PostHogProvider', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     renderHook(() => usePostHog())
 

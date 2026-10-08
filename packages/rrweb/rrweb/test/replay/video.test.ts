@@ -81,8 +81,8 @@ describe('video', () => {
     // wait till video is done seeking
     await wait;
 
-    const frameImage = await page!.screenshot();
     await waitForRAF(page);
+    const frameImage = await page!.screenshot();
     expect(frameImage).toMatchImageSnapshot({
       failureThreshold: 0.08,
       failureThresholdType: 'percent',
@@ -102,8 +102,8 @@ describe('video', () => {
     // wait till video is done seeking
     await wait;
 
-    const frameImage = await page!.screenshot();
     await waitForRAF(page);
+    const frameImage = await page!.screenshot();
     expect(frameImage).toMatchImageSnapshot({
       failureThreshold: 0.08,
       failureThresholdType: 'percent',
@@ -121,9 +121,9 @@ describe('video', () => {
     // loading indicator lingers quite often
     await page.waitForTimeout(1000);
 
+    await waitForRAF(page);
     const frameImage = await page!.screenshot();
 
-    await waitForRAF(page);
     expect(frameImage).toMatchImageSnapshot({
       failureThreshold: 0.05,
       failureThresholdType: 'percent',
@@ -152,8 +152,8 @@ describe('video', () => {
     );
     await waitForRAF(page);
 
-    const frameImage = await page!.screenshot();
     await waitForRAF(page);
+    const frameImage = await page!.screenshot();
     expect(frameImage).toMatchImageSnapshot({
       failureThreshold: 0.08,
       failureThresholdType: 'percent',

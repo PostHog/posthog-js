@@ -24,18 +24,24 @@ concurrency:
     group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
     cancel-in-progress: false
 
-permissions:
-    contents: write
-    issues: write
-    pull-requests: write
-    actions: read
+permissions: {}
 
 jobs:
     drain-queue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name != 'workflow_dispatch' || inputs['issue-number'] == '' }}
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Audit runner egress
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                egress-policy: audit
+
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
@@ -44,11 +50,14 @@ jobs:
                   install: 'false'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
+              uses: PostHog/posthog-watcher-action@1c47c46c8cd9647f6c146bb56fd436ae45387279
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -58,14 +67,28 @@ jobs:
                   allow-security-ai: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
+                  fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
+                  pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Audit runner egress
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                egress-policy: audit
+
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
@@ -74,11 +97,14 @@ jobs:
                   install: 'false'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@53752eea5b036f37e83da06879ca05e06cb377e9
+              uses: PostHog/posthog-watcher-action@1c47c46c8cd9647f6c146bb56fd436ae45387279
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
@@ -89,5 +115,9 @@ jobs:
                   allow-security-ai: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
+                  fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
+                  pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}

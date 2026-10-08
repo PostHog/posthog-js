@@ -1,17 +1,18 @@
 {
     "name": "@posthog/rrweb-record",
-    "version": "0.0.74",
+    "version": "0.0.88",
     "publishConfig": {
         "access": "public"
     },
     "scripts": {
-        "dev": "vite build --watch",
-        "build": "pnpm turbo run prepublish",
-        "test": "vitest run",
+        "dev": "pnpm turbo run build --filter='@posthog/rrweb-record^...' && vite build --watch",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
+        "test": "pnpm test:rrweb",
+        "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
-        "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build",
-        "lint": "pnpm eslint src/**/*.ts"
+        "check-types": "tsc --noEmit",
+        "lint": "oxlint src"
     },
     "repository": {
         "type": "git",
@@ -41,10 +42,11 @@
     ],
     "devDependencies": {
         "puppeteer": "^23.11.1",
+        "rolldown": "catalog:",
+        "rolldown-plugin-dts": "catalog:",
         "vite": "catalog:",
-        "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",
-        "typescript": "catalog:"
+        "typescript": "catalog:native"
     },
     "dependencies": {
         "@posthog/rrweb-types": "workspace:*",

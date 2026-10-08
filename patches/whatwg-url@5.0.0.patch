@@ -1,0 +1,7 @@
+diff --git a/lib/url-state-machine.js b/lib/url-state-machine.js
+index c25dbc2c486289fbd7446baed24dc6343f0226f6..e1681d27501013c5e6aa9b720b32338c177b692c 100644
+--- a/lib/url-state-machine.js
++++ b/lib/url-state-machine.js
+@@ -2 +2 @@
+-const punycode = require("punycode");
++const punycode = require("punycode/");

@@ -99,7 +99,7 @@ describe('Edge Runtime Compatibility', () => {
 
     afterEach(() => {
       globalThis.process = originalProcess
-      jest.resetModules()
+      vi.resetModules()
     })
 
     it('should not throw when process.once is unavailable', async () => {
@@ -110,7 +110,7 @@ describe('Edge Runtime Compatibility', () => {
       globalThis.process = mockProcess
 
       // Reset modules to re-run module-level code
-      jest.resetModules()
+      vi.resetModules()
 
       // Should not throw when importing
       await expect(import('../extensions/capture')).resolves.toBeDefined()
@@ -120,7 +120,7 @@ describe('Edge Runtime Compatibility', () => {
       // @ts-expect-error - intentionally removing process for test
       globalThis.process = undefined
 
-      jest.resetModules()
+      vi.resetModules()
 
       // Should not throw - capture module should still load without process
       const module = await import('../extensions/capture')
@@ -256,7 +256,7 @@ describe('Integration: SDK in Limited Environment', () => {
 
   afterEach(() => {
     globalThis.process = originalProcess
-    jest.resetModules()
+    vi.resetModules()
   })
 
   it('should work when process has limited functionality', async () => {
@@ -274,7 +274,7 @@ describe('Integration: SDK in Limited Environment', () => {
     } as unknown as typeof process
 
     globalThis.process = limitedProcess
-    jest.resetModules()
+    vi.resetModules()
 
     // SDK should still load
     const mcpAnalytics = await import('../index')
@@ -328,21 +328,29 @@ describe('Error Handling Robustness', () => {
     const captured = captureException(error1)
 
     expect(captured.$exception_list[0].value).toBe('Error 1')
-    // Core caps cause recursion, so the list stays bounded instead of looping.
-    expect(captured.$exception_list.length).toBeLessThanOrEqual(10)
+    expect(captured.$exception_list.map((exception) => exception.value)).toEqual(['Error 1', 'Error 2'])
   })
 
-  it('should handle deeply nested error chains', () => {
+  it.each([20, 60])('should retain the canonical prefix of a %i-deep error chain', (depth) => {
     // Create a deep chain of errors
     let current = new Error('Root')
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < depth; i++) {
       current = new Error(`Level ${i}`, { cause: current })
     }
 
     const captured = captureException(current)
 
-    expect(captured.$exception_list[0].value).toBe('Level 19')
-    // Core caps the cause chain, so the list stays bounded.
-    expect(captured.$exception_list.length).toBeLessThanOrEqual(10)
+    expect(captured.$exception_list.map((exception) => exception.value)).toEqual(
+      Array.from({ length: Math.min(depth + 1, 50) }, (_, index) =>
+        index < depth ? `Level ${depth - index - 1}` : 'Root'
+      )
+    )
+    captured.$exception_list.forEach((exception, index) => {
+      expect(exception.mechanism).toEqual(
+        index === 0
+          ? { type: 'generic', handled: true, synthetic: false, exception_id: 0 }
+          : { type: 'chained', source: 'cause', synthetic: false, exception_id: index, parent_id: index - 1 }
+      )
+    })
   })
 })

@@ -2,19 +2,27 @@ import React, { useContext } from 'react'
 import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
 import { PostHogContext, useFeatureFlagEnabled } from '@posthog/react'
-import posthogJs from 'posthog-js'
+import { posthog as posthogJs } from 'posthog-js'
 
-jest.mock('posthog-js', () => ({
-    __esModule: true,
-    default: {
+vi.mock('posthog-js', () => {
+    const posthog = {
         __loaded: false,
-        init: jest.fn(),
-        isFeatureEnabled: jest.fn(() => undefined),
-        onFeatureFlags: jest.fn(() => () => {}),
-    },
-}))
+        init: vi.fn(),
+        isFeatureEnabled: vi.fn(() => undefined),
+        onFeatureFlags: vi.fn(() => () => {}),
+    }
 
-const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
+    return {
+        __esModule: true,
+        // Native Node ESM resolves the posthog-js CommonJS default import to
+        // the exports object. Model that shape so the provider must select the
+        // named singleton instead of accidentally placing this object in context.
+        default: { default: posthog, posthog },
+        posthog,
+    }
+})
+
+const mockPostHogJs = posthogJs as vi.Mocked<typeof posthogJs> & { __loaded: boolean }
 
 /** Helper component that exposes the PostHogContext value for assertions. */
 function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstrap?: any }) => void }) {
@@ -25,9 +33,9 @@ function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstra
 
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
-        ;(mockPostHogJs.init as jest.Mock).mockClear()
-        ;(mockPostHogJs.isFeatureEnabled as jest.Mock).mockClear()
-        ;(mockPostHogJs.onFeatureFlags as jest.Mock).mockClear()
+        ;(mockPostHogJs.init as vi.Mock).mockClear()
+        ;(mockPostHogJs.isFeatureEnabled as vi.Mock).mockClear()
+        ;(mockPostHogJs.onFeatureFlags as vi.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
 
@@ -96,14 +104,14 @@ describe('ClientPostHogProvider', () => {
         expect(contextValue.client).toBe(mockPostHogJs)
     })
 
-    it('merges bootstrap into options when provided', () => {
+    it('passes options.bootstrap to posthog-js', () => {
         const bootstrap = {
             distinctID: 'user_abc',
             isIdentifiedID: true,
             featureFlags: { 'flag-a': true, 'flag-b': 'variant-1' },
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
                 <div>Child</div>
             </ClientPostHogProvider>
         )
@@ -113,63 +121,21 @@ describe('ClientPostHogProvider', () => {
         )
     })
 
-    it('merges bootstrap with existing options without overwriting', () => {
-        const options = { api_host: 'https://custom.posthog.com' }
-        const bootstrap = { featureFlags: { 'flag-a': true } }
-        render(
-            <ClientPostHogProvider apiKey="phc_test123" options={options} bootstrap={bootstrap}>
-                <div>Child</div>
-            </ClientPostHogProvider>
-        )
-        expect(mockPostHogJs.init).toHaveBeenCalledWith(
-            'phc_test123',
-            expect.objectContaining({
-                api_host: 'https://custom.posthog.com',
-                bootstrap,
-            })
-        )
-    })
-
-    it('preserves existing options.bootstrap fields when merging server bootstrap', () => {
-        const options = {
-            bootstrap: { sessionID: 'sess_123' },
-        } as any
-        const bootstrap = {
-            distinctID: 'user_abc',
-            featureFlags: { 'flag-a': true },
-        }
-        render(
-            <ClientPostHogProvider apiKey="phc_test123" options={options} bootstrap={bootstrap}>
-                <div>Child</div>
-            </ClientPostHogProvider>
-        )
-        expect(mockPostHogJs.init).toHaveBeenCalledWith(
-            'phc_test123',
-            expect.objectContaining({
-                bootstrap: expect.objectContaining({
-                    sessionID: 'sess_123',
-                    distinctID: 'user_abc',
-                    featureFlags: { 'flag-a': true },
-                }),
-            })
-        )
-    })
-
-    it('provides bootstrap via context for SSR hook access', () => {
+    it('provides options.bootstrap via context for SSR hook access', () => {
         const bootstrap = {
             featureFlags: { 'flag-a': true, 'flag-b': 'variant-1' },
             featureFlagPayloads: { 'flag-b': { key: 'value' } },
         }
         let contextValue: any
         render(
-            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
                 <ContextReader onContext={(ctx) => (contextValue = ctx)} />
             </ClientPostHogProvider>
         )
         expect(contextValue.bootstrap).toEqual(bootstrap)
     })
 
-    it('context bootstrap is undefined when no bootstrap prop provided', () => {
+    it('context bootstrap is undefined when options.bootstrap is not provided', () => {
         let contextValue: any
         render(
             <ClientPostHogProvider apiKey="phc_test123">
@@ -201,7 +167,7 @@ describe('ClientPostHogProvider', () => {
             return <div data-testid="flag">{String(flagValue)}</div>
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
                 <FlagReader />
             </ClientPostHogProvider>
         )
@@ -219,7 +185,7 @@ describe('ClientPostHogProvider', () => {
             return null
         }
         render(
-            <ClientPostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <ClientPostHogProvider apiKey="phc_test123" options={{ bootstrap }}>
                 <FlagReader />
             </ClientPostHogProvider>
         )
@@ -227,7 +193,7 @@ describe('ClientPostHogProvider', () => {
     })
 
     it('renders children and warns when apiKey is empty', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         render(
             <ClientPostHogProvider apiKey="">
                 <div data-testid="child">Child</div>

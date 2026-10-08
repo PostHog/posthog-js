@@ -2,12 +2,13 @@ import '../src/__tests__/helpers/mock-logger'
 
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
-import { getRequests, resetRequests } from './mock-server'
-import { uuidv7 } from '../src/uuidv7'
+import { deferNextFlagsResponse, getFlagsWireRequests, getRequests, resetRequests } from './mock-server'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression } from '@posthog/core'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
 }
 
@@ -16,6 +17,53 @@ describe('FunctionalTests / Feature Flags', () => {
 
     beforeEach(() => {
         token = uuidv7()
+    })
+
+    test('snapshots the decoded /flags wire envelope from the real transport', async () => {
+        token = 'flags-wire-snapshot-token'
+        resetRequests(token)
+
+        const posthog = await createPosthogInstance(
+            token,
+            {
+                advanced_disable_flags: false,
+                advanced_disable_feature_flags_on_first_load: true,
+                before_send: (cr) => cr,
+            },
+            { supportedCompression: [Compression.GZipJS] }
+        )
+        posthog.reloadFeatureFlags()
+
+        await waitFor(() => expect(getFlagsWireRequests(token)).toHaveLength(1))
+
+        const wireRequest = getFlagsWireRequests(token)[0]
+        expect(wireRequest).toMatchObject({
+            bodyWrapper: '<gzip>',
+            compression: null,
+            contentType: 'text/plain',
+            path: '/flags/?v=2',
+        })
+        expect(wireRequest.decodedBody.$device_id).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.distinct_id).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.sent_at).toEqual(expect.any(String))
+        expect(Number.isNaN(Date.parse(wireRequest.decodedBody.sent_at))).toBe(false)
+        expect(wireRequest.decodedBody.timezone).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.person_properties.$lib_version).toEqual(expect.any(String))
+
+        expect({
+            ...wireRequest,
+            decodedBody: {
+                ...wireRequest.decodedBody,
+                $device_id: '<generated-device-id>',
+                distinct_id: '<generated-distinct-id>',
+                person_properties: {
+                    ...wireRequest.decodedBody.person_properties,
+                    $lib_version: '<sdk-version>',
+                },
+                sent_at: '<sent-at>',
+                timezone: '<runtime-timezone>',
+            },
+        }).toMatchSnapshot()
     })
 
     test('person properties set in identify() with new distinct_id are sent to /flags', async () => {
@@ -31,6 +79,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: anonymousId,
                     person_properties: expect.any(Object),
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -73,6 +122,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_li_fat_id: null,
                         $initial_mc_cid: null,
                         $initial_msclkid: null,
+                        $initial_oppref: null,
                         $initial_pathname: '/',
                         $initial_qclid: null,
                         $initial_rdt_cid: null,
@@ -88,12 +138,49 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_utm_term: null,
                         $initial_wbraid: null,
                         email: 'test@email.com',
+                        $lib: 'web',
+                        $lib_version: expect.any(String),
                     },
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
             ])
+        })
+    })
+
+    test('reuseAnonymousId omits the previous anonymous id from identify-triggered /flags requests', async () => {
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_flags: false,
+            advanced_disable_feature_flags_on_first_load: true,
+            reuseAnonymousId: true,
+            before_send: (cr) => cr,
+        })
+        const anonymousId = posthog.get_distinct_id()
+        posthog.featureFlags?.setAnonymousDistinctId('stale-anonymous-id')
+
+        posthog.identify('test-id', {
+            email: 'test@email.com',
+        })
+
+        await waitFor(() => {
+            const flagRequests = getRequests(token)['/flags/']
+            expect(flagRequests).toHaveLength(1)
+            expect(flagRequests[0]).toMatchObject({
+                $device_id: anonymousId,
+                distinct_id: 'test-id',
+                groups: {},
+                person_properties: expect.objectContaining({
+                    email: 'test@email.com',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                }),
+                sent_at: expect.any(String),
+                timezone: expect.any(String),
+                token,
+            })
+            expect(flagRequests[0]).not.toHaveProperty('$anon_distinct_id')
         })
     })
 
@@ -110,6 +197,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: anonymousId,
                     person_properties: expect.any(Object),
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -150,6 +238,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_li_fat_id: null,
                         $initial_mc_cid: null,
                         $initial_msclkid: null,
+                        $initial_oppref: null,
                         $initial_pathname: '/',
                         $initial_qclid: null,
                         $initial_rdt_cid: null,
@@ -164,7 +253,10 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_utm_source: null,
                         $initial_utm_term: null,
                         $initial_wbraid: null,
+                        $lib: 'web',
+                        $lib_version: expect.any(String),
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -199,6 +291,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_li_fat_id: null,
                         $initial_mc_cid: null,
                         $initial_msclkid: null,
+                        $initial_oppref: null,
                         $initial_pathname: '/',
                         $initial_qclid: null,
                         $initial_rdt_cid: null,
@@ -214,7 +307,10 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_utm_term: null,
                         $initial_wbraid: null,
                         email: 'test@email.com',
+                        $lib: 'web',
+                        $lib_version: expect.any(String),
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -223,87 +319,97 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() triggers new request in queue after first request', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+        const releaseFlagsResponse = deferNextFlagsResponse(token)
+        try {
+            const posthog = await createPosthogInstance(token, {
+                advanced_disable_flags: false,
+                before_send: (cr) => cr,
+            })
 
-        const anonymousId = posthog.get_distinct_id()
+            const anonymousId = posthog.get_distinct_id()
 
-        await waitFor(() => {
-            expect(getRequests(token)['/flags/']).toEqual([
-                // This is the initial call to the flags endpoint on PostHog init.
-                {
-                    $device_id: anonymousId,
-                    distinct_id: anonymousId,
-                    person_properties: expect.any(Object),
-                    groups: {},
-                    timezone: expect.any(String),
-                    token,
-                },
-            ])
-        })
-
-        resetRequests(token)
-
-        // don't wait for flags callback
-        posthog.identify('test-id', {
-            email: 'test2@email.com',
-        })
-
-        await waitFor(() => {
-            expect(getRequests(token)['/flags/']).toEqual([])
-        })
-
-        // wait for flags callback
-        await shortWait()
-
-        // now second call should've fired
-        await waitFor(() => {
-            expect(getRequests(token)['/flags/']).toEqual([
-                {
-                    $anon_distinct_id: anonymousId,
-                    $device_id: anonymousId,
-                    distinct_id: 'test-id',
-                    groups: {},
-                    person_properties: {
-                        $initial__kx: null,
-                        $initial_current_url: 'http://localhost/',
-                        $initial_dclid: null,
-                        $initial_epik: null,
-                        $initial_fbclid: null,
-                        $initial_gad_source: null,
-                        $initial_gbraid: null,
-                        $initial_gclid: null,
-                        $initial_gclsrc: null,
-                        $initial_host: 'localhost',
-                        $initial_igshid: null,
-                        $initial_irclid: null,
-                        $initial_li_fat_id: null,
-                        $initial_mc_cid: null,
-                        $initial_msclkid: null,
-                        $initial_pathname: '/',
-                        $initial_qclid: null,
-                        $initial_rdt_cid: null,
-                        $initial_referrer: '$direct',
-                        $initial_referring_domain: '$direct',
-                        $initial_sccid: null,
-                        $initial_ttclid: null,
-                        $initial_twclid: null,
-                        $initial_utm_campaign: null,
-                        $initial_utm_content: null,
-                        $initial_utm_medium: null,
-                        $initial_utm_source: null,
-                        $initial_utm_term: null,
-                        $initial_wbraid: null,
-                        email: 'test2@email.com',
+            await waitFor(() => {
+                expect(getRequests(token)['/flags/']).toEqual([
+                    // This is the initial call to the flags endpoint on PostHog init.
+                    {
+                        $device_id: anonymousId,
+                        distinct_id: anonymousId,
+                        person_properties: expect.any(Object),
+                        groups: {},
+                        sent_at: expect.any(String),
+                        timezone: expect.any(String),
+                        token,
                     },
-                    timezone: expect.any(String),
-                    token,
-                },
-            ])
-        })
+                ])
+            })
+
+            resetRequests(token)
+
+            // don't wait for flags callback
+            posthog.identify('test-id', {
+                email: 'test2@email.com',
+            })
+
+            await shortWait()
+            expect(getRequests(token)['/flags/']).toEqual([])
+            releaseFlagsResponse()
+
+            // now second call should've fired
+            await waitFor(() => {
+                expect(getRequests(token)['/flags/']).toEqual([
+                    {
+                        $anon_distinct_id: anonymousId,
+                        $device_id: anonymousId,
+                        distinct_id: 'test-id',
+                        groups: {},
+                        person_properties: {
+                            $initial__kx: null,
+                            $initial_current_url: 'http://localhost/',
+                            $initial_dclid: null,
+                            $initial_epik: null,
+                            $initial_fbclid: null,
+                            $initial_gad_source: null,
+                            $initial_gbraid: null,
+                            $initial_gclid: null,
+                            $initial_gclsrc: null,
+                            $initial_host: 'localhost',
+                            $initial_igshid: null,
+                            $initial_irclid: null,
+                            $initial_li_fat_id: null,
+                            $initial_mc_cid: null,
+                            $initial_msclkid: null,
+                            $initial_oppref: null,
+                            $initial_pathname: '/',
+                            $initial_qclid: null,
+                            $initial_rdt_cid: null,
+                            $initial_referrer: '$direct',
+                            $initial_referring_domain: '$direct',
+                            $initial_sccid: null,
+                            $initial_ttclid: null,
+                            $initial_twclid: null,
+                            $initial_utm_campaign: null,
+                            $initial_utm_content: null,
+                            $initial_utm_medium: null,
+                            $initial_utm_source: null,
+                            $initial_utm_term: null,
+                            $initial_wbraid: null,
+                            email: 'test2@email.com',
+                            $lib: 'web',
+                            $lib_version: expect.any(String),
+                        },
+                        sent_at: expect.any(String),
+                        timezone: expect.any(String),
+                        token,
+                    },
+                ])
+            })
+        } finally {
+            releaseFlagsResponse()
+        }
     })
 
     test('identify() does not trigger new request in queue after first request for loaded callback', async () => {
-        await createPosthogInstance(token, {
+        const posthog = await createPosthogInstance(token, {
             advanced_disable_flags: false,
             bootstrap: { distinctID: 'anon-id' },
             before_send: (cr) => cr,
@@ -312,6 +418,11 @@ describe('FunctionalTests / Feature Flags', () => {
                 ph.group('playlist', 'id:77', { length: 8 })
             },
         })
+
+        // This callback barrier runs in the Node test runner, not in legacy browsers.
+        // oxlint-disable-next-line compat/compat
+        await new Promise<void>((resolve) => posthog.onFeatureFlags(() => resolve()))
+        await shortWait()
 
         await waitFor(() => {
             expect(getRequests(token)['/flags/']).toEqual([
@@ -337,6 +448,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_li_fat_id: null,
                         $initial_mc_cid: null,
                         $initial_msclkid: null,
+                        $initial_oppref: null,
                         $initial_pathname: '/',
                         $initial_qclid: null,
                         $initial_rdt_cid: null,
@@ -352,12 +464,15 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_utm_term: null,
                         $initial_wbraid: null,
                         email: 'test3@email.com',
+                        $lib: 'web',
+                        $lib_version: expect.any(String),
                     },
                     group_properties: {
                         playlist: {
                             length: 8,
                         },
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },

@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+import type { Mock as VitestMock } from 'vitest'
 import { ConversationsPersistence } from '../../../extensions/conversations/external/persistence'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
@@ -21,32 +21,32 @@ describe('ConversationsPersistence', () => {
     let localStorageData: Record<string, string>
 
     beforeEach(() => {
-        jest.restoreAllMocks()
-        jest.clearAllMocks()
+        vi.restoreAllMocks()
+        vi.clearAllMocks()
 
         localStorageData = {}
 
         // Mock localStorage
         const localStorageMock = {
-            getItem: jest.fn((key: string) => localStorageData[key] ?? null),
-            setItem: jest.fn((key: string, value: string) => {
+            getItem: vi.fn((key: string) => localStorageData[key] ?? null),
+            setItem: vi.fn((key: string, value: string) => {
                 localStorageData[key] = value
             }),
-            removeItem: jest.fn((key: string) => {
+            removeItem: vi.fn((key: string) => {
                 delete localStorageData[key]
             }),
         }
         Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true })
 
         mockPosthog = {
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
             config: { token: TEST_TOKEN },
             persistence: {
                 props: {},
-                get_property: jest.fn().mockReturnValue(undefined),
-                register: jest.fn(),
-                unregister: jest.fn(),
-                isDisabled: jest.fn().mockReturnValue(false),
+                get_property: vi.fn().mockReturnValue(undefined),
+                register: vi.fn(),
+                unregister: vi.fn(),
+                isDisabled: vi.fn().mockReturnValue(false),
             },
         } as unknown as PostHog
 
@@ -54,7 +54,7 @@ describe('ConversationsPersistence', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     function readStorage(): Record<string, any> | null {
@@ -93,7 +93,7 @@ describe('ConversationsPersistence', () => {
         it('should return same widget_session_id even after distinct_id changes', () => {
             const sessionIdBefore = persistence.getOrCreateWidgetSessionId()
 
-            ;(mockPosthog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
+            ;(mockPosthog.get_distinct_id as VitestMock).mockReturnValue('new-user@example.com')
 
             const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
             expect(sessionIdBefore).toBe(sessionIdAfter)
@@ -118,16 +118,17 @@ describe('ConversationsPersistence', () => {
         it('should generate new widget_session_id after clearing', () => {
             const sessionId1 = persistence.getOrCreateWidgetSessionId()
             persistence.clearWidgetSessionId()
-
-            // Create new persistence instance to clear internal cache
+            const sameInstanceId = persistence.getOrCreateWidgetSessionId()
+            expect(sameInstanceId).not.toBe(sessionId1)
             persistence = new ConversationsPersistence(mockPosthog)
             const sessionId2 = persistence.getOrCreateWidgetSessionId()
 
             expect(sessionId1).not.toBe(sessionId2)
+            expect(sessionId2).toBe(sameInstanceId)
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.getItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.getItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -137,7 +138,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should return the same fallback UUID on repeated calls when localStorage is broken', () => {
-            ;(window.localStorage.getItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.getItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -171,7 +172,7 @@ describe('ConversationsPersistence', () => {
 
         it('should keep same ticket after distinct_id changes (identify)', () => {
             persistence.saveTicketId('ticket-123')
-            ;(mockPosthog.get_distinct_id as jest.Mock).mockReturnValue('new-user@example.com')
+            ;(mockPosthog.get_distinct_id as VitestMock).mockReturnValue('new-user@example.com')
 
             expect(persistence.loadTicketId()).toBe('ticket-123')
         })
@@ -185,7 +186,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage write errors gracefully', () => {
-            ;(window.localStorage.setItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.setItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
@@ -193,7 +194,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage read errors gracefully', () => {
-            ;(window.localStorage.getItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.getItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -225,12 +226,12 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.setItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.setItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
             expect(() => persistence.saveWidgetState('open')).not.toThrow()
-            ;(window.localStorage.getItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.getItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -274,12 +275,12 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.setItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.setItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage full')
             })
 
             expect(() => persistence.saveUserTraits({ name: 'Test' })).not.toThrow()
-            ;(window.localStorage.getItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.getItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -306,14 +307,16 @@ describe('ConversationsPersistence', () => {
             const sessionIdBefore = persistence.getOrCreateWidgetSessionId()
 
             persistence.clearAll()
-
+            const sameInstanceId = persistence.getOrCreateWidgetSessionId()
+            expect(sameInstanceId).not.toBe(sessionIdBefore)
             persistence = new ConversationsPersistence(mockPosthog)
             const sessionIdAfter = persistence.getOrCreateWidgetSessionId()
             expect(sessionIdBefore).not.toBe(sessionIdAfter)
+            expect(sessionIdAfter).toBe(sameInstanceId)
         })
 
         it('should handle localStorage errors gracefully', () => {
-            ;(window.localStorage.removeItem as jest.Mock).mockImplementation(() => {
+            ;(window.localStorage.removeItem as VitestMock).mockImplementation(() => {
                 throw new Error('Storage error')
             })
 
@@ -324,7 +327,7 @@ describe('ConversationsPersistence', () => {
     describe('migration from legacy PostHog persistence', () => {
         it('should migrate widget_session_id from PostHog persistence props', () => {
             const existingId = 'legacy-session-id-456'
-            ;(mockPosthog.persistence!.get_property as jest.Mock).mockImplementation((key: string) => {
+            ;(mockPosthog.persistence!.get_property as VitestMock).mockImplementation((key: string) => {
                 if (key === LEGACY_WIDGET_SESSION_ID) {
                     return existingId
                 }
@@ -339,7 +342,7 @@ describe('ConversationsPersistence', () => {
 
         it('should migrate all legacy data from PostHog persistence', () => {
             const traits = { name: 'Legacy User', email: 'legacy@example.com' }
-            ;(mockPosthog.persistence!.get_property as jest.Mock).mockImplementation((key: string) => {
+            ;(mockPosthog.persistence!.get_property as VitestMock).mockImplementation((key: string) => {
                 switch (key) {
                     case LEGACY_WIDGET_SESSION_ID:
                         return 'legacy-session-id'
@@ -364,7 +367,7 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should clean up old keys from PostHog persistence after migration', () => {
-            ;(mockPosthog.persistence!.get_property as jest.Mock).mockImplementation((key: string) => {
+            ;(mockPosthog.persistence!.get_property as VitestMock).mockImplementation((key: string) => {
                 if (key === LEGACY_WIDGET_SESSION_ID) {
                     return 'legacy-session-id'
                 }
@@ -381,7 +384,7 @@ describe('ConversationsPersistence', () => {
 
         it('should skip migration if dedicated storage already has data', () => {
             localStorageData[STORAGE_KEY] = JSON.stringify({ widgetSessionId: 'already-migrated-id' })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             persistence = new ConversationsPersistence(mockPosthog)
 
@@ -391,7 +394,7 @@ describe('ConversationsPersistence', () => {
 
         it('should fall back to raw localStorage when persistence.props lost the key', () => {
             // PostHog persistence.props doesn't have the key (the bug scenario)
-            ;(mockPosthog.persistence!.get_property as jest.Mock).mockReturnValue(undefined)
+            ;(mockPosthog.persistence!.get_property as VitestMock).mockReturnValue(undefined)
 
             // But raw localStorage still has it
             localStorageData[LEGACY_PH_KEY] = JSON.stringify({
@@ -408,8 +411,8 @@ describe('ConversationsPersistence', () => {
         })
 
         it('should not migrate if persistence is disabled', () => {
-            ;(mockPosthog.persistence!.isDisabled as jest.Mock).mockReturnValue(true)
-            ;(mockPosthog.persistence!.get_property as jest.Mock).mockReturnValue('should-not-be-used')
+            ;(mockPosthog.persistence!.isDisabled as VitestMock).mockReturnValue(true)
+            ;(mockPosthog.persistence!.get_property as VitestMock).mockReturnValue('should-not-be-used')
 
             persistence = new ConversationsPersistence(mockPosthog)
 

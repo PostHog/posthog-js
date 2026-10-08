@@ -1,6 +1,9 @@
-import { addEventListener, each, extend } from './utils'
+import type { Client, Disposable, Extension } from '@posthog/browser-common'
+import { addEventListener, each, extend } from '@posthog/browser-common/utils/general-utils'
 import {
     autocaptureCompatibleElements,
+    DEFAULT_AUTOCAPTURE_IGNORE_LIST,
+    elementMatchesCSSSelector,
     getClassNames,
     getDirectAndNestedSpanText,
     getElementsChainString,
@@ -9,25 +12,26 @@ import {
     isAngularStyleAttr,
     isSensitiveElement,
     makeSafeText,
+    MAX_DOM_ANCESTOR_DEPTH,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
-} from './autocapture-utils'
+} from '@posthog/browser-common/utils/autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
-import { PostHog } from './posthog-core'
+import { EventName, Properties, RemoteConfigResult } from './types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
+import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
+import { AutocaptureExtension } from './extension-tokens'
 
-import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { document, window } from './utils/globals'
-import { convertToURL } from './utils/request-utils'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
+import { isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import { includes } from '@posthog/core'
-import type { Extension } from './extensions/types'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -99,7 +103,7 @@ export function getPropertiesFromElement(
     }
 
     const classes = getClassNames(elem)
-    if (classes.length > 0)
+    if (!maskAllAttributes && !elementAttributeIgnorelist?.includes('class') && classes.length > 0)
         props['classes'] = classes.filter(function (c) {
             return c !== ''
         })
@@ -130,7 +134,6 @@ export function getPropertiesFromElement(
     let nthOfType = 1
     let currentElem: Element | null = elem
     while ((currentElem = previousElementSibling(currentElem))) {
-        // eslint-disable-line no-cond-assign
         nthChild++
         if (currentElem.tagName === elem.tagName) {
             nthOfType++
@@ -159,24 +162,52 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
     }
-): { props: Properties; explicitNoCapture?: boolean } {
+): { props: Properties; explicitNoCapture?: boolean; target?: Element } {
     if (!isElementNode(target)) {
         return { props: {} }
     }
 
     const targetElementList: Element[] = [target]
+    const seen = new Set<Node>([target])
     let curEl: Element = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
+        // bail out of abnormally deep or cyclic (patched parentNode) ancestor chains
+        if (targetElementList.length >= MAX_DOM_ANCESTOR_DEPTH) {
+            break
+        }
         if (isShadowRoot(curEl.parentNode)) {
-            targetElementList.push(curEl.parentNode.host)
-            curEl = curEl.parentNode.host
+            const host = curEl.parentNode.host
+            if (seen.has(host)) {
+                break
+            }
+            seen.add(host)
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         if (!isElementNode(curEl.parentNode)) {
             break
         }
+        if (seen.has(curEl.parentNode)) {
+            break
+        }
+        seen.add(curEl.parentNode)
         targetElementList.push(curEl.parentNode)
         curEl = curEl.parentNode
+    }
+
+    // Keep the original path for privacy and selector checks, but attribute icon clicks
+    // to their enclosing control rather than an SVG implementation detail.
+    const controlIndex =
+        e.type === 'click' && target.namespaceURI === 'http://www.w3.org/2000/svg'
+            ? targetElementList.findIndex((el) => isTag(el, 'button') || isTag(el, 'a'))
+            : -1
+    if (controlIndex > 0) {
+        maskAllText =
+            maskAllText ||
+            targetElementList
+                .slice(0, controlIndex + 1)
+                .some((el) => !shouldCaptureElement(el) || isSensitiveElement(el))
     }
 
     const elementsJson: Properties[] = []
@@ -189,7 +220,7 @@ export function autocapturePropertiesForElement(
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
-        if (isTag(el, 'a')) {
+        if (isTag(el, 'a') && !maskAllElementAttributes && !elementAttributeIgnoreList?.includes('href')) {
             const hrefAttr = el.getAttribute('href')
             href =
                 shouldCaptureEl && !!hrefAttr && shouldCaptureValue(hrefAttr)
@@ -216,11 +247,21 @@ export function autocapturePropertiesForElement(
         )
 
         const augmentProperties = getAugmentPropertiesFromElement(el)
-        extend(autocaptureAugmentProperties, augmentProperties)
+        each(augmentProperties, (value, key) => {
+            // Elements are ordered from the target to its ancestors, so retain the closest value.
+            if (!Object.prototype.hasOwnProperty.call(autocaptureAugmentProperties, key)) {
+                autocaptureAugmentProperties[key] = value
+            }
+        })
     })
 
     if (explicitNoCapture) {
         return { props: {}, explicitNoCapture }
+    }
+
+    if (controlIndex > 0) {
+        target = targetElementList[controlIndex]
+        elementsJson.splice(0, controlIndex)
     }
 
     if (!maskAllText) {
@@ -254,33 +295,187 @@ export function autocapturePropertiesForElement(
         autocaptureAugmentProperties
     )
 
-    return { props }
+    return { props, target }
 }
 
 export class Autocapture implements Extension {
-    instance: PostHog
+    readonly name = AutocaptureExtension
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
+    _hasReceivedConfigResponse: boolean = false
     _elementSelectors: Set<string> | null
+    private _elementSelectorsByOwner = new Map<object, Set<string>>()
     rageclicks: RageClick
     _elementsChainAsString = false
+    private _client?: Client
+    private readonly _config: AutocaptureConfig = {
+        enabled: false,
+        rageclick: false,
+        maskAllElementAttributes: false,
+        maskAllText: false,
+        disableCaptureUrlHashes: false,
+        remoteRequestsDisabled: false,
+    }
+    private _remoteConfigSubscription?: Disposable
+    private _domEventHandler?: EventListener
+    private _copiedTextHandler?: EventListener
+    private _disposed = false
+    private _pointerDown?: {
+        target: Element
+        excluded: boolean
+        id: number
+        x: number
+        y: number
+        released: boolean
+        distinctId: string | undefined
+    }
+    private _pointerExpiry?: ReturnType<typeof setTimeout>
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        this.rageclicks = new RageClick(instance.config.rageclick)
+    private _clearPointer(): void {
+        this._pointerDown = undefined
+        clearTimeout(this._pointerExpiry)
+        this._pointerExpiry = undefined
+    }
+
+    private _isExcludedPointerTarget(target: Element): boolean {
+        if (!shouldCaptureElement(target)) return true
+
+        const ignorelist = this._refreshConfig().css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
+        const seen = new Set<Element>()
+        let el: Element | null = target
+        while (el) {
+            if (seen.size >= MAX_DOM_ANCESTOR_DEPTH || seen.has(el)) return true
+            seen.add(el)
+            const current = el
+            const classes = getClassNames(current)
+            if (
+                includes(classes, 'ph-no-capture') ||
+                includes(classes, 'ph-sensitive') ||
+                isSensitiveElement(current) ||
+                ignorelist.some((selector) => elementMatchesCSSSelector(current, selector))
+            ) {
+                return true
+            }
+            const parent: ParentNode | null = el.parentNode
+            el = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+        }
+        return false
+    }
+
+    private _trackPointer(e: PointerEvent): void {
+        if (!this.isEnabled || e.type === 'pointercancel') {
+            this._clearPointer()
+            return
+        }
+        if (e.type === 'pointerdown') {
+            this._clearPointer()
+            const target = getEventTarget(e)
+            if (e.isPrimary && e.button === 0 && !e.ctrlKey && target && isElementNode(target)) {
+                this._pointerDown = {
+                    target,
+                    excluded: this._isExcludedPointerTarget(target),
+                    id: e.pointerId,
+                    x: e.clientX,
+                    y: e.clientY,
+                    released: false,
+                    distinctId: this._client?.distinctId,
+                }
+            }
+            return
+        }
+        const down = this._pointerDown
+        if (!down) return
+        if (e.pointerId !== down.id || Math.abs(e.clientX - down.x) > 5 || Math.abs(e.clientY - down.y) > 5) {
+            this._clearPointer()
+        } else if (e.type === 'pointerup') {
+            down.released = true
+            // The matching click follows pointerup. Never retain an origin for a later gesture.
+            this._pointerExpiry = setTimeout(() => this._clearPointer(), 0)
+        }
+    }
+
+    private _recoverClickTarget(e: PointerEvent): Element | null | undefined {
+        const down = this._pointerDown
+        this._clearPointer()
+        const target = getEventTarget(e)
+        if (
+            down?.released &&
+            down.target.isConnected &&
+            down.distinctId === this._client?.distinctId &&
+            e.pointerId === down.id &&
+            (e.detail > 0 || e.pointerType === 'touch' || e.pointerType === 'pen') &&
+            e.button === 0 &&
+            Math.abs(e.clientX - down.x) <= 5 &&
+            Math.abs(e.clientY - down.y) <= 5 &&
+            target &&
+            (isTag(target, 'html') || isTag(target, 'body'))
+        ) {
+            // DOM changes after pointerdown must not erase the origin's privacy exclusions.
+            if (down.excluded) return null
+
+            // The origin's normal checks stop at body. Recovery must also respect
+            // opt-outs on the actual root hit by the click, including html.
+            const ignorelist = this._refreshConfig().css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
+            const excludedRoot = [target, document?.documentElement, document?.body].some((root) => {
+                if (!root) return false
+                const classes = getClassNames(root)
+                return (
+                    includes(classes, 'ph-no-capture') ||
+                    includes(classes, 'ph-sensitive') ||
+                    !shouldCaptureElement(root) ||
+                    isSensitiveElement(root) ||
+                    ignorelist.some((selector) => elementMatchesCSSSelector(root, selector))
+                )
+            })
+            if (excludedRoot) return null
+            return down.target
+        }
+        return undefined
+    }
+
+    constructor(private readonly _configSource: AutocaptureConfigSource) {
+        this._configSource.refresh(this._config)
+        this.rageclicks = new RageClick(this._config.rageclick)
         this._elementSelectors = null
     }
 
-    initialize() {
+    setup(client: Client): void {
+        this._compileUrlPatterns()
+        this._client = client
+        const subscription = client.onRemoteConfig(
+            this.onRemoteConfig.bind(this) as Parameters<Client['onRemoteConfig']>[0]
+        )
+        if (this._disposed) {
+            subscription.dispose()
+            return
+        }
+        this._remoteConfigSubscription = subscription
         this.startIfEnabled()
     }
 
-    private get _config(): AutocaptureConfig {
-        const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
-        // precompile the regex
-        config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
-        config.url_ignorelist = config.url_ignorelist?.map((url) => new RegExp(url))
-        return config
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._client = undefined
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._elementSelectorsByOwner.clear()
+        this._elementSelectors = null
+        this._removeDomEventHandlers()
+    }
+
+    private _refreshConfig(): Readonly<AutocaptureConfig> {
+        this._configSource.refresh(this._config)
+        return this._config
+    }
+
+    private _compileUrlPatterns(): Readonly<AutocaptureConfig> {
+        this._refreshConfig()
+        this._config.url_allowlist = this._config.url_allowlist?.map((url) => new RegExp(url))
+        this._config.url_ignorelist = this._config.url_ignorelist?.map((url) => new RegExp(url))
+        return this._config
     }
 
     _addDomEventHandlers(): void {
@@ -293,74 +488,136 @@ export class Autocapture implements Extension {
             return
         }
 
-        const handler = (e: Event) => {
+        const handler = (this._domEventHandler = (e: Event) => {
             e = e || window?.event
             try {
-                this._captureEvent(e)
+                if (e.type === 'blur') {
+                    this._clearPointer()
+                    return
+                }
+                if (e.type.indexOf('pointer') === 0) {
+                    this._trackPointer(e as PointerEvent)
+                    return
+                }
+                const target = e.type === 'click' ? this._recoverClickTarget(e as PointerEvent) : undefined
+                if (isNull(target)) return
+                this._captureEvent(e, '$autocapture', target)
             } catch (error) {
                 logger.error('Failed to capture event', error)
             }
-        }
+        })
 
+        addEventListener(window, 'blur', handler)
         addEventListener(document, 'submit', handler, { capture: true })
         addEventListener(document, 'change', handler, { capture: true })
         addEventListener(document, 'click', handler, { capture: true })
+        each(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], (type) => {
+            addEventListener(document!, type, handler, { capture: true })
+        })
 
-        if (this._config.capture_copied_text) {
-            const copiedTextHandler = (e: Event) => {
+        if (this._refreshConfig().capture_copied_text) {
+            const copiedTextHandler = (this._copiedTextHandler = (e: Event) => {
                 e = e || window?.event
                 try {
                     this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
                 } catch (error) {
-                    logger.error('Failed to capture copy/cut event', error)
+                    logger.error('Failed to capture clipboard event', error)
                 }
-            }
+            })
 
             addEventListener(document, 'copy', copiedTextHandler, { capture: true })
             addEventListener(document, 'cut', copiedTextHandler, { capture: true })
+            addEventListener(document, 'paste', copiedTextHandler, { capture: true })
         }
     }
 
-    public startIfEnabled() {
-        if (this.isEnabled && !this._initialized) {
+    private _removeDomEventHandlers(): void {
+        this._clearPointer()
+        if (this._domEventHandler) {
+            window?.removeEventListener('blur', this._domEventHandler)
+            each(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], (type) => {
+                document?.removeEventListener(type, this._domEventHandler!, true)
+            })
+            document?.removeEventListener('submit', this._domEventHandler, true)
+            document?.removeEventListener('change', this._domEventHandler, true)
+            document?.removeEventListener('click', this._domEventHandler, true)
+            this._domEventHandler = undefined
+        }
+        if (this._copiedTextHandler) {
+            document?.removeEventListener('copy', this._copiedTextHandler, true)
+            document?.removeEventListener('cut', this._copiedTextHandler, true)
+            document?.removeEventListener('paste', this._copiedTextHandler, true)
+            this._copiedTextHandler = undefined
+        }
+        this._initialized = false
+    }
+
+    public startIfEnabled(): void {
+        if (!this.isEnabled) {
+            this._clearPointer()
+        }
+        if (!this._disposed && this._client && this.isEnabled && !this._initialized) {
             this._addDomEventHandlers()
             this._initialized = true
         }
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult): void {
+        if (this._disposed) {
+            return
+        }
+        this._hasReceivedConfigResponse = true
+        if (!result.ok) {
+            // Failed fetch = opt-out unknown: keep the last known persisted server
+            // value instead of defaulting to enabled, so a network error cannot turn
+            // autocapture on for an opted-out project. No persistence write.
+            this.startIfEnabled()
+            return
+        }
+
+        const response = result.config
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally
-        // DO NOT guard against missing autocapture_opt_out key here. Autocapture uses
-        // a "wait for server, then enable unless explicitly opted out" model:
-        // - Before remote config: autocapture disabled (isEnabled returns false)
-        // - After remote config: enabled unless autocapture_opt_out is explicitly true
-        // Missing/undefined key → !!undefined = false → autocapture enabled
-        // This is intentional and different from opt-in features like heatmaps.
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
-            })
+        // A missing autocapture_opt_out carries no opt-out information:
+        // keep the last known server value, as with a failed fetch.
+        const optOut = response['autocapture_opt_out']
+        if (isBoolean(optOut)) {
+            this._client?.kv.set(AUTOCAPTURE_DISABLED_SERVER_SIDE, optOut)
+            // store this in-memory in case persistence is disabled
+            this._isDisabledServerSide = optOut
         }
-        // store this in-memory in case persistence is disabled
-        this._isDisabledServerSide = !!response['autocapture_opt_out']
         this.startIfEnabled()
     }
 
-    public setElementSelectors(selectors: Set<string>): void {
-        this._elementSelectors = selectors
+    public setElementSelectors(selectors: Set<string>, owner: object = this): void {
+        if (this._disposed) {
+            return
+        }
+        if (selectors.size) {
+            this._elementSelectorsByOwner.set(owner, new Set(selectors))
+        } else {
+            this._elementSelectorsByOwner.delete(owner)
+        }
+        // Survey and product-tour actions can watch the same selector independently.
+        const combined = new Set<string>()
+        this._elementSelectorsByOwner.forEach((contribution) => {
+            contribution.forEach((selector) => combined.add(selector))
+        })
+        this._elementSelectors = combined
     }
 
-    public getElementSelectors(element: Element | null): string[] | null {
+    public getElementSelectors(element: Element | null, additionalElement?: Element): string[] | null {
         const elementSelectors: string[] = []
 
         this._elementSelectors?.forEach((selector) => {
             const matchedElements = document?.querySelectorAll(selector)
             matchedElements?.forEach((matchedElement: Element) => {
-                if (element === matchedElement) {
+                if (
+                    (element === matchedElement || additionalElement === matchedElement) &&
+                    !includes(elementSelectors, selector)
+                ) {
                     elementSelectors.push(selector)
                 }
             })
@@ -370,88 +627,113 @@ export class Autocapture implements Extension {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        if (this._disposed) {
+            return false
+        }
+        const persistedServerDisabled = this._client?.kv.get<boolean>(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
-            // We only enable if we know that the server has not disabled it (unless /flags is disabled)
+        const config = this._refreshConfig()
+        // Cached enablement may be stale. Wait for the initial config outcome unless
+        // remote requests are disabled; failures still use the last known server value.
+        if (!config.remoteRequestsDisabled && !this._hasReceivedConfigResponse) {
+            return false
+        }
+
+        // The /flags-disabled bypass only applies while no config outcome has arrived;
+        // once a response (or failure) has been seen, an unknown opt-out stays off.
+        const clientConfigOnly = config.remoteRequestsDisabled && !this._hasReceivedConfigResponse
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !clientConfigOnly) {
+            // We only enable if we know that the server has not disabled it
             return false
         }
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
-        const disabledClient = !this.instance.config.autocapture
+        const disabledClient = !config.enabled
         return !disabledClient && !disabledServer
     }
 
-    private _captureEvent(e: Event, eventName: EventName = '$autocapture'): boolean | void {
+    private _captureEvent(e: Event, eventName: EventName = '$autocapture', targetOverride?: Element): boolean | void {
         if (!this.isEnabled) {
+            this._clearPointer()
             return
         }
 
         /*** Don't mess with this code without running IE8 tests on it ***/
-        let target = getEventTarget(e)
+        let target = targetOverride || getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
             target = (target.parentNode || null) as Element | null
         }
 
+        const config = this._compileUrlPatterns()
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
-                !!this.instance.config.rageclick &&
+                !!config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
-                if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
-                    this._captureEvent(e, '$rageclick')
+                if (shouldCaptureRageclick(target, config.rageclick)) {
+                    this._captureEvent(e, '$rageclick', targetOverride)
                 }
             }
         }
 
-        const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
+        const isClipboardAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
+        const eventConfig = isClipboardAutocapture ? { ...config, dom_event_allowlist: undefined } : config
         if (
             target &&
             shouldCaptureDomEvent(
                 target,
                 e,
-                this._config,
-                // mostly this method cares about the target element, but in the case of copy events,
+                eventConfig,
+                // mostly this method cares about the target element, but for clipboard events,
                 // we want some of the work this check does without insisting on the target element's type
-                isCopyAutocapture,
-                // we also don't want to restrict copy checks to clicks,
+                isClipboardAutocapture,
+                // we also don't want to restrict clipboard checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
-                isCopyAutocapture ? ['copy', 'cut'] : undefined
+                isClipboardAutocapture ? ['copy', 'cut', 'paste'] : undefined,
+                { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
-            const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
+            const {
+                props,
+                explicitNoCapture,
+                target: attributedTarget,
+            } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
-                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
+                maskAllElementAttributes: config.maskAllElementAttributes,
+                maskAllText: config.maskAllText,
+                elementAttributeIgnoreList: config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
-                disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
+                disableCaptureUrlHashes: config.disableCaptureUrlHashes,
             })
 
             if (explicitNoCapture) {
                 return false
             }
 
-            const elementSelectors = this.getElementSelectors(target)
+            const elementSelectors = this.getElementSelectors(target, attributedTarget)
             if (elementSelectors && elementSelectors.length > 0) {
                 props['$element_selectors'] = elementSelectors
             }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
-                // you can't read the data from the clipboard event,
-                // but you can guess that you can read it from the window's current selection
-                const selectedContent = makeSafeText(window?.getSelection()?.toString())
-                const clipType = (e as ClipboardEvent).type || 'clipboard'
-                if (!selectedContent) {
-                    return false
+                const clipType = e.type || 'clipboard'
+
+                // Don't add the contents for paste events, as usually the page emits an input change with the new value
+                if (clipType !== 'paste') {
+                    const selectedText = window?.getSelection()?.toString()
+                    const selectedContent = makeSafeText(selectedText)
+                    if (!selectedContent) {
+                        return false
+                    }
+                    props['$selected_content'] = selectedContent
+                    props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
-                props['$selected_content'] = selectedContent
                 props['$copy_type'] = clipType
             }
 
-            this.instance.capture(eventName, props)
+            this._client?.capture(eventName, props)
             return true
         }
     }

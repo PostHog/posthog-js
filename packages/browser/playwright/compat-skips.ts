@@ -15,9 +15,24 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
+        range: '<1.431.0',
+        test: 'records customer fetch and XHR durations without changing them, and skips its own requests',
+        reason: 'metrics.network option added in #4918',
+    },
+    {
+        range: '<1.417.0',
+        test: 'already-open sibling subdomains adopt identify and reset cookie changes',
+        reason: 'live cross-subdomain cookie reconciliation is added by this change',
+    },
+    {
         range: '<1.335.0',
         test: 'web_vitals_attribution: true includes attribution data',
         reason: 'web_vitals_attribution option added in #2953',
+    },
+    {
+        range: '<1.410.10',
+        test: 'does not request a recorder script',
+        reason: 'full bundles before #4309 intentionally fetched lazy-recorder.js',
     },
 ]
 

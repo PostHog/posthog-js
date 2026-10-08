@@ -1,8 +1,8 @@
-import { window } from './utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { PostHog } from './posthog-core'
 import { clampToRange, isUndefined } from '@posthog/core'
-import { extend } from './utils'
-import { logger } from './utils/logger'
+import { extend } from '@posthog/browser-common/utils/general-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { SessionIdChangedCallback } from './types'
 
 interface PageViewEventProperties {

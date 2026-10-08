@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h } from 'preact'
 import { ConversationsRemoteConfig } from '../../../../posthog-conversations-types'
 import { getStyles } from './styles'

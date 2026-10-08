@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  *
  * Smoke tests for the per-runtime barrels resolved when running outside
  * a browser bundle: the `default` (Node server) and `edge`/`edge-light`/
@@ -9,28 +9,28 @@
  * don't transitively pull in `posthog-node`.
  */
 
-jest.mock('server-only', () => ({}))
-jest.mock('next/router.js', () => ({ useRouter: jest.fn() }))
-jest.mock('next/navigation.js', () => ({
-    usePathname: jest.fn(),
-    useSearchParams: jest.fn(),
+vi.mock('server-only', () => ({}))
+vi.mock('next/router.js', () => ({ useRouter: vi.fn() }))
+vi.mock('next/navigation.js', () => ({
+    usePathname: vi.fn(),
+    useSearchParams: vi.fn(),
 }))
-jest.mock('next/headers.js', () => ({
-    cookies: jest.fn(),
-    headers: jest.fn(),
+vi.mock('next/headers.js', () => ({
+    cookies: vi.fn(),
+    headers: vi.fn(),
 }))
-jest.mock('next/server.js', () => ({
-    NextResponse: { next: jest.fn(), rewrite: jest.fn() },
+vi.mock('next/server.js', () => ({
+    NextResponse: { next: vi.fn(), rewrite: vi.fn() },
 }))
-jest.mock('@posthog/react', () => ({
+vi.mock('@posthog/react', () => ({
     PostHogContext: { Provider: ({ children }: { children: unknown }) => children },
-    usePostHog: jest.fn(),
-    useFeatureFlagResult: jest.fn(),
-    useActiveFeatureFlags: jest.fn(),
-    PostHogFeature: jest.fn(() => null),
+    usePostHog: vi.fn(),
+    useFeatureFlagResult: vi.fn(),
+    useActiveFeatureFlags: vi.fn(),
+    PostHogFeature: vi.fn(() => null),
 }))
-jest.mock('posthog-js', () => ({ __esModule: true, default: { __loaded: false, init: jest.fn() } }))
-jest.mock('posthog-node', () => ({ PostHog: jest.fn() }))
+vi.mock('posthog-js', () => ({ __esModule: true, default: { __loaded: false, init: vi.fn() } }))
+vi.mock('posthog-node', () => ({ PostHog: vi.fn() }))
 
 import * as pagesNode from '../src/pages'
 import * as pagesEdge from '../src/pages.edge'
@@ -45,12 +45,15 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
         it.each([
             ['PostHogProvider', 'function'],
             ['PostHogPageView', 'function'],
-            ['getServerSidePostHog', 'function'],
-            ['getPostHog', 'function'],
+            ['createPostHog', 'function'],
             ['postHogMiddleware', 'function'],
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {
             expect(typeof asRecord(pagesNode)[name]).toBe(expectedType)
+        })
+
+        it.each(['getServerSidePostHog', 'getPostHog'])('omits the removed bare getter %s', (name) => {
+            expect(asRecord(pagesNode)[name]).toBeUndefined()
         })
     })
 
@@ -64,7 +67,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             expect(typeof asRecord(pagesEdge)[name]).toBe(expectedType)
         })
 
-        it.each(['getServerSidePostHog', 'getPostHog'])('omits %s', (name) => {
+        it.each(['getServerSidePostHog', 'getPostHog', 'createPostHog'])('omits %s', (name) => {
             expect(asRecord(pagesEdge)[name]).toBeUndefined()
         })
     })
@@ -73,7 +76,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
         it.each([
             ['PostHogProvider', 'function'],
             ['PostHogPageView', 'function'],
-            ['getPostHog', 'function'],
+            ['createPostHog', 'function'],
             ['postHogMiddleware', 'function'],
             ['captureRequestError', 'function'],
             ['onRequestError', 'function'],
@@ -81,6 +84,10 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {
             expect(typeof asRecord(indexNode)[name]).toBe(expectedType)
+        })
+
+        it('omits the removed bare getter getPostHog', () => {
+            expect(asRecord(indexNode)['getPostHog']).toBeUndefined()
         })
     })
 
@@ -96,7 +103,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             expect(typeof asRecord(indexEdge)[name]).toBe(expectedType)
         })
 
-        it.each(['PostHogProvider', 'getPostHog'])('omits %s', (name) => {
+        it.each(['PostHogProvider', 'getPostHog', 'createPostHog'])('omits %s', (name) => {
             expect(asRecord(indexEdge)[name]).toBeUndefined()
         })
     })

@@ -9,11 +9,10 @@ export class BinaryContentRedactor {
 
   constructor(private readonly recognizer: Base64Recognizer = new Base64Recognizer()) {}
 
-  redact<T>(value: T): T
-  redact(value: unknown): unknown {
-    if (this.isMultimodalEnabled()) return value
+  redact<T>(value: T, mediaType?: string): T
+  redact(value: unknown, mediaType?: string): unknown {
     this.visited = new WeakSet()
-    return this.walk(value, MediaTypeContext.EMPTY)
+    return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
 
   private walk(value: unknown, ctx: MediaTypeContext): unknown {
@@ -42,8 +41,14 @@ export class BinaryContentRedactor {
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
-    const minLength = ctx.signalsBinary() ? STRONG_CONTEXT_MIN_LENGTH : WEAK_CONTEXT_MIN_LENGTH
-    const recognition = this.recognizer.recognize(value, minLength)
+    const hasExplicitBinaryMediaType = ctx.hasExplicitBinaryMediaType()
+    const recognitionValue = hasExplicitBinaryMediaType ? value.replace(/[\r\n]/g, '') : value
+    const minLength = hasExplicitBinaryMediaType
+      ? Math.min(recognitionValue.length, STRONG_CONTEXT_MIN_LENGTH)
+      : ctx.signalsBinary()
+        ? STRONG_CONTEXT_MIN_LENGTH
+        : WEAK_CONTEXT_MIN_LENGTH
+    const recognition = this.recognizer.recognize(recognitionValue, minLength)
     switch (recognition.kind) {
       case 'data-url':
         return this.placeholderFor(recognition.mediaType)
@@ -58,10 +63,5 @@ export class BinaryContentRedactor {
     if (!mediaType) return '[base64 redacted]'
     if (mediaType === 'application/octet-stream') return '[base64 file redacted]'
     return `[base64 ${mediaType} redacted]`
-  }
-
-  private isMultimodalEnabled(): boolean {
-    const val = process.env._INTERNAL_LLMA_MULTIMODAL || ''
-    return val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'yes'
   }
 }

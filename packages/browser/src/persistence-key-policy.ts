@@ -17,10 +17,12 @@ import {
     EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE,
     FLAG_CALL_REPORTED,
     FLAG_CALL_REPORTED_SESSION_ID,
+    GROUPS,
     HEATMAPS_ENABLED_SERVER_SIDE,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
+    LOGS_CAPTURE_ENABLED_SERVER_SIDE,
     PEOPLE_DISTINCT_ID_KEY,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -29,17 +31,23 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_BROWSER_ID,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
+    PRODUCT_TOURS_ACTIVATED_SESSION,
     PRODUCT_TOURS_ENABLED_SERVER_SIDE,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
     SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS,
     SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS,
     SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
     SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG,
     SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT,
     SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS,
@@ -65,23 +73,21 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     SURVEYS_ACTIVATED,
+    SURVEYS_ACTIVATED_SESSION,
+    SURVEYS_ACTIVATED_TIMESTAMPS,
     SURVEYS_LOADED_AT,
     USER_STATE,
     WEB_VITALS_ALLOWED_METRICS,
     WEB_VITALS_ENABLED_SERVER_SIDE,
 } from './constants'
-import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
-import type { Properties, Property } from './types'
+import type { Property } from './types'
 import { isNull } from '@posthog/core'
 
 /**
  * - `event`: include the stored key/value on captured events as-is.
  * - `hidden`: keep the key in persistence only; never expose it on captured events.
- * - `derived`: do not expose the stored key directly, but derive one or more event properties from its value.
- *   For example, `ENABLED_FEATURE_FLAGS` is stored as `$enabled_feature_flags`, but exposed on events as
- *   `$feature/<flag-key>` properties via `transformToEventProperties`.
  */
-export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
+export type PersistenceKeyExposure = 'event' | 'hidden'
 
 /**
  * Keys sharing a `storageGroup` are persisted together in their own storage
@@ -106,8 +112,7 @@ interface PersistenceKeyPolicyEntry {
      * write; the on-disk copy may lag in-memory until then.
      */
     volatile?: boolean
-    shouldSkipFromEventProperties?: (value: Property, shouldSkip: () => boolean) => boolean
-    transformToEventProperties?: (value: Property) => Properties
+    shouldSkipFromEventProperties?: (value: Property) => boolean
 }
 
 export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> = {
@@ -115,8 +120,11 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [ALIAS_ID_KEY]: { exposure: 'hidden' },
     [CAMPAIGN_IDS_KEY]: { exposure: 'hidden' },
     [EVENT_TIMERS_KEY]: { exposure: 'hidden' },
+    [PERSISTENCE_FACEBOOK_CLICK_ID]: { exposure: 'hidden' },
+    [PERSISTENCE_FACEBOOK_BROWSER_ID]: { exposure: 'hidden' },
     [AUTOCAPTURE_DISABLED_SERVER_SIDE]: { exposure: 'event' },
     [HEATMAPS_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
+    [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: { exposure: 'hidden' },
     [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: { exposure: 'event' },
     [ERROR_TRACKING_SUPPRESSION_RULES]: { exposure: 'hidden' },
     [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: { exposure: 'event' },
@@ -137,32 +145,34 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
     [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'event' },
     [SESSION_RECORDING_FLUSHED_SIZE]: { exposure: 'hidden' },
-    [ENABLED_FEATURE_FLAGS]: {
-        exposure: 'derived',
-        storageGroup: 'flags',
-        shouldSkipFromEventProperties: (_, shouldSkip) => shouldSkip(),
-        transformToEventProperties: transformEnabledFeatureFlagsToEventProperties,
-    },
-    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'event', storageGroup: 'flags' },
+    [ENABLED_FEATURE_FLAGS]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'hidden', storageGroup: 'flags' },
     [PERSISTENCE_EARLY_ACCESS_FEATURES]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_DETAILS]: { exposure: 'hidden', storageGroup: 'flags' },
-    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'event', storageGroup: 'flags' },
-    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event', storageGroup: 'flags', volatile: true },
-    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'event' },
+    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'hidden', storageGroup: 'flags', volatile: true },
+    // Server gate for minimal $feature_flag_called events — internal state that must never
+    // leak into event properties.
+    [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'hidden' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
     [SURVEYS]: { exposure: 'hidden', storageGroup: 'surveys' },
     [SURVEYS_LOADED_AT]: { exposure: 'hidden', storageGroup: 'surveys', volatile: true },
     [SURVEYS_ACTIVATED]: { exposure: 'event' },
+    [SURVEYS_ACTIVATED_SESSION]: { exposure: 'hidden' },
+    [SURVEYS_ACTIVATED_TIMESTAMPS]: { exposure: 'hidden' },
     [PRODUCT_TOURS]: { exposure: 'hidden' },
     [PRODUCT_TOURS_ACTIVATED]: { exposure: 'hidden' },
+    [PRODUCT_TOURS_ACTIVATED_SESSION]: { exposure: 'hidden' },
     [CONVERSATIONS_LEGACY_WIDGET_SESSION_ID]: { exposure: 'event' },
     [CONVERSATIONS_LEGACY_TICKET_ID]: { exposure: 'event' },
     [CONVERSATIONS_LEGACY_WIDGET_STATE]: { exposure: 'event' },
     [CONVERSATIONS_LEGACY_USER_TRAITS]: { exposure: 'event' },
     [FLAG_CALL_REPORTED]: { exposure: 'hidden' },
     [FLAG_CALL_REPORTED_SESSION_ID]: { exposure: 'hidden' },
+    [GROUPS]: { exposure: 'event' },
     [PERSISTENCE_FEATURE_FLAG_ERRORS]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: { exposure: 'hidden', storageGroup: 'flags', volatile: true },
     [USER_STATE]: { exposure: 'hidden' },
@@ -178,13 +188,16 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_OVERRIDE_EVENT_TRIGGER]: { exposure: 'event' },
     [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: { exposure: 'event' },
     [SDK_DEBUG_EXTENSIONS_INIT_TIME_MS]: { exposure: 'event' },
-    [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT]: { exposure: 'event' },
-    [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: { exposure: 'event' },
+    // replay debug state: SessionRecording.sdkDebugProperties adds it to the events that carry replay debug properties
+    [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_STALE_CONFIG]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT]: { exposure: 'hidden' },
+    [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: { exposure: 'hidden' },
     [SESSION_RECORDING_START_REASON]: { exposure: 'event' },
 }
 

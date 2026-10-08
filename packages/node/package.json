@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.38.6",
+  "version": "5.55.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -11,17 +11,18 @@
     "directory": "packages/node"
   },
   "scripts": {
+    "check-types": "pnpm prebuild && tsc --noEmit --project tsconfig.build.json && tsc --noEmit --project tsconfig.test-types.json",
     "clean": "rimraf dist coverage",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
-    "test:unit": "jest",
-    "test:edge-compat": "jest --env @edge-runtime/jest-environment --no-coverage",
-    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "lint": "oxlint --report-unused-disable-directives-severity error src",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
+    "test:unit": "vitest run",
+    "test:edge-compat": "vitest run --config vitest.edge.config.ts",
+    "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -44,14 +45,16 @@
     "@posthog/core": "workspace:^"
   },
   "devDependencies": {
-    "@edge-runtime/jest-environment": "^4.0.0",
+    "@edge-runtime/vm": "^5.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog/types": "workspace:^",
     "@rslib/core": "catalog:",
-    "@types/express": "^5.0.5",
-    "@types/jest": "catalog:",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
-    "jest": "catalog:",
-    "rxjs": "^7.8.0"
+    "rxjs": "^7.8.0",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:",
+    "typescript": "catalog:native"
   },
   "peerDependencies": {
     "rxjs": "^7.0.0"

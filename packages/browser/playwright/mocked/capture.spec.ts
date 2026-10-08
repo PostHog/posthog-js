@@ -1,7 +1,8 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilCondition, pollUntilEventCaptured } from './utils/event-capture-utils'
-import { Request } from '@playwright/test'
+import { Page, Request } from '@playwright/test'
+import { satisfies } from 'compare-versions'
 import { decompressSync, strFromU8 } from 'fflate'
 
 function getGzipEncodedPayloady(req: Request): Record<string, any> {
@@ -9,6 +10,8 @@ function getGzipEncodedPayloady(req: Request): Record<string, any> {
     if (!data) {
         throw new Error('Expected body to be present')
     }
+    expect(data[0]).toBe(0x1f)
+    expect(data[1]).toBe(0x8b)
     const decoded = strFromU8(decompressSync(data))
 
     return JSON.parse(decoded)
@@ -56,13 +59,28 @@ test.describe('event capture', () => {
         expect(captureRequests.length).toEqual(1)
         const captureRequest = captureRequests[0]
         expect(captureRequest.headers()['content-type']).toEqual('text/plain')
-        expect(captureRequest.url()).toMatch(/gzip/)
+        const captureRequestUrl = new URL(captureRequest.url())
+        expect(captureRequestUrl.searchParams.has('compression')).toBe(false)
+        expect(captureRequest.url()).not.toContain('gzip')
         // webkit doesn't allow us to read the body for some reason
         // see e.g. https://github.com/microsoft/playwright/issues/6479
         if (browserName !== 'webkit') {
             const payload = getGzipEncodedPayloady(captureRequest)
-            expect(payload.event).toEqual('$pageview')
-            expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+            // Batched capture request envelopes were introduced in posthog-js 1.407.3.
+            const usesLegacyCapturePayload =
+                process.env.COMPAT_VERSION !== undefined && satisfies(process.env.COMPAT_VERSION, '<1.407.3')
+
+            if (usesLegacyCapturePayload) {
+                expect(payload.event).toEqual('$pageview')
+                expect(payload.properties.token).toEqual('test token')
+                expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+            } else {
+                expect(payload.api_key).toEqual('test token')
+                expect(payload.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+                expect(payload.batch).toHaveLength(1)
+                expect(payload.batch[0].event).toEqual('$pageview')
+                expect(Object.keys(payload.batch[0].properties).length).toBeGreaterThan(0)
+            }
         }
     })
 
@@ -155,6 +173,79 @@ test.describe('event capture', () => {
         // no rageclick event to wait for so just wait a little
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview', 'custom-event', 'custom-event', 'custom-event'])
+    })
+
+    test.describe('rageclick content ignorelist on a non-semantic cursor:pointer control', () => {
+        async function injectPointerControl(page: Page, ariaLabel: string) {
+            await page.evaluate((label) => {
+                const control = document.createElement('div')
+                control.id = 'rc-next'
+                control.style.cursor = 'pointer'
+                control.setAttribute('aria-label', label)
+
+                const icon = document.createElement('i')
+                icon.id = 'rc-icon'
+                icon.style.display = 'inline-block'
+                icon.style.width = '40px'
+                icon.style.height = '40px'
+
+                control.appendChild(icon)
+                document.body.appendChild(control)
+            }, ariaLabel)
+        }
+
+        test('suppresses the rageclick when the wrapper label matches a keyword', async ({ page, context }) => {
+            await start(
+                {
+                    ...startOptions,
+                    options: {
+                        ...startOptions.options,
+                        rageclick: { content_ignorelist: true },
+                    },
+                },
+                page,
+                context
+            )
+
+            await injectPointerControl(page, 'Next slide')
+
+            // the premise: a real browser inherits `cursor:pointer` onto the icon, unlike jsdom
+            const iconCursor = await page.locator('#rc-icon').evaluate((el) => getComputedStyle(el).cursor)
+            expect(iconCursor).toEqual('pointer')
+
+            const icon = page.locator('#rc-icon')
+            await icon.click()
+            await icon.click()
+            await icon.click()
+
+            // no rageclick event to wait for so just wait a little
+            await page.waitForTimeout(250)
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents.map((event) => event.event)).not.toContain('$rageclick')
+        })
+
+        test('still captures the rageclick when the wrapper label matches no keyword', async ({ page, context }) => {
+            await start(
+                {
+                    ...startOptions,
+                    options: {
+                        ...startOptions.options,
+                        rageclick: { content_ignorelist: true },
+                    },
+                },
+                page,
+                context
+            )
+
+            await injectPointerControl(page, 'Buy now')
+
+            const icon = page.locator('#rc-icon')
+            await icon.click()
+            await icon.click()
+            await icon.click()
+
+            await pollUntilEventCaptured(page, '$rageclick')
+        })
     })
 
     test('captures pageviews and custom events when autocapture disabled', async ({ page, context }) => {

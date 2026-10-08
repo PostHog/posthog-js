@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
@@ -13,13 +13,16 @@ function expectNotToThrow(promise: Promise<Response>) {
     return expect(promise).resolves.toBeInstanceOf(Response)
 }
 
-function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeof fetch; cleanup: () => void } {
+function setupWrappedFetch(
+    downstreamFetch: typeof fetch,
+    recordBody: NetworkRecordOptions['recordBody'] = true
+): { wrappedFetch: typeof fetch; cleanup: () => void } {
     class MockPerformanceObserver {
         static supportedEntryTypes = ['resource']
         observe() {}
         disconnect() {}
     }
-    ;(global as any).PerformanceObserver = MockPerformanceObserver
+    vi.stubGlobal('PerformanceObserver', MockPerformanceObserver)
 
     const mockWindow = {
         fetch: downstreamFetch,
@@ -28,23 +31,50 @@ function setupWrappedFetch(downstreamFetch: typeof fetch): { wrappedFetch: typeo
     } as any
 
     const plugin = getRecordNetworkPlugin({
-        recordBody: true,
+        recordBody,
         recordHeaders: true,
     } as Partial<NetworkRecordOptions> as NetworkRecordOptions)
     const cleanup = plugin.observer(() => {}, mockWindow, {
-        recordBody: true,
+        recordBody,
         recordHeaders: true,
         initiatorTypes: ['fetch'],
     } as any)
 
+    expect(mockWindow.fetch).not.toBe(downstreamFetch)
     return { wrappedFetch: mockWindow.fetch, cleanup }
 }
 
 describe('fetch wrapper', () => {
     // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
     // from keeping the Jest worker alive after tests complete.
-    beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+    })
+
+    // Reading direct Blob/File bodies in Node can leave BLOBREADER resources open;
+    // body recording is covered separately in browser tests.
+    it.each([
+        ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
+        ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
+    ])('forwards %s body through the installed wrapper', async (_name, createBody) => {
+        let receivedBody: BodyInit | null | undefined
+        const result = setupWrappedFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            receivedBody = init?.body
+            return new Response('ok')
+        }, false)
+        const body = createBody()
+
+        try {
+            await expectNotToThrow(result.wrappedFetch('https://example.com/api', { method: 'POST', body }))
+            expect(receivedBody).toBe(body)
+        } finally {
+            result.cleanup()
+        }
+    })
 
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch
@@ -78,7 +108,6 @@ describe('fetch wrapper', () => {
         })
 
         it.each([
-            ['Blob', () => new Blob(['blob content'], { type: 'text/plain' })],
             ['ArrayBuffer', () => new TextEncoder().encode('buffer content').buffer],
             ['URLSearchParams', () => new URLSearchParams({ foo: 'bar', baz: 'qux' })],
             [
@@ -90,7 +119,6 @@ describe('fetch wrapper', () => {
                 },
             ],
             ['Uint8Array', () => new Uint8Array([1, 2, 3])],
-            ['File', () => new File(['content'], 'test.txt', { type: 'text/plain' })],
             ['empty FormData', () => new FormData()],
             [
                 'FormData with multiple files',
@@ -168,6 +196,19 @@ describe('fetch wrapper', () => {
 
             expect(await response.text()).toBe('test body')
             expect(await clone.text()).toBe('test body')
+        })
+
+        // Regression test for https://github.com/PostHog/posthog-js/issues/1459
+        it('returns a downstream response without headers', async () => {
+            const responseWithoutHeaders = Response.error()
+            Object.defineProperty(responseWithoutHeaders, 'headers', { value: undefined })
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => responseWithoutHeaders)
+
+            try {
+                await expect(wrappedFetch('https://example.com/api')).resolves.toBe(responseWithoutHeaders)
+            } finally {
+                cleanup()
+            }
         })
     })
 
@@ -305,10 +346,14 @@ describe('fetch wrapper', () => {
 
         const contentType = capturedRequest!.headers.get('content-type')!
         const headerBoundary = contentType.match(/boundary=([^\s;]+)/)?.[1]
-        const body = await capturedRequest!.text()
-        const bodyBoundary = body.match(/^--+([^\r\n]+)/)?.[1]
-
-        expect(headerBoundary).toContain(bodyBoundary)
+        expect(headerBoundary).toBeTruthy()
+        const body = await capturedRequest!.clone().text()
+        expect(body.split('\r\n')[0]).toBe(`--${headerBoundary}`)
+        const parsed = await capturedRequest!.formData()
+        expect(parsed.get('key')).toBe('value')
+        const file = parsed.get('file') as File
+        expect(file.name).toBe('test.txt')
+        expect(await file.text()).toBe('test content')
     })
 
     it('passes init to downstream wrappers', async () => {
@@ -423,7 +468,7 @@ describe('fetch wrapper', () => {
         // playwright/mocked/session-recording/csrf-headers-preserved.spec.ts
         // is authoritative for the REAL composed wrapper behaviour (it
         // boots posthog-js end-to-end with tracing_headers and session
-        // recording network capture both enabled). The jest test
+        // recording network capture both enabled). The vi test
         // here only proves the structural invariant that two `new
         // Request(url, init)`-style wrappers compose without dropping
         // headers, irrespective of what each one adds.

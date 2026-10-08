@@ -1,10 +1,6 @@
 name: TestCafe
 on: [pull_request]
 env:
-  BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
-  BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
-  POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
-  POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
   BROWSERSTACK_DEBUG: "true"
   BROWSERSTACK_NETWORK_LOGS: "true"
   BROWSERSTACK_CONSOLE: "info"
@@ -12,14 +8,37 @@ env:
   BROWSERSTACK_USE_AUTOMATE: "true"
   BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  affected:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        packages/browser/
+        .github/workflows/testcafe.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+        .github/actions/setup/action.yaml
+
   browsers:
+    permissions:
+      contents: read
     name: Test on ${{ matrix.name }}
+    needs: affected
     runs-on: ubuntu-22.04
+    env:
+      BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
+      BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
+      POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
+      POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
 
     strategy:
       matrix:
@@ -30,47 +49,89 @@ jobs:
             name: IE11
 
     steps:
-      - name: Skip fork PR
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: echo "Skipping ${{ matrix.name }} TestCafe tests for fork PRs because required BrowserStack/PostHog secrets are unavailable."
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      - name: Audit runner egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          fetch-depth: 0
+          egress-policy: audit
+
+      - name: Skip TestCafe tests
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
+        run: echo "Skipping ${{ matrix.name }} TestCafe tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
+
+      - name: Check TestCafe credentials
+        id: credentials
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        shell: bash
+        run: |
+          missing=()
+          for name in BROWSERSTACK_USERNAME BROWSERSTACK_ACCESS_KEY POSTHOG_PROJECT_API_KEY POSTHOG_PERSONAL_API_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::notice::Skipping TestCafe tests; missing required environment variables: ${missing[*]}"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.credentials.outputs.available == 'true'
 
       - uses: ./.github/actions/setup
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: steps.credentials.outputs.available == 'true'
         with:
           build: false
 
-      - uses: ./.github/actions/is-affected
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        id: is-affected
-        with:
-          package-name: posthog-js
-
       - name: Build packages
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         run: pnpm build
 
       - name: Serve static files
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
           BROWSERSLIST: "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
-        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
+          NODE_OPTIONS: --require ./testcafe/browserstack-node-fetch-patch.cjs
+        run: |
+          set -o pipefail
+
+          # BrowserStack setup/API retries happen inside browserstack-node-fetch-patch.cjs so
+          # a real IE assertion failure is not retried as infrastructure flakiness.
+          output_file="$(mktemp)"
+
+          if pnpm testcafe "${BROWSER}" --stop-on-first-fail 2>&1 | tee "${output_file}"; then
+            rm -f "${output_file}"
+            exit 0
+          fi
+
+          exit_code="${PIPESTATUS[0]}"
+
+          if {
+            grep -Fq "POSTHOG_BROWSERSTACK_SETUP_FAILURE" "${output_file}" ||
+              grep -Fq "BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY" "${output_file}"
+          }; then
+            echo "::error title=BrowserStack setup failed::BrowserStack API/session setup failed after retry/backoff. This is infrastructure setup, not an IE11 test assertion failure."
+          elif grep -Fq "POSTHOG_BROWSERSTACK_API_FAILURE" "${output_file}"; then
+            echo "::error title=BrowserStack API failed::BrowserStack API failed after retry/backoff outside initial setup."
+          else
+            echo "::error title=IE11 TestCafe failed::TestCafe reached IE11 and failed without a BrowserStack setup marker. Treat this as a browser/test failure."
+          fi
+
+          rm -f "${output_file}"
+          exit "${exit_code}"
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser

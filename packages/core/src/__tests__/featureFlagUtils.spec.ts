@@ -3,6 +3,7 @@ import {
   getPayloadsFromFlags,
   getFeatureFlagValue,
   normalizeFlagsResponse,
+  createFlagsResponseFromFlagsAndPayloads,
   flagDetailsToResults,
 } from '@/featureFlagUtils'
 import { PostHogFlagsResponse, FeatureFlagDetail, FeatureFlagResult } from '@/types'
@@ -86,6 +87,15 @@ describe('featureFlagUtils', () => {
 
     it('should handle empty flags object', () => {
       expect(getFlagValuesFromFlags({})).toEqual({})
+    })
+  })
+
+  describe('createFlagsResponseFromFlagsAndPayloads', () => {
+    it('should preserve explicitly false feature flags', () => {
+      const result = createFlagsResponseFromFlagsAndPayloads({ enabled: true, disabled: false }, {})
+
+      expect(result.featureFlags).toEqual({ enabled: true, disabled: false })
+      expect(result.flags.disabled).toMatchObject({ key: 'disabled', enabled: false })
     })
   })
 

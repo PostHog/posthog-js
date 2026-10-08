@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["@jest/globals"],
+    "types": ["node"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext"
   },

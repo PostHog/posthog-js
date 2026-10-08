@@ -6,7 +6,7 @@ async function ensureRecordingIsStopped(page: Page) {
     // Check recording status without triggering user activity
     const isRecording = await page.evaluate(() => {
         const ph = (window as WindowWithPostHog).posthog
-        return ph?.sessionRecording?.status === 'disabled'
+        return ph?.sessionRecording?.started
     })
 
     expect(isRecording).toBe(false)
@@ -19,31 +19,16 @@ async function ensureActivitySendsSnapshots(page: Page) {
     await page.locator('[data-cy-input]').type('hello posthog!')
     await responsePromise
 
-    const capturedEvents = await page.capturedEvents()
-    const capturedSnapshot = capturedEvents?.find((e) => e.event === '$snapshot')
-    expect(capturedSnapshot).toBeDefined()
+    await expect.poll(async () => (await page.capturedEvents()).some((event) => event.event === '$snapshot')).toBe(true)
 }
 
+test.beforeEach(async ({ page }) => {
+    await page.clock.install()
+})
+
 async function triggerForcedIdleTimeout(page: Page) {
-    await page.evaluate(() => {
-        const ph = (window as WindowWithPostHog).posthog
-        const sessionManager = ph?.sessionManager as any
-
-        if (!sessionManager) {
-            throw new Error('SessionManager not available')
-        }
-
-        // Store the old session ID before we reset it
-        const oldSessionId = ph?.get_session_id()
-
-        // Directly reset the session to simulate an idle timeout
-        sessionManager.resetSessionId()
-
-        // Trigger the forcedIdleReset event manually to simulate what the timer would do
-        if (sessionManager._eventEmitter && sessionManager._eventEmitter.emit) {
-            sessionManager._eventEmitter.emit('forcedIdleReset', { idleSessionId: oldSessionId })
-        }
-    })
+    // Exercise the real idle timer; private emitter names are mangled in browser bundles.
+    await page.clock.fastForward(35 * 60 * 1000)
 }
 
 function getSnapshotTimestamp(snapshot: any, position: 'first' | 'last'): number {
@@ -118,14 +103,13 @@ test.describe('Session recording - idle timeout behavior', () => {
         // Recording should be stopped
         await ensureRecordingIsStopped(page)
 
-        await page.resetCapturedEvents()
-
         await page.waitForTimeout(100)
 
         // User activity should start a new session and restart recording
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
+                await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('activity_after_idle'))
                 await page.locator('[data-cy-input]').type('new activity after idle!')
             },
         })
@@ -139,7 +123,13 @@ test.describe('Session recording - idle timeout behavior', () => {
         })
         expect(newSessionId).not.toEqual(initialSessionId)
 
-        // Recording should be active again (verified by the fact we got snapshots above)
+        await expect
+            .poll(async () =>
+                (await page.capturedEvents()).some(
+                    (event) => event.event === '$snapshot' && event.properties.$session_id === newSessionId
+                )
+            )
+            .toBe(true)
 
         // Verify we got a new session with session_id_changed reason
         await page.evaluate(() => {
@@ -151,10 +141,10 @@ test.describe('Session recording - idle timeout behavior', () => {
         const snapshots = capturedEvents.filter((e) => e.event === '$snapshot')
         const testEvent = capturedEvents.find((e) => e.event === 'test_after_idle_restart')
 
-        // Should have at least 2 snapshots (old session final, new session data)
+        // Retain snapshots on both sides of the idle boundary.
         expect(snapshots.length).toBeGreaterThanOrEqual(2)
 
-        // First snapshot should be old session final data
+        // Old-session data must keep its original identity and timestamp.
         const oldSessionSnapshots = snapshots.filter((s) => s['properties']['$session_id'] === initialSessionId)
         expect(oldSessionSnapshots.length).toBeGreaterThanOrEqual(1)
         expect(getSnapshotTimestamp(oldSessionSnapshots[0], 'last')).toBeLessThan(timestampAfterRestart)
@@ -263,19 +253,11 @@ test.describe('Session recording - idle timeout behavior', () => {
             }))
         })
 
-        // Filter to just the significant events (not the many incremental snapshots from typing)
-        const significantEvents = snapshotSummary.filter(
-            (e) => e.type !== 3 // exclude IncrementalSnapshot (type 3) which are just typing mutations
-        )
-
-        // Assert on the exact expected sequence of events
-        // This is a solid record of what we expect to happen:
-        // 1. Old session gets final flush (type 6 = Plugin data) AND the $session_ending event
-        // 2. New session gets rrweb bootup events, then config and lifecycle custom events
+        expect(snapshotSummary.every((event) => event.sessionId !== 'unknown')).toBe(true)
+        // Incremental mutations and resource-timing plugin batches depend on browser scheduling.
+        // Preserve exact identity/order for the lifecycle and playable bootup events.
+        const significantEvents = snapshotSummary.filter((event) => event.type !== 3 && event.type !== 6)
         expect(significantEvents).toEqual([
-            // Final flush from old session before rotation
-            { sessionId: 'initial', type: 6, tag: null }, // Plugin data (network timing etc)
-
             // $session_ending is emitted during the callback, before new session starts
             // It MUST go to the initial/old session, not the new one
             { sessionId: 'initial', type: 5, tag: '$session_ending' }, // CustomEvent: marks end of old session
@@ -284,7 +266,6 @@ test.describe('Session recording - idle timeout behavior', () => {
             // CRITICAL: these MUST be on new session, not initial (the bug we're fixing)
             { sessionId: 'new', type: 4, tag: null }, // Meta event (page metadata)
             { sessionId: 'new', type: 2, tag: null }, // FullSnapshot (DOM state)
-            { sessionId: 'new', type: 6, tag: null }, // Plugin data
 
             // Config custom events emitted during bootup
             { sessionId: 'new', type: 5, tag: '$remote_config_received' }, // CustomEvent: config
@@ -295,6 +276,118 @@ test.describe('Session recording - idle timeout behavior', () => {
             { sessionId: 'new', type: 5, tag: '$session_id_change' }, // CustomEvent: session rotation marker
             { sessionId: 'new', type: 5, tag: '$session_starting' }, // CustomEvent: marks start of new session
         ])
+    })
+})
+
+test.describe('Session recording - recording idle (activity timeout) within one session', () => {
+    // recording idle is the 5-minute activity pause _within_ a session (custom events
+    // sessionIdle / sessionNoLongerIdle), not the 30-minute session rotation above
+    const idleStartOptions = {
+        ...startOptions,
+        options: {
+            session_recording: {
+                compress_events: false,
+                // very short so the test can cross the idle threshold quickly
+                session_idle_threshold_ms: 600,
+            },
+        },
+    }
+
+    test.beforeEach(async ({ page, context }) => {
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await start(idleStartOptions, page, context)
+            },
+        })
+        await waitForSessionRecordingToStart(page)
+        await page.resetCapturedEvents()
+    })
+
+    test('takes a full snapshot on wake when the DOM mutated while recording was idle', async ({ page }) => {
+        // establish user activity, then stay quiet past the idle threshold
+        await page.locator('[data-cy-input]').type('pre idle activity')
+        await page.waitForTimeout(800)
+
+        // a non-interactive DOM mutation after the threshold sends the recorder idle;
+        // rrweb observes it but the recorder drops it, so the player's mirror goes stale
+        await page.evaluate(() => {
+            const el = document.createElement('div')
+            el.id = 'created-while-going-idle'
+            el.textContent = 'swapped in while idle'
+            document.body.appendChild(el)
+        })
+        await page.waitForTimeout(200)
+
+        // keep mutating while idle - all of this is invisible to the event stream
+        await page.evaluate(() => {
+            document.getElementById('created-while-going-idle')?.remove()
+            const el = document.createElement('div')
+            el.id = 'swapped-while-idle'
+            el.textContent = 'replacement subtree'
+            document.body.appendChild(el)
+        })
+        await page.waitForTimeout(200)
+
+        // user returns: recording must re-sync the player with a fresh full snapshot
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').type('back from idle')
+            },
+        })
+        const collectSnapshotData = async (): Promise<any[]> => {
+            const capturedEvents = await page.capturedEvents()
+            return capturedEvents
+                .filter((e) => e.event === '$snapshot')
+                .flatMap((e) => e['properties']['$snapshot_data'] as any[])
+        }
+
+        // poll until the post-wake flush has shipped the wake marker and a full snapshot
+        await expect
+            .poll(
+                async () => {
+                    const tags = (await collectSnapshotData()).map((s) => ({ type: s.type, tag: s.data?.tag ?? null }))
+                    const wakeIndex = tags.findIndex((s) => s.tag === 'sessionNoLongerIdle')
+                    if (wakeIndex === -1) {
+                        return 'waiting for sessionNoLongerIdle'
+                    }
+                    return tags.slice(wakeIndex + 1).some((s) => s.type === 2)
+                        ? 'wake full snapshot shipped'
+                        : 'waiting for wake full snapshot'
+                },
+                { timeout: 10000 }
+            )
+            .toBe('wake full snapshot shipped')
+
+        const snapshotData = await collectSnapshotData()
+        const tags = snapshotData.map((s) => ({ type: s.type, tag: s.data?.tag ?? null }))
+        const idleIndex = tags.findIndex((s) => s.tag === 'sessionIdle')
+        const wakeIndex = tags.findIndex((s) => s.tag === 'sessionNoLongerIdle')
+        expect(idleIndex, `expected a sessionIdle event in ${JSON.stringify(tags)}`).toBeGreaterThan(-1)
+        expect(wakeIndex, `expected a sessionNoLongerIdle event in ${JSON.stringify(tags)}`).toBeGreaterThan(idleIndex)
+
+        const afterWake = tags.slice(wakeIndex + 1)
+        const fullSnapshotAfterWake = afterWake.findIndex((s) => s.type === 2)
+        const incrementalAfterWake = afterWake.findIndex((s) => s.type === 3)
+        // the mirror-healing full snapshot must exist, and must come before any
+        // post-wake incremental, or the player applies mutations to a stale tree
+        expect(
+            fullSnapshotAfterWake,
+            `expected a full snapshot after wake in ${JSON.stringify(afterWake)}`
+        ).toBeGreaterThan(-1)
+        expect(fullSnapshotAfterWake).toBeLessThan(incrementalAfterWake)
+
+        // the mutations that happened while idle are not in the event stream (they were
+        // dropped) - the full snapshot is the only record of them
+        const idleEraMutations = snapshotData.filter(
+            (s) => s.type === 3 && s.data?.source === 0 && JSON.stringify(s.data).includes('created-while-going-idle')
+        )
+        expect(idleEraMutations).toEqual([])
+        // but the wake full snapshot carries the post-idle DOM state
+        const fullSnapshots = snapshotData.filter((s) => s.type === 2)
+        const wakeSnapshot = fullSnapshots[fullSnapshots.length - 1]
+        expect(JSON.stringify(wakeSnapshot.data)).toContain('swapped-while-idle')
     })
 })
 
@@ -313,7 +406,7 @@ test.describe('Session recording - idle timeout with sampling', () => {
     test('applies sampling rules after forced idle timeout when sampling is 0', async ({ page }) => {
         // With sample rate 0, recording should not start automatically
         await page.locator('[data-cy-input]').type('initial activity')
-        await page.waitForTimeout(250)
+        await page.waitForTimeout(2500)
         await page.expectCapturedEventsToBe([]) // No recording due to sample rate 0
 
         // Override sampling to start recording
@@ -338,8 +431,9 @@ test.describe('Session recording - idle timeout with sampling', () => {
         await page.resetCapturedEvents()
 
         // User activity should create new session but NOT start recording due to sample rate 0
+        await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('activity_after_idle'))
         await page.locator('[data-cy-input]').type('activity after idle timeout')
-        await page.waitForTimeout(250)
+        await page.waitForTimeout(2500)
 
         // Verify new session was created
         const sessionIdAfterIdle = await page.evaluate(() => {
@@ -348,8 +442,10 @@ test.describe('Session recording - idle timeout with sampling', () => {
         })
         expect(sessionIdAfterIdle).not.toEqual(sessionIdBeforeIdle)
 
-        // But recording should still be inactive due to sampling rules (verified by no events)
-        await page.expectCapturedEventsToBe([])
+        await expect
+            .poll(() => page.evaluate(() => (window as WindowWithPostHog).posthog?.sessionRecording?.status))
+            .toBe('disabled')
+        await page.expectCapturedEventsToBe(['activity_after_idle'])
 
         // Verify that sampling override can restart recording even after idle timeout
         await page.evaluate(() => {

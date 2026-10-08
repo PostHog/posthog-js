@@ -1,5 +1,147 @@
 # @posthog/next
 
+## 0.9.0
+
+### Minor Changes
+
+- [#4656](https://github.com/PostHog/posthog-js/pull/4656) [`39aa650`](https://github.com/PostHog/posthog-js/commit/39aa650d4acf4d669916e846364c13ce5cd28197) Thanks [@marandaneto](https://github.com/marandaneto)! - Add opt-in `$route` template capture for App Router and Pages Router pageviews.
+  (2026-09-01)
+
+### Patch Changes
+
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`aa72a36`](https://github.com/PostHog/posthog-js/commit/aa72a36930f09f8db0971e9077e852d1c76f3879), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a), [`ec550b8`](https://github.com/PostHog/posthog-js/commit/ec550b82797caafb79cdd87bde1a59c7991f37f6), [`6d6091e`](https://github.com/PostHog/posthog-js/commit/6d6091e0b335d27b1aa94ea725fec0842aaa9463), [`0cddefe`](https://github.com/PostHog/posthog-js/commit/0cddefe2e84d0bd8c85cf53f5d65b5fd4318d9cf), [`cee2280`](https://github.com/PostHog/posthog-js/commit/cee22804dfbedae447808d1615b5b27315d08f45), [`5874d1c`](https://github.com/PostHog/posthog-js/commit/5874d1c9f1e8cb9bf70600698a102498f876c24a), [`1406e04`](https://github.com/PostHog/posthog-js/commit/1406e04745d3828528a3709377810015927ba036), [`e7f5733`](https://github.com/PostHog/posthog-js/commit/e7f5733c368f83795e88572ba16e736176460e67), [`5c6ab6f`](https://github.com/PostHog/posthog-js/commit/5c6ab6f8372edacb1500d3d459b713f622b6a993)]:
+    - @posthog/core@1.50.0
+    - posthog-node@5.51.5
+    - posthog-js@1.423.0
+
+## 0.8.6
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+    - @posthog/core@1.48.6
+    - posthog-js@1.418.6
+    - posthog-node@5.49.2
+
+## 0.8.5
+
+### Patch Changes
+
+- [#4568](https://github.com/PostHog/posthog-js/pull/4568) [`de7de16`](https://github.com/PostHog/posthog-js/commit/de7de16eb992ca03b07de627dbc4fb06901164b1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix request routing in the Next.js middleware proxy.
+  (2026-08-19)
+- Updated dependencies [[`3e0edff`](https://github.com/PostHog/posthog-js/commit/3e0edff32a6a6285876026fae35a402d7faef004)]:
+    - posthog-js@1.418.2
+
+## 0.8.4
+
+### Patch Changes
+
+- [#4170](https://github.com/PostHog/posthog-js/pull/4170) [`ba536ba`](https://github.com/PostHog/posthog-js/commit/ba536bab0bf703d2416ba4da477c08fb7165ace3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Let Next.js dynamic rendering bailouts propagate when bootstrapping flags.
+  (2026-07-16)
+
+- [#4169](https://github.com/PostHog/posthog-js/pull/4169) [`faf3e7d`](https://github.com/PostHog/posthog-js/commit/faf3e7dbc296dde8d936bbc1ac07eac83b40d4b1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require the Pages Router request context in server identity resolver types.
+  (2026-07-16)
+- Updated dependencies [[`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17)]:
+    - @posthog/core@1.43.1
+    - posthog-node@5.45.2
+
+## 0.8.3
+
+### Patch Changes
+
+- [#4152](https://github.com/PostHog/posthog-js/pull/4152) [`2578f08`](https://github.com/PostHog/posthog-js/commit/2578f082f57cbd5588c58065b97a2f737a14578b) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Remove the Pages Router `PostHogProvider.bootstrap` prop; move its value to `clientOptions.bootstrap`. For App Router server-evaluated bootstrap, use fresh evaluated flags and payloads while preserving configured identity and session fields.
+  (2026-07-16)
+
+## 0.8.2
+
+### Patch Changes
+
+- [#4150](https://github.com/PostHog/posthog-js/pull/4150) [`2e9405b`](https://github.com/PostHog/posthog-js/commit/2e9405bd26388332b316bc4569c90e1c99df4b34) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix Pages Router SSR feature flag hooks when Node loads the CommonJS posthog-js entrypoint.
+  (2026-07-16)
+
+## 0.8.1
+
+### Patch Changes
+
+- [#4093](https://github.com/PostHog/posthog-js/pull/4093) [`4da3b41`](https://github.com/PostHog/posthog-js/commit/4da3b414bf14213c27788b2e25c9d632e23ce91e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Dedupe `getDistinctId` resolution per request in the App Router: repeated `getPostHog()` calls within one request (e.g. across a layout and its pages) now share a single resolver invocation, keyed on the request's `headers()` instance.
+  (2026-07-14)
+
+## 0.8.0
+
+### Minor Changes
+
+- [#4091](https://github.com/PostHog/posthog-js/pull/4091) [`3336dbf`](https://github.com/PostHog/posthog-js/commit/3336dbfb3fd0573b81fe6de5bda8e0aaaee3d23c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Replace the `getPostHog` and `getServerSidePostHog` exports with a `createPostHog()` factory. Configure PostHog once in a shared module — including an optional `getDistinctId` resolver that attributes server-side events and feature flags to the authenticated user — and use the returned `getPostHog` everywhere.
+
+    ```ts
+    import 'server-only'
+    import { createPostHog } from '@posthog/next'
+
+    export const { getPostHog } = createPostHog()
+    ```
+
+    Pass `getDistinctId` to resolve identity from your auth session:
+
+    ```ts
+    import 'server-only'
+    import { createPostHog } from '@posthog/next'
+    import { auth } from '@/auth'
+
+    export const { getPostHog } = createPostHog({
+        getDistinctId: async () => (await auth())?.user?.id,
+    })
+    ```
+
+    In the Pages Router, import from `@posthog/next/pages`; the returned `getPostHog(ctx)` requires the `GetServerSidePropsContext` and passes it to the resolver:
+
+    ```ts
+    import { createPostHog } from '@posthog/next/pages'
+
+    export const { getPostHog } = createPostHog({
+        getDistinctId: async (ctx) =>
+            ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,
+    })
+    ```
+
+    Call sites are unchanged apart from the import. `getPostHog` is still async, `ctx` is still required in the Pages Router, and per-call `apiKey`/`options` move into `createPostHog()`:
+
+    ```ts
+    // Before
+    import { getPostHog } from '@posthog/next'
+    const posthog = await getPostHog(apiKey, { host })
+
+    // After
+    import { getPostHog } from '@/lib/posthog'
+    const posthog = await getPostHog()
+    ```
+
+    In the Pages Router, `getServerSidePostHog(ctx)` becomes `getPostHog(ctx)`. (2026-07-09)
+
+### Patch Changes
+
+- [#4091](https://github.com/PostHog/posthog-js/pull/4091) [`3336dbf`](https://github.com/PostHog/posthog-js/commit/3336dbfb3fd0573b81fe6de5bda8e0aaaee3d23c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix Pages Router server clients to apply request context after async initialization: the Pages Router path of `createPostHog().getPostHog(ctx)` now wraps method calls in `withContext` instead of calling `enterContext`, which does not propagate back to the caller across the helper's await boundary.
+  (2026-07-09)
+- Updated dependencies [[`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563), [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8)]:
+    - @posthog/core@1.40.1
+
+## 0.7.2
+
+### Patch Changes
+
+- [#4092](https://github.com/PostHog/posthog-js/pull/4092) [`335dd05`](https://github.com/PostHog/posthog-js/commit/335dd05f418c8d9127f12a8b8619b5b514d279b5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix `@posthog/next/pages` in Pages Router server bundles so server APIs like `getServerSideProps` resolve correctly instead of importing the client entrypoint.
+  (2026-07-08)
+
+## 0.7.1
+
+### Patch Changes
+
+- [#4055](https://github.com/PostHog/posthog-js/pull/4055) [`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry `/flags` requests that receive HTTP 502 or 504 responses across SDKs that use the shared core flags client.
+  (2026-07-02)
+- Updated dependencies [[`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0)]:
+    - @posthog/core@1.39.4
+    - posthog-node@5.39.3
+
 ## 0.7.0
 
 ### Minor Changes

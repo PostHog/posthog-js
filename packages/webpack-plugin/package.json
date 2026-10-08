@@ -1,10 +1,10 @@
 {
     "name": "@posthog/webpack-plugin",
-    "version": "1.5.26",
+    "version": "1.7.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
-    "description": "Webpack plugin for Posthog 🦔",
+    "description": "Webpack plugin for Posthog \ud83e\udd94",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -35,16 +35,17 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "jest": "catalog:",
-        "ts-jest": "catalog:",
-        "webpack": "^5"
+        "webpack": "^5",
+        "vitest": "catalog:",
+        "typescript": "catalog:native"
     },
     "scripts": {
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "clean": "rimraf dist",
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "build": "rslib build",
-        "test:unit": "jest --passWithNoTests",
+        "test:unit": "vitest run --passWithNoTests",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },

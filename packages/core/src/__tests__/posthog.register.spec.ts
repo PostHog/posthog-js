@@ -3,7 +3,6 @@ import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } f
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let mocks: PostHogCoreTestClientMocks
 
   const getEnrichedProperties = (): any => {

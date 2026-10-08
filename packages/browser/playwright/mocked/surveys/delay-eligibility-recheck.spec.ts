@@ -76,6 +76,9 @@ test.describe('surveys - re-validate eligibility when the display delay elapses'
 
         await start(startOptions, page, context)
 
+        await expect(page.locator('.PostHogSurvey-delay-recheck-suppressed')).toBeAttached()
+        await expect(page.locator('.PostHogSurvey-delay-recheck-suppressed .survey-form')).not.toBeVisible()
+
         // identify() reloads flags; replace the flags mock so the identified profile is no
         // longer targeted (unroute first so this handler, not the anonymous one, serves the reload).
         await context.unroute('**/flags/*')
@@ -87,6 +90,9 @@ test.describe('surveys - re-validate eligibility when the display delay elapses'
             })
         )
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.identify('identified-user-123'))
+        await expect
+            .poll(() => page.evaluate((key) => (window as any).posthog.getFeatureFlag(key), INTERNAL_TARGETING_FLAG))
+            .toBe(false)
 
         // Wait past the 2s display delay; the survey must never render.
         await page.waitForTimeout(3500)

@@ -1,13 +1,14 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
-import { assignableWindow, window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
-import { uuidv7 } from '../../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
-import { afterEach } from '@jest/globals'
+import { afterEach } from 'vitest'
 
 /** help out jsdom */
 export type PromiseRejectionEventTypes = 'rejectionhandled' | 'unhandledrejection'
@@ -34,12 +35,12 @@ export class PromiseRejectionEvent extends Event {
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
-    let sendRequestSpy: jest.SpyInstance
-    const beforeSendMock = jest.fn().mockImplementation((e) => e)
-    const loadScriptMock = jest.fn()
+    let sendRequestSpy: VitestSpyInstance
+    const beforeSendMock = vi.fn().mockImplementation((e) => e)
+    const loadScriptMock = vi.fn()
 
     const addErrorWrappingFlagToWindow = () => {
-        // assignableWindow.onerror = jest.fn()
+        // assignableWindow.onerror = vi.fn()
         // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
 
         assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
@@ -62,7 +63,7 @@ describe('Exception Observer', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        sendRequestSpy = jest.spyOn(posthog, '_send_request')
+        sendRequestSpy = vi.spyOn(posthog, '_send_retriable_request')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })
@@ -73,7 +74,7 @@ describe('Exception Observer', () => {
 
     describe('when enabled remotely', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should instrument enabled handlers only when started', () => {
@@ -126,7 +127,7 @@ describe('Exception Observer', () => {
             // See e2e tests
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })
@@ -173,9 +174,13 @@ describe('Exception Observer', () => {
         })
 
         it('does not start if disabled locally', () => {
+            exceptionObserver['_stopCapturing']()
+            expectNoHandlers()
             posthog.config.capture_exceptions = false
             exceptionObserver = new ExceptionObserver(posthog)
+            exceptionObserver.startIfEnabledOrStop()
             expect(exceptionObserver.isEnabled).toBe(false)
+            expectNoHandlers()
         })
     })
 
@@ -183,7 +188,7 @@ describe('Exception Observer', () => {
         it('captures an event when console.error is called', () => {
             // setup.js makes console.error throw, so we need to replace it
             const originalConsoleError = window!.console.error
-            window!.console.error = jest.fn()
+            window!.console.error = vi.fn()
 
             posthog.config.capture_exceptions = {
                 capture_console_errors: true,
@@ -193,6 +198,8 @@ describe('Exception Observer', () => {
             const observer = new ExceptionObserver(posthog)
 
             window!.console.error('console error test')
+            observer['_stopCapturing']()
+            window!.console.error = originalConsoleError
 
             const captureCall = beforeSendMock.mock.calls.find(
                 (call: any) => call[0]?.properties?.$exception_list?.[0]?.value === 'console error test'
@@ -202,26 +209,78 @@ describe('Exception Observer', () => {
                 event: '$exception',
                 properties: {
                     $exception_list: [
-                        { type: 'Error', value: 'console error test', stacktrace: { frames: expect.any(Array) } },
+                        {
+                            type: 'Error',
+                            value: 'console error test',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { handled: true, type: 'onconsole', synthetic: true },
+                        },
                     ],
                 },
             })
-
-            observer['_stopCapturing']()
-            window!.console.error = originalConsoleError
         })
     })
 
+    it('preserves console provenance through reinstalls and stops capturing when disabled', () => {
+        const originalConsoleError = window!.console.error
+        const nativeConsoleError = vi.fn()
+        window!.console.error = nativeConsoleError
+        posthog.config.capture_exceptions = { capture_console_errors: true }
+        exceptionObserver.onConfigChange()
+
+        try {
+            for (let i = 0; i < 3; i++) {
+                exceptionObserver.startIfEnabledOrStop()
+                try {
+                    throw new Error(`caught error ${i}`)
+                } catch (error) {
+                    window!.console.error('caught', error)
+                }
+            }
+
+            expect(nativeConsoleError).toHaveBeenCalledTimes(3)
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+            for (const [event] of beforeSendMock.mock.calls) {
+                expect(event.properties.$exception_list[0].mechanism).toEqual({
+                    exception_id: 0,
+                    handled: true,
+                    type: 'onconsole',
+                    synthetic: false,
+                })
+            }
+
+            posthog.config.capture_exceptions = false
+            exceptionObserver.onConfigChange()
+            exceptionObserver.startIfEnabledOrStop()
+            expect(window!.console.error).toBe(nativeConsoleError)
+            window!.console.error('disabled console capture')
+            expect(nativeConsoleError).toHaveBeenCalledTimes(4)
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+
+            posthog.captureException(new Error('manually reported'))
+            expect(beforeSendMock).toHaveBeenCalledTimes(4)
+            expect(beforeSendMock.mock.calls[3][0].properties.$exception_list[0].mechanism).toEqual({
+                exception_id: 0,
+                handled: true,
+                type: 'generic',
+                synthetic: false,
+            })
+        } finally {
+            exceptionObserver['_stopCapturing']()
+            window!.console.error = originalConsoleError
+        }
+    })
+
     describe('when there are handlers already present', () => {
-        const originalOnError = jest.fn()
-        const originalOnUnhandledRejection = jest.fn()
+        const originalOnError = vi.fn()
+        const originalOnUnhandledRejection = vi.fn()
 
         beforeEach(() => {
-            jest.clearAllMocks()
+            vi.clearAllMocks()
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
 
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should wrap original onerror handler if one was present when wrapped', () => {
@@ -247,7 +306,7 @@ describe('Exception Observer', () => {
             const error = new Error('test error')
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })
@@ -280,7 +339,7 @@ describe('Exception Observer', () => {
 
     describe('when disabled', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: false } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: false } as FlagsResponse })
         })
 
         it('cannot be started', () => {

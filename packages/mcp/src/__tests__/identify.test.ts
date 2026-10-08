@@ -1,4 +1,4 @@
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
@@ -43,13 +43,13 @@ describe('identify option', () => {
       distinctId: 'user-1',
       properties: { name: 'Alice', email: 'alice@example.com' },
     }
-    const identify = jest.fn(async (request: any, extra: any) => {
+    const identify = vi.fn(async (request: any, extra: any) => {
       expect(request).toBeDefined()
       expect(extra).toBeDefined()
       return identity
     })
 
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -65,9 +65,9 @@ describe('identify option', () => {
   it('calls identify on every tool invocation but only publishes an event when the identity changes', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
+    const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
 
-    instrument(server, fakePostHog(), { identify })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
 
     await callAddTodo(client, 'first')
     await callAddTodo(client, 'second')
@@ -82,12 +82,37 @@ describe('identify option', () => {
     await capture.stop()
   })
 
+  it('republishes $identify when the identity materially changes mid-session, then dedupes again', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    // Same distinctId, but the plan changes on the second call and then holds.
+    const plans = ['free', 'pro', 'pro']
+    let call = 0
+    const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { plan: plans[call++] } }))
+
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
+
+    await callAddTodo(client, 'first')
+    await callAddTodo(client, 'second')
+    await callAddTodo(client, 'third')
+
+    await new Promise((r) => setTimeout(r, 50))
+
+    // One at first-seen, one when plan flips free→pro; the third call (still pro) dedupes.
+    expect(identify).toHaveBeenCalledTimes(3)
+    const identifyEvents = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.identify)
+    expect(identifyEvents).toHaveLength(2)
+    expectIdentityStored(server, { distinctId: 'user-1', properties: { plan: 'pro' } })
+
+    await capture.stop()
+  })
+
   it('identifies the caller on tools registered after instrument() (proxy listener)', async () => {
     const capture = new EventCapture()
     await capture.start()
 
-    const identify = jest.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
-    instrument(server, fakePostHog(), { context: true, identify })
+    const identify = vi.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
+    instrument(server, fakePostHog(), { enableConversationId: false, context: true, identify })
 
     server.tool!(
       'post_track_tool',
@@ -117,7 +142,7 @@ describe('identify option', () => {
   it('treats a null return as "no identity": no event published, no identity stored', async () => {
     const capture = new EventCapture()
     await capture.start()
-    instrument(server, fakePostHog(), { identify: async () => null })
+    instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => null })
 
     await callAddTodo(client)
     await new Promise((r) => setTimeout(r, 50))
@@ -157,25 +182,26 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('populates session info with the resolved identity (distinctId, properties)', async () => {
-    instrument(server, fakePostHog(), {
-      identify: async () => ({
-        distinctId: 'session-user',
-        properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
-      }),
-    })
+  it('stores the resolved identity without mutating shared session metadata', async () => {
+    const identity = {
+      distinctId: 'session-user',
+      properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
+    }
+    instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => identity })
 
     await callAddTodo(client)
 
+    expectIdentityStored(server, identity)
     const sessionInfo = getServerTrackingData(server.server)?.sessionInfo
-    expect(sessionInfo?.identifyActorGivenId).toBe('session-user')
-    expect(sessionInfo?.identifyActorData).toEqual({ name: 'Session Alice', role: 'admin', team: 'platform' })
+    expect(sessionInfo?.identifyActorGivenId).toBeUndefined()
+    expect(sessionInfo?.identifyActorData).toEqual({})
   })
 
   it('stamps $groups on events when identify returns groups', async () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => ({
         distinctId: 'session-user',
         groups: { organization: 'org_123', project: 'proj_9' },
@@ -195,6 +221,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => ({
         distinctId: 'session-user',
         properties: { name: 'Session Alice', role: 'admin' },
@@ -215,10 +242,35 @@ describe('identify option', () => {
     await capture.stop()
   })
 
+  it('identifies tools/list', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    const identify = vi.fn(async () => ({
+      distinctId: 'list-user',
+      properties: { name: 'List Alice' },
+    }))
+    instrument(server, fakePostHog(), { enableConversationId: false, identify })
+
+    // No tool call first: nothing has cached an identity on this instance, which
+    // is the state every request sees under per-request instance lifetime.
+    await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(identify).toHaveBeenCalledTimes(1)
+    const listing = capture.findCapturesByEvent('$mcp_tools_list')[0]
+    expect(listing).toBeDefined()
+    expect(listing.distinct_id).toBe('list-user')
+    expect(listing.properties.$process_person_profile).toBeUndefined()
+    expect(listing.properties.$set).toMatchObject({ name: 'List Alice' })
+
+    await capture.stop()
+  })
+
   it('awaits async identify callbacks and records a non-zero duration on the $identify event', async () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => {
         await new Promise((r) => setTimeout(r, 50))
         return { distinctId: 'async-user' }
@@ -238,6 +290,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       identify: async () => {
         throw new Error('identify boom')
       },
@@ -254,6 +307,7 @@ describe('identify option', () => {
 
   it('stores whatever identify returns — no schema validation', async () => {
     instrument(server, fakePostHog(), {
+      enableConversationId: false,
       // The SDK does not validate the identity shape; whatever you return ends up cached.
       identify: async () => ({ invalidField: 'invalid' }) as unknown as UserIdentity,
     })

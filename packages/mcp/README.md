@@ -7,3 +7,416 @@ SDK usage examples and code snippets live in the official documentation so they 
 ## Documentation
 
 - [MCP analytics docs](https://posthog.com/docs/mcp-analytics)
+
+## Stateless & multi-pod servers
+
+On stateless deployments the SDK mints the `Mcp-Session-Id` response header at `initialize`
+as a token carrying the session id and client name/version. Clients replay the header on
+every request, so any pod keeps `$session_id` and `$mcp_client_name`/`$mcp_client_version`
+stable with no server-side store.
+
+A standalone `$identify` event fires **at most once per session** — at `initialize` (or, on a
+long-lived server, when the identity first appears or materially changes). Tool calls on other
+pods reuse the identity to stamp `distinct_id`/`$set` on every event **without** re-publishing
+`$identify`, so person **properties** are never lost. (Edge case: if identity isn't resolvable
+until _after_ `initialize`, the first `$identify` is suppressed too, so pre-identify anonymous
+events aren't aliased onto the user — see `docs/ARCHITECTURE.md` §4.) To drop `$identify`
+entirely, return `null` from `beforeSend` when `event === '$identify'`.
+
+### Streamable HTTP: set `enableJsonResponse: true`
+
+The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`
+handler, so it only reaches the client when the transport builds the response **after** the
+handler runs — i.e. **JSON mode**. In **SSE (streaming) mode** `StreamableHTTPServerTransport`
+flushes the response headers **before** the handler runs, so the minted header never lands and
+behavior silently falls back to a session-per-request. This is a property of the transport, so
+it applies to **every** Streamable-HTTP host — set `enableJsonResponse: true` (and use a fresh
+transport per request):
+
+```ts
+// @modelcontextprotocol/sdk
+new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
+
+// Cloudflare agents / createMcpHandler (SSE is the default)
+createMcpHandler(server, { enableJsonResponse: true })
+
+// @rekog/mcp-nest
+McpModule.forRoot({ streamableHttp: { enableJsonResponse: true } })
+```
+
+### If you must stream (SSE)
+
+Set the header yourself at the HTTP layer with the exported `encodeSessionId` (read `clientInfo`
+from the `initialize` body) — the SDK decodes it either way:
+
+```ts
+import { MCP_SESSION_HEADER, encodeSessionId, newSessionId } from '@posthog/mcp'
+
+// after parsing the POST body, before flushing headers:
+if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
+  res.setHeader(
+    MCP_SESSION_HEADER,
+    encodeSessionId({
+      sessionId: newSessionId(),
+      clientName: body.params?.clientInfo?.name,
+      clientVersion: body.params?.clientInfo?.version,
+    })
+  )
+}
+```
+
+Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
+
+## MCP TypeScript SDK v2
+
+`instrument()` works on both SDK majors — `@modelcontextprotocol/sdk` v1 and
+`@modelcontextprotocol/{core,server,client}` v2 — and on both the high-level `McpServer` and the
+low-level `Server`. Shapes are detected at runtime, so neither major is a dependency here.
+
+### Sessions and client identity on a v2 server
+
+Protocol revision is a property of each **request**, not of the server: a v2 server serves both
+`2025-11-25` and `2026-07-28` traffic, and the SDK is instrumented once for both.
+
+- **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
+  protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
+  `enableConversationId`, which is **on by default**. Without it every request is its own `$session_id`.
+  The `get_more_tools` and `send_feedback` virtual tools also use this handle, including calls handled
+  by a fresh server instance.
+- **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
+  `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
+  `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that
+  handshake. The SDK bridges it by minting the `Mcp-Session-Id` token described above, which the
+  client replays on every request.
+
+  **That token only reaches the client if the transport builds response headers _after_ the handler
+  runs.** `@rekog/mcp-nest` with `enableJsonResponse: true` does; `createMcpHandler`'s legacy leg
+  does not, and there is no setting we can reach from inside the server. On that leg, expect
+  `$mcp_client_name` and `$mcp_client_version` to be absent for `2025-11-25` traffic — the protocol
+  version still arrives, because clients send it on the `MCP-Protocol-Version` header of every
+  request.
+
+### Reading request headers in a callback
+
+If your `identify`, `intentFallback`, `eventProperties` or `beforeSend` reads HTTP headers, it has
+to change. The two majors put the request in different places and in different shapes: v1 attaches
+a plain object at `extra.requestInfo.headers`, v2 attaches the WHATWG `Request` at `extra.http.req`,
+whose `headers` only answers to `.get()`. A v1-shaped read returns `undefined` on v2 — an
+`identify()` written that way returns `null` and every event goes anonymous.
+
+The SDK hands your callback whatever the MCP SDK handed it, unchanged; it does **not** fake a v1
+shape on v2, because a partially synthesised `requestInfo` is a more convincing lie than an absent
+one. Read headers through the exported helper instead, which handles both majors, lowercases keys,
+and duck-types `Headers` so it also works on edge runtimes:
+
+```ts
+import { getRequestHeaders } from '@posthog/mcp'
+
+identify: async (request, extra) => {
+  const auth = getRequestHeaders(extra)?.['authorization'] // v1 and v2
+  // ...
+}
+```
+
+### What `$mcp_intent` records, and how to turn it off
+
+`context` defaults to **on**: the SDK adds a `context` parameter to every tool it advertises, asks
+the agent to say why it is calling, and records the answer as `$mcp_intent`. It is stripped before
+your tool runs wherever the SDK can confirm the parameter is its own.
+
+On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or `@rekog/mcp-nest`
+in its stateless mode — that confirmation is not available: ownership is learned while serving
+`tools/list`, and the instance handling a `tools/call` never served one. There the SDK records the
+argument but does **not** strip it, because deleting an argument your tool declared would cost you
+the call, while an extra key usually costs nothing.
+
+What matters is instance lifetime, not statelessness. A server that is stateless at the transport
+(`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
+first `tools/list` and keeps it, so none of the above applies to it.
+
+An extra key is not free for a tool that validates strictly (a `.strict()` Zod object, or
+`additionalProperties: false` enforced by the handler): it rejects the call. A low-level server that
+can look up its own tools can resolve ownership without a listing. Return the tool's input schema
+as registered, before PostHog preparation, and the SDK strips the arguments it owns on every
+instance. It never strips a parameter that the returned schema declares. Returning `undefined`
+keeps the behavior above.
+
+```ts
+instrument(server, posthog, {
+  resolveOriginalTool: (toolName) => {
+    const tool = myToolRegistry.get(toolName)
+    return tool ? { inputSchema: tool.inputSchema } : undefined
+  },
+})
+```
+
+The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
+cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,
+and it is capped at 2048 characters. Two ways out, both one line:
+
+```ts
+instrument(server, posthog, { context: false }) // no injection, no capture
+
+instrument(server, posthog, {
+  // keep it, drop the property
+  beforeSend: (event) => {
+    delete event.properties.$mcp_intent
+    return event
+  },
+})
+```
+
+`intentFallback` is the third option: supply the intent yourself when the agent did not send one.
+
+Whatever the agent narrates, the SDK redacts structured personal identifiers — email addresses, phone
+numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is
+sent. This is always on and needs no configuration. It is best-effort for those well-defined shapes,
+not for free-form personal data such as names or postal addresses, which a regex cannot catch without
+over-redacting ordinary prose. It also applies only to `$mcp_intent`: structured tool `arguments` and
+results are left as-is, because the same shapes are often legitimate data there. If you need a stronger
+guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
+
+### Defaults and opt-outs
+
+On fresh low-level instances, tools with an `outputSchema` deliver new handles through `content` only. Clients that consume only `structuredContent` will not echo those handles, so correlation is not guaranteed for that combination. Unknown ownership can also cause a prompt-back block to be appended for a schema that discovery would not extend; disable `enableConversationId` if that contract is unsuitable.
+
+A valid echoed conversation handle takes precedence over transport sessions. A request that already carries a transport session or a PostHog session token does not mint a new handle or append a prompt-back block. Requests carrying neither use the conversation fallback.
+
+Intent, model capture, conversation correlation, and exception capture are enabled by default.
+Missing-capability reporting and feedback collection remain disabled.
+
+```ts
+instrument(server, posthog, { captureModel: false, enableConversationId: false })
+```
+
+Model capture adds a required `llm_model` argument to compatible tool schemas. Dispatch never
+enforces it, so servers keep working; strict-schema clients see the new field. Set
+`captureModel: false` to leave schemas untouched. Conversation correlation adds an optional
+`conversation_id` argument and returns a handle in eligible tool results. Clients must echo that
+handle to group later calls; calls without it mint new handles. Set `enableConversationId: false`
+to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
+dispatchers also enable model capture and conversation correlation by default.
+The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
+
+### Identifying the deployed server build
+
+MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable
+Git commit SHA, release ID, or container digest once during setup. The SDK adds it to every MCP event
+as `$mcp_server_build`.
+
+```ts
+instrument(server, posthog, { serverBuild: process.env.GIT_SHA })
+
+const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  serverBuild: process.env.GIT_SHA,
+})
+```
+
+Omit `serverBuild` when the deployment does not provide a reliable value.
+`PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
+
+### What `$mcp_llm_model` records, and when it stays empty
+
+`captureModel` is **on** by default. The SDK records the best model id visible to the
+server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
+the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
+
+MCP does not standardize or attest model identity. Client metadata and self-report are both
+unverified. Use the value to spot degradation across models, never for billing or access control.
+Missing, blank, and `unknown` values are recorded as nothing.
+
+The recognized metadata path is Codex's `x-codex-turn-metadata.model` field inside request `_meta`.
+Other clients keep using self-report until they expose a stable model field.
+
+Like `context`, self-report follows the ownership rule of ADR-0011: reading `llm_model` fails
+open where the SDK cannot tell who declared it, stripping it requires proof that the SDK did:
+
+- `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
+  request from the live tool registry, so those work even on a fresh instance.
+- The `get_more_tools` virtual tool works on any instance and on either server type: the SDK writes
+  that descriptor itself, so what it declares is known without a listing.
+- Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
+  that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
+  answer, so it records `llm_model` as the self-reported model and strips nothing, unless
+  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above). Return the schema as
+  your `tools/list` advertises it: ownership follows the same rule as a served listing, and a
+  listing served on the instance wins. A Zod schema is read the way the MCP SDK advertises it, so a
+  union, record or refined object lists as an empty object, gains the injected fields and has them
+  stripped; a host that lists its own JSON Schema (an `anyOf`, say) returns that schema. A tool that
+  declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
+  until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
+  are the escapes. The SDK never replays your listing handler on the call path to find out.
+
+As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
+server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
+from the first `tools/list` and keeps it.
+
+For a custom dispatcher, `PostHogMCP` enables model capture and conversation correlation by default.
+`prepareToolList()` injects the analytics fields and records ownership by tool name.
+`prepareToolCall()` removes SDK-owned arguments and resolves the conversation and session.
+`prepareToolResult()` returns the result to send and the final values to capture. Pass the original
+tool descriptor on each call so this also works when `tools/list` and `tools/call` reach different
+server replicas:
+
+```ts
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
+
+const tools = posthog.prepareToolList(serverTools)
+const originalTool = serverTools.find((tool) => tool.name === toolName)
+const preparedCall = posthog.prepareToolCall(toolName, rawArgs, {
+  originalTool,
+  requestMeta: request.params?._meta,
+  sessionId: transportSessionId,
+})
+const toolResult = await dispatch(toolName, preparedCall.args)
+const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
+
+posthog.captureToolCall({
+  toolName,
+  llmModel: preparedCall.llmModel,
+  llmModelSource: preparedCall.llmModelSource,
+  sessionId: preparedResult.sessionId,
+  conversationId: preparedResult.conversationId,
+  isError: false,
+})
+
+return preparedResult.result
+```
+
+A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
+Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
+without changing the arguments sent to the tool. Pass an existing transport or request session as
+`sessionId`. A valid echoed conversation handle takes precedence. Otherwise, the existing session
+prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
+the previous custom-dispatcher behavior.
+
+### Collecting agent feedback (`send_feedback`)
+
+`collectFeedback` is **off** by default. Turn it on and the SDK advertises a `send_feedback` virtual
+tool: an honest, general feedback channel from the agent to your team. The tool description makes
+missing capabilities the priority category ("report a missing capability whenever no available tool
+fits your task, even if you can work around it") and also invites reports about a tool that failed
+or confused the agent, and praise. Every call emits one `$mcp_feedback` event — never a
+`$mcp_tool_call` — with `$mcp_feedback_type`, `$mcp_feedback_summary`, and the other
+`$mcp_feedback_*` properties; the summary and details double as `$mcp_intent`. The agent receives an
+acknowledgement that says exactly what happened: the report was recorded, no tools were added.
+
+```ts
+instrument(server, posthog, {
+  collectFeedback: {
+    // All fields optional; `collectFeedback: true` uses the defaults.
+    toolName: 'send_feedback',
+    extraProperties: {
+      product_area: { type: 'string', description: 'The product or feature the feedback is about.' },
+    },
+    extraRequired: ['product_area'],
+    onFeedback: async (report) => {
+      await myFeedbackBackend.record(report) // report.extras.product_area, report.raw, ...
+      return 'Thanks - your feedback reached the team.' // replaces the default acknowledgement
+    },
+  },
+})
+```
+
+Host-declared `extraProperties` are merged into the advertised schema and captured as
+`$mcp_feedback_<key>` (sanitized and bounded like every captured value). Arguments the agent invents
+beyond the schema are never captured — they reach `onFeedback` via `report.raw` only. A key that
+collides with a core field fails at configuration time. Free-text fields go through the same PII
+redaction as `$mcp_intent`.
+
+`onFeedback`'s returned string replaces the acknowledgement and is captured as `$mcp_response`
+through the generic sanitize pipeline only — it does not get the structured-PII redaction applied to
+`$mcp_feedback_summary`/`details`, so don't echo the agent's raw report text back in it.
+
+On the custom-dispatcher path, configure the tool on the `PostHogMCP` constructor and route reports
+yourself (`onFeedback` does not apply there):
+
+```ts
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  collectFeedback: { toolName: 'send_feedback' },
+})
+
+// tools/list handler
+return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
+
+// tools/call dispatcher
+const originalTool = myTools.find((tool) => tool.name === name)
+const preparedCall = posthog.prepareToolCall(name, rawArgs, { originalTool })
+if (preparedCall.isFeedback) {
+  await myFeedbackBackend.record(preparedCall.feedbackReport!)
+  const preparedResult = posthog.prepareToolResult(sendFeedbackResult(), preparedCall)
+  posthog.captureFeedback({
+    report: preparedCall.feedbackReport!,
+    sessionId: preparedResult.sessionId,
+    conversationId: preparedResult.conversationId,
+    ...identity,
+  })
+  return preparedResult.result
+}
+```
+
+`originalTool` must come from the application's tool list before `prepareToolList()` adds PostHog's
+virtual tools. This lets a real application tool with the configured feedback name win, including
+when `tools/list` and `tools/call` reach different server replicas.
+
+`send_feedback` covers what `reportMissing` covers — a capability gap is
+`feedback_type: "missing_capability"` — so new integrations should enable only `collectFeedback`.
+`reportMissing` and its `$mcp_missing_capability` event stay unchanged for existing users; enabling
+both advertises both tools. Like `get_more_tools`, a real tool that already uses the configured name
+wins: the SDK warns, skips injection, and delegates calls to the real handler.
+
+On a paginated catalogue (a `tools/list` response with a `nextCursor`), `instrument()` injects
+its virtual tools (`send_feedback` and `get_more_tools`) on the first page only — the page every
+client reads, including clients that never follow `nextCursor` — so a compliant client's
+concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
+empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
+`prepareToolList()` directly own this rule themselves: pass `reportMissing: true` and
+`collectFeedback: true` only for the first page.
+
+Name collisions are detected on the first page only. A real tool named `send_feedback` (or
+`get_more_tools`) on the first page wins: the SDK warns, skips injection, and forwards its calls. A
+real tool that only appears on a **later** page is not detected up front — the SDK's virtual tool is
+injected and intercepts calls to the name, so the real tool is shadowed and a concatenated listing
+carries the name twice. The SDK logs a warning when a client fetches the colliding page, but the fix
+is yours: rename the SDK's tools with `collectFeedback: { toolName: "..." }` and the
+`missingCapabilityToolName` option.
+
+### If you switched to `instrument(server.server)`
+
+Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual
+workaround was to instrument the underlying low-level server. `instrument(server)` now works, so
+you can go back to the documented call.
+
+Whether the workaround costs you anything depends on your stack: instrumenting the low-level server
+skips the high-level tool registry, so tool descriptions and callback-level wrapping come only from
+what is advertised over `tools/list`. If your framework never calls `registerTool()` — `@rekog/mcp-nest`
+does not — the registry is empty and the two calls behave the same.
+
+## Developing locally
+
+To test local changes in a consumer app (e.g. a dummy MCP server), symlink **both**
+`@posthog/mcp` and its `posthog-node` peer from this monorepo into the app — run from the
+app's directory:
+
+```bash
+mkdir -p node_modules/@posthog   # in case the app has no other @posthog/-scoped deps yet
+ln -s /absolute/path/to/posthog-js/packages/mcp  node_modules/@posthog/mcp
+ln -s /absolute/path/to/posthog-js/packages/node node_modules/posthog-node
+```
+
+Then keep a watch build running and restart the app after each change:
+
+```bash
+cd /absolute/path/to/posthog-js/packages/mcp && pnpm dev   # rebuilds dist/ on save
+
+# in the app (e.g. dummy mcp), after each rebuild:
+npm start                                                  # Node caches dist/ at startup, so restart to pick it up
+```
+
+- **`npm install` in the app replaces both symlinks with published copies** — re-create them if you run it.
+
+## Run tests
+
+```bash
+cd packages/mcp && pnpm test:unit
+```

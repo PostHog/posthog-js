@@ -29,6 +29,7 @@ export type {
     EvaluationReason,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
@@ -46,6 +47,7 @@ export type { Headers, RequestResponse, RequestCallback } from './request'
 // Session recording types
 export type {
     SessionRecordingCanvasOptions,
+    CanvasMaskRegion,
     InitiatorType,
     NetworkRequest,
     CapturedNetworkRequest,
@@ -60,6 +62,7 @@ export type {
     AutocaptureConfig,
     RageclickConfig,
     BootstrapConfig,
+    ResetOptions,
     SupportedWebVitalsMetrics,
     PerformanceCaptureConfig,
     DeadClickCandidate,
@@ -70,16 +73,33 @@ export type {
     ConfigDefaults,
     ExternalIntegrationKind,
     ErrorTrackingOptions,
+    ExceptionRateLimiterConfig,
     MaskInputOptions,
     SlimDOMOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
     LogCaptureOptions,
+    MetricsConfig,
+    BrowserMetricsConfig,
+    NetworkMetricsConfig,
+    NetworkMetricsRequest,
+    NetworkMetricsResponse,
+    CapturePageviewOptions,
+    WebMCPCaptureConfig,
     PostHogConfig,
 } from './posthog-config'
 
 // Segment integration types
-export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, SegmentFunction } from './segment'
+export type {
+    SegmentUser,
+    SegmentAnalytics,
+    SegmentPlugin,
+    SegmentContext,
+    SegmentFunction,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+} from './segment'
 
 // Survey types
 export type { SurveyRenderReason } from './survey'
@@ -105,3 +125,38 @@ export type {
     OtlpLogsPayload,
     BeforeSendLogFn,
 } from './capture-log'
+
+// Metric capture types
+export type {
+    MetricAttributeValue,
+    MetricAttributes,
+    MetricType,
+    CaptureMetricOptions,
+    MetricSample,
+    BeforeSendMetricFn,
+    Metrics,
+    OtlpNumberDataPoint,
+    OtlpHistogramDataPoint,
+    OtlpMetric,
+    OtlpMetricsPayload,
+} from './capture-metric'
+export { OTLP_AGGREGATION_TEMPORALITY_DELTA } from './capture-metric'
+
+// Distributed tracing types
+export type {
+    SpanKind,
+    SpanStatusCode,
+    SpanAttributeValue,
+    SpanAttributes,
+    SpanTimeInput,
+    StartSpanOptions,
+    Span,
+    SpanRecord,
+    BeforeSpanSendFn,
+    TracesConfig,
+    OtlpSpanKeyValue,
+    OtlpSpanEvent,
+    OtlpSpanStatus,
+    OtlpSpan,
+    OtlpTracesPayload,
+} from './traces'

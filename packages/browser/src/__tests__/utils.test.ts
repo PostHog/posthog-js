@@ -7,19 +7,28 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, extend, isCrossDomainCookie, migrateConfigField } from '../utils'
-import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
-import { expect } from '@jest/globals'
+import {
+    _copyAndTruncateStrings,
+    extend,
+    isCrossDomainCookie,
+    migrateConfigField,
+} from '@posthog/browser-common/utils/general-utils'
+import {
+    isLikelyBot,
+    DEFAULT_BLOCKED_UA_STRS,
+    isBlockedUA,
+    NavigatorUAData,
+} from '@posthog/browser-common/utils/blocked-uas'
+import { expect } from 'vitest'
 
-import { _base64Encode } from '../utils/encode-utils'
-import { getPersonPropertiesHash, propertyComparisons } from '../utils/property-utils'
+import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
+import { getPersonPropertiesHash, propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { detectDeviceType } from '@posthog/core'
-import { getEventProperties } from '../utils/event-utils'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import '../config'
 
 function userAgentFor(botString: string) {
-    const randOne = (Math.random() + 1).toString(36).substring(7)
-    const randTwo = (Math.random() + 1).toString(36).substring(7)
-    return `Mozilla/5.0 (compatible; ${botString}/${randOne}; +http://a.com/bot/${randTwo})`
+    return `Mozilla/5.0 (compatible; ${botString}/1.0; +https://example.com/client)`
 }
 
 describe('utils', () => {
@@ -105,12 +114,20 @@ describe('utils', () => {
     })
 
     describe('isLikelyBot', () => {
+        it('only blocks a custom marker when configured', () => {
+            const navigator = { userAgent: userAgentFor('testington') } as Navigator
+            expect(isLikelyBot(navigator, undefined)).toBe(false)
+            expect(isLikelyBot(navigator, ['unrelated-marker'])).toBe(false)
+            expect(isLikelyBot(navigator, ['testington'])).toBe(true)
+            expect(isLikelyBot({ userAgent: userAgentFor('ordinary-client') } as Navigator, ['testington'])).toBe(false)
+        })
+
         it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
             'blocks a bot based on the user agent %s',
             (botString) => {
-                const randomisedUserAgent = userAgentFor(botString)
+                const userAgent = userAgentFor(botString)
 
-                expect(isLikelyBot({ userAgent: randomisedUserAgent } as Navigator, ['testington'])).toBe(true)
+                expect(isLikelyBot({ userAgent } as Navigator, ['testington'])).toBe(true)
             }
         )
 
@@ -163,6 +180,7 @@ describe('utils', () => {
                 'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
             ],
             ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
+            ['Mozilla/5.0 (compatible; Pinterestbot/1.0; +http://www.pinterest.com/bot.html)'],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
@@ -182,6 +200,10 @@ describe('utils', () => {
             ],
             [
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) elec/1.0.0 Chrome/126.0.6478.127 Electron/31.2.1 Safari/537.36',
+            ],
+            [
+                // Pinterest app's own in-app browser -- a real user, not the Pinterestbot crawler
+                'Mozilla/5.0 (iPad; CPU OS 11_2_6 like Mac OS X) AppleWebKit/604.5.6 (KHTML, like Gecko) Mobile/15D100 [Pinterest/iOS]',
             ],
         ])('does not block based on non-bot user agent', (userAgent) => {
             expect(isBlockedUA(userAgent, [])).toBe(false)
@@ -443,6 +465,8 @@ describe('utils', () => {
         })
 
         const icontainsCases: [string[], string[], boolean][] = [
+            [['ONE'], ['a message with one'], true],
+            [['one'], ['A MESSAGE WITH ONE'], true],
             [[], ['one'], false], // no targets
             [['one', 'two', 'three'], [], false], // no values
             [['one', 'two', 'three'], ['one'], true], // full match
@@ -474,7 +498,7 @@ describe('utils', () => {
         })
 
         it('logs deprecation warning when using old field', () => {
-            const mockLogger = { warn: jest.fn() }
+            const mockLogger = { warn: vi.fn() }
             migrateConfigField({ oldField: 'oldValue' }, 'newField', 'oldField', 'default', mockLogger)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining("Config field 'oldField' is deprecated")

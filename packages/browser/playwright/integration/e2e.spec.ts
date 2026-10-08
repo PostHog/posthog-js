@@ -24,6 +24,7 @@ test.describe('ingestion', () => {
         await events.waitForEvent('$pageview')
         await page.click('[data-cy-custom-event-button]')
         await events.waitForEvent('custom-event')
+        await events.waitForEvent('$autocapture')
         events.expectCountMap({
             $pageview: 1,
             $autocapture: 1,

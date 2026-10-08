@@ -1,0 +1,10 @@
+{
+  "trailingComma": "es5",
+  "tabWidth": 2,
+  "semi": false,
+  "singleQuote": true,
+  "quoteProps": "preserve",
+  "printWidth": 120,
+  "sortPackageJson": false,
+  "ignorePatterns": ["src/component/_generated/**"]
+}

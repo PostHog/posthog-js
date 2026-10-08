@@ -55,6 +55,40 @@ describe('error capture on the tool-call path', () => {
     expect(exception?.stacktrace?.frames?.length).toBeGreaterThan(0)
   })
 
+  it('redacts PostHog tokens from both emitted error-message properties', async () => {
+    instrument(server, fakePostHog())
+    const projectToken = 'phc_123456789012345678901234567890'
+    const personalToken = 'phx_abcdefghijklmnopqrstuvwxyz1234'
+
+    server.tool!('secret_error', 'throws a sensitive error', {}, async () => {
+      throw new Error(`Project token ${projectToken} and personal token ${personalToken}`)
+    })
+
+    const result = await client.request(
+      {
+        method: 'tools/call',
+        params: { name: 'secret_error', arguments: {} },
+      },
+      CallToolResultSchema
+    )
+
+    // Sanitization applies only to analytics and must not alter the MCP result.
+    expect(result.content[0].text).toContain(projectToken)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const toolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_tool_name === 'secret_error')
+    const exception = capture
+      .findCapturesByEvent('$exception')
+      .find((event) => event.properties.$mcp_tool_name === 'secret_error')
+    const expected = 'Project token [redacted] and personal token [redacted]'
+    const exceptionList = exception?.properties.$exception_list as Array<{ value: string }> | undefined
+
+    expect(toolCall?.properties.$mcp_error_message).toBe(expected)
+    expect(exceptionList?.[0].value).toBe(expected)
+  })
+
   it('still propagates the error result to the MCP client (does not swallow it)', async () => {
     instrument(server, fakePostHog())
 
@@ -98,7 +132,7 @@ describe('error capture on the tool-call path', () => {
         )
       },
       'calculate',
-      { op: 'modulo', a: 10, b: 3, context: 'test' },
+      { op: 'modulo', a: 10, b: 3, context: 'test', private_identifier: true },
     ],
     [
       'missing required parameter',
@@ -120,6 +154,7 @@ describe('error capture on the tool-call path', () => {
     await new Promise((r) => setTimeout(r, 50))
     const event = capture.findEventsByResourceName(toolName).find((e) => e.isError)
     const exception = event?.error?.$exception_list?.[0]
+    expect(event?.properties?.$mcp_input_keys).toEqual(toolName === 'calculate' ? ['a', 'b', 'op', '[redacted]'] : [])
     expect(exception?.value).toMatch(/Invalid|required/i)
     expect(['McpError', 'Error', undefined]).toContain(exception?.type)
   })

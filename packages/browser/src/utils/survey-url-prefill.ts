@@ -1,6 +1,6 @@
 import { Survey, SurveyQuestion, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
 import { getSurveyResponseKey } from '../extensions/surveys/surveys-extension-utils'
-import { logger } from './logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { isUndefined } from '@posthog/core'
 import { getNextSurveyStep } from './survey-branching'
 
@@ -33,13 +33,19 @@ export function extractPrefillParamsFromUrl(searchString: string): {
     const pairs = cleanSearch.split('&')
 
     for (const pair of pairs) {
-        const [key, value] = pair.split('=')
-        if (!key || isUndefined(value)) {
+        const separator = pair.indexOf('=')
+        if (separator <= 0) {
             continue
         }
 
-        const decodedKey = decodeURIComponent(key)
-        const decodedValue = decodeURIComponent(value)
+        let decodedKey: string
+        let decodedValue: string
+        try {
+            decodedKey = decodeURIComponent(pair.slice(0, separator))
+            decodedValue = decodeURIComponent(pair.slice(separator + 1))
+        } catch {
+            continue
+        }
 
         // Check for auto_submit parameter
         if (decodedKey === 'auto_submit' && decodedValue === 'true') {
@@ -152,13 +158,16 @@ export function calculatePrefillStartIndex(
     survey: Survey,
     prefilledIndices: number[],
     responses: Record<string, any>
-): { startQuestionIndex: number; skippedResponses: Record<string, any> } {
+): { startQuestionIndex: number; skippedResponses: Record<string, any>; skippedIndices: number[] } {
     let currentIndex = 0
     const skippedResponses: Record<string, any> = {}
+    // Auto-advanced questions, persisted as visitedIndices so a manual submit keeps their answers.
+    const skippedIndices: number[] = []
 
     const MAX_ITERATIONS = survey.questions.length + 1
-    const iterations = 0
+    let iterations = 0
     while (currentIndex < survey.questions.length && iterations < MAX_ITERATIONS) {
+        iterations++
         // Stop if current question is not prefilled
         if (!prefilledIndices.includes(currentIndex)) {
             break
@@ -179,6 +188,7 @@ export function calculatePrefillStartIndex(
                 skippedResponses[responseKey] = responses[responseKey]
             }
         }
+        skippedIndices.push(currentIndex)
 
         // Use branching logic to determine the next question
         const response = question.id ? responses[getSurveyResponseKey(question.id)] : null
@@ -186,12 +196,12 @@ export function calculatePrefillStartIndex(
 
         if (nextStep === SurveyQuestionBranchingType.End) {
             // Survey is complete - return questions.length to indicate completion
-            return { startQuestionIndex: survey.questions.length, skippedResponses }
+            return { startQuestionIndex: survey.questions.length, skippedResponses, skippedIndices }
         }
 
         // Move to the next question (respecting branching)
         currentIndex = nextStep
     }
 
-    return { startQuestionIndex: currentIndex, skippedResponses }
+    return { startQuestionIndex: currentIndex, skippedResponses, skippedIndices }
 }

@@ -32,11 +32,39 @@ print_command_error() {
 
 # WITH_ENVIRONMENT is executed by React Native
 
-POSTHOG_UPLOAD_ARGS=""
+POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
+POSTHOG_FORCE_ENABLED="${POSTHOG_FORCE:-}"
+# The mode is explicit when the environment or a --posthog-release-mode argument supplies it, and
+# implicit when only the event default applies. The difference decides how an old posthog-cli is
+# handled below: an explicit mode fails the build, the implicit default softens to a bound upload.
+POSTHOG_RELEASE_MODE_EXPLICIT=1
+if [ -z "${POSTHOG_RELEASE_MODE:-}" ]; then
+  POSTHOG_RELEASE_MODE_EXPLICIT=0
+fi
+POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-event}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
-      POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"
+      POSTHOG_SKIP_ON_CONFLICT_ENABLED=1
+      shift
+      ;;
+    --posthog-force)
+      POSTHOG_FORCE_ENABLED=1
+      shift
+      ;;
+    --posthog-release-mode)
+      # `shift 2` past the end of the argument list makes `set -e` abort the wrapper silently.
+      if [ "$#" -lt 2 ]; then
+        echo "error: --posthog-release-mode needs a value ('symbol-set' or 'event')"
+        exit 1
+      fi
+      POSTHOG_RELEASE_MODE_VALUE="$2"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
+      shift 2
+      ;;
+    --posthog-release-mode=*)
+      POSTHOG_RELEASE_MODE_VALUE="${1#*=}"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
       shift
       ;;
     --)
@@ -49,13 +77,78 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+posthog_flag_is_enabled() {
+  [ "$1" = "1" ] || [ "$1" = "true" ]
+}
+
+# How an upload treats a symbol set that already exists with different content: skip-on-conflict
+# keeps the stored one, force overwrites it, and the default fails the build. posthog-cli declares
+# the two flags mutually exclusive, so reject the pair here rather than letting the upload fail on
+# an argument-parser error after the bundle is built.
+if posthog_flag_is_enabled "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" && posthog_flag_is_enabled "$POSTHOG_FORCE_ENABLED"; then
+  echo "error: posthog skip-on-conflict and force cannot both be set. posthog-cli accepts only one of --skip-on-conflict and --force."
+  exit 1
+fi
+
+POSTHOG_UPLOAD_ARGS=()
+if posthog_flag_is_enabled "$POSTHOG_SKIP_ON_CONFLICT_ENABLED"; then
+  POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)
+fi
+if posthog_flag_is_enabled "$POSTHOG_FORCE_ENABLED"; then
+  POSTHOG_UPLOAD_ARGS+=(--force)
+fi
+
+# How the release a build belongs to gets associated with the exceptions it reports. This covers
+# the Hermes source maps only. The dSYM upload always binds to the release its build creates.
+#   event (the default) uploads the maps release-independent, and each event resolves its own
+#     release from the $app_namespace / $app_version / $app_build the SDK already sends. Xcode's
+#     build settings supply matching coordinates below, so nothing is injected into the app.
+#   symbol-set stamps the release onto the uploaded maps instead, and an exception inherits the
+#     release of the maps its frames resolved against.
+POSTHOG_RELEASE_MODE_ARGS=()
+if [ -n "$POSTHOG_RELEASE_MODE_VALUE" ]; then
+  case "$POSTHOG_RELEASE_MODE_VALUE" in
+    symbol-set|event) ;;
+    *)
+      echo "error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RELEASE_MODE_VALUE'"
+      exit 1
+      ;;
+  esac
+
+  # posthog-cli reads POSTHOG_RELEASE_MODE itself when --release-mode is absent, which it
+  # deliberately is in symbol-set mode so the flag stays optional against a CLI predating it. Pin
+  # the resolved mode so a variable inherited from the build environment cannot quietly override
+  # an explicit --posthog-release-mode.
+  export POSTHOG_RELEASE_MODE="$POSTHOG_RELEASE_MODE_VALUE"
+  if [ "$POSTHOG_RELEASE_MODE_VALUE" != "symbol-set" ]; then
+    POSTHOG_RELEASE_MODE_ARGS=(--release-mode "$POSTHOG_RELEASE_MODE_VALUE")
+  fi
+fi
+
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
-# Accept $1 only when it actually points at a shell script; guard against the
-# Expo plugin previously passing "/bin/sh" as $1 (issue #3682).
-if [[ "${1:-}" == *.sh ]]; then
-  REACT_NATIVE_XCODE="$1"
-else
-  REACT_NATIVE_XCODE="$REACT_NATIVE_XCODE_DEFAULT"
+REACT_NATIVE_XCODE="$REACT_NATIVE_XCODE_DEFAULT"
+# A config plugin may already wrap the React Native script. Keep the complete
+# command for execution, but locate the RN script within it so its intermediate
+# Hermes source map can be preserved before any wrapper runs.
+for command_arg in "$@"; do
+  case "$command_arg" in
+    *packager/react-native-xcode.sh|*scripts/react-native-xcode.sh)
+      REACT_NATIVE_XCODE="$command_arg"
+      break
+      ;;
+  esac
+done
+
+# Some outer wrappers only forward posthog-xcode.sh, without the original RN
+# script argument. Resolve hoisted installs when the standard relative path is
+# unavailable instead of assuming node_modules lives directly above ios/.
+if [ "$#" -eq 0 ] && [ ! -f "$REACT_NATIVE_XCODE_DEFAULT" ]; then
+  REACT_NATIVE_PACKAGE_JSON=$("${NODE_BINARY:-node}" --print "require.resolve('react-native/package.json')" 2>/dev/null || true)
+  RESOLVED_REACT_NATIVE_XCODE="$(dirname "$REACT_NATIVE_PACKAGE_JSON")/scripts/react-native-xcode.sh"
+  if [ -n "$REACT_NATIVE_PACKAGE_JSON" ] && [ -f "$RESOLVED_REACT_NATIVE_XCODE" ]; then
+    REACT_NATIVE_XCODE_DEFAULT="$RESOLVED_REACT_NATIVE_XCODE"
+    REACT_NATIVE_XCODE="$RESOLVED_REACT_NATIVE_XCODE"
+  fi
 fi
 
 # Check if DERIVED_FILE_DIR exists, defined by Xcode
@@ -102,32 +195,155 @@ if [ -z "$PH_CLI_PATH" ] || [ ! -x "$PH_CLI_PATH" ]; then
   exit 1
 fi
 
+INFO_PLIST_MIN_POSTHOG_CLI_VERSION="0.15.1"
+PH_CLI_VERSION=$("$PH_CLI_PATH" --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)
+POSTHOG_CLI_SUPPORTS_INFO_PLIST=0
+if [ -n "$PH_CLI_VERSION" ]; then
+  LOWEST_POSTHOG_CLI_VERSION=$(printf '%s\n%s\n' "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+  if [ "$LOWEST_POSTHOG_CLI_VERSION" = "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" ]; then
+    POSTHOG_CLI_SUPPORTS_INFO_PLIST=1
+  fi
+fi
+
+# The CLI is whatever the machine has, not a pinned version, so an older one rejects --release-mode
+# with a bare argument-parser error. Checks the version read above, and mirrors the floor check in
+# posthog-ios build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli
+# built from source, which reports its Cargo manifest version rather than the version it ships as.
+# posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep this
+# in step with PostHogCli.MIN_RELEASE_MODE_VERSION in posthog.gradle.
+MIN_RELEASE_MODE_CLI_VERSION="0.16.0"
+# A SKIP_BUNDLING build (a native-only compile) exits before the hermes clone/upload below, so the
+# --release-mode flag they carry is never applied. Skip the floor check for it, otherwise the default
+# event mode fails such a build over a posthog-cli version it never exercises.
+if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ] && [ -z "${SKIP_BUNDLING:-}" ]; then
+  POSTHOG_CLI_SUPPORTS_RELEASE_MODE=0
+  if [ -n "$PH_CLI_VERSION" ]; then
+    # If the minimum sorts first, the installed version is at or above it.
+    PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+    if [ "$PH_CLI_LOWEST" = "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
+      POSTHOG_CLI_SUPPORTS_RELEASE_MODE=1
+    fi
+  fi
+  if [ "$POSTHOG_CLI_SUPPORTS_RELEASE_MODE" != "1" ]; then
+    if [ "$POSTHOG_RELEASE_MODE_EXPLICIT" = "1" ]; then
+      if [ -z "$PH_CLI_VERSION" ]; then
+        echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
+        exit 1
+      fi
+      echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
+      exit 1
+    fi
+    # Nothing configured the mode, so keep the old posthog-cli working: upload without the flag,
+    # which binds the maps to the release, as builds did before the event default existed.
+    echo "warning: posthog-cli ${PH_CLI_VERSION:-unknown} predates release mode '$POSTHOG_RELEASE_MODE_VALUE' (needs >= ${MIN_RELEASE_MODE_CLI_VERSION}). Uploading Hermes source maps bound to the release. Upgrade: npm install -g @posthog/cli@latest"
+    POSTHOG_RELEASE_MODE_ARGS=()
+  fi
+fi
+
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
-# Pass release info from Xcode build settings when available
-CLI_RELEASE_ARGS=""
-if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-name $PRODUCT_BUNDLE_IDENTIFIER"
-fi
-if [ -n "${MARKETING_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $MARKETING_VERSION"
-fi
-if [ -n "${CURRENT_PROJECT_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $CURRENT_PROJECT_VERSION"
+# The native runtime reports these values from the built Info.plist. Prefer the source Info.plist so
+# source maps use the same release when Expo EAS remote versioning does not update Xcode's defaults.
+resolve_posthog_ios_release_info() {
+  resolve_posthog_build_setting_references() {
+    local value="$1"
+    local token
+    local name
+    local replacement
+    local prefix
+    local suffix
+
+    while [[ "$value" =~ (\$\(([A-Za-z_][A-Za-z0-9_]*)\)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}) ]]; do
+      token=${BASH_REMATCH[1]}
+      name=${BASH_REMATCH[2]:-${BASH_REMATCH[3]}}
+      replacement=$(printenv "$name" 2>/dev/null) || return
+      prefix=${value%%"$token"*}
+      suffix=${value#*"$token"}
+      value="${prefix}${replacement}${suffix}"
+    done
+    printf '%s' "$value"
+  }
+
+  POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"
+  POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
+  POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
+  POSTHOG_INFO_PLIST="${INFOPLIST_FILE:-}"
+  POSTHOG_USE_INFO_PLIST=0
+
+  # Bare C preprocessor macros cannot be expanded safely here, and the product plist may belong to
+  # a previous build. Preserve the existing Xcode-setting fallback for preprocessed plists.
+  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] || [ -z "$POSTHOG_INFO_PLIST" ]; then
+    return 0
+  fi
+  case "$POSTHOG_INFO_PLIST" in
+    /*) ;;
+    *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;
+  esac
+  if [ ! -f "$POSTHOG_INFO_PLIST" ]; then
+    return 0
+  fi
+  if [ "$POSTHOG_CLI_SUPPORTS_INFO_PLIST" = "1" ]; then
+    POSTHOG_USE_INFO_PLIST=1
+    return 0
+  fi
+  if [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
+    return 0
+  fi
+
+  POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
+  POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
+  POSTHOG_PLIST_RELEASE_VERSION=$(resolve_posthog_build_setting_references "$POSTHOG_PLIST_RELEASE_VERSION" || true)
+  POSTHOG_PLIST_BUILD_VERSION=$(resolve_posthog_build_setting_references "$POSTHOG_PLIST_BUILD_VERSION" || true)
+
+  case "$POSTHOG_PLIST_RELEASE_VERSION" in
+    ""|*"\$("*|*"\${"*) ;;
+    *) POSTHOG_RELEASE_VERSION="$POSTHOG_PLIST_RELEASE_VERSION" ;;
+  esac
+  case "$POSTHOG_PLIST_BUILD_VERSION" in
+    ""|*"\$("*|*"\${"*) ;;
+    *) POSTHOG_BUILD_VERSION="$POSTHOG_PLIST_BUILD_VERSION" ;;
+  esac
+}
+
+resolve_posthog_ios_release_info
+
+CLI_RELEASE_ARGS=()
+if [ "$POSTHOG_USE_INFO_PLIST" = "1" ]; then
+  CLI_RELEASE_ARGS+=(--info-plist "$POSTHOG_INFO_PLIST")
+else
+  if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
+    CLI_RELEASE_ARGS+=(--release-name "$PRODUCT_BUNDLE_IDENTIFIER")
+  fi
+  if [ -n "${POSTHOG_RELEASE_VERSION}" ]; then
+    CLI_RELEASE_ARGS+=(--release-version "$POSTHOG_RELEASE_VERSION")
+  fi
+  if [ -n "${POSTHOG_BUILD_VERSION}" ]; then
+    CLI_RELEASE_ARGS+=(--build "$POSTHOG_BUILD_VERSION")
+  fi
 fi
 
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it
 # lets patch the script to comment out this part if not yet
 if grep -q '^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE' "$REACT_NATIVE_XCODE"; then
   echo "Patching React Native script to preserve sourcemap file..."
-  sed -i '' 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  if sed --version >/dev/null 2>&1; then
+    sed -i 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  else
+    sed -i '' 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  fi
   echo "Patched: commented out rm PACKAGER_SOURCEMAP_FILE line"
 fi
 
-# Execute React Native Xcode script and check exit code
+# Execute the complete bundle command so other source-map wrappers keep their
+# script path and arguments. Fall back to the standard RN script when an outer
+# wrapper invokes posthog-xcode.sh without forwarding its remaining arguments.
 set +x +e # disable printing commands and allow continuing on error
-RN_XCODE_OUTPUT=$(/bin/sh -c "$REACT_NATIVE_XCODE" 2>&1)
+if [ "$#" -gt 0 ]; then
+  RN_XCODE_OUTPUT=$("$@" 2>&1)
+else
+  RN_XCODE_OUTPUT=$(/bin/sh "$REACT_NATIVE_XCODE_DEFAULT" 2>&1)
+fi
 RN_XCODE_EXIT_CODE=$?
 if [ $RN_XCODE_EXIT_CODE -eq 0 ]; then
   echo "$RN_XCODE_OUTPUT" | awk '{print "output: react-native-xcode - " $0}'
@@ -159,6 +375,7 @@ set -x -e
 # natively (GitHub Actions, Vercel). Those runners inject the real variables
 # themselves, and we don't want to overwrite them with locally-derived ones.
 #
+set +e # best-effort git metadata; failures must not abort the build
 if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
   GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$GIT_TOPLEVEL" ]; then
@@ -173,7 +390,9 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
       GIT_HOST=$(echo "$GIT_REMOTE_URL" | sed -E 's#^[a-z]+://##; s#^[^@]*@##; s#[:/].*$##')
       # Strip scheme + user@host + separator, optional port, and .git suffix
       GIT_REPO_PATH=$(echo "$GIT_REMOTE_URL" | sed -E 's#^([a-z]+://)?[^:/]*[:/]##; s#^[0-9]+/##; s#\.git$##')
-      if [ -n "$GIT_HOST" ] && [ -n "$GIT_REPO_PATH" ]; then
+      # --verify --quiet prints nothing on an unborn branch, where plain `rev-parse HEAD` prints "HEAD"
+      GIT_SHA=$(git -C "$GIT_TOPLEVEL" rev-parse --verify --quiet HEAD 2>/dev/null)
+      if [ -n "$GIT_HOST" ] && [ -n "$GIT_REPO_PATH" ] && [ -n "$GIT_SHA" ]; then
         GIT_BRANCH_NAME=$(git -C "$GIT_TOPLEVEL" rev-parse --abbrev-ref HEAD 2>/dev/null)
         # --abbrev-ref returns the literal string "HEAD" when the working copy
         # is in a detached-HEAD state (bisect, checking out a tag, CI checkouts
@@ -183,7 +402,7 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
           GIT_BRANCH_NAME=$(git -C "$GIT_TOPLEVEL" rev-parse --short HEAD 2>/dev/null)
         fi
         export GITHUB_ACTIONS="true"
-        export GITHUB_SHA=$(git -C "$GIT_TOPLEVEL" rev-parse HEAD 2>/dev/null)
+        export GITHUB_SHA="$GIT_SHA"
         export GITHUB_REF_NAME="$GIT_BRANCH_NAME"
         export GITHUB_REPOSITORY="$GIT_REPO_PATH"
         export GITHUB_SERVER_URL="https://${GIT_HOST}"
@@ -191,10 +410,11 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
     fi
   fi
 fi
+set -e
 
 # Execute posthog cli clone
 set +x +e
-CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE $CLI_RELEASE_ARGS" 2>&1)
+CLI_CLONE_OUTPUT=$("$PH_CLI_PATH" hermes clone --minified-map-path "$SOURCEMAP_PACKAGER_FILE" --composed-map-path "$SOURCEMAP_FILE" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)
 CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
@@ -206,7 +426,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)
+CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'

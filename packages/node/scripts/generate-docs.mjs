@@ -38,6 +38,7 @@ const NODE_TYPE_EXAMPLES = {
 const config = {
   packageDir: path.resolve(import.meta.dirname, '..'), // packages/node
   apiJsonPath: path.resolve(import.meta.dirname, '../docs/posthog-node.api.json'),
+  dtsEntryPath: path.resolve(import.meta.dirname, '../dist/entrypoints/index.node.d.ts'),
   outputPath: path.resolve(import.meta.dirname, `../references/posthog-node-references-${version}.json`),
   version: version,
   id: NODE_SPEC_INFO.id,
@@ -58,7 +59,7 @@ const latestOutput = { ...output, info: { ...output.info, version: '<version>' }
 
 // Always update the rolling public API reference used by CI and docs previews.
 const latestPath = path.resolve(import.meta.dirname, '../references/posthog-node-references-latest.json')
-fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2))
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2) + '\n')
 
 // Versioned references are release artifacts. Avoid writing them during normal generation
 // so PRs don't accidentally commit package-version-specific reference files.

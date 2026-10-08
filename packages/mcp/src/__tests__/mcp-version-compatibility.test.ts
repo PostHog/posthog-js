@@ -15,7 +15,7 @@ describe('MCP Version Compatibility', () => {
     )
 
     // Test compatibility using isCompatibleServerType
-    const result = isCompatibleServerType(server)
+    const result = isCompatibleServerType(server, () => undefined)
     expect(result).toBe(server)
   })
 })

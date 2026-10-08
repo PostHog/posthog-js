@@ -38,8 +38,14 @@
             {
               "description": "",
               "isOptional": false,
-              "type": "PostHogProviderProps",
+              "type": "any",
               "name": "{ children, client, options, apiKey, autocapture, style, debug, }"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "PostHogProviderProps",
+              "name": "input"
             }
           ],
           "returnType": {
@@ -64,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -148,7 +154,7 @@
         },
         {
           "category": "Error tracking",
-          "description": "Capture a caught exception manually",
+          "description": "Capture a caught exception manually\nExceptions also include capture-time `$app_state` (active, background, inactive or extension) on any platform where React Native AppState provides a known value. On iOS and Android, optional `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by `customAppProperties`, including the existing `$app_version` and `$app_build`. Override these fields with `additionalProperties`, or remove them using `before_send`.",
           "details": null,
           "id": "captureException",
           "showDocs": true,
@@ -218,6 +224,35 @@
           "returnType": {
             "id": "void",
             "name": "void"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus Android taps while the app is running if `@posthog/react-native-plugin` is older than 2.6.0. A notification PostHog sent is still counted once when both paths report it (same `posthog.invocation_id` and action within five minutes); one from another provider is counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
+          "details": null,
+          "id": "capturePushNotificationOpened",
+          "showDocs": true,
+          "title": "capturePushNotificationOpened",
+          "examples": [
+            {
+              "id": "capturepushnotificationopened",
+              "name": "Generated example for capturePushNotificationOpened",
+              "code": "// Generated example for capturePushNotificationOpened\nposthog.capturePushNotificationOpened();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "{\n        title?: string;\n        subtitle?: string;\n        body?: string;\n        payload?: {\n            [key: string]: JsonType;\n        };\n        action?: string;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -409,7 +444,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Gets the value of a feature flag for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading. Multivariant feature flags are returned as a string.",
+          "description": "Gets the value of a feature flag for the current user.\nReturns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag. Returns `undefined` before flags load or when loading fails. For backwards compatibility, a missing key can resolve to `false` after a non-empty response is stored; use `getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.\nGlobally inactive flags are omitted from remote responses, so they follow this missing-key behavior rather than carrying an explicit off evaluation.",
           "details": null,
           "id": "getFeatureFlag",
           "showDocs": true,
@@ -428,6 +463,12 @@
               "isOptional": false,
               "type": "string",
               "name": "key"
+            },
+            {
+              "description": "Optional per-call settings",
+              "isOptional": true,
+              "type": "FeatureFlagResultOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -720,7 +761,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Checks if a feature flag is enabled for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading.",
+          "description": "Checks if a feature flag is enabled for the current user.\nA `false` return value means the SDK resolved the current value as off. If no evaluation is available, this method returns `defaultValue` when provided. Without a default, it returns `undefined` before flags load; for backwards compatibility, a missing key can resolve to `false` after a non-empty response is stored.\nGlobally inactive flags are omitted from remote responses, so they follow this missing-key behavior rather than carrying an explicit off evaluation.",
           "details": null,
           "id": "isFeatureEnabled",
           "showDocs": true,
@@ -729,7 +770,12 @@
             {
               "id": "check_if_feature_flag_is_enabled",
               "name": "check if feature flag is enabled",
-              "code": "\n\n// check if feature flag is enabled\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')\n\n\n\n"
+              "code": "\n\n// check if feature flag is enabled\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')\n\n\n"
+            },
+            {
+              "id": "fall_back_to_false_while_flags_are_not_loaded",
+              "name": "fall back to false while flags are not loaded",
+              "code": "\n\n// fall back to false while flags are not loaded\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -739,11 +785,17 @@
               "isOptional": false,
               "type": "string",
               "name": "key"
+            },
+            {
+              "description": "Optional per-call settings",
+              "isOptional": false,
+              "type": "IsFeatureEnabledOptions & {\n        defaultValue: boolean;\n    }",
+              "name": "options"
             }
           ],
           "returnType": {
-            "id": "boolean | undefined",
-            "name": "boolean | undefined"
+            "id": "boolean",
+            "name": "boolean"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -834,6 +886,41 @@
               "isOptional": false,
               "type": "PostHogEventProperties",
               "name": "properties"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Registers this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`.\nRegistration happens at startup on its own when  is on, so call this for token refreshes, which that startup fetch cannot see — on Android only, since a refresh listener yields an FCM token and iOS defaults to APNs. Safe to call before the native SDK is ready; the call queues rather than being dropped.\n`appId` says which provider delivers: the Firebase `project_id` for an FCM token, the APNs bundle id for an APNs token. Unset, iOS uses the bundle id and Android the default `FirebaseApp`'s project id, so pass it if you don't use Firebase or use a non-default project. Registration fails server-side if your PostHog project has no matching integration for `appId`.\nTo use FCM on iOS too, pass the Firebase `project_id` as `appId` and set  to `false` first — otherwise the device registers twice (APNs under the bundle id, FCM under the project id), a Workflow with both integrations delivers twice, and  clears only the most recent.\nNot supported on web or macOS.",
+          "details": null,
+          "id": "registerPushNotificationToken",
+          "showDocs": true,
+          "title": "registerPushNotificationToken",
+          "examples": [
+            {
+              "id": "registerpushnotificationtoken",
+              "name": "Generated example for registerPushNotificationToken",
+              "code": "// Generated example for registerPushNotificationToken\nposthog.registerPushNotificationToken();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "deviceToken"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "{\n        appId?: string;\n    }",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -1002,7 +1089,7 @@
         {
           "category": "Capture",
           "description": "Captures a screen view event.",
-          "details": "This function requires a name. You may also pass in an optional properties object. Screen name is automatically registered for the session and will be included in subsequent events.",
+          "details": "This function requires a name. You may also pass in an optional properties object. Once initialized, the screen name is registered immediately for subsequent events, including exceptions. During initialization, screen registration and event capture retain their call order. Exceptions use the last recorded screen, not a destination that has not yet been tracked.",
           "id": "screen",
           "showDocs": true,
           "title": "screen",
@@ -1202,7 +1289,7 @@
         },
         {
           "category": "Session Replay",
-          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
+          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nA refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds, and on subsequent feature flags loads while pending. This promise resolves after the initial attempt, without waiting for retries or guaranteeing recording is active. A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
           "details": null,
           "id": "startSessionRecording",
           "showDocs": true,
@@ -1279,6 +1366,28 @@
               "name": "property"
             }
           ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Unregisters this device's push token so Workflows stop targeting it — for example from your logout flow. Requires `@posthog/react-native-plugin`.\nDurable: a failed or offline request retries on the next flush or launch. `reset()` already moves a registered token to the new identity, so this is only needed if you manage subscriptions yourself.\nNot supported on web or macOS.",
+          "details": null,
+          "id": "unregisterPushNotificationToken",
+          "showDocs": true,
+          "title": "unregisterPushNotificationToken",
+          "examples": [
+            {
+              "id": "unregisterpushnotificationtoken",
+              "name": "Generated example for unregisterPushNotificationToken",
+              "code": "// Generated example for unregisterPushNotificationToken\nposthog.unregisterPushNotificationToken();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
           "returnType": {
             "id": "Promise<void>",
             "name": "Promise<void>"
@@ -1621,6 +1730,7 @@
         },
         {
           "category": "",
+          "description": "Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive off result; `undefined` means no evaluation is available for the key.",
           "details": null,
           "id": "getFeatureFlagResult",
           "showDocs": true,
@@ -2063,39 +2173,64 @@
     {
       "id": "ActionStepStringMatching",
       "name": "ActionStepStringMatching",
-      "properties": [
-        {
-          "type": "\"contains\"",
-          "name": "Contains"
-        },
-        {
-          "type": "\"exact\"",
-          "name": "Exact"
-        },
-        {
-          "type": "\"regex\"",
-          "name": "Regex"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof ActionStepStringMatching)[keyof typeof ActionStepStringMatching]"
     },
     {
       "id": "ActionStepType",
       "name": "ActionStepType",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    event?: string;\n    selector?: string;\n    text?: string;\n    text_matching?: ActionStepStringMatching;\n    href?: string;\n    href_matching?: ActionStepStringMatching;\n    url?: string;\n    url_matching?: ActionStepStringMatching;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "event"
+        },
+        {
+          "type": "string",
+          "name": "selector"
+        },
+        {
+          "type": "string",
+          "name": "text"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "text_matching"
+        },
+        {
+          "type": "string",
+          "name": "href"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "href_matching"
+        },
+        {
+          "type": "string",
+          "name": "url"
+        },
+        {
+          "type": "ActionStepStringMatching",
+          "name": "url_matching"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "AutocaptureOptions",
       "name": "AutocaptureOptions",
       "properties": [
         {
+          "description": "Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the project's error tracking settings.\nAn NDK crash kills the process immediately, so it is captured on the next app launch from the records the OS kept, which means properties such as `$app_version` and the identity describe that launch rather than the crash. The first launch after enabling this also captures the native crashes the OS still holds from before.\nFor readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols` on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication\nIgnored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer.",
+          "type": "boolean",
+          "name": "androidNdkCrashes"
+        },
+        {
           "type": "boolean | LogLevel[]",
           "name": "console"
         },
         {
-          "description": "Enables native iOS/Android crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed.",
+          "description": "Enables native iOS/Android/macOS crash autocapture through the optional native plugin. On Android this covers Java/Kotlin crashes; native C/C++ (NDK) crashes are enabled with `androidNdkCrashes`. On Apple platforms it covers signal crashes too. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS).",
           "type": "boolean",
           "name": "nativeCrashes"
         },
@@ -2132,9 +2267,53 @@
     {
       "id": "BasicSurveyQuestion",
       "name": "BasicSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Open;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"open\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "BeforeSendFn",
@@ -2146,9 +2325,39 @@
     {
       "id": "CaptureEvent",
       "name": "CaptureEvent",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    uuid?: string;\n    event: string;\n    properties?: PostHogEventProperties;\n    $set?: PostHogEventProperties;\n    $set_once?: PostHogEventProperties;\n    timestamp?: Date;\n}"
+      "properties": [
+        {
+          "description": "UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "description": "The name of the event",
+          "type": "string",
+          "name": "event"
+        },
+        {
+          "description": "Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage)",
+          "type": "PostHogEventProperties",
+          "name": "properties"
+        },
+        {
+          "description": "Properties to set on the person (overrides existing values)",
+          "type": "PostHogEventProperties",
+          "name": "$set"
+        },
+        {
+          "description": "Properties to set on the person only once (does not override existing values)",
+          "type": "PostHogEventProperties",
+          "name": "$set_once"
+        },
+        {
+          "description": "Timestamp for the event",
+          "type": "Date",
+          "name": "timestamp"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "CaptureLogger",
@@ -2202,9 +2411,13 @@
     {
       "id": "EndBranching",
       "name": "EndBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.End;\n}"
+      "properties": [
+        {
+          "type": "\"end\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "ErrorEventLike",
@@ -2349,21 +2562,38 @@
       "id": "ExceptionList",
       "name": "ExceptionList",
       "properties": [],
-      "path": "../core/src/error-tracking/types.ts"
+      "path": "../core/src/error-tracking/types.ts",
+      "example": "Exception[]"
     },
     {
       "id": "ExceptionStep",
       "name": "ExceptionStep",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    [EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: string;\n    [EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: string | number;\n    [key: string]: unknown;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "$message"
+        },
+        {
+          "type": "string | number",
+          "name": "$timestamp"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ExceptionStepsConfig",
       "name": "ExceptionStepsConfig",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    enabled?: boolean;\n    max_bytes?: number;\n}"
+      "properties": [
+        {
+          "type": "boolean | undefined",
+          "name": "enabled"
+        },
+        {
+          "type": "number | undefined",
+          "name": "max_bytes"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ExceptionStepsOptions",
@@ -2394,28 +2624,57 @@
       "name": "FeatureFlagMetadata",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n}"
+      "example": "{\n    id: number | undefined;\n    version: number | undefined;\n    description: string | undefined;\n    payload: string | undefined;\n    has_experiment?: boolean;\n}"
     },
     {
       "id": "FeatureFlagRequestError",
       "name": "FeatureFlagRequestError",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: 'timeout' | 'connection_error' | 'api_error' | 'unknown_error';\n    statusCode?: number;\n}"
+      "properties": [
+        {
+          "type": "\"timeout\" | \"connection_error\" | \"api_error\" | \"unknown_error\"",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "statusCode"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "FeatureFlagResult",
       "name": "FeatureFlagResult",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    readonly key: string;\n    readonly enabled: boolean;\n    readonly variant?: string;\n    readonly payload?: JsonType;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "readonly key"
+        },
+        {
+          "type": "boolean",
+          "name": "readonly enabled"
+        },
+        {
+          "type": "string | undefined",
+          "name": "readonly variant"
+        },
+        {
+          "type": "JsonType | undefined",
+          "name": "readonly payload"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "FeatureFlagResultOptions",
       "name": "FeatureFlagResultOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    sendEvent?: boolean;\n}"
+      "properties": [
+        {
+          "description": "Whether to send a $feature_flag_called event. Defaults to true.",
+          "type": "boolean",
+          "name": "sendEvent"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "FeatureFlagValue",
@@ -2465,6 +2724,13 @@
       "example": "(filename: string | undefined) => string | undefined"
     },
     {
+      "id": "IsFeatureEnabledOptions",
+      "name": "IsFeatureEnabledOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "FeatureFlagResultOptions & {\n    defaultValue?: boolean;\n}"
+    },
+    {
       "id": "JsonType",
       "name": "JsonType",
       "properties": [],
@@ -2474,16 +2740,88 @@
     {
       "id": "LinkSurveyQuestion",
       "name": "LinkSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Link;\n    link?: string | null;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"link\"",
+          "name": "type"
+        },
+        {
+          "type": "string",
+          "name": "link"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "Logger",
       "name": "Logger",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    debug: (...args: any[]) => void;\n    info: (...args: any[]) => void;\n    warn: (...args: any[]) => void;\n    error: (...args: any[]) => void;\n    critical: (...args: any[]) => void;\n    createLogger: (prefix: string) => Logger;\n}"
+      "properties": [
+        {
+          "type": "(...args: any[]) => void",
+          "name": "debug"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "info"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "warn"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "error"
+        },
+        {
+          "type": "(...args: any[]) => void",
+          "name": "critical"
+        },
+        {
+          "type": "(prefix: string) => Logger",
+          "name": "createLogger"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "LogLevel",
@@ -2497,8 +2835,16 @@
       "name": "Mechanism",
       "properties": [
         {
+          "type": "number",
+          "name": "exception_id"
+        },
+        {
           "type": "boolean",
           "name": "handled"
+        },
+        {
+          "type": "number",
+          "name": "parent_id"
         },
         {
           "type": "string",
@@ -2509,7 +2855,7 @@
           "name": "synthetic"
         },
         {
-          "type": "'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'",
+          "type": "string",
           "name": "type"
         }
       ],
@@ -2518,16 +2864,80 @@
     {
       "id": "MultipleSurveyQuestion",
       "name": "MultipleSurveyQuestion",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice;\n    choices: string[];\n    hasOpenChoice?: boolean;\n    shuffleOptions?: boolean;\n    skipSubmitButton?: boolean;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"single_choice\" | \"multiple_choice\"",
+          "name": "type"
+        },
+        {
+          "type": "string[]",
+          "name": "choices"
+        },
+        {
+          "type": "boolean",
+          "name": "hasOpenChoice"
+        },
+        {
+          "type": "boolean",
+          "name": "shuffleOptions"
+        },
+        {
+          "type": "boolean",
+          "name": "skipSubmitButton"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "NextQuestionBranching",
       "name": "NextQuestionBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.NextQuestion;\n}"
+      "properties": [
+        {
+          "type": "\"next_question\"",
+          "name": "type"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "ObjectLike",
@@ -2602,37 +3012,276 @@
     {
       "id": "PostHogAutocaptureElement",
       "name": "PostHogAutocaptureElement",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    $el_text?: string;\n    tag_name: string;\n    href?: string;\n    nth_child?: number;\n    nth_of_type?: number;\n    order?: number;\n} & PostHogEventProperties"
+      "properties": [
+        {
+          "type": "string",
+          "name": "$el_text"
+        },
+        {
+          "type": "string",
+          "name": "tag_name"
+        },
+        {
+          "type": "string",
+          "name": "href"
+        },
+        {
+          "type": "number",
+          "name": "nth_child"
+        },
+        {
+          "type": "number",
+          "name": "nth_of_type"
+        },
+        {
+          "type": "number",
+          "name": "order"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogAutocaptureNavigationTrackerOptions",
       "name": "PostHogAutocaptureNavigationTrackerOptions",
-      "properties": [],
-      "path": "dist/types.d.ts",
-      "example": "{\n    routeToName?: (name: string, params: any) => string;\n    routeToProperties?: (name: string, params: any) => Record<string, any>;\n}"
+      "properties": [
+        {
+          "type": "(name: string, params: any) => string",
+          "name": "routeToName"
+        },
+        {
+          "type": "(name: string, params: any) => Record<string, any>",
+          "name": "routeToProperties"
+        }
+      ],
+      "path": "dist/types.d.ts"
     },
     {
       "id": "PostHogAutocaptureOptions",
       "name": "PostHogAutocaptureOptions",
-      "properties": [],
-      "path": "dist/types.d.ts",
-      "example": "{\n    captureTouches?: boolean;\n    customLabelProp?: string;\n    noCaptureProp?: string;\n    maxElementsCaptured?: number;\n    ignoreLabels?: string[];\n    propsToCapture?: string[];\n    captureScreens?: boolean;\n    navigation?: PostHogAutocaptureNavigationTrackerOptions;\n    navigationRef?: PostHogNavigationRef;\n}"
+      "properties": [
+        {
+          "description": "Enable autocapture of touch events.\n\nOn React Native Web this also captures `click` events — mouse, trackpad, keyboard\nactivation and programmatic clicks — emitted with `$event_type: 'click'`, since\nbrowsers fire `touchend` only for touch input.",
+          "type": "boolean",
+          "name": "captureTouches"
+        },
+        {
+          "description": "Custom prop name used to label elements for autocapture",
+          "type": "string",
+          "name": "customLabelProp"
+        },
+        {
+          "description": "Prop name used to prevent autocapture on an element and its children",
+          "type": "string",
+          "name": "noCaptureProp"
+        },
+        {
+          "description": "Maximum number of elements to capture in the component tree hierarchy",
+          "type": "number",
+          "name": "maxElementsCaptured"
+        },
+        {
+          "description": "List of element labels to ignore during autocapture",
+          "type": "string[]",
+          "name": "ignoreLabels"
+        },
+        {
+          "description": "List of prop names to capture from elements",
+          "type": "string[]",
+          "name": "propsToCapture"
+        },
+        {
+          "description": "Capture the screen name (or route name) and properties\n\nOnly used for expo-router,",
+          "type": "boolean",
+          "name": "captureScreens"
+        },
+        {
+          "description": "Used for mutating the screen name and properties\nOnly used if captureScreens is true",
+          "type": "PostHogAutocaptureNavigationTrackerOptions",
+          "name": "navigation"
+        },
+        {
+          "description": "If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref\nOnly used for expo-router and\nDeprecated: this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically",
+          "type": "PostHogNavigationRef",
+          "name": "navigationRef",
+          "releaseTag": "deprecated"
+        }
+      ],
+      "path": "dist/types.d.ts"
     },
     {
       "id": "PostHogCaptureOptions",
       "name": "PostHogCaptureOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    uuid?: string;\n    timestamp?: Date;\n    disableGeoip?: boolean;\n    _originatedFromCaptureException?: boolean;\n}"
+      "properties": [
+        {
+          "description": "If provided overrides the auto-generated event UUID. Must be a valid UUID.",
+          "type": "string",
+          "name": "uuid"
+        },
+        {
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
+          "type": "Date",
+          "name": "timestamp"
+        },
+        {
+          "type": "boolean",
+          "name": "disableGeoip"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCoreOptions",
       "name": "PostHogCoreOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    host?: string;\n    flushAt?: number;\n    flushInterval?: number;\n    maxBatchSize?: number;\n    maxQueueSize?: number;\n    disabled?: boolean;\n    defaultOptIn?: boolean;\n    disable_capture_url_hashes?: boolean;\n    sendFeatureFlagEvent?: boolean;\n    preloadFeatureFlags?: boolean;\n    disableRemoteFeatureFlags?: boolean;\n    disableRemoteConfig?: boolean;\n    disableSurveys?: boolean;\n    bootstrap?: {\n        distinctId?: string;\n        isIdentifiedId?: boolean;\n        featureFlags?: Record<string, FeatureFlagValue>;\n        featureFlagPayloads?: Record<string, JsonType>;\n    };\n    fetchRetryCount?: number;\n    fetchRetryDelay?: number;\n    requestTimeout?: number;\n    featureFlagsRequestTimeoutMs?: number;\n    remoteConfigRequestTimeoutMs?: number;\n    sessionExpirationTimeSeconds?: number;\n    disableCompression?: boolean;\n    disableGeoip?: boolean;\n    historicalMigration?: boolean;\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    personProfiles?: 'always' | 'identified_only' | 'never';\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    addTracingHeaders?: string[];\n}"
+      "properties": [
+        {
+          "description": "PostHog API host, usually 'https://us.i.posthog.com' or 'https://eu.i.posthog.com'",
+          "type": "string",
+          "name": "host"
+        },
+        {
+          "description": "The number of events to queue before sending to PostHog (flushing)",
+          "type": "number",
+          "name": "flushAt"
+        },
+        {
+          "description": "The interval in milliseconds between periodic flushes",
+          "type": "number",
+          "name": "flushInterval"
+        },
+        {
+          "description": "The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxBatchSize"
+        },
+        {
+          "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",
+          "type": "number",
+          "name": "maxQueueSize"
+        },
+        {
+          "description": "If set to true the SDK is essentially disabled (useful for local environments where you don't want to track anything)",
+          "type": "boolean",
+          "name": "disabled"
+        },
+        {
+          "description": "If set to false the SDK will not track until the `optIn` function is called.",
+          "type": "boolean",
+          "name": "defaultOptIn"
+        },
+        {
+          "description": "Whether to strip URL fragments (`#...`) from automatically captured URL fields.\nDisabled by default for backwards compatibility. Set to `true` to strip hashes from:\n\n- `$current_url` on automatically captured browser events, including `$pageview`\n- `$initial_current_url`\n- `$session_entry_url`\n- `$elements[*].attr__href` and `$external_click_url` for autocapture and dead-click autocapture\n- Next.js Pages Router `$pageview` `$current_url`\n- web vitals `$current_url`\n- logs `url.full`\n- conversations `current_url` and `request_url`\n- session replay rrweb meta/custom-event `href` URLs\n- heatmap data URLs\n\nIf your SPA relies on hash-based routes for analytics, enabling this is a breaking behavior change.\nIf you want to capture hashes selectively, leave this as `false` and use `before_send` to remove\nsensitive hash values before events are sent.",
+          "type": "boolean",
+          "name": "disable_capture_url_hashes"
+        },
+        {
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "type": "boolean",
+          "name": "sendFeatureFlagEvent"
+        },
+        {
+          "description": "Whether to load feature flags when initialized or not",
+          "type": "boolean",
+          "name": "preloadFeatureFlags"
+        },
+        {
+          "description": "Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.\n\nWhen set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,\n`group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request\nto the flags endpoint that still goes out (e.g. to fetch remote config or surveys)\ncarries `disable_flags: true` so the server skips flag evaluation. Flag values must be\nsupplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and\nrelated methods keep working against those values. Until `updateFlags()` runs, reads\nreturn their not-loaded defaults, so use `bootstrap` for any flags needed at startup.\nEquivalent to the web SDK's `advanced_disable_feature_flags`.\n\nNote: surveys gated on feature flags will not evaluate unless the survey targeting\nflags are also provided via `updateFlags()`. This option cannot be toggled at runtime.\n`posthog-node` inherits this option but does not implement it (no-op).",
+          "type": "boolean",
+          "name": "disableRemoteFeatureFlags"
+        },
+        {
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
+          "type": "boolean",
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
+          "type": "boolean",
+          "name": "disableSurveys"
+        },
+        {
+          "description": "Option to bootstrap the library with given distinctId and feature flags",
+          "type": "{ distinctId?: string; isIdentifiedId?: boolean; featureFlags?: Record<string, FeatureFlagValue>; featureFlagPayloads?: Record<string, JsonType>; }",
+          "name": "bootstrap"
+        },
+        {
+          "description": "How many times we will retry HTTP requests",
+          "type": "number",
+          "name": "fetchRetryCount"
+        },
+        {
+          "description": "The delay between HTTP request retries in milliseconds",
+          "type": "number",
+          "name": "fetchRetryDelay"
+        },
+        {
+          "description": "Timeout in milliseconds for any calls",
+          "type": "number",
+          "name": "requestTimeout"
+        },
+        {
+          "description": "Timeout in milliseconds for feature flag calls",
+          "type": "number",
+          "name": "featureFlagsRequestTimeoutMs"
+        },
+        {
+          "description": "How many times feature flag requests retry after a transient network error.\nSet to 0 to disable feature flag request retries.",
+          "type": "number",
+          "name": "featureFlagsRequestMaxRetries"
+        },
+        {
+          "description": "Timeout in milliseconds for remote config calls",
+          "type": "number",
+          "name": "remoteConfigRequestTimeoutMs"
+        },
+        {
+          "description": "For Session Analysis how long before we expire a session in seconds",
+          "type": "number",
+          "name": "sessionExpirationTimeSeconds"
+        },
+        {
+          "description": "Whether to disable GZIP compression",
+          "type": "boolean",
+          "name": "disableCompression"
+        },
+        {
+          "description": "Whether to disable GeoIP lookups",
+          "type": "boolean",
+          "name": "disableGeoip"
+        },
+        {
+          "description": "Special flag to indicate ingested data is for a historical migration",
+          "type": "boolean",
+          "name": "historicalMigration"
+        },
+        {
+          "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'mobile']",
+          "type": "readonly string[]",
+          "name": "evaluationContexts"
+        },
+        {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
+          "type": "\"always\" | \"identified_only\" | \"never\"",
+          "name": "personProfiles"
+        },
+        {
+          "description": "Allows modification or dropping of events before they're sent to PostHog.\nIf an array is provided, the functions are run in order.\nIf a function returns null, the event will be dropped.",
+          "type": "BeforeSendFn | BeforeSendFn[]",
+          "name": "before_send"
+        },
+        {
+          "description": "A list of hostnames for which to inject PostHog tracing headers\n(X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID) on outgoing `fetch` requests.\n\nUse this to link requests made from your app to session replays and LLM traces\nin PostHog. When set, the global `fetch` is patched on initialization and the\nheaders are added to requests whose hostname matches one of the entries.\n\nRequires the SDK to wire up `patchFetchForTracingHeaders` against this option\n(currently supported in posthog-react-native).",
+          "type": "string[]",
+          "name": "addTracingHeaders"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCustomAppProperties",
@@ -2699,6 +3348,11 @@
           "name": "$os_version"
         },
         {
+          "description": "React Native version like \"0.79.6\"",
+          "type": "string | null | undefined",
+          "name": "$react_native_version"
+        },
+        {
           "description": "Timezone of the device like \"Europe/Berlin\"",
           "type": "string | null",
           "name": "$timezone"
@@ -2724,23 +3378,59 @@
     {
       "id": "PostHogErrorBoundaryFallbackProps",
       "name": "PostHogErrorBoundaryFallbackProps",
-      "properties": [],
-      "path": "dist/PostHogErrorBoundary.d.ts",
-      "example": "{\n    error: unknown;\n    componentStack: string;\n}"
+      "properties": [
+        {
+          "type": "unknown",
+          "name": "error"
+        },
+        {
+          "type": "string",
+          "name": "componentStack"
+        },
+        {
+          "type": "() => void",
+          "name": "resetError"
+        }
+      ],
+      "path": "dist/PostHogErrorBoundary.d.ts"
     },
     {
       "id": "PostHogErrorBoundaryProps",
       "name": "PostHogErrorBoundaryProps",
-      "properties": [],
-      "path": "dist/PostHogErrorBoundary.d.ts",
-      "example": "{\n    children?: React.ReactNode | (() => React.ReactNode);\n    fallback?: React.ReactNode | FunctionComponent<PostHogErrorBoundaryFallbackProps>;\n    additionalProperties?: Properties | ((error: unknown) => Properties);\n}"
+      "properties": [
+        {
+          "type": "any",
+          "name": "children"
+        },
+        {
+          "type": "any",
+          "name": "fallback"
+        },
+        {
+          "type": "Properties | ((error: unknown) => Properties)",
+          "name": "additionalProperties"
+        }
+      ],
+      "path": "dist/PostHogErrorBoundary.d.ts"
     },
     {
       "id": "PostHogErrorBoundaryState",
       "name": "PostHogErrorBoundaryState",
-      "properties": [],
-      "path": "dist/PostHogErrorBoundary.d.ts",
-      "example": "{\n    componentStack: string | null;\n    error: unknown;\n}"
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "hasError"
+        },
+        {
+          "type": "string",
+          "name": "componentStack"
+        },
+        {
+          "type": "unknown",
+          "name": "error"
+        }
+      ],
+      "path": "dist/PostHogErrorBoundary.d.ts"
     },
     {
       "id": "PostHogEventProperties",
@@ -2752,37 +3442,287 @@
     {
       "id": "PostHogFeatureFlagDetails",
       "name": "PostHogFeatureFlagDetails",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+      "properties": [
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFeatureFlagsResponse",
       "name": "PostHogFeatureFlagsResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "\"flags\" | \"featureFlags\" | \"featureFlagPayloads\" | \"requestId\""
+      "properties": [
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PostHogFetchBodyBytes",
+      "name": "PostHogFetchBodyBytes",
+      "properties": [
+        {
+          "description": "The size in bytes of each element in the array.",
+          "type": "number",
+          "name": "BYTES_PER_ELEMENT"
+        },
+        {
+          "description": "The ArrayBuffer instance referenced by the array.",
+          "type": "ArrayBuffer",
+          "name": "buffer"
+        },
+        {
+          "description": "The length in bytes of the array.",
+          "type": "number",
+          "name": "byteLength"
+        },
+        {
+          "description": "The offset in bytes of the array.",
+          "type": "number",
+          "name": "byteOffset"
+        },
+        {
+          "description": "The length of the array.",
+          "type": "number",
+          "name": "length"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFetchOptions",
       "name": "PostHogFetchOptions",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    method: 'GET' | 'POST' | 'PUT' | 'PATCH';\n    mode?: 'no-cors';\n    credentials?: 'omit';\n    headers: {\n        [key: string]: string;\n    };\n    body?: string | Blob;\n    signal?: AbortSignal;\n}"
+      "properties": [
+        {
+          "type": "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\"",
+          "name": "method"
+        },
+        {
+          "type": "\"no-cors\"",
+          "name": "mode"
+        },
+        {
+          "type": "\"omit\"",
+          "name": "credentials"
+        },
+        {
+          "type": "{ [key: string]: string; }",
+          "name": "headers"
+        },
+        {
+          "type": "string | PostHogFetchBodyBytes | Blob",
+          "name": "body"
+        },
+        {
+          "type": "AbortSignal",
+          "name": "signal"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFetchResponse",
       "name": "PostHogFetchResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    status: number;\n    text: () => Promise<string>;\n    json: () => Promise<any>;\n    headers?: {\n        get(name: string): string | null;\n    };\n    body?: ReadableStream<Uint8Array> | null;\n}"
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "() => Promise<string>",
+          "name": "text"
+        },
+        {
+          "type": "() => Promise<any>",
+          "name": "json"
+        },
+        {
+          "type": "{ get(name: string): string | null; }",
+          "name": "headers"
+        },
+        {
+          "type": "ReadableStream<Uint8Array<ArrayBuffer>>",
+          "name": "body"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogFlagsResponse",
       "name": "PostHogFlagsResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {\n    featureFlags: {\n        [key: string]: FeatureFlagValue;\n    };\n    featureFlagPayloads: {\n        [key: string]: JsonType;\n    };\n    flags: {\n        [key: string]: FeatureFlagDetail;\n    };\n    errorsWhileComputingFlags: boolean;\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    quotaLimited?: string[];\n    requestId?: string;\n    evaluatedAt?: number;\n}"
+      "properties": [
+        {
+          "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
+          "name": "sessionRecording"
+        },
+        {
+          "description": "Supported compression algorithms",
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "description": "Whether surveys are enabled",
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "description": "Error tracking remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "description": "Capture performance remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "description": "Logs feature remote config. When a map, `captureConsoleLogs` (boolean)\nis the local opt-in flag for `console.*` autocapture (read by the JS\nSDK's `PostHogLogs` extension to decide whether to load the autocapture\nbundle).",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagValue; }",
+          "name": "featureFlags"
+        },
+        {
+          "type": "{ [key: string]: JsonType; }",
+          "name": "featureFlagPayloads"
+        },
+        {
+          "type": "{ [key: string]: FeatureFlagDetail; }",
+          "name": "flags"
+        },
+        {
+          "type": "boolean",
+          "name": "errorsWhileComputingFlags"
+        },
+        {
+          "type": "string[]",
+          "name": "quotaLimited"
+        },
+        {
+          "type": "string",
+          "name": "requestId"
+        },
+        {
+          "type": "number",
+          "name": "evaluatedAt"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the\nproject opted in; omitted otherwise. Absence always means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogGroupProperties",
@@ -2811,7 +3751,7 @@
           "name": "flushIntervalMs"
         },
         {
-          "description": "Max records per outbound POST. Keeps each request under the server's 2 MB cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
           "type": "number",
           "name": "maxBatchRecordsPerPost"
         },
@@ -2858,9 +3798,17 @@
     {
       "id": "PostHogNavigationRef",
       "name": "PostHogNavigationRef",
-      "properties": [],
-      "path": "dist/types.d.ts",
-      "example": "{\n    getCurrentRoute(): any | undefined;\n    isReady: () => boolean;\n    current?: PostHogNavigationRef | any | undefined;\n}"
+      "properties": [
+        {
+          "type": "() => boolean",
+          "name": "isReady"
+        },
+        {
+          "type": "any",
+          "name": "current"
+        }
+      ],
+      "path": "dist/types.d.ts"
     },
     {
       "id": "PostHogOptions",
@@ -2872,7 +3820,17 @@
           "name": "captureAppLifecycleEvents"
         },
         {
-          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
+          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nOn iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to catch a tap that cold-launches the app. Two switches gate automatic capture there, and `false` on either one means the SDK sends no `$push_notification_opened` of its own (an explicit  call still captures):\n- This option set to `false` turns capture off when `setup()` runs and releases the launch hook, dropping the tap it was holding. The hook is still installed for the window between launch and `setup()`. - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist` (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your JS runs, and forces capture off at `setup()` even when this option is `true`. It is the same key posthog-flutter reads.\nNot supported on web.\ntrue",
+          "type": "boolean",
+          "name": "capturePushNotificationOpened"
+        },
+        {
+          "description": "Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`.\nYour app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to  yourself.\nNot supported on web or macOS.\ntrue",
+          "type": "boolean",
+          "name": "capturePushNotificationSubscriptions"
+        },
+        {
+          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated. An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
         },
@@ -2887,7 +3845,7 @@
           "name": "enablePersistSessionIdAcrossRestart"
         },
         {
-          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nfalse",
+          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nThis option is read once, at setup. To record only some sessions, either gate recording from your project settings (sampling, a linked flag, or event triggers), or leave this option off and drive the recorder from your app with `startSessionRecording()` and `stopSessionRecording()`.\nfalse",
           "type": "boolean",
           "name": "enableSessionReplay"
         },
@@ -2912,6 +3870,21 @@
           "name": "persistence"
         },
         {
+          "description": "Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`.\nCalled with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds.",
+          "type": "PostHogPushIdentityProvider",
+          "name": "pushIdentityProvider"
+        },
+        {
+          "description": "Configure rage click (rage tap) detection on iOS.\nThe native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them.\nAndroid is unaffected — posthog-android does not have native rage click detection.\nRequires `@posthog/react-native-plugin` version 2.7.0 or newer.",
+          "type": "PostHogRageClickConfig",
+          "name": "rageClickConfig"
+        },
+        {
+          "description": "A list of headers that should be sent with requests to the PostHog API.",
+          "type": "{\n        [header_name: string]: string;\n    }",
+          "name": "requestHeaders"
+        },
+        {
           "description": "Configuration for Session Replay",
           "type": "PostHogSessionReplayConfig",
           "name": "sessionReplayConfig"
@@ -2928,6 +3901,14 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
+        {
+          "type": "\"ai_queue\"",
+          "name": "AiQueue"
+        },
         {
           "type": "\"anonymous_id\"",
           "name": "AnonymousId"
@@ -3009,6 +3990,10 @@
           "name": "Props"
         },
         {
+          "type": "\"push_registered\"",
+          "name": "PushRegistered"
+        },
+        {
           "type": "\"queue\"",
           "name": "Queue"
         },
@@ -3045,6 +4030,10 @@
           "name": "Surveys"
         },
         {
+          "type": "\"surveys_in_progress\"",
+          "name": "SurveysInProgress"
+        },
+        {
           "type": "\"surveys_seen\"",
           "name": "SurveysSeen"
         }
@@ -3056,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },
@@ -3094,42 +4083,279 @@
       "path": "dist/PostHogProvider.d.ts"
     },
     {
+      "id": "PostHogPushIdentityProvider",
+      "name": "PostHogPushIdentityProvider",
+      "properties": [],
+      "path": "dist/types.d.ts",
+      "example": "(distinctId: string, appId: string) => Promise<string | null>"
+    },
+    {
+      "id": "PostHogRageClickConfig",
+      "name": "PostHogRageClickConfig",
+      "properties": [
+        {
+          "description": "Enable or disable rage click (rage tap) detection.\n\nWhen enabled the native SDK emits a `$rageclick` event whenever a user\ntaps the same area repeatedly in quick succession.",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Number of consecutive taps required to trigger a rage click.",
+          "type": "number",
+          "name": "minimumTapCount"
+        },
+        {
+          "description": "Maximum pixel distance between consecutive taps for them to still\ncount toward a rage click.",
+          "type": "number",
+          "name": "thresholdPoints"
+        },
+        {
+          "description": "Maximum time in seconds allowed between consecutive taps.",
+          "type": "number",
+          "name": "timeoutInterval"
+        }
+      ],
+      "path": "dist/types.d.ts"
+    },
+    {
       "id": "PostHogReactNativePluginExtended",
       "name": "PostHogReactNativePluginExtended",
-      "properties": [],
-      "path": "dist/optional/OptionalPlugin.d.ts",
-      "example": "typeof PostHogReactNativePlugin & {\n    setup?: (sessionId: string, sdkOptions: {\n        [key: string]: any;\n    }, pluginConfig: {\n        [key: string]: any;\n    }) => Promise<void>;\n    startRecording?: (resumeCurrent: boolean) => Promise<void>;\n    stopRecording?: () => Promise<void>;\n    addExceptionStep?: (message: string, properties?: {\n        [key: string]: any;\n    }) => Promise<void>;\n}"
+      "properties": [
+        {
+          "type": "((sessionId: string, sdkOptions: PostHogReactNativePluginMap, pluginConfig?: PostHogReactNativePluginConfig) => Promise<void>) & ((sessionId: string, sdkOptions: { [key: string]: any; }, pluginConfig: { [key: string]: any; }) => Promise<void>)",
+          "name": "setup"
+        },
+        {
+          "description": "Legacy session replay setup entrypoint. Prefer setup() for new native features.",
+          "type": "(sessionId: string, sdkOptions: PostHogReactNativePluginMap, sdkReplayConfig: PostHogReactNativePluginMap, decideReplayConfig: PostHogReactNativePluginMap) => Promise<void>",
+          "name": "start"
+        },
+        {
+          "type": "(sessionId: string) => Promise<void>",
+          "name": "startSession"
+        },
+        {
+          "type": "() => Promise<void>",
+          "name": "endSession"
+        },
+        {
+          "type": "() => Promise<boolean>",
+          "name": "isEnabled"
+        },
+        {
+          "type": "(distinctId: string, anonymousId: string) => Promise<void>",
+          "name": "identify"
+        },
+        {
+          "type": "((distinctId: string, anonymousId: string) => Promise<void>) & ((distinctId: string, anonymousId: string) => Promise<void>)",
+          "name": "reset"
+        },
+        {
+          "type": "((resumeCurrent: boolean) => Promise<void>) & ((resumeCurrent: boolean) => Promise<void>)",
+          "name": "startRecording"
+        },
+        {
+          "type": "(() => Promise<void>) & (() => Promise<void>)",
+          "name": "stopRecording"
+        },
+        {
+          "type": "((message: string, properties?: PostHogReactNativePluginMap) => Promise<void>) & ((message: string, properties?: { [key: string]: any; }) => Promise<void>)",
+          "name": "addExceptionStep"
+        },
+        {
+          "type": "((distinctId: string, timestamp: string, properties: PostHogReactNativePluginMap) => Promise<void>) & ((distinctId: string, timestamp: string, properties: { [key: string]: any; }) => Promise<void>)",
+          "name": "captureFatalException"
+        },
+        {
+          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "name": "getSessionReplayDebugProperties"
+        },
+        {
+          "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",
+          "name": "registerPushNotificationToken"
+        },
+        {
+          "type": "(() => Promise<void>) & (() => Promise<void>)",
+          "name": "unregisterPushNotificationToken"
+        },
+        {
+          "type": "((optOut: boolean) => Promise<void>) & ((optOut: boolean) => Promise<void>)",
+          "name": "setOptOut"
+        },
+        {
+          "type": "((properties: PostHogReactNativePluginMap) => Promise<void>) & ((properties: { [key: string]: any; }) => Promise<void>)",
+          "name": "capturePushNotificationOpened"
+        },
+        {
+          "type": "((provider: PostHogPushIdentityProvider) => void) & ((provider: PostHogPushIdentityProvider) => void)",
+          "name": "setPushIdentityProvider"
+        }
+      ],
+      "path": "dist/optional/OptionalPlugin.d.ts"
     },
     {
       "id": "PostHogRemoteConfig",
       "name": "PostHogRemoteConfig",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    sessionRecording?: boolean | {\n        [key: string]: JsonType;\n    };\n    supportedCompression?: Compression[];\n    surveys?: boolean | Survey[];\n    hasFeatureFlags?: boolean;\n    errorTracking?: boolean | {\n        [key: string]: JsonType;\n    };\n    capturePerformance?: boolean | {\n        [key: string]: JsonType;\n    };\n    logs?: boolean | {\n        [key: string]: JsonType;\n    };\n}"
+      "properties": [
+        {
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "sessionRecording"
+        },
+        {
+          "description": "Supported compression algorithms",
+          "type": "Compression[]",
+          "name": "supportedCompression"
+        },
+        {
+          "description": "Whether surveys are enabled",
+          "type": "boolean | Survey[]",
+          "name": "surveys"
+        },
+        {
+          "description": "Indicates if the team has any flags enabled (if not we don't need to load them)",
+          "type": "boolean",
+          "name": "hasFeatureFlags"
+        },
+        {
+          "description": "Error tracking remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `autocaptureExceptions` (boolean) controls whether automatic exception capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "errorTracking"
+        },
+        {
+          "description": "Capture performance remote config.\nEither a boolean (false = disabled) or a map with configuration.\nWhen a map, `network_timing` (boolean) controls whether network timing capture is enabled remotely.",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "capturePerformance"
+        },
+        {
+          "description": "Logs feature remote config. When a map, `captureConsoleLogs` (boolean)\nis the local opt-in flag for `console.*` autocapture (read by the JS\nSDK's `PostHogLogs` extension to decide whether to load the autocapture\nbundle).",
+          "type": "boolean | { [key: string]: JsonType; }",
+          "name": "logs"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogSessionReplayConfig",
       "name": "PostHogSessionReplayConfig",
-      "properties": [],
-      "path": "dist/types.d.ts",
-      "example": "{\n    maskAllTextInputs?: boolean;\n    maskAllImages?: boolean;\n    maskAllSandboxedViews?: boolean;\n    captureLog?: boolean;\n    iOSdebouncerDelayMs?: number;\n    androidDebouncerDelayMs?: number;\n    throttleDelayMs?: number;\n    captureNetworkTelemetry?: boolean;\n    screenshotModeBackgroundCapture?: boolean;\n    sampleRate?: number;\n}"
+      "properties": [
+        {
+          "description": "Capture touch coordinates in session replay. Set to false to keep screenshots\nwithout recording taps that could reveal sensitive input on a known keypad layout.\nDoes not change masking or `PostHogProvider` touch autocapture.\nAndroid and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;\nolder plugins and `posthog-react-native-session-replay` ignore this option.\nSet before constructing PostHog. Changes after initialization do not update native state.",
+          "type": "boolean",
+          "name": "captureTouches"
+        },
+        {
+          "description": "Enable masking of all text and text input fields",
+          "type": "boolean",
+          "name": "maskAllTextInputs"
+        },
+        {
+          "description": "Enable masking of all images to a placeholder",
+          "type": "boolean",
+          "name": "maskAllImages"
+        },
+        {
+          "description": "Enable masking of all sandboxed system views\nThese may include UIImagePickerController, PHPickerViewController and CNContactPickerViewController\niOS only",
+          "type": "boolean",
+          "name": "maskAllSandboxedViews"
+        },
+        {
+          "description": "Enable capturing of logs as console events",
+          "type": "boolean",
+          "name": "captureLog"
+        },
+        {
+          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nDeprecated: please use throttleDelayMs instead",
+          "type": "number",
+          "name": "iOSdebouncerDelayMs",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nPs: it was 500ms (0.5s) by default until version 3.3.7\nDeprecated: please use throttleDelayMs instead",
+          "type": "number",
+          "name": "androidDebouncerDelayMs",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Throttling delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a wireframe or screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\n\nThis value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs\nIf this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility",
+          "type": "number",
+          "name": "throttleDelayMs"
+        },
+        {
+          "description": "Enable capturing network telemetry\niOS only",
+          "type": "boolean",
+          "name": "captureNetworkTelemetry"
+        },
+        {
+          "description": "Verify that masks remain aligned while capturing session replay screenshots.\nAndroid only. Requires `@posthog/react-native-plugin`.\n\nEnabling this can preserve screenshots during pixel-only redraws, including\ncontinuously animated content, but performs additional view hierarchy walks\nwhile a screenshot is captured.",
+          "type": "boolean",
+          "name": "verifyScreenshotMaskAlignment"
+        },
+        {
+          "description": "Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0.\nFor example, 0.5 captures half the width and height, or one quarter of the pixels.\nThe logical replay viewport is unchanged. Non-finite values use the native default.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.\nDoes not enable session replay or change compression quality or color mode.",
+          "type": "number",
+          "name": "screenshotScale"
+        },
+        {
+          "description": "Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated.\nHigher values generally retain more detail and produce larger payloads.\nCompression is lossy, except at quality 100 on Android 10, which uses lossless WebP.\nNon-finite values use the native default. Does not change screenshot resolution.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "number",
+          "name": "screenshotCompressionQuality"
+        },
+        {
+          "description": "Experimental. Screenshot bitmap pixel format. ARGB_8888 preserves transparency and color precision.\nRGB_565 uses half the bitmap memory but reduces color precision and removes alpha,\nmaking transparent window regions appear black. Unsupported devices fall back to ARGB_8888.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "\"ARGB_8888\" | \"RGB_565\"",
+          "name": "screenshotColorMode"
+        },
+        {
+          "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
+          "type": "boolean",
+          "name": "screenshotModeBackgroundCapture"
+        },
+        {
+          "description": "Session replay sample rate between 0 and 1\nLocal config has precedence over remote config when both are set.\nIf undefined, sampling is controlled by remote config (when available).",
+          "type": "number",
+          "name": "sampleRate"
+        }
+      ],
+      "path": "dist/types.d.ts"
     },
     {
       "id": "PostHogSurveyProviderProps",
       "name": "PostHogSurveyProviderProps",
-      "properties": [],
-      "path": "dist/surveys/PostHogSurveyProvider.d.ts",
-      "example": "{\n    defaultSurveyAppearance?: SurveyAppearance;\n    overrideAppearanceWithDefault?: boolean;\n    androidKeyboardBehavior?: 'padding' | 'height';\n    client?: PostHog;\n    children: React.ReactNode;\n}"
+      "properties": [
+        {
+          "description": "Whether eligible popover surveys are automatically presented. (Default: true)\nSet to false to defer presentation — e.g. while a native-stack formSheet/modal is on top.\nDeferral is display-only: the survey stays armed and presents once this is true again.\nA survey already on screen is not interrupted when this becomes false.\n\nYou own flipping this back to true (e.g. wire it to route/screen focus). While it stays\nfalse the survey remains deferred and never shows — if the un-defer never happens\n(sheet dismissed without re-focusing the provider, an unmount, an error boundary), the\nsurvey stays armed indefinitely and no \"survey shown\" event fires.",
+          "type": "boolean",
+          "name": "autoPresentSurveys"
+        },
+        {
+          "description": "The default appearance for surveys when not specified in PostHog.\n\nAccepts the React Native-only appearance fields as well (e.g.\n`maxFontSizeMultiplier`) — they are merged into the same theme object the\nsurvey components read, and PostHog never sends them down.",
+          "type": "SurveyAppearance",
+          "name": "defaultSurveyAppearance"
+        },
+        {
+          "description": "If true, PosHog appearance will be ignored and defaultSurveyAppearance is always used.",
+          "type": "boolean",
+          "name": "overrideAppearanceWithDefault"
+        },
+        {
+          "description": "The keyboard avoiding behavior for the survey modal (KeyboardAvoidingView), applied only to Android devices.\n- 'padding': Adds padding to avoid keyboard (recommended)\n- 'height': Resizes the view height (default, for legacy - may cause flickering on some Android devices)",
+          "type": "\"padding\" | \"height\"",
+          "name": "androidKeyboardBehavior"
+        },
+        {
+          "type": "PostHog",
+          "name": "client"
+        },
+        {
+          "type": "React.ReactNode",
+          "name": "children"
+        }
+      ],
+      "path": "dist/surveys/PostHogSurveyProvider.d.ts"
     },
     {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "__posthog_previously_captured_error"
-        }
-      ],
+      "properties": [],
       "path": "../core/src/error-tracking/types.ts"
     },
     {
@@ -3158,11 +4384,95 @@
       "example": "Record<string, any>"
     },
     {
-      "id": "RatingSurveyQuestion",
-      "name": "RatingSurveyQuestion",
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "SurveyQuestionBase & {\n    type: SurveyQuestionType.Rating;\n    display: SurveyRatingDisplay;\n    scale: 2 | 3 | 5 | 7 | 10;\n    lowerBoundLabel: string;\n    upperBoundLabel: string;\n    skipSubmitButton?: boolean;\n}"
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
+      "properties": [],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
+    },
+    {
+      "id": "RatingSurveyQuestion",
+      "name": "RatingSurveyQuestion",
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "\"rating\"",
+          "name": "type"
+        },
+        {
+          "type": "SurveyRatingDisplay",
+          "name": "display"
+        },
+        {
+          "type": "2 | 3 | 5 | 7 | 10",
+          "name": "scale"
+        },
+        {
+          "type": "string",
+          "name": "lowerBoundLabel"
+        },
+        {
+          "type": "string",
+          "name": "upperBoundLabel"
+        },
+        {
+          "type": "boolean",
+          "name": "skipSubmitButton"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "RejectionLike",
@@ -3174,16 +4484,32 @@
     {
       "id": "ResolvedExceptionStepsConfig",
       "name": "ResolvedExceptionStepsConfig",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "{\n    enabled: boolean;\n    max_bytes: number;\n}"
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "type": "number",
+          "name": "max_bytes"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ResponseBasedBranching",
       "name": "ResponseBasedBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.ResponseBased;\n    responseValues: Record<string, any>;\n}"
+      "properties": [
+        {
+          "type": "\"response_based\"",
+          "name": "type"
+        },
+        {
+          "type": "Record<string, any>",
+          "name": "responseValues"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "RetriableOptions",
@@ -3209,7 +4535,21 @@
       "name": "SendLogsBatchOutcome",
       "properties": [],
       "path": "../core/src/posthog-core-stateless.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendMetricsBatchOutcome",
+      "name": "SendMetricsBatchOutcome",
+      "properties": [],
+      "path": "../core/src/metrics/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SeverityLevel",
@@ -3221,9 +4561,17 @@
     {
       "id": "SpecificQuestionBranching",
       "name": "SpecificQuestionBranching",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    type: SurveyQuestionBranchingType.SpecificQuestion;\n    index: number;\n}"
+      "properties": [
+        {
+          "type": "\"specific_question\"",
+          "name": "type"
+        },
+        {
+          "type": "number",
+          "name": "index"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "StackFrame",
@@ -3316,111 +4664,461 @@
     {
       "id": "Survey",
       "name": "Survey",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    id: string;\n    name: string;\n    description?: string;\n    type: SurveyType;\n    translations?: Record<string, SurveyTranslation>;\n    feature_flag_keys?: {\n        key: string;\n        value?: string;\n    }[];\n    linked_flag_key?: string;\n    targeting_flag_key?: string;\n    internal_targeting_flag_key?: string;\n    questions: SurveyQuestion[];\n    appearance?: SurveyAppearance;\n    conditions?: {\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: SurveyMatchType;\n        events?: {\n            repeatedActivation?: boolean;\n            values?: {\n                name: string;\n            }[];\n        };\n        actions?: {\n            values: SurveyActionType[];\n        };\n        deviceTypes?: string[];\n        deviceTypesMatchType?: SurveyMatchType;\n        linkedFlagVariant?: string;\n    };\n    start_date?: string;\n    end_date?: string;\n    current_iteration?: number;\n    current_iteration_start_date?: string;\n    schedule?: SurveySchedule;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyType",
+          "name": "type"
+        },
+        {
+          "type": "Record<string, SurveyTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "{ key: string; value?: string; }[]",
+          "name": "feature_flag_keys"
+        },
+        {
+          "type": "string",
+          "name": "linked_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "targeting_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "internal_targeting_flag_key"
+        },
+        {
+          "type": "SurveyQuestion[]",
+          "name": "questions"
+        },
+        {
+          "type": "SurveyAppearance",
+          "name": "appearance"
+        },
+        {
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "name": "conditions"
+        },
+        {
+          "type": "string",
+          "name": "start_date"
+        },
+        {
+          "type": "string",
+          "name": "end_date"
+        },
+        {
+          "type": "number",
+          "name": "current_iteration"
+        },
+        {
+          "type": "string",
+          "name": "current_iteration_start_date"
+        },
+        {
+          "type": "SurveySchedule",
+          "name": "schedule"
+        },
+        {
+          "type": "boolean",
+          "name": "enable_partial_responses"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyActionType",
       "name": "SurveyActionType",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    id: number;\n    name?: string;\n    steps?: ActionStepType[];\n}"
+      "properties": [
+        {
+          "type": "number",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "ActionStepType[]",
+          "name": "steps"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyAppearance_2",
+      "name": "SurveyAppearance_2",
+      "properties": [
+        {
+          "type": "string | undefined",
+          "name": "backgroundColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "textColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "submitButtonColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "submitButtonText"
+        },
+        {
+          "type": "string | undefined",
+          "name": "submitButtonTextColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "ratingButtonColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "ratingButtonActiveColor"
+        },
+        {
+          "type": "string | undefined",
+          "name": "inputBackground"
+        },
+        {
+          "type": "string | undefined",
+          "name": "inputTextColor"
+        },
+        {
+          "type": "boolean | undefined",
+          "name": "autoDisappear"
+        },
+        {
+          "type": "boolean | undefined",
+          "name": "displayThankYouMessage"
+        },
+        {
+          "type": "string | undefined",
+          "name": "thankYouMessageHeader"
+        },
+        {
+          "type": "string | undefined",
+          "name": "thankYouMessageDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType | undefined",
+          "name": "thankYouMessageDescriptionContentType"
+        },
+        {
+          "type": "string | undefined",
+          "name": "thankYouMessageCloseButtonText"
+        },
+        {
+          "type": "boolean | undefined",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string | undefined",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string | undefined",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType | undefined",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string | undefined",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string | undefined",
+          "name": "borderColor"
+        },
+        {
+          "type": "SurveyPosition | undefined",
+          "name": "position"
+        },
+        {
+          "type": "string | undefined",
+          "name": "placeholder"
+        },
+        {
+          "type": "boolean | undefined",
+          "name": "shuffleQuestions"
+        },
+        {
+          "type": "number | undefined",
+          "name": "surveyPopupDelaySeconds"
+        },
+        {
+          "type": "boolean | undefined",
+          "name": "allowGoBack"
+        },
+        {
+          "type": "string | undefined",
+          "name": "backButtonText"
+        },
+        {
+          "type": "SurveyWidgetType | undefined",
+          "name": "widgetType"
+        },
+        {
+          "type": "string | undefined",
+          "name": "widgetSelector"
+        },
+        {
+          "type": "string | undefined",
+          "name": "widgetLabel"
+        },
+        {
+          "type": "string | undefined",
+          "name": "widgetColor"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyAppearance",
       "name": "SurveyAppearance",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    backgroundColor?: string;\n    textColor?: string;\n    submitButtonColor?: string;\n    submitButtonText?: string;\n    submitButtonTextColor?: string;\n    ratingButtonColor?: string;\n    ratingButtonActiveColor?: string;\n    inputBackground?: string;\n    inputTextColor?: string;\n    autoDisappear?: boolean;\n    displayThankYouMessage?: boolean;\n    thankYouMessageHeader?: string;\n    thankYouMessageDescription?: string;\n    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType;\n    thankYouMessageCloseButtonText?: string;\n    borderColor?: string;\n    position?: SurveyPosition;\n    placeholder?: string;\n    shuffleQuestions?: boolean;\n    surveyPopupDelaySeconds?: number;\n    allowGoBack?: boolean;\n    backButtonText?: string;\n    widgetType?: SurveyWidgetType;\n    widgetSelector?: string;\n    widgetLabel?: string;\n    widgetColor?: string;\n}"
+      "properties": [
+        {
+          "description": "Caps how far survey text may grow under the OS text-size setting, as a multiple of its base size - React Native's `maxFontSizeMultiplier`, applied to every semantic `Text` and `TextInput` the survey renders. Icon-only text fallbacks do not scale because they occupy fixed-size icon boxes.\nPass a number to cap every role at once, or an object to cap them separately: a survey headline can usually take more scaling than a numeral inside a rating button, and a host app that already caps its own text by role will want to match those ceilings here.\nRoles left out of the object are uncapped, as they are today. Use `0` for no maximum, or a value of `1` or greater to set a cap. Other values below `1` (such as `0.8`) do not shrink text and are unsupported by React Native; depending on the platform and version, they may be ignored or rejected.\nLeave it unset (the default) and survey text scales without a ceiling. That is what the OS asks for, but not always what a fixed-size survey card can hold - at the largest accessibility sizes an unbounded 18pt headline renders roughly one word per line.\nReact Native only inherits this prop through nested `Text`, so a host app cannot apply it from the outside - it has to come in here.\nundefined (no ceiling)",
+          "type": "number | Partial<Record<SurveyTextRole, number>>",
+          "name": "maxFontSizeMultiplier"
+        }
+      ],
+      "path": "dist/surveys/surveys-utils.d.ts"
     },
     {
       "id": "SurveyAppearanceTheme",
       "name": "SurveyAppearanceTheme",
-      "properties": [],
-      "path": "dist/surveys/surveys-utils.d.ts",
-      "example": "Omit<Required<SurveyAppearance>, 'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'> & {\n    textColor?: string;\n    inputTextColor?: string;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "backgroundColor"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonColor"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonText"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonTextColor"
+        },
+        {
+          "type": "string",
+          "name": "ratingButtonColor"
+        },
+        {
+          "type": "string",
+          "name": "ratingButtonActiveColor"
+        },
+        {
+          "type": "string",
+          "name": "inputBackground"
+        },
+        {
+          "type": "boolean",
+          "name": "autoDisappear"
+        },
+        {
+          "type": "boolean",
+          "name": "displayThankYouMessage"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageHeader"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "thankYouMessageDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "thankYouMessageCloseButtonText"
+        },
+        {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "borderColor"
+        },
+        {
+          "type": "SurveyPosition",
+          "name": "position"
+        },
+        {
+          "type": "number",
+          "name": "surveyPopupDelaySeconds"
+        },
+        {
+          "type": "boolean",
+          "name": "allowGoBack"
+        },
+        {
+          "type": "string",
+          "name": "backButtonText"
+        },
+        {
+          "type": "string",
+          "name": "textColor"
+        },
+        {
+          "type": "string",
+          "name": "inputTextColor"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
+        },
+        {
+          "type": "number | Partial<Record<SurveyTextRole, number>>",
+          "name": "maxFontSizeMultiplier"
+        }
+      ],
+      "path": "dist/surveys/surveys-utils.d.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyMatchType",
       "name": "SurveyMatchType",
-      "properties": [
-        {
-          "type": "\"exact\"",
-          "name": "Exact"
-        },
-        {
-          "type": "\"icontains\"",
-          "name": "Icontains"
-        },
-        {
-          "type": "\"is_not\"",
-          "name": "IsNot"
-        },
-        {
-          "type": "\"not_icontains\"",
-          "name": "NotIcontains"
-        },
-        {
-          "type": "\"not_regex\"",
-          "name": "NotRegex"
-        },
-        {
-          "type": "\"regex\"",
-          "name": "Regex"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyMatchType)[keyof typeof SurveyMatchType]"
     },
     {
       "id": "SurveyModalProps",
       "name": "SurveyModalProps",
-      "properties": [],
-      "path": "dist/surveys/components/SurveyModal.d.ts",
-      "example": "{\n    survey: Survey;\n    surveyLanguage: string | null;\n    appearance: SurveyAppearanceTheme;\n    onShow: () => void;\n    onClose: (submitted: boolean, responses: SurveyResponses) => void;\n    androidKeyboardBehavior?: 'padding' | 'height';\n}"
+      "properties": [
+        {
+          "type": "Survey",
+          "name": "survey"
+        },
+        {
+          "type": "PostHog",
+          "name": "client"
+        },
+        {
+          "type": "SurveyProgress",
+          "name": "initialProgress"
+        },
+        {
+          "type": "(progress: SurveyProgress, completed: boolean) => boolean",
+          "name": "onProgressChange"
+        },
+        {
+          "type": "string",
+          "name": "surveyLanguage"
+        },
+        {
+          "type": "SurveyAppearanceTheme",
+          "name": "appearance"
+        },
+        {
+          "type": "() => void",
+          "name": "onShow"
+        },
+        {
+          "type": "(submitted: boolean, responses: SurveyResponses) => void",
+          "name": "onClose"
+        },
+        {
+          "type": "\"padding\" | \"height\"",
+          "name": "androidKeyboardBehavior"
+        }
+      ],
+      "path": "dist/surveys/components/SurveyModal.d.ts"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
+    },
+    {
+      "id": "SurveyProgress",
+      "name": "SurveyProgress",
       "properties": [
         {
-          "type": "\"center\"",
-          "name": "Center"
+          "type": "string",
+          "name": "submissionId"
         },
         {
-          "type": "\"left\"",
-          "name": "Left"
+          "type": "number",
+          "name": "questionIndex"
         },
         {
-          "type": "\"middle_center\"",
-          "name": "MiddleCenter"
+          "type": "number[]",
+          "name": "questionOrder"
         },
         {
-          "type": "\"middle_left\"",
-          "name": "MiddleLeft"
+          "type": "SurveyResponses",
+          "name": "responses"
         },
         {
-          "type": "\"middle_right\"",
-          "name": "MiddleRight"
+          "type": "Record<string, string>",
+          "name": "questionSnapshots"
         },
         {
-          "type": "\"right\"",
-          "name": "Right"
-        },
-        {
-          "type": "\"top_center\"",
-          "name": "TopCenter"
-        },
-        {
-          "type": "\"top_left\"",
-          "name": "TopLeft"
-        },
-        {
-          "type": "\"top_right\"",
-          "name": "TopRight"
+          "type": "string",
+          "name": "surveyLanguage"
         }
       ],
-      "path": "../core/src/types.ts"
+      "path": "dist/surveys/survey-progress.d.ts"
     },
     {
       "id": "SurveyQuestion",
@@ -3432,47 +5130,63 @@
     {
       "id": "SurveyQuestionBase",
       "name": "SurveyQuestionBase",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    question: string;\n    id: string;\n    description?: string | null;\n    descriptionContentType?: SurveyQuestionDescriptionContentType;\n    optional?: boolean;\n    buttonText?: string;\n    originalQuestionIndex: number;\n    branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching;\n    validation?: SurveyValidationRule[];\n    translations?: Record<string, SurveyQuestionTranslation>;\n}"
+      "properties": [
+        {
+          "type": "string",
+          "name": "question"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "descriptionContentType"
+        },
+        {
+          "type": "boolean",
+          "name": "optional"
+        },
+        {
+          "type": "string",
+          "name": "buttonText"
+        },
+        {
+          "type": "number",
+          "name": "originalQuestionIndex"
+        },
+        {
+          "type": "NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching",
+          "name": "branching"
+        },
+        {
+          "type": "SurveyValidationRule[]",
+          "name": "validation"
+        },
+        {
+          "type": "Record<string, SurveyQuestionTranslation>",
+          "name": "translations"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
-      "properties": [
-        {
-          "type": "\"end\"",
-          "name": "End"
-        },
-        {
-          "type": "\"next_question\"",
-          "name": "NextQuestion"
-        },
-        {
-          "type": "\"response_based\"",
-          "name": "ResponseBased"
-        },
-        {
-          "type": "\"specific_question\"",
-          "name": "SpecificQuestion"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
       "id": "SurveyQuestionDescriptionContentType",
       "name": "SurveyQuestionDescriptionContentType",
-      "properties": [
-        {
-          "type": "\"html\"",
-          "name": "Html"
-        },
-        {
-          "type": "\"text\"",
-          "name": "Text"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionDescriptionContentType)[keyof typeof SurveyQuestionDescriptionContentType]"
     },
     {
       "id": "SurveyQuestionTranslation",
@@ -3512,51 +5226,27 @@
     {
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
-      "properties": [
-        {
-          "type": "\"link\"",
-          "name": "Link"
-        },
-        {
-          "type": "\"multiple_choice\"",
-          "name": "MultipleChoice"
-        },
-        {
-          "type": "\"open\"",
-          "name": "Open"
-        },
-        {
-          "type": "\"rating\"",
-          "name": "Rating"
-        },
-        {
-          "type": "\"single_choice\"",
-          "name": "SingleChoice"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
       "id": "SurveyRatingDisplay",
       "name": "SurveyRatingDisplay",
-      "properties": [
-        {
-          "type": "\"emoji\"",
-          "name": "Emoji"
-        },
-        {
-          "type": "\"number\"",
-          "name": "Number"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyRatingDisplay)[keyof typeof SurveyRatingDisplay]"
     },
     {
       "id": "SurveyResponse",
       "name": "SurveyResponse",
-      "properties": [],
-      "path": "../core/src/types.ts",
-      "example": "{\n    surveys: Survey[];\n}"
+      "properties": [
+        {
+          "type": "Survey[]",
+          "name": "surveys"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyResponses",
@@ -3575,21 +5265,16 @@
     {
       "id": "SurveySchedule",
       "name": "SurveySchedule",
-      "properties": [
-        {
-          "type": "\"always\"",
-          "name": "Always"
-        },
-        {
-          "type": "\"once\"",
-          "name": "Once"
-        },
-        {
-          "type": "\"recurring\"",
-          "name": "Recurring"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
+    },
+    {
+      "id": "SurveyTextRole",
+      "name": "SurveyTextRole",
+      "properties": [],
+      "path": "dist/surveys/surveys-utils.d.ts",
+      "example": "\"question\" | \"description\" | \"header\" | \"choice\" | \"input\" | \"button\" | \"ratingLabel\" | \"ratingNumber\" | \"validationHint\""
     },
     {
       "id": "SurveyTranslation",
@@ -3598,6 +5283,18 @@
         {
           "type": "string",
           "name": "backButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
         },
         {
           "type": "string",
@@ -3625,25 +5322,9 @@
     {
       "id": "SurveyType",
       "name": "SurveyType",
-      "properties": [
-        {
-          "type": "\"api\"",
-          "name": "API"
-        },
-        {
-          "type": "\"external_survey\"",
-          "name": "ExternalSurvey"
-        },
-        {
-          "type": "\"popover\"",
-          "name": "Popover"
-        },
-        {
-          "type": "\"widget\"",
-          "name": "Widget"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyValidationRule",
@@ -3667,36 +5348,16 @@
     {
       "id": "SurveyValidationType",
       "name": "SurveyValidationType",
-      "properties": [
-        {
-          "type": "\"max_length\"",
-          "name": "MaxLength"
-        },
-        {
-          "type": "\"min_length\"",
-          "name": "MinLength"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyValidationType)[keyof typeof SurveyValidationType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
-      "properties": [
-        {
-          "type": "\"button\"",
-          "name": "Button"
-        },
-        {
-          "type": "\"selector\"",
-          "name": "Selector"
-        },
-        {
-          "type": "\"tab\"",
-          "name": "Tab"
-        }
-      ],
-      "path": "../core/src/types.ts"
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     }
   ],
   "categories": [

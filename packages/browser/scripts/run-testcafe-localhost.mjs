@@ -1,5 +1,4 @@
-/* eslint-disable no-console */
-/* eslint-disable no-undef */
+/* oxlint-disable no-console */
 import * as child_process from 'child_process'
 
 const currentEnv = process.env

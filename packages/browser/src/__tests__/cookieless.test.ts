@@ -1,14 +1,15 @@
 import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     const mockedCookieBox = { cookie: '' }
-    const mockedFetch = jest.fn()
+    const mockedFetch = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -17,7 +18,8 @@ jest.mock('../utils/globals', () => {
         mockedFetch,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()
@@ -47,38 +49,46 @@ jest.mock('../utils/globals', () => {
             }
         },
         XMLHttpRequest: () => ({
-            open: jest.fn(),
-            send: jest.fn(),
-            setRequestHeader: jest.fn(),
+            open: vi.fn(),
+            send: vi.fn(),
+            setRequestHeader: vi.fn(),
         }),
         fetch: mockedFetch,
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('../utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = mockedGlobals as any
 
-const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
+const delay = (timeoutMs: number) => vi.advanceTimersByTimeAsync(timeoutMs)
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
+    const instances: Array<{ shutdown: (timeoutMs?: number) => Promise<void> }> = []
     const eventProperties = {
         event: 'prop',
     }
     const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             ...config,
             before_send: beforeSendMock,
         })!
-        posthog.debug()
+        instances.push(posthog)
         return { posthog, beforeSendMock }
     }
 
     beforeEach(() => {
+        vi.useFakeTimers()
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
+        mockedFetch.mockReset()
         mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{"flags": {}}') })
+    })
+
+    afterEach(async () => {
+        await Promise.all(instances.splice(0).map((instance) => instance.shutdown(0)))
+        vi.clearAllTimers()
+        vi.useRealTimers()
     })
 
     describe('always mode', () => {
@@ -101,11 +111,37 @@ describe('cookieless', () => {
             expect(document.cookie).toBe('')
             expect(posthog.sessionRecording).toBeFalsy()
 
-            // should ignore cookie consent, and throw in test code due to logging an error
-            expect(() => posthog.opt_in_capturing()).toThrow()
+            // should ignore cookie consent
+            posthog.opt_in_capturing()
+            expect(posthog.has_opted_in_capturing()).toBe(false)
         })
 
-        it.each([[true], ['history_change']])(
+        it('emits a rate-limit warning without session context or durable storage', async () => {
+            const token = uuidv7()
+            const { posthog, beforeSendMock } = await setup(
+                {
+                    cookieless_mode: 'always',
+                    capture_pageview: false,
+                    persistence: 'memory',
+                    persistence_name: token,
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                },
+                token
+            )
+
+            console.error = vi.fn()
+            posthog.capture(eventName, eventProperties)
+            posthog.capture(eventName, eventProperties)
+
+            const warning = beforeSendMock.mock.calls.find(([event]) => event.event === '$$client_ingestion_warning')[0]
+            expect(warning.properties.$$client_ingestion_warning_message).not.toContain('session ')
+            expect(warning.properties.$$client_ingestion_warning_session_id).toBeUndefined()
+            expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(0)
+            expect(localStorage.getItem(`ph_${token}`)).toBeNull()
+            expect(document.cookie).toBe('')
+        })
+
+        it.each([[true], ['history_change' as const], [{ path: true }]])(
             'should send the initial pageview event when capture_pageview is %p',
             async (capturePageview: PostHogConfig['capture_pageview']) => {
                 const { posthog, beforeSendMock } = await setup({
@@ -127,8 +163,9 @@ describe('cookieless', () => {
                 expect(document.cookie).toBe('')
                 expect(posthog.sessionRecording).toBeFalsy()
 
-                // should ignore cookie consent, and throw in test code due to logging an error
-                expect(() => posthog.opt_in_capturing()).toThrow()
+                // should ignore cookie consent
+                posthog.opt_in_capturing()
+                expect(posthog.has_opted_in_capturing()).toBe(false)
             }
         )
     })
@@ -143,7 +180,7 @@ describe('cookieless', () => {
             expect(posthog.has_opted_out_capturing()).toEqual(true)
 
             // Mock surveys to verify they get loaded
-            const mockSurveysLoadIfEnabled = jest.spyOn(posthog.surveys, 'loadIfEnabled')
+            const mockSurveysLoadIfEnabled = vi.spyOn(posthog.surveys, 'loadIfEnabled')
 
             // opt in
             posthog.opt_in_capturing()
@@ -288,7 +325,10 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'on_reject',
             })
+            const detachedSessionRecording = posthog.sessionRecording!
+            const detachedRemoteConfig = vi.spyOn(detachedSessionRecording, 'onRemoteConfig')
             posthog.opt_out_capturing()
+            expect(posthog['_extensions']).not.toContain(detachedSessionRecording)
             posthog.register({ test: 'test' })
             posthog.capture(eventName, eventProperties)
             expect(beforeSendMock).toBeCalledTimes(2)
@@ -309,6 +349,43 @@ describe('cookieless', () => {
             expect(beforeSendMock.mock.calls[3][0].properties.$window_id).toMatch(uuidV7Pattern)
             expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(undefined)
             expect(posthog.sessionRecording).toBeTruthy()
+
+            posthog._onRemoteConfig({ ok: false })
+            expect(detachedRemoteConfig).not.toHaveBeenCalled()
+        })
+
+        it('disposes the detached recorder when consent changes before opting in', async () => {
+            const { posthog } = await setup({
+                cookieless_mode: 'on_reject',
+            })
+            posthog.opt_in_capturing()
+            const detachedSessionRecording = posthog.sessionRecording!
+            const identityBeforeReplacement = {
+                distinctId: posthog.get_distinct_id(),
+                sessionId: posthog.get_session_id(),
+            }
+            let identityAtDisposal: typeof identityBeforeReplacement | undefined
+            const originalDispose = detachedSessionRecording.dispose.bind(detachedSessionRecording)
+            const disposeSessionRecording = vi
+                .spyOn(detachedSessionRecording, 'dispose')
+                .mockImplementation((options) => {
+                    identityAtDisposal = {
+                        distinctId: posthog.get_distinct_id(),
+                        sessionId: posthog.get_session_id(),
+                    }
+                    originalDispose(options)
+                })
+
+            // Consent persistence is shared across tabs and can change without this instance receiving opt_out_capturing().
+            posthog.consent.optInOut(false)
+            posthog.opt_in_capturing()
+
+            expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(identityAtDisposal).toEqual(identityBeforeReplacement)
+            expect(posthog.get_distinct_id()).not.toBe(identityBeforeReplacement.distinctId)
+            expect(posthog.get_session_id()).not.toBe(identityBeforeReplacement.sessionId)
+            expect(posthog.sessionRecording).not.toBe(detachedSessionRecording)
+            expect(posthog['_extensions']).not.toContain(detachedSessionRecording)
         })
 
         it('should reset when switching consent mode from opt in to opt out', async () => {
@@ -322,9 +399,25 @@ describe('cookieless', () => {
             expect(beforeSendMock).toBeCalledTimes(3)
             expect(beforeSendMock.mock.calls[2][0].properties.test).toBe('test')
 
+            const identityBeforeOptOut = {
+                distinctId: posthog.get_distinct_id(),
+                sessionId: posthog.get_session_id(),
+            }
+            let identityAtDisposal: typeof identityBeforeOptOut | undefined
+            const sessionRecording = posthog.sessionRecording!
+            const originalDispose = sessionRecording.dispose.bind(sessionRecording)
+            const disposeSessionRecording = vi.spyOn(sessionRecording, 'dispose').mockImplementation((options) => {
+                identityAtDisposal = {
+                    distinctId: posthog.get_distinct_id(),
+                    sessionId: posthog.get_session_id(),
+                }
+                originalDispose(options)
+            })
             posthog.opt_out_capturing()
             posthog.capture(eventName, eventProperties)
 
+            expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(identityAtDisposal).toEqual(identityBeforeOptOut)
             expect(beforeSendMock).toBeCalledTimes(4)
             expect(beforeSendMock.mock.calls[3][0].event).toBe(eventName)
             expect(beforeSendMock.mock.calls[3][0].properties.test).toBe(undefined)
@@ -383,51 +476,143 @@ describe('cookieless', () => {
 
         it('should restart the request queue when opting in', async () => {
             // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
             // Flags are loaded via RemoteConfig -> ensureFlagsLoaded -> reloadFeatureFlags,
             // which debounces for 5ms before calling the flags endpoint
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags
             expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
 
             posthog.opt_in_capturing()
             expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].event).toEqual('$opt_in')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('$pageview')
 
             posthog.capture('custom event')
-            jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
+            vi.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[3][1].body).batch[0].event).toEqual('custom event')
+        })
+
+        describe('cross-tab consent flip (cookieless sentinel leak)', () => {
+            // Reproduces the multi-tab scenario: one tab is opted out and capturing cookieless events
+            // (distinct_id === sentinel), while a second tab (sharing the consent store) opts in. The
+            // first tab never ran opt_in_capturing(), so it never healed its own distinct_id — it is no
+            // longer in cookieless mode but still holds the sentinel. The sentinel must never leak out.
+            const optOutThenFlipConsentInAnotherTab = async () => {
+                const consentName = uuidv7()
+                const persistenceName = uuidv7()
+
+                // Tab A: opted out → capturing cookieless events, distinct_id is the sentinel.
+                const { posthog: tabA, beforeSendMock } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: persistenceName,
+                })
+                tabA.opt_out_capturing()
+                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
+
+                // Tab B: shared persistence and consent store, as in two tabs for the same project.
+                // Opting in resets and persists the canonical replacement identity.
+                const { posthog: tabB } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: persistenceName,
+                })
+                tabB.opt_in_capturing()
+                const optedInDistinctId = tabB.get_distinct_id()
+                expect(optedInDistinctId).toMatch(uuidV7Pattern)
+
+                // Tab A now reads the granted consent from shared storage, so it is no longer in
+                // cookieless mode, yet it still holds the stale sentinel distinct_id in memory.
+                expect(tabA.has_opted_in_capturing()).toBe(true)
+                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
+
+                beforeSendMock.mockClear()
+                return { tabA, beforeSendMock, optedInDistinctId }
+            }
+
+            it('does not leak the sentinel into $identify as $anon_distinct_id', async () => {
+                const { tabA, beforeSendMock, optedInDistinctId } = await optOutThenFlipConsentInAnotherTab()
+
+                tabA.identify('real-user-123')
+
+                const identifyEvent = beforeSendMock.mock.calls.find(([e]) => e.event === '$identify')?.[0]
+                expect(identifyEvent).toBeDefined()
+                expect(identifyEvent.properties.distinct_id).toEqual('real-user-123')
+                expect(identifyEvent.properties.$anon_distinct_id).toEqual(optedInDistinctId)
+                expect(tabA.get_distinct_id()).toEqual('real-user-123')
+                expect(tabA.persistence?.isDisabled?.()).toBe(false)
+            })
+
+            it('heals the sentinel at capture time for a plain event', async () => {
+                const { tabA, beforeSendMock, optedInDistinctId } = await optOutThenFlipConsentInAnotherTab()
+
+                tabA.capture(eventName, eventProperties)
+
+                const event = beforeSendMock.mock.calls.find(([e]) => e.event === eventName)?.[0]
+                expect(event).toBeDefined()
+                expect(event.properties.distinct_id).toEqual(optedInDistinctId)
+                expect(event.properties.$device_id).toEqual(optedInDistinctId)
+                expect(event.properties.$cookieless_mode).toEqual(undefined)
+                expect(tabA.persistence?.isDisabled?.()).toBe(false)
+            })
+
+            it('generates a fallback device id when the consent store is shared but persistence is not', async () => {
+                const consentName = uuidv7()
+                const { posthog: tabA, beforeSendMock } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: uuidv7(),
+                })
+                tabA.opt_out_capturing()
+
+                const { posthog: tabB } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: uuidv7(),
+                })
+                tabB.opt_in_capturing()
+
+                beforeSendMock.mockClear()
+                tabA.capture(eventName, eventProperties)
+
+                const event = beforeSendMock.mock.calls.find(([e]) => e.event === eventName)?.[0]
+                expect(event.properties.distinct_id).toMatch(uuidV7Pattern)
+                expect(event.properties.distinct_id).not.toEqual('$posthog_cookieless')
+                expect(event.properties.$device_id).toEqual(event.properties.distinct_id)
+            })
         })
 
         it('should start the request queue when opting out (cookieless transport regression #3680)', async () => {
             // Regression: after opt_out_capturing() in on_reject mode the SDK switches to cookieless
             // capturing, but the RequestQueue was never enabled — so batched events were enqueued
             // but never flushed over the network.
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags only — queue is paused, no events yet
 
             posthog.opt_out_capturing()
             // opt_out triggers an initial $pageview in cookieless mode — it should be sent immediately (non-batched)
             expect(mockedFetch).toBeCalledTimes(2) // flags + pageview
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$pageview')
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].properties.distinct_id).toEqual(
+                '$posthog_cookieless'
+            )
 
             posthog.capture('custom event')
-            jest.advanceTimersByTime(5000) // flush the batch queue
+            vi.advanceTimersByTime(5000) // flush the batch queue
             expect(mockedFetch).toBeCalledTimes(3) // flags + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].event).toEqual('custom event')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].properties.distinct_id).toEqual(
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].properties.distinct_id).toEqual(
                 '$posthog_cookieless'
             )
         })

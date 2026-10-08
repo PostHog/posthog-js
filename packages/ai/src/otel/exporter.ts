@@ -1,12 +1,14 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
-import { ExportResultCode } from '@opentelemetry/core'
 
 import { redactSpan } from './redact'
 import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
+// OpenTelemetry's ExportResultCode.SUCCESS is 0. Keep this local so loading the
+// published subpath does not require the exporter package's transitive dependencies.
+const EXPORT_SUCCESS = 0
 
 function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -91,13 +93,13 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
     if (this.disabled) {
       // Intentionally report success: missing or blank tokens disable exporting as a compatibility no-op.
       // Reporting failure would make OpenTelemetry treat every span as an export error.
-      resultCallback({ code: ExportResultCode.SUCCESS })
+      resultCallback({ code: EXPORT_SUCCESS })
       return
     }
 
     const aiSpans = spans.filter(isAISpan)
     if (aiSpans.length === 0) {
-      resultCallback({ code: ExportResultCode.SUCCESS })
+      resultCallback({ code: EXPORT_SUCCESS })
       return
     }
     for (const span of aiSpans) {

@@ -5,7 +5,6 @@ import {
   EmbedContentParameters,
   EmbedContentResponse,
   Part,
-  GenerateContentResponseUsageMetadata,
 } from '@google/genai'
 import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
@@ -19,15 +18,27 @@ import {
   withPrivacyMode,
   buildInlineDataBlock,
   getModelParams,
+  truncate,
+  utf8ByteLength,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
+import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
+import { mapGeminiUsage } from './usage'
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
 }
+
+interface FormattedGeminiFunctionResponse {
+  type: 'tool_result'
+  tool_use_id?: string
+  content: unknown
+}
+
+const TOOL_RESULT_MAX_BYTES = 5000
 
 export class PostHogGoogleGenAI {
   private readonly phClient: PostHog
@@ -68,21 +79,12 @@ export class WrappedModels {
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams),
-        output: formatResponseGemini(response),
+        output: formatResponseGemini(response, this.phClient),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
-        usage: {
-          inputTokens: metadata?.promptTokenCount ?? 0,
-          outputTokens: metadata?.candidatesTokenCount ?? 0,
-          reasoningTokens:
-            (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
-            0,
-          cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
-          webSearchCount: calculateGoogleWebSearchCount(response),
-          rawUsage: metadata,
-        },
+        usage: mapGeminiUsage(metadata, { webSearchCount: calculateGoogleWebSearchCount(response) }),
         stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
@@ -99,10 +101,7 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        usage: {},
         error,
       })
       throw error
@@ -118,11 +117,10 @@ export class WrappedModels {
     let firstTokenTime: number | undefined
     let stopReason: string | undefined
     let usage: TokenUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
       webSearchCount: 0,
       rawUsage: undefined,
     }
+    let errored = false
 
     try {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
@@ -170,10 +168,12 @@ export class WrappedModels {
                   if (firstTokenTime === undefined) {
                     firstTokenTime = Date.now()
                   }
-                  const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
+                  const funcCall = (part as Part & { functionCall?: { id?: string; name?: string; args?: unknown } })
+                    .functionCall
                   if (funcCall?.name) {
                     accumulatedContent.push({
                       type: 'function',
+                      ...(funcCall.id != null ? { id: funcCall.id } : {}),
                       function: {
                         name: funcCall.name,
                         arguments: funcCall.args || {},
@@ -188,49 +188,12 @@ export class WrappedModels {
 
         // Update usage metadata - handle both old and new field names
         if (chunk.usageMetadata) {
-          const metadata = chunk.usageMetadata as GenerateContentResponseUsageMetadata
-          usage = {
-            inputTokens: metadata.promptTokenCount ?? 0,
-            outputTokens: metadata.candidatesTokenCount ?? 0,
-            reasoningTokens:
-              (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
-              0,
-            cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
-            webSearchCount: usage.webSearchCount,
-            rawUsage: metadata,
-          }
+          usage = mapGeminiUsage(chunk.usageMetadata, { webSearchCount: usage.webSearchCount })
         }
         yield chunk
       }
-
-      const latency = (Date.now() - startTime) / 1000
-      const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-
-      const availableTools = extractAvailableToolCalls('gemini', geminiParams)
-
-      // Format output similar to formatResponseGemini
-      const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
-
-      await captureAiGeneration(this.phClient, {
-        ...posthogParams,
-        model: geminiParams.model,
-        provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
-        output,
-        latency,
-        timeToFirstToken,
-        baseURL: 'https://generativelanguage.googleapis.com',
-        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        httpStatus: 200,
-        usage: {
-          ...usage,
-          webSearchCount: usage.webSearchCount,
-          rawUsage: usage.rawUsage,
-        },
-        stopReason,
-        tools: availableTools,
-      })
     } catch (error: unknown) {
+      errored = true
       const latency = (Date.now() - startTime) / 1000
       await captureAiGeneration(this.phClient, {
         ...posthogParams,
@@ -241,13 +204,43 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        usage,
         error,
       })
       throw error
+    } finally {
+      // A consumer that stops iterating resumes the pending yield as a return,
+      // skipping both the loop tail and the catch. Only a finally runs then, so
+      // the success capture lives here to cover completion and cancellation.
+      if (!errored) {
+        const latency = (Date.now() - startTime) / 1000
+        const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+
+        const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
+        // Format output similar to formatResponseGemini
+        const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
+
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: geminiParams.model,
+          provider: 'gemini',
+          input: this.formatInputForPostHog(geminiParams),
+          output,
+          latency,
+          timeToFirstToken,
+          baseURL: 'https://generativelanguage.googleapis.com',
+          modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
+          httpStatus: 200,
+          usage: {
+            ...usage,
+            webSearchCount: usage.webSearchCount,
+            rawUsage: usage.rawUsage,
+          },
+          stopReason,
+          tools: availableTools,
+        })
+      }
     }
   }
 
@@ -290,17 +283,15 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-        },
+        usage: {},
         error,
       })
       throw error
     }
   }
 
-  private formatPartsAsContentBlocks(parts: unknown[]): FormattedContent {
-    const blocks: FormattedContent = []
+  private formatPartsAsContentBlocks(parts: unknown[]): Array<FormattedContentItem | FormattedGeminiFunctionResponse> {
+    const blocks: Array<FormattedContentItem | FormattedGeminiFunctionResponse> = []
 
     for (const part of parts) {
       // Handle dict/object with text field
@@ -316,10 +307,47 @@ export class WrappedModels {
         const inlineData = (part as any).inlineData
         const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
         blocks.push(buildInlineDataBlock(mimeType, inlineData.data))
+      } else if (part && typeof part === 'object' && 'functionCall' in part) {
+        const functionCall = (part as Part).functionCall
+        if (functionCall?.name) {
+          blocks.push({
+            type: 'function',
+            ...(functionCall.id != null && { id: functionCall.id }),
+            function: { name: functionCall.name, arguments: functionCall.args ?? {} },
+          })
+        }
+      } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+        const functionResponse = (part as Part).functionResponse
+        if (functionResponse?.name) {
+          const content =
+            functionResponse.parts !== undefined
+              ? {
+                  ...(functionResponse.response !== undefined && { response: functionResponse.response }),
+                  parts: functionResponse.parts,
+                }
+              : (functionResponse.response ?? {})
+          blocks.push({
+            type: 'tool_result',
+            ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
+            content: this.boundToolResult(content),
+          })
+        }
       }
     }
 
     return blocks
+  }
+
+  private boundToolResult(content: unknown): unknown {
+    if (isFullAiCaptureEnabled(this.phClient)) return content
+    try {
+      const serialized = JSON.stringify(content)
+      return utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
+        ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
+        : content
+    } catch {
+      return '[Unserializable tool result]'
+    }
   }
 
   private formatInput(contents: unknown): FormattedMessage[] {
@@ -416,7 +444,7 @@ export class WrappedModels {
   }
 
   private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
-    const sanitized = sanitizeGemini(params.contents)
+    const sanitized = sanitizeGemini(params.contents, this.phClient)
     const messages = this.formatInput(sanitized)
 
     const systemInstruction = this.extractSystemInstruction(params)

@@ -1,19 +1,13 @@
 import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
-import { createLogger } from './utils/logger'
-import { assignableWindow, document } from './utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { assignableWindow } from './utils/globals'
+import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
 
-// Default refresh interval for feature flags in long-running sessions.
-// 5 minutes balances freshness with server load - flags typically don't change
-// frequently, and most sessions are shorter than this anyway.
-const DEFAULT_REFRESH_INTERVAL = 5 * 60 * 1000
-
 export class RemoteConfigLoader {
-    private _refreshInterval: ReturnType<typeof setInterval> | undefined
-
     constructor(private readonly _instance: PostHog) {}
 
     get remoteConfig(): RemoteConfig | undefined {
@@ -30,13 +24,11 @@ export class RemoteConfigLoader {
         }
     }
 
-    private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
+    private _loadRemoteConfigJSON(cb: (response: RequestResponse) => void): void {
         this._instance._send_request({
             method: 'GET',
             url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
-            callback: (response) => {
-                cb(response.json as RemoteConfig | undefined)
-            },
+            callback: cb,
         })
     }
 
@@ -46,7 +38,6 @@ export class RemoteConfigLoader {
             if (this.remoteConfig) {
                 logger.info('Using preloaded remote config', this.remoteConfig)
                 this._onRemoteConfig(this.remoteConfig)
-                this._startRefreshInterval()
                 return
             }
 
@@ -61,62 +52,29 @@ export class RemoteConfigLoader {
                 if (!config) {
                     logger.info('No config found after loading remote JS config. Falling back to JSON.')
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
-                    this._loadRemoteConfigJSON((config) => {
-                        this._onRemoteConfig(config)
-                        this._startRefreshInterval()
+                    this._loadRemoteConfigJSON((response) => {
+                        this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
                     })
                     return
                 }
 
                 this._onRemoteConfig(config)
-                this._startRefreshInterval()
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
+            this._onRemoteConfig()
         }
     }
 
-    stop(): void {
-        if (this._refreshInterval) {
-            clearInterval(this._refreshInterval)
-            this._refreshInterval = undefined
-        }
-    }
-
-    /**
-     * Refresh feature flags for long-running sessions.
-     * Calls reloadFeatureFlags() directly rather than re-fetching config — the initial
-     * config load already determined whether flags are enabled, and reloadFeatureFlags()
-     * is a no-op when flags are disabled. This avoids an unnecessary network round-trip.
-     */
-    refresh(): void {
-        if (this._instance._shouldDisableFlags() || !document || document.visibilityState === 'hidden') {
-            return
-        }
-
-        this._instance.reloadFeatureFlags()
-    }
-
-    private _startRefreshInterval(): void {
-        if (this._refreshInterval) {
-            return
-        }
-
-        const intervalMs = this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
-
-        // Allow users to disable periodic refresh by setting interval to 0
-        if (intervalMs === 0) {
-            return
-        }
-
-        this._refreshInterval = setInterval(() => {
-            this.refresh()
-        }, intervalMs)
-    }
-
-    private _onRemoteConfig(config?: RemoteConfig): void {
-        if (!config) {
-            logger.error('Failed to fetch remote config from PostHog.')
+    private _onRemoteConfig(config?: RemoteConfig, response?: RequestResponse): void {
+        if (!config && response) {
+            if (response.statusCode === 0) {
+                if (!response.error) {
+                    logger.warn('Failed to fetch remote config from PostHog.')
+                }
+            } else {
+                logger.error('Failed to fetch remote config from PostHog.')
+            }
         }
 
         // Config and flags are loaded separately: config from /array/{token}/config,
@@ -126,13 +84,20 @@ export class RemoteConfigLoader {
         // whether to show a survey), not during config processing. By the time a linked
         // flag is evaluated, flags have already loaded.
         //
-        // Even when config fails, we pass an empty object so extensions (autocapture,
-        // session recording, etc.) still initialize with their defaults.
-        this._instance._onRemoteConfig(config ?? ({} as RemoteConfig))
+        // Even when config fails, we notify extensions so they initialize with their
+        // defaults — as an explicit failure, so settings that must not fail open
+        // (e.g. autocapture's opt-out) can keep their last known value.
+        try {
+            this._instance._onRemoteConfig(config ? { ok: true, config } : { ok: false })
+        } catch (error) {
+            logger.error('Error applying remote config', error)
+        }
 
-        if (config?.hasFeatureFlags !== false) {
-            if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
+        if (config?.hasFeatureFlags !== false && !this._instance.config.advanced_disable_feature_flags_on_first_load) {
+            try {
                 this._instance.featureFlags?.ensureFlagsLoaded()
+            } catch (error) {
+                logger.error('Error loading feature flags', error)
             }
         }
     }

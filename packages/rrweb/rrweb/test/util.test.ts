@@ -7,6 +7,9 @@ import {
   inDom,
   shadowHostInDom,
   getShadowHost,
+  on,
+  hookSetter,
+  callAllSafely,
 } from '../src/utils';
 
 describe('Utilities for other modules', () => {
@@ -82,6 +85,375 @@ describe('Utilities for other modules', () => {
     });
   });
 
+  describe('on()', () => {
+    it('should not throw when cleanup target cannot remove listeners', () => {
+      const target = {
+        addEventListener: vi.fn(),
+      } as unknown as Document;
+
+      const cleanup = on('click', vi.fn(), target);
+
+      expect(() => cleanup()).not.toThrow();
+      expect(target.addEventListener).toHaveBeenCalledWith(
+        'click',
+        expect.any(Function),
+        { capture: true, passive: true },
+      );
+    });
+  });
+
+  describe('hookSetter()', () => {
+    it('should contain a failing deferred hooked setter and preserve the native throw', () => {
+      vi.useFakeTimers();
+      try {
+        // emulates a genuine element whose setter throws (e.g. a file input
+        // rejecting a programmatic value): the getter succeeds, so the probe
+        // passes and the native setter's throw is preserved
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set() {
+            throw new TypeError('Illegal invocation');
+          },
+        });
+
+        const hookedSet = vi.fn(() => {
+          throw new TypeError('Illegal invocation');
+        });
+
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        const foreign = Object.create(proto) as { value: string };
+
+        // the native setter's throw reaches the caller, as it would
+        // without the hook installed
+        expect(() => {
+          foreign.value = 'test';
+        }).toThrow(TypeError);
+
+        // the deferred hooked setter still ran and its throw is contained
+        expect(() => vi.runAllTimers()).not.toThrow();
+        expect(hookedSet).toHaveBeenCalledTimes(1);
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should still invoke the setters for a valid `this`', () => {
+      vi.useFakeTimers();
+      try {
+        const nativeSet = vi.fn();
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set: nativeSet,
+        });
+
+        const hookedSet = vi.fn();
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        const obj = Object.create(proto) as { value: string };
+        obj.value = 'test';
+
+        expect(nativeSet).toHaveBeenCalledWith('test');
+        vi.runAllTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should skip the synchronous native setter for a non-native `this` reached through assignment', () => {
+      vi.useFakeTimers();
+      try {
+        // emulate the native internal-slot brand check: both accessors reject a
+        // `this` that was not genuinely constructed, exactly as a DOM accessor
+        // throws 'Illegal invocation' for a proxy/cross-realm/`setPrototypeOf`
+        // object. `isPrototypeOf`/`instanceof` cannot tell those apart from a
+        // real element (they sit on the prototype chain); the getter probe can.
+        const genuine = new WeakSet<object>();
+        const nativeSet = vi.fn(function (this: object) {
+          if (!genuine.has(this)) throw new TypeError('Illegal invocation');
+        });
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get(this: object) {
+            if (!genuine.has(this)) throw new TypeError('Illegal invocation');
+            return '';
+          },
+          set: nativeSet,
+        });
+
+        const hookedSet = vi.fn();
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        const realInput = Object.create(proto) as { value: string };
+        genuine.add(realInput);
+
+        // a transparent proxy forwards the prototype chain, so `.value =`
+        // reaches the hooked setter with `this` = the proxy, which has no
+        // internal slot — the synchronous native setter must be skipped
+        const proxy = new Proxy(realInput, {}) as { value: string };
+        expect(() => {
+          proxy.value = 'via-proxy';
+        }).not.toThrow();
+
+        // a `setPrototypeOf` fake (a known instanceof-spoof pattern) is on the
+        // prototype chain too, and must likewise be skipped rather than throw
+        const fake = {} as { value: string };
+        Object.setPrototypeOf(fake, proto);
+        expect(() => {
+          fake.value = 'via-fake';
+        }).not.toThrow();
+
+        expect(nativeSet).not.toHaveBeenCalled();
+
+        vi.runAllTimers();
+        expect(hookedSet).toHaveBeenCalledWith('via-proxy');
+        expect(hookedSet).toHaveBeenCalledWith('via-fake');
+
+        realInput.value = 'genuine';
+        expect(nativeSet).toHaveBeenCalledTimes(1);
+        expect(nativeSet).toHaveBeenCalledWith('genuine');
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    describe('deferring on an unpatched timer', () => {
+      const zoneGlobals = window as unknown as Record<string, unknown>;
+      const symbolFor = (key: string) => `__zone_symbol__${key}`;
+      let originalSetTimeout: typeof setTimeout;
+      let nativeSetTimeout: typeof setTimeout;
+
+      beforeEach(() => {
+        originalSetTimeout = window.setTimeout;
+        nativeSetTimeout = originalSetTimeout.bind(window) as typeof setTimeout;
+      });
+
+      // the globals are restored here rather than in each test, so that a test
+      // failing before its own cleanup cannot leak a patched timer or a `Zone`
+      // into the ones after it
+      afterEach(() => {
+        window.setTimeout = originalSetTimeout;
+        delete zoneGlobals.Zone;
+        delete zoneGlobals.__zone_symbol__setTimeout;
+        document.body.innerHTML = '';
+      });
+
+      const flushTimers = () =>
+        new Promise((resolve) => nativeSetTimeout(resolve, 0));
+
+      const deferringTimer = () =>
+        vi.fn((callback: () => void) => nativeSetTimeout(callback, 0));
+
+      // the hook is installed on a throwaway prototype, so there is nothing
+      // shared to restore afterwards
+      const hookValueSetter = (
+        hookedSet: () => void,
+        win: Window & typeof globalThis,
+        nativeSet: () => void = vi.fn(),
+      ) => {
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set: nativeSet,
+        });
+        hookSetter(proto, 'value', { set: hookedSet }, false, win);
+        return Object.create(proto) as { value: string };
+      };
+
+      it('should defer on the timer zone.js left unpatched', async () => {
+        const patchedSetTimeout = deferringTimer();
+        const unpatchedSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = unpatchedSetTimeout;
+        window.setTimeout = patchedSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const nativeSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window, nativeSet);
+        element.value = 'test';
+
+        // a timer scheduled through the patched global keeps the Angular zone
+        // busy, so NgZone runs another change detection when it completes; a
+        // component that writes the property on every change detection then
+        // feeds itself forever
+        expect(patchedSetTimeout).not.toHaveBeenCalled();
+        expect(unpatchedSetTimeout).toHaveBeenCalledTimes(1);
+        // the page-visible write stays synchronous
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should defer on the timer of the window the hook was installed for', async () => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameWindow = iframe.contentWindow as
+          | (Window & typeof globalThis)
+          | null;
+        if (!frameWindow) throw new Error('the iframe has no window');
+
+        // zone.js patches every window it reaches, so the hook has to pick the
+        // unpatched timer of the window it was installed for
+        const patchedSetTimeout = deferringTimer();
+        const topUnpatchedSetTimeout = vi.fn();
+        const frameUnpatchedSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = topUnpatchedSetTimeout;
+        window.setTimeout = patchedSetTimeout as unknown as typeof setTimeout;
+
+        const frameGlobals = frameWindow as unknown as Record<string, unknown>;
+        frameGlobals.Zone = { __symbol__: symbolFor };
+        frameGlobals.__zone_symbol__setTimeout = frameUnpatchedSetTimeout;
+        frameWindow.setTimeout =
+          patchedSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, frameWindow);
+        element.value = 'test';
+
+        expect(patchedSetTimeout).not.toHaveBeenCalled();
+        expect(topUnpatchedSetTimeout).not.toHaveBeenCalled();
+        expect(frameUnpatchedSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should fall back to the window timer when no unpatched one is exposed', async () => {
+        const windowSetTimeout = deferringTimer();
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should fall back to the window timer when the lookup throws', async () => {
+        const windowSetTimeout = deferringTimer();
+        // `Zone` is an ordinary global, so a page is free to put anything there
+        zoneGlobals.Zone = {
+          __symbol__: () => {
+            throw new Error('not the zone.js you were looking for');
+          },
+        };
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        // a throw here would escape the loop that installs the six input hooks,
+        // leaving the earlier ones in place with no resetter to remove them
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should not let a throwing timer reach the page', async () => {
+        const nativeSet = vi.fn();
+        const throwingSetTimeout = vi.fn(() => {
+          throw new Error('the page owns this global too');
+        });
+        zoneGlobals.Zone = { __symbol__: symbolFor };
+        zoneGlobals.__zone_symbol__setTimeout = throwingSetTimeout;
+
+        const element = hookValueSetter(vi.fn(), window, nativeSet);
+
+        // the deferral runs inside the page's own assignment and before it is
+        // forwarded, so a throw here would swallow the page's write
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(throwingSetTimeout).toHaveBeenCalledTimes(1);
+        expect(nativeSet).toHaveBeenCalledWith('test');
+      });
+
+      it('should not let a window without a usable timer reach the page', async () => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameWindow = iframe.contentWindow as
+          | (Window & typeof globalThis)
+          | null;
+        if (!frameWindow) throw new Error('the iframe has no window');
+
+        const nativeSet = vi.fn();
+        const hookedSet = vi.fn();
+        frameWindow.setTimeout = undefined as unknown as typeof setTimeout;
+
+        const element = hookValueSetter(hookedSet, frameWindow, nativeSet);
+
+        expect(() => {
+          element.value = 'test';
+        }).not.toThrow();
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await flushTimers();
+        expect(hookedSet).not.toHaveBeenCalled();
+      });
+
+      it('should use the window timer when nothing patched it', async () => {
+        const windowSetTimeout = deferringTimer();
+        window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+        expect('Zone' in window).toBe(false);
+
+        const hookedSet = vi.fn();
+        const element = hookValueSetter(hookedSet, window);
+        element.value = 'test';
+
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await flushTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      });
+    });
+  });
+
   describe('inDom()', () => {
     it('should get correct result given nested shadow doms', () => {
       const shadowHost = document.createElement('div');
@@ -141,6 +513,34 @@ describe('Utilities for other modules', () => {
       expect(getRootShadowHost(a.childNodes[0])).toBe(a.childNodes[0]);
       expect(shadowHostInDom(a.childNodes[0])).toBeTruthy();
       expect(inDom(a.childNodes[0])).toBeTruthy();
+    });
+  });
+
+  describe('callAllSafely', () => {
+    it('runs every handler when one throws', () => {
+      const calls: string[] = [];
+
+      callAllSafely([
+        () => calls.push('first'),
+        () => {
+          throw new Error('bad cleanup');
+        },
+        () => calls.push('last'),
+      ]);
+
+      expect(calls).toEqual(['first', 'last']);
+    });
+
+    it('skips a handler that is not callable', () => {
+      const calls: string[] = [];
+
+      expect(() =>
+        callAllSafely([
+          undefined as unknown as () => void,
+          () => calls.push('last'),
+        ]),
+      ).not.toThrow();
+      expect(calls).toEqual(['last']);
     });
   });
 });

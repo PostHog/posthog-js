@@ -1,25 +1,32 @@
-import { PostHogLogs } from '../posthog-logs'
+import type { Mock as VitestMock } from 'vitest'
+import type { Client } from '@posthog/browser-common'
+
+import { PostHogLogs, RECORDER_MAX_AGE_MS } from '../posthog-logs'
+import { patch as rrwebPatch } from '@posthog/rrweb-utils'
+import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
 
 import { assignableWindow } from '../utils/globals'
 
 // Mock the logger to avoid console output during tests
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
-    createLogger: jest.fn(() => mockLogger),
+vi.mock('@posthog/browser-common/utils/logger', () => ({
+    createLogger: vi.fn(() => mockLogger),
 }))
 
 describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
-        let mockInitializeLogs: jest.Mock
-        let mockLoadExternalDependency: jest.Mock
+        let mockDisposeLogs: VitestMock
+        let mockInitializeLogs: VitestMock
+        let mockReplayConsoleBuffer: VitestMock
+        let mockLoadExternalDependency: VitestMock
 
         const flagsResponse = {
             featureFlags: {
@@ -36,18 +43,20 @@ describe('posthog-logs', () => {
 
         beforeEach(() => {
             // Clear all mocks
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Mock window and PostHog extensions
-            mockInitializeLogs = jest.fn()
-            mockLoadExternalDependency = jest.fn((_instance, _name, callback) => {
+            mockDisposeLogs = vi.fn()
+            mockInitializeLogs = vi.fn(() => mockDisposeLogs)
+            mockReplayConsoleBuffer = vi.fn()
+            mockLoadExternalDependency = vi.fn((_instance, _name, callback) => {
                 callback(null) // Simulate successful loading
             })
 
             // Mock assignableWindow
             Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                 value: {
-                    logs: { initializeLogs: mockInitializeLogs },
+                    logs: { initializeLogs: mockInitializeLogs, replayConsoleBuffer: mockReplayConsoleBuffer },
                     loadExternalDependency: mockLoadExternalDependency,
                 },
                 writable: true,
@@ -56,24 +65,25 @@ describe('posthog-logs', () => {
 
             // Create mock PostHog instance
             mockPostHog = {
+                __loaded: true,
                 config: {
                     disable_logs: false,
                     token: 'test-token',
                     logs_request_timeout_ms: 3000,
                 },
                 persistence: {
-                    register: jest.fn(),
+                    register: vi.fn(),
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
+                    endpointFor: vi.fn(() => 'https://us.i.posthog.com'),
                 },
-                _send_request: jest.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
-                get_property: jest.fn(),
-                is_capturing: jest.fn(() => true),
-                get_distinct_id: jest.fn(() => 'distinct-id-123'),
+                _send_request: vi.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
+                get_property: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                get_distinct_id: vi.fn(() => 'distinct-id-123'),
                 sessionManager: {
-                    checkAndGetSessionAndWindowId: jest.fn(() => ({
+                    checkAndGetSessionAndWindowId: vi.fn(() => ({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
                         sessionStartTimestamp: 1672567200000,
@@ -83,31 +93,151 @@ describe('posthog-logs', () => {
                 consent: {
                     _instance: mockPostHog,
                     _config: {},
-                    consent: jest.fn(),
-                    isOptedIn: jest.fn(() => true),
-                    isOptedOut: jest.fn(() => false),
-                    hasOptedInBefore: jest.fn(() => true),
-                    hasOptedOutBefore: jest.fn(() => false),
-                    optInCapturing: jest.fn(),
-                    optOutCapturing: jest.fn(),
-                    reset: jest.fn(),
-                    onConsentChange: jest.fn(),
+                    consent: vi.fn(),
+                    isOptedIn: vi.fn(() => true),
+                    isOptedOut: vi.fn(() => false),
+                    hasOptedInBefore: vi.fn(() => true),
+                    hasOptedOutBefore: vi.fn(() => false),
+                    optInCapturing: vi.fn(),
+                    optOutCapturing: vi.fn(),
+                    reset: vi.fn(),
+                    onConsentChange: vi.fn(),
                 },
                 featureFlags: {
-                    _send_retriable_request: jest.fn((_url, _params, callback) => {
+                    _send_retriable_request: vi.fn((_url, _params, callback) => {
                         callback({ statusCode: 200, json: flagsResponse })
                     }),
-                    getFeatureFlag: jest.fn((flag) => {
+                    getFeatureFlag: vi.fn((flag) => {
                         return flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
-                    isFeatureEnabled: jest.fn((flag) => {
+                    isFeatureEnabled: vi.fn((flag) => {
                         return !!flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
-                    getFlags: jest.fn(() => ['logs-capture-enabled']),
+                    getFlags: vi.fn(() => ['logs-capture-enabled']),
                 },
             } as unknown as PostHog
 
             logs = new PostHogLogs(mockPostHog)
+        })
+
+        describe('shared extension lifecycle', () => {
+            it('subscribes to remote config during setup', () => {
+                const remoteConfigDispose = vi.fn()
+                let remoteConfigHandler: ((result: any) => void) | undefined
+                const client = {
+                    onRemoteConfig: vi.fn((handler: (result: any) => void) => {
+                        remoteConfigHandler = handler
+                        return { dispose: remoteConfigDispose }
+                    }),
+                } as unknown as Client
+
+                logs.setup(client)
+                remoteConfigHandler?.({ ok: true, config: flagsResponse })
+
+                expect(logs.name).toBe('logs')
+                expect(client.onRemoteConfig).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).toHaveBeenCalledWith(client)
+
+                logs.dispose()
+                expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+                expect(mockDisposeLogs).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not load twice when setup replays enabled remote config', () => {
+                let loadCallback: ((error?: unknown) => void) | undefined
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    loadCallback = callback
+                })
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        handler({ ok: true, config: flagsResponse })
+                        return { dispose: vi.fn() }
+                    },
+                } as unknown as Client
+
+                logs.setup(client)
+                loadCallback?.()
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not retry a synchronous replay load failure during setup', () => {
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    callback(new Error('Loading failed'))
+                })
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        handler({ ok: true, config: flagsResponse })
+                        return { dispose: vi.fn() }
+                    },
+                } as unknown as Client
+
+                logs.setup(client)
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).not.toHaveBeenCalled()
+            })
+
+            it('releases resources and ignores late work on dispose', () => {
+                const remoteConfigDispose = vi.fn()
+                let remoteConfigHandler: ((result: any) => void) | undefined
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        remoteConfigHandler = handler
+                        return { dispose: remoteConfigDispose }
+                    },
+                } as unknown as Client
+                const removeEventListener = vi.spyOn(window, 'removeEventListener')
+
+                logs.setup(client)
+                logs.dispose()
+                logs.dispose()
+                remoteConfigHandler?.({ ok: true, config: flagsResponse })
+
+                expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+                expect(removeEventListener).toHaveBeenCalledWith('online', expect.any(Function))
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+                removeEventListener.mockRestore()
+            })
+
+            it('does not initialize a lazy logs chunk after disposal', () => {
+                let loadCallback: ((error?: unknown) => void) | undefined
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    loadCallback = callback
+                })
+                ;(logs as any)._isLogsEnabled = true
+
+                logs.loadIfEnabled()
+                logs.dispose()
+                loadCallback?.()
+
+                expect(mockInitializeLogs).not.toHaveBeenCalled()
+                expect((logs as any)._isLoaded).toBe(false)
+            })
+
+            it('preserves queued logs for the shutdown transport flush', () => {
+                vi.useFakeTimers()
+                try {
+                    logs.captureLog({ body: 'queued before shutdown' })
+
+                    logs.dispose()
+                    logs.flushLogs('sendBeacon')
+
+                    expect((logs as any)._queue).toHaveLength(0)
+                    expect(mockPostHog._send_request).toHaveBeenCalledWith(
+                        expect.objectContaining({ transport: 'sendBeacon', batchKey: 'logs' })
+                    )
+                    const sent = vi.mocked(mockPostHog._send_request).mock.calls[0][0]
+                    expect(
+                        (sent.data as Record<string, any>).resourceLogs[0].scopeLogs[0].logRecords.map(
+                            (record: any) => record.body.stringValue
+                        )
+                    ).toEqual(['queued before shutdown'])
+                } finally {
+                    vi.useRealTimers()
+                }
+            })
         })
 
         describe('onRemoteConfig', () => {
@@ -121,7 +251,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -136,7 +266,7 @@ describe('posthog-logs', () => {
                     logs: null,
                 } as any
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -150,7 +280,7 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -165,13 +295,13 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
             it('should call loadIfEnabled when logs are enabled', () => {
-                const loadIfEnabledSpy = jest.spyOn(logs, 'loadIfEnabled')
+                const loadIfEnabledSpy = vi.spyOn(logs, 'loadIfEnabled')
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
@@ -181,7 +311,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
             })
@@ -287,7 +417,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
@@ -304,7 +434,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
                 logs.loadIfEnabled()
 
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
@@ -330,15 +460,16 @@ describe('posthog-logs', () => {
                 }
 
                 // First enable
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
 
-                // Then disable (should not change the enabled state)
-                logs.onRemoteConfig(disabledResponse)
-                expect((logs as any)._isLogsEnabled).toBe(true) // Still enabled from first call
+                // The server reports `false` for every project that has not opted in, so
+                // it cannot revoke capture the caller enabled.
+                logs.onRemoteConfig({ ok: true, config: disabledResponse })
+                expect((logs as any)._isLogsEnabled).toBe(true)
 
                 // Enable again
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
@@ -358,7 +489,7 @@ describe('posthog-logs', () => {
 
                 configs.forEach((config) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    testLogs.onRemoteConfig(config)
+                    testLogs.onRemoteConfig({ ok: true, config: config })
                     expect((testLogs as any)._isLogsEnabled).toBe(true)
                 })
             })
@@ -376,12 +507,12 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                expect(() => logsWithNullPostHog.onRemoteConfig(response)).not.toThrow()
+                expect(() => logsWithNullPostHog.onRemoteConfig({ ok: true, config: response })).not.toThrow()
                 expect(() => logsWithNullPostHog.loadIfEnabled()).not.toThrow()
                 expect(() => logsWithNullPostHog.reset()).not.toThrow()
             })
 
-            it('should handle window object not being available', () => {
+            it('should handle the extension registry not being available', () => {
                 ;(logs as any)._isLogsEnabled = true
                 const originalExtensions = assignableWindow.__PosthogExtensions__
                 Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
@@ -422,7 +553,7 @@ describe('posthog-logs', () => {
 
                 malformedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).not.toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).not.toThrow()
                     expect((testLogs as any)._isLogsEnabled).toBeFalsy()
                 })
 
@@ -430,7 +561,7 @@ describe('posthog-logs', () => {
                 const nullUndefinedResponses = [null, undefined]
                 nullUndefinedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).toThrow()
                 })
             })
 
@@ -455,15 +586,15 @@ describe('posthog-logs', () => {
 
         describe('captureLog', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('should silently skip when user has opted out of capturing', () => {
-                ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+                ;(mockPostHog.is_capturing as VitestMock).mockReturnValue(false)
 
                 logs.captureLog({ body: 'should not be captured' })
 
@@ -490,16 +621,18 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue[0].record.body.stringValue).toBe('test message')
             })
 
-            it('should not send before the flush timer expires', () => {
+            it('should not send before the flush timer expires', async () => {
                 logs.captureLog({ body: 'test message' })
-
+                await vi.advanceTimersByTimeAsync(2999)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
+                await vi.advanceTimersByTimeAsync(1)
+                expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
 
             it('should flush on timer expiry and clear the queue on success', async () => {
                 logs.captureLog({ body: 'test message' })
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -520,7 +653,7 @@ describe('posthog-logs', () => {
                 // Hold the flush open so capture outpaces drain. maxBufferSize (2) only
                 // triggers a flush; the eviction backstop sits at the rate cap (1000), so
                 // a burst the cap admits is held in full rather than dropped at the trigger.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
                 ;(mockPostHog.config as any).logs = { maxBufferSize: 2, maxLogsPerInterval: 1000 }
                 logs = new PostHogLogs(mockPostHog)
 
@@ -534,18 +667,18 @@ describe('posthog-logs', () => {
 
             it('should send to the correct URL with token', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })
 
             it('should send OTLP formatted payload', () => {
                 logs.captureLog({ body: 'test', level: 'error' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.data.resourceLogs).toBeDefined()
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
@@ -553,17 +686,17 @@ describe('posthog-logs', () => {
 
             it('should use batchKey "logs" for independent rate limiting', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.batchKey).toBe('logs')
             })
 
             it('should use best-available compression', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.compression).toBe('best-available')
             })
 
@@ -571,18 +704,18 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
                 logs.captureLog({ body: 'log 3' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
             })
 
             it('should auto-populate SDK context', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -599,7 +732,7 @@ describe('posthog-logs', () => {
             it.each(['sessionStartTimestamp', 'lastActivityTimestamp'])(
                 'omits %s and does not throw when the session manager returns null for it',
                 (attribute) => {
-                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as jest.Mock).mockReturnValue({
+                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as VitestMock).mockReturnValue({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
                         sessionStartTimestamp: null,
@@ -608,10 +741,10 @@ describe('posthog-logs', () => {
 
                     expect(() => {
                         logs.captureLog({ body: 'test' })
-                        jest.advanceTimersByTime(3000)
+                        vi.advanceTimersByTime(3000)
                     }).not.toThrow()
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                     const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -629,15 +762,39 @@ describe('posthog-logs', () => {
                 }
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
                 expect(attrsMap['service.name']).toEqual({ stringValue: 'my-service' })
                 expect(attrsMap['service.version']).toEqual({ stringValue: '1.2.3' })
                 expect(attrsMap['deployment.environment']).toEqual({ stringValue: 'production' })
+            })
+
+            it('should include the detected OS in OTLP resource attributes', () => {
+                Object.defineProperty(window.navigator, 'userAgent', {
+                    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
+                    configurable: true,
+                })
+
+                try {
+                    logs = new PostHogLogs(mockPostHog)
+                    logs.captureLog({ body: 'test' })
+                    vi.advanceTimersByTime(3000)
+
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
+                    const attrsMap = Object.fromEntries(
+                        call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+                    )
+
+                    expect(attrsMap['os.name']).toEqual({ stringValue: 'Windows' })
+                    expect(attrsMap['os.version']).toEqual({ stringValue: '10' })
+                } finally {
+                    // @ts-expect-error restoring the jsdom prototype getter
+                    delete window.navigator.userAgent
+                }
             })
 
             it('should allow resourceAttributes to override named fields', () => {
@@ -654,9 +811,9 @@ describe('posthog-logs', () => {
                 }
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -673,9 +830,9 @@ describe('posthog-logs', () => {
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -685,9 +842,9 @@ describe('posthog-logs', () => {
 
             it('should default service.name to unknown_service when not configured', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -731,7 +888,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'dropped' })
                 expect((logs as any)._queue).toHaveLength(2)
 
-                jest.advanceTimersByTime(3001)
+                vi.advanceTimersByTime(3001)
                 logs.captureLog({ body: 'c' })
                 expect((logs as any)._queue.some((e: any) => e.record.body.stringValue === 'c')).toBe(true)
             })
@@ -741,7 +898,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
 
                 logs.captureLog({ body: 'works without autocapture' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
@@ -750,25 +907,29 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'unload log' })
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 expect(call.transport).toBe('sendBeacon')
             })
         })
 
         describe('logger convenience methods', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             it.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const)(
                 'logger.%s() should capture a log with the correct level',
                 (level) => {
                     logs.logger[level]('test message', { key: 'value' })
-                    jest.advanceTimersByTime(3000)
+                    vi.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
 
+                    expect(record.severityText).toBe(level.toUpperCase())
+                    expect(record.severityNumber).toBe(
+                        { trace: 1, debug: 5, info: 9, warn: 13, error: 17, fatal: 21 }[level]
+                    )
                     expect(record.body.stringValue).toBe('test message')
                     const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
                     expect(attrs.key).toEqual({ stringValue: 'value' })
@@ -777,9 +938,9 @@ describe('posthog-logs', () => {
 
             it('logger.info() should work without attributes', () => {
                 logs.logger.info('no attrs')
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 expect(record.body.stringValue).toBe('no attrs')
             })
@@ -853,7 +1014,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 expect(call.transport).toBe('sendBeacon')
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -885,7 +1046,7 @@ describe('posthog-logs', () => {
 
                     logs.flushLogs(transport)
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                    const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                     expect(call.transport).toBe(transport)
                     expect(call.batchKey).toBe('logs')
                     expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
@@ -894,18 +1055,720 @@ describe('posthog-logs', () => {
             )
         })
 
-        describe('console capture instance', () => {
+        const noopClient = () => ({ onRemoteConfig: vi.fn(() => ({ dispose: vi.fn() })) }) as unknown as Client
+
+        describe('persisted capture hint', () => {
+            it('persists the server response so the next page load can buffer early console calls', () => {
+                const register = vi.fn()
+                ;(mockPostHog as any).persistence = { register, props: {} }
+                const persisting = new PostHogLogs(mockPostHog)
+
+                persisting.onRemoteConfig({
+                    ok: true,
+                    config: { ...flagsResponse, logs: { captureConsoleLogs: true } },
+                } as any)
+                expect(register).toHaveBeenLastCalledWith({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true })
+
+                persisting.onRemoteConfig({
+                    ok: true,
+                    config: { ...flagsResponse, logs: { captureConsoleLogs: false } },
+                } as any)
+                expect(register).toHaveBeenLastCalledWith({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false })
+
+                // A response without a `logs` key must not overwrite the last verdict.
+                register.mockClear()
+                persisting.onRemoteConfig({ ok: true, config: { ...flagsResponse, logs: undefined } } as any)
+                expect(register).not.toHaveBeenCalled()
+            })
+        })
+
+        describe('console recorder', () => {
+            const buildInstanceWithPersistedBit = () =>
+                ({
+                    ...mockPostHog,
+                    persistence: {
+                        register: vi.fn(),
+                        props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
+                    },
+                }) as unknown as PostHog
+
+            const remoteConfigResult = (captureConsoleLogs: boolean) => ({
+                ok: true as const,
+                config: {
+                    supportedCompression: [],
+                    toolbarParams: {},
+                    toolbarVersion: 'toolbar' as const,
+                    isAuthenticated: false,
+                    siteApps: [],
+                    logs: { captureConsoleLogs },
+                },
+            })
+
+            let logsFromPersisted: PostHogLogs
+            // The global test setup makes real console methods throw, and the
+            // recorder passes every call through to them. Swap in inert stubs
+            // for the duration of these tests, then restore the setup versions.
+            const RECORDER_LEVELS = ['debug', 'log', 'warn', 'error', 'info'] as const
+            let setupConsoleMethods: Partial<Record<(typeof RECORDER_LEVELS)[number], any>>
+
             beforeEach(() => {
-                jest.useFakeTimers()
+                setupConsoleMethods = {}
+                for (const level of RECORDER_LEVELS) {
+                    setupConsoleMethods[level] = assignableWindow.console[level]
+                    assignableWindow.console[level] = vi.fn()
+                }
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                logsFromPersisted?.reset()
+                for (const level of RECORDER_LEVELS) {
+                    assignableWindow.console[level] = setupConsoleMethods[level]
+                }
+            })
+
+            it('should buffer console entries instead of loading when the persisted bit is set', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(false)
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+
+                assignableWindow.console.log('buffered message', 42)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+            })
+
+            const buildInstanceWithLocalConfig = () =>
+                ({
+                    ...mockPostHog,
+                    config: { ...mockPostHog.config, logs: { captureConsoleLogs: true } },
+                    persistence: { register: vi.fn(), props: {} },
+                }) as unknown as PostHog
+
+            it('should buffer console entries when capture is enabled in local config', () => {
+                // The documented way to turn console capture on. It skips the remote-config
+                // wait but still has to wait for the logs script, so it gets a recorder too.
+                mockLoadExternalDependency.mockImplementation(() => {})
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
+                assignableWindow.console.log('before the script lands')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+            })
+
+            it('should stop recording when the bundle ships no extensions object at all', () => {
+                // Plain `no-external` builds import no entrypoint, so nothing ever creates
+                // `__PosthogExtensions__` and this is the branch they actually take.
+                ;(assignableWindow as any).__PosthogExtensions__ = undefined
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('never handed over')
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should keep a locally-configured buffer when the remote config request fails', () => {
+                let finishLoad: (err: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finishLoad = cb
+                })
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.log('kept')
+
+                logsFromPersisted.onRemoteConfig({ ok: false } as any)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                finishLoad(null)
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['kept'] }),
+                ])
+            })
+
+            it('should record console calls made while the script loads after a first remote enable', () => {
+                // First visit: nothing local, nothing persisted, so `setup` starts no
+                // recorder. The remote `true` is the first thing that enables capture, and
+                // the script it kicks off does not land in the same tick.
+                let finishLoad: (err: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finishLoad = cb
+                })
+                logsFromPersisted = new PostHogLogs(mockPostHog)
+                logsFromPersisted.setup(noopClient())
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                assignableWindow.console.log('during the load')
+
+                finishLoad(null)
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['during the load'] }),
+                ])
+            })
+
+            it('should not start a recorder once the script is capturing live', () => {
+                // A later remote-config callback must not re-patch `console` behind the
+                // entrypoint: `loadIfEnabled` is done, so nothing would ever collect that
+                // buffer and it would pin argument graphs until the max-age backstop.
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                expect((logsFromPersisted as any)._isLoaded).toBe(true)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+            })
+
+            it('should load the logs script once when local and remote config both enable capture', () => {
+                // Every caller gets its own load callback, so a second in-flight load
+                // would have the entrypoint wrap console twice.
+                mockLoadExternalDependency.mockImplementation(() => {})
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+            })
+
+            it('should not buffer a console call made with no arguments', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log()
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+
+                assignableWindow.console.log('real')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+            })
+
+            it('should stop buffering when the recorder cannot be unpatched from the console chain', () => {
+                // `patch` gives up when a non-layer wrapper closed over us directly, so the
+                // recorder stays in the call path and the flag is what stops it recording.
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+                const recorder = assignableWindow.console.log
+                assignableWindow.console.log = ((...args: any[]) => (recorder as any)(...args)) as any
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+
+                assignableWindow.console.log('after a failed unpatch')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should drop the buffer and unpatch console when the user opts out mid-window', () => {
+                const instance = buildInstanceWithPersistedBit()
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('before opt out')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+                ;(instance as any).is_capturing = vi.fn(() => false)
+
+                assignableWindow.console.log('after opt out')
+
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should drop console records already captured when the user opts out', () => {
+                const instance = buildInstanceWithLocalConfig()
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+                logsFromPersisted.captureLog({ body: 'programmatic' })
+                logsFromPersisted.captureConsoleLog({ body: 'mirrored before the opt-out' })
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
+                ;(instance as any).is_capturing = vi.fn(() => false)
+
+                logsFromPersisted._onOptOut()
+
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
+                expect((logsFromPersisted as any)._queue).toHaveLength(1)
+
+                logsFromPersisted.captureConsoleLog({ body: 'after the opt-out' })
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
+            })
+
+            it('should drop the buffer as soon as the user opts out, not on the next log line', () => {
+                const instance = buildInstanceWithPersistedBit()
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('before opt out')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                logsFromPersisted._onOptOut()
+
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should not leave a recorder patched over the entrypoint when remote config replays synchronously', () => {
+                const replayingClient = () =>
+                    ({
+                        onRemoteConfig: (handler: (result: any) => void) => {
+                            handler(remoteConfigResult(true))
+                            return { dispose: vi.fn() }
+                        },
+                    }) as unknown as Client
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+
+                logsFromPersisted.setup(replayingClient())
+
+                expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should unpatch console and drop the buffer on dispose', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('held')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                logsFromPersisted.dispose()
+
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should stop a hint-only recorder when the response carries no logs key', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('held on the hint alone')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                logsFromPersisted.onRemoteConfig({
+                    ok: true,
+                    config: { ...remoteConfigResult(true).config, logs: undefined },
+                } as any)
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it.each([
+                { label: 'the response carries no logs key', result: { ok: true, config: { logs: undefined } } },
+                {
+                    label: 'the server reports capture disabled',
+                    result: { ok: true, config: { logs: { captureConsoleLogs: false } } },
+                },
+            ])('should keep a locally-configured recorder when $label', ({ result }) => {
+                mockLoadExternalDependency.mockImplementation(() => {})
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.log('kept')
+
+                logsFromPersisted.onRemoteConfig(result as any)
+
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
+                assignableWindow.console.log('still captured')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(2)
+            })
+
+            it('should not start a hint-only recorder when remote config cannot arrive', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any)._shouldDisableFlags = vi.fn(() => true)
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should still buffer with flags disabled when remote config was preloaded', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any)._shouldDisableFlags = vi.fn(() => true)
+                ;(assignableWindow as any)._POSTHOG_REMOTE_CONFIG = { 'test-token': { config: {} } }
+                try {
+                    logsFromPersisted = new PostHogLogs(instance)
+                    logsFromPersisted.setup(noopClient())
+                    expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
+                } finally {
+                    delete (assignableWindow as any)._POSTHOG_REMOTE_CONFIG
+                }
+            })
+
+            it('should not patch console when the server last said no', () => {
+                const instance = {
+                    ...mockPostHog,
+                    persistence: { register: vi.fn(), props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false } },
+                } as unknown as PostHog
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should not patch console when the persisted bit is absent', () => {
+                const originalLog = assignableWindow.console.log
+                logs.setup(noopClient())
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logs as any)._isRecordingConsole).toBe(false)
+            })
+
+            it('should hand raw buffered entries to the entrypoint and unpatch console when remote config enables logs', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                const payload = { a: 1 }
+                assignableWindow.console.log('hello', payload)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect(mockLoadExternalDependency).toHaveBeenCalled()
+                expect(mockInitializeLogs).toHaveBeenCalled()
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({
+                        level: 'log',
+                        args: ['hello', payload],
+                        occurredAtMs: expect.any(Number),
+                        context: expect.any(Object),
+                    }),
+                ])
+            })
+
+            it('should keep recording until the entrypoint has initialized', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('before config')
+
+                mockLoadExternalDependency.mockImplementationOnce((_instance, _name, callback) => {
+                    assignableWindow.console.log('while script loads')
+                    callback(null)
+                })
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                const entries = mockReplayConsoleBuffer.mock.calls[0][1]
+                expect(entries.map((e: any) => e.args[0])).toEqual(['before config', 'while script loads'])
+            })
+
+            it('should stop the recorder and drop the buffer when the logs script fails to load', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('lost to a failed script load')
+
+                mockLoadExternalDependency.mockImplementationOnce((_instance, _name, callback) => {
+                    callback(new Error('load failed'))
+                })
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect(mockReplayConsoleBuffer).not.toHaveBeenCalled()
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should keep a hint-started buffer once remote config has granted capture', () => {
+                // Session recording asks for a fresh remote config of its own when its
+                // persisted copy is stale, so a second result — including a failed fetch —
+                // can land while the logs script is still loading. The grant already
+                // happened and the handover is coming, so the buffer has to survive it.
+                let finish: (e: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finish = cb
+                })
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.info('early')
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                logsFromPersisted.onRemoteConfig({ ok: false } as any)
+                finish(null)
+
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['early'] }),
+                ])
+            })
+
+            it('should replay the buffer when remote config flips to false after granting capture', () => {
+                // `false` does not stop the load it already started, so the entrypoint
+                // captures live either way. Dropping just the early lines would be the one
+                // inconsistent outcome.
+                let finish: (e: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finish = cb
+                })
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.info('early')
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+                finish(null)
+
+                expect(mockInitializeLogs).toHaveBeenCalled()
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['early'] }),
+                ])
+            })
+
+            it('should drop the buffer and restore console when remote config disables logs', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalInfo = assignableWindow.console.info
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.info('never sent')
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+
+                expect(assignableWindow.console.info).toBe(originalInfo)
+                expect(mockReplayConsoleBuffer).not.toHaveBeenCalled()
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not buffer when the user has opted out', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any).is_capturing = vi.fn(() => false)
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('opted out')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should stop the recorder after the max age passes with no resolution', () => {
+                vi.useFakeTimers()
+                try {
+                    logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                    const originalLog = assignableWindow.console.log
+                    logsFromPersisted.setup(noopClient())
+
+                    assignableWindow.console.log('held too long')
+                    vi.advanceTimersByTime(RECORDER_MAX_AGE_MS)
+
+                    expect(assignableWindow.console.log).toBe(originalLog)
+                    expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                    expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                } finally {
+                    vi.useRealTimers()
+                }
+            })
+
+            it('should stop recording and drop the buffer when remote config fails', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('lost to a failed config fetch')
+
+                logsFromPersisted.onRemoteConfig({ ok: false } as any)
+
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should not buffer a console call made while snapshotting the context', () => {
+                const instance = buildInstanceWithPersistedBit()
+                let nested = 0
+                ;(instance as any).sessionManager = {
+                    checkAndGetSessionAndWindowId: vi.fn(() => {
+                        // Stands in for any context lookup that reaches the console
+                        // directly: the nested call must not be buffered while the
+                        // outer entry is still being built.
+                        if (nested++ < 3) {
+                            assignableWindow.console.error('from inside the capture path')
+                        }
+                        return { sessionId: 's', windowId: 'w' }
+                    }),
+                }
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('outer')
+
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+            })
+
+            it('should drop the buffer and unpatch console when the SDK is reset mid-buffer', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('before reset')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                logsFromPersisted.reset()
+
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+            })
+
+            it('should stop recording when the extensions object carries no script loader', () => {
+                // `full.no-external` inlines the logs entrypoint, so the object exists but
+                // nothing can fetch: the handover can never come.
+                assignableWindow.__PosthogExtensions__ = {} as any
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('never handed over')
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should unpatch cleanly from underneath a session-replay console patch', () => {
+                // recorder.js and logs.js both arrive after remote config, in either
+                // order. rrweb's patch builds the same layer under its own marker, so
+                // the recorder can only be spliced out if the walk recognises both.
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+                const recorderWrapper: any = assignableWindow.console.log
+
+                rrwebPatch(
+                    assignableWindow.console,
+                    'log',
+                    (next: any) =>
+                        (...args: any[]) =>
+                            next.apply(assignableWindow.console, args)
+                )
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                let recorderRan = false
+                recorderWrapper.__posthog_layer__.next = () => {
+                    recorderRan = true
+                }
+                assignableWindow.console.log('after handover')
+                expect(recorderRan).toBe(false)
+            })
+
+            it('should reach the real console method through an existing console wrapper', () => {
+                // A console already wrapped by another plugin must still be restorable.
+                const realLog = vi.fn()
+                const foreign = (...args: any[]) => (realLog as any)(...args)
+                ;(foreign as any).__rrweb_original__ = realLog
+                assignableWindow.console.log = foreign as any
+
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.setup(noopClient())
+
+                expect((assignableWindow.console.log as any).__rrweb_original__).toBe(realLog)
+                assignableWindow.console.log('through active wrapper', 42)
+                expect(realLog).toHaveBeenCalledTimes(1)
+                expect(realLog).toHaveBeenCalledWith('through active wrapper', 42)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+                expect(assignableWindow.console.log).toBe(foreign)
+            })
+
+            it('should cap the console buffer at the configured max size', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any).config.logs = { maxBufferSize: 3 }
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+
+                for (let i = 0; i < 10; i++) {
+                    assignableWindow.console.info('entry', i)
+                }
+                // Earliest calls are kept: they are the ones the live path would miss.
+                expect((logsFromPersisted as any)._consoleBuffer.map((e: any) => e.args[1])).toEqual([0, 1, 2])
+            })
+        })
+
+        describe('console capture instance', () => {
+            beforeEach(() => {
+                vi.useFakeTimers()
+            })
+
+            it('does not drop records captured after a reset mid-flush', async () => {
+                let releaseSend: (r: any) => void = () => {}
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(({ callback }: any) => {
+                    releaseSend = callback
+                })
+                logs.captureConsoleLog({ body: 'before the reset' })
+                vi.advanceTimersByTime(3000)
+                expect(mockPostHog._send_request).toHaveBeenCalled()
+
+                logs.reset()
+                logs.captureConsoleLog({ body: 'after the reset' })
+
+                releaseSend({ statusCode: 200 })
+                await Promise.resolve()
+                await Promise.resolve()
+
+                expect((logs as any)._consoleQueue.map((e: any) => e.record.body.stringValue)).toEqual([
+                    'after the reset',
+                ])
+            })
+
+            it('does not drop records captured after opting back in mid-flush', async () => {
+                let releaseSend: (r: any) => void = () => {}
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(({ callback }: any) => {
+                    releaseSend = callback
+                })
+                logs.captureConsoleLog({ body: 'before the opt-out' })
+                vi.advanceTimersByTime(3000)
+                expect(mockPostHog._send_request).toHaveBeenCalled()
+
+                logs._onOptOut()
+                logs.captureConsoleLog({ body: 'after opting back in' })
+
+                releaseSend({ statusCode: 200 })
+                await Promise.resolve()
+                await Promise.resolve()
+
+                expect((logs as any)._consoleQueue.map((e: any) => e.record.body.stringValue)).toEqual([
+                    'after opting back in',
+                ])
+            })
+
+            it('stamps a replayed console record from the buffered snapshot, not live state', () => {
+                logs.captureBufferedConsoleLog(
+                    { body: 'early line' },
+                    { distinctId: 'anon-before-identify', sessionId: 'session-before-roll' },
+                    1700000000000
+                )
+                vi.advanceTimersByTime(3000)
+
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
+                const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
+                const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
+
+                expect(record.timeUnixNano).toBe('1700000000000000000')
+                expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+                expect(attrs['posthogDistinctId']).toEqual({ stringValue: 'anon-before-identify' })
+                expect(attrs['sessionId']).toEqual({ stringValue: 'session-before-roll' })
+            })
+
+            afterEach(() => {
+                vi.useRealTimers()
             })
 
             it('buffers console captures on a separate queue from programmatic logs', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs._captureConsoleLog({ body: 'console' })
+                logs.captureConsoleLog({ body: 'console' })
 
                 expect((logs as any)._queue).toHaveLength(1)
                 expect((logs as any)._consoleQueue).toHaveLength(1)
@@ -914,10 +1777,10 @@ describe('posthog-logs', () => {
             })
 
             it('flushes console captures with service.name posthog-browser-logs', () => {
-                logs._captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                logs.captureConsoleLog({ body: 'console' })
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -925,10 +1788,10 @@ describe('posthog-logs', () => {
             })
 
             it('flushes console captures under the OTel-parity scope name "console"', () => {
-                logs._captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                logs.captureConsoleLog({ body: 'console' })
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 // Scope name labels the console stream...
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('console')
                 // ...but telemetry.sdk.name stays the SDK id, not the scope.
@@ -940,17 +1803,17 @@ describe('posthog-logs', () => {
 
             it('flushes programmatic captures under the SDK scope name (not "console")', () => {
                 logs.captureLog({ body: 'programmatic' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('web')
             })
 
             it('auto-populates the shared SDK context (incl. feature_flags) on console records', () => {
-                logs._captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                logs.captureConsoleLog({ body: 'console' })
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -965,11 +1828,11 @@ describe('posthog-logs', () => {
             })
 
             it('emits standard OTLP severity (text + number) on console records', () => {
-                logs._captureConsoleLog({ body: 'uh oh', level: 'warn' })
-                logs._captureConsoleLog({ body: 'boom', level: 'error' })
-                jest.advanceTimersByTime(3000)
+                logs.captureConsoleLog({ body: 'uh oh', level: 'warn' })
+                logs.captureConsoleLog({ body: 'boom', level: 'error' })
+                vi.advanceTimersByTime(3000)
 
-                const records = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
+                const records = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
                     .scopeLogs[0].logRecords
                 expect(records[0]).toMatchObject({ severityText: 'WARN', severityNumber: 13 })
                 expect(records[1]).toMatchObject({ severityText: 'ERROR', severityNumber: 17 })
@@ -979,10 +1842,10 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = { serviceName: 'my-app' }
                 logs = new PostHogLogs(mockPostHog)
 
-                logs._captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                logs.captureConsoleLog({ body: 'console' })
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as VitestMock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -991,11 +1854,11 @@ describe('posthog-logs', () => {
 
             it('drains both queues on a sendBeacon flush, each with its own service.name', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs._captureConsoleLog({ body: 'console' })
+                logs.captureConsoleLog({ body: 'console' })
 
                 logs.flushLogs('sendBeacon')
 
-                const calls = (mockPostHog._send_request as jest.Mock).mock.calls
+                const calls = (mockPostHog._send_request as VitestMock).mock.calls
                 const serviceNames = calls.map((c: any[]) => {
                     const attrs = Object.fromEntries(
                         c[0].data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
@@ -1012,12 +1875,12 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                expect(mockPostHog._send_request as jest.Mock).toHaveBeenCalledTimes(1)
+                expect(mockPostHog._send_request as VitestMock).toHaveBeenCalledTimes(1)
             })
 
             it('clears both queues on reset', () => {
                 logs.captureLog({ body: 'programmatic' })
-                logs._captureConsoleLog({ body: 'console' })
+                logs.captureConsoleLog({ body: 'console' })
 
                 logs.reset()
 
@@ -1032,10 +1895,10 @@ describe('posthog-logs', () => {
                 // console instance retains everything up to the eviction backstop (2048).
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, maxLogsPerInterval: 50 }
                 logs = new PostHogLogs(mockPostHog)
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
 
                 for (let i = 0; i < 1500; i++) {
-                    logs._captureConsoleLog({ body: `console ${i}` })
+                    logs.captureConsoleLog({ body: `console ${i}` })
                 }
 
                 expect((logs as any)._consoleQueue).toHaveLength(1500)
@@ -1054,7 +1917,7 @@ describe('posthog-logs', () => {
             })
 
             it('flushes queued console logs when the browser comes back online', () => {
-                logs._captureConsoleLog({ body: 'console queued while offline' })
+                logs.captureConsoleLog({ body: 'console queued while offline' })
                 expect((logs as any)._consoleQueue).toHaveLength(1)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
 
@@ -1066,15 +1929,15 @@ describe('posthog-logs', () => {
 
         describe('flush outcome handling', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
@@ -1097,6 +1960,11 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue).toHaveLength(1)
             })
 
+            it('keeps records on a 408 so they retry later', async () => {
+                await flushWith(408)
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+
             it('drops records on a 4xx client error', async () => {
                 await flushWith(400)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -1106,7 +1974,7 @@ describe('posthog-logs', () => {
                 // Models the callback-less paths (request enqueued before load, or a
                 // transport that does not report back). Without the backstop timer the
                 // flush promise would never settle and wedge all future flushes.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
                 logs.captureLog({ body: 'x' })
 
                 const flushPromise = (logs as any)._core.flush().catch(() => {})
@@ -1117,9 +1985,9 @@ describe('posthog-logs', () => {
 
                 // The promise must stay pending until the 90s backstop fires, so a
                 // queue length of 1 here can't be confused with "no flush ran at all".
-                await jest.advanceTimersByTimeAsync(89000)
+                await vi.advanceTimersByTimeAsync(89000)
                 expect(settled).toBe(false)
-                await jest.advanceTimersByTimeAsync(2000)
+                await vi.advanceTimersByTimeAsync(2000)
                 await flushPromise
                 expect(settled).toBe(true)
 
@@ -1129,29 +1997,330 @@ describe('posthog-logs', () => {
             it('keeps records after a timer-driven flush hits a 429', async () => {
                 // Drives the real timer-expiry path (not _core.flush() directly) to
                 // confirm a transient response requeues end to end.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 429 })
                 )
                 logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: 'logs request failed with status 429' })
+                )
+            })
+
+            it('does not re-log timer-driven transport failures handled by the request layer', async () => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await vi.advanceTimersByTimeAsync(3000)
+
+                expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.warn).not.toHaveBeenCalled()
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('warns once for a bare status-zero logs response', async () => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0 })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await vi.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.warn).toHaveBeenCalledTimes(1)
+                expect(mockLogger.warn).toHaveBeenCalledWith('Logs request failed before receiving an HTTP response')
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it.each([400, 500])('keeps HTTP status %s at error severity', async (statusCode) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                await vi.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: `logs request failed with status ${statusCode}` })
+                )
+            })
+
+            it('does not re-log handled failures from an explicit flush', async () => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                logs.flushLogs()
+                const flushPromise = (logs as any)._core._flushPromise as Promise<void>
+                await flushPromise.catch(() => {})
+                await Promise.resolve()
+
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('logs unhandled failures from an explicit flush', async () => {
+                const error = { statusCode: 500 }
+                const flush = vi.fn().mockRejectedValue(error)
+                const core = (logs as any)._core
+                ;(logs as any)._core = { flush }
+                mockLogger.error.mockClear()
+
+                try {
+                    logs.flushLogs()
+                    await flush.mock.results[0].value.catch(() => {})
+                    await Promise.resolve()
+
+                    expect(mockLogger.error).toHaveBeenCalledWith('PostHog logs flush failed:', error)
+                } finally {
+                    ;(logs as any)._core = core
+                }
+            })
+        })
+
+        describe('status 0 circuit breaker', () => {
+            beforeEach(() => {
+                vi.useFakeTimers()
+            })
+
+            afterEach(() => {
+                vi.useRealTimers()
+                delete (window.navigator as any).onLine
+            })
+
+            const flushWith = async (statusCode: number) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                await (logs as any)._core.flush().catch(() => {})
+            }
+
+            const sendCount = () => (mockPostHog._send_request as VitestMock).mock.calls.length
+
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            it.each([1, 2])('still attempts the network after %i consecutive status-0 failures', async (failures) => {
+                for (let i = 0; i < failures; i++) {
+                    await flushWith(0)
+                }
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(failures + 1)
+            })
+
+            it('stops sending and drops the batch after 3 consecutive status-0 failures', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._queue).toHaveLength(3)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._queue).toHaveLength(0)
+            })
+
+            it.each([200, 429, 503])(
+                'a %i response resets the count — any HTTP response proves the endpoint is reachable',
+                async (statusCode) => {
+                    await flushWith(0)
+                    await flushWith(0)
+                    await flushWith(statusCode)
+                    await flushWith(0)
+                    await flushWith(0)
+
+                    await flushWith(0)
+
+                    expect(sendCount()).toBe(6)
+                }
+            )
+
+            it('does not count pre-init synthetic drops — only post-load failures feed the breaker', async () => {
+                // Before `init` completes, `_send_request` synthesizes
+                // `{ statusCode: 0 }` without any network attempt
+                // (`fireCallbackOnDrop` on the `!__loaded` path). A deferred init
+                // must not arrive to an already-tripped breaker.
+                ;(mockPostHog as any).__loaded = false
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                ;(mockPostHog as any).__loaded = true
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                setOnline(true)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('queues (retry-later) instead of dropping when the breaker is tripped but the browser is offline', async () => {
+                // Trip the breaker (3 status-0 failures while online).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                const countAfterTrip = sendCount()
+                expect(countAfterTrip).toBe(3) // breaker tripped after 3
+
+                // Go offline — the online guard should bypass the fatal-drop short-circuit.
+                setOnline(false)
+
+                // Capture + flush with status 0 while tripped AND offline.
+                // The send MUST be attempted (online guard lifts the short-circuit).
+                await flushWith(0)
+                expect(sendCount()).toBe(countAfterTrip + 1) // request was made
+
+                // The batch MUST be retained (offline => retry-later, not fatal).
+                expect((logs as any)._queue).toHaveLength(4)
+
+                // Restore online — reconnect flush delivers the retained records.
+                setOnline(true)
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 200 })
+                )
+                assignableWindow.dispatchEvent(new Event('online'))
+                expect(sendCount()).toBe(countAfterTrip + 2)
+            })
+
+            it('reopens on the online event so recovery is possible', async () => {
+                for (let i = 0; i < 4; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3) // tripped: the 4th flush made no request
+
+                logs.captureLog({ body: 'after whitelist' })
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('counter resets to 0 on reconnect — needs 3 fresh failures to trip again', async () => {
+                // Trip the breaker (3 failures then 1 dropped).
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                expect(sendCount()).toBe(3)
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // still 3 — the 4th was dropped
+
+                // Reset the breaker via the online event.
+                assignableWindow.dispatchEvent(new Event('online'))
+
+                // Verify the counter was actually reset to 0.
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                // The online event schedules a reconnect flush (empty queue, no send).
+                // The first flushWith after online resolves that lingering flush promise,
+                // so the second and third explicit flushes are the real first two failures.
+                await flushWith(0) // drains lingering online-reconnect flush promise
+                await flushWith(0) // failure 1
+                await flushWith(0) // failure 2
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(2)
+
+                // Third failure: re-trips (counter=3), still sends on this flush.
+                await flushWith(0)
+                const countWhenRetripped = sendCount()
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(3)
+
+                // Fourth failure post-reset: breaker is tripped — dropped, no send.
+                await flushWith(0)
+                expect(sendCount()).toBe(countWhenRetripped) // no new send
+            })
+
+            it('reset clears the tripped breaker so future sends can recover immediately', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+                await flushWith(0)
+                expect(sendCount()).toBe(3) // tripped: the 4th flush made no request
+
+                logs.reset()
+
+                expect((logs as any)._consecutiveStatusZeroFailures).toBe(0)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
+            })
+
+            it('one tripped breaker silences the console queue too — both cores share the endpoint', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await flushWith(0)
+                }
+
+                logs.captureConsoleLog({ body: 'console x' })
+                await (logs as any)._consoleCore.flush().catch(() => {})
+
+                expect(sendCount()).toBe(3)
+                expect((logs as any)._consoleQueue).toHaveLength(0)
+            })
+
+            it('warns once when it stops sending', async () => {
+                for (let i = 0; i < 4; i++) {
+                    await flushWith(0)
+                }
+
+                const breakerWarnings = mockLogger.warn.mock.calls.filter(([msg]) =>
+                    String(msg).includes('ad blockers')
+                )
+                expect(breakerWarnings).toHaveLength(1)
+            })
+
+            it('does not count the send-timeout backstop toward the status-0 trip', async () => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation(() => undefined)
+                for (let i = 0; i < 3; i++) {
+                    logs.captureLog({ body: 'x' })
+                    const flushPromise = (logs as any)._core.flush().catch(() => {})
+                    await vi.advanceTimersByTimeAsync(91000)
+                    await flushPromise
+                }
+                expect(sendCount()).toBe(3)
+
+                await flushWith(0)
+
+                expect(sendCount()).toBe(4)
             })
         })
 
         describe('live config resolution', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             const beaconResourceAttrs = () =>
                 Object.fromEntries(
-                    (mockPostHog._send_request as jest.Mock).mock.calls
+                    (mockPostHog._send_request as VitestMock).mock.calls
                         .at(-1)![0]
                         .data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -1197,7 +2366,7 @@ describe('posthog-logs', () => {
                 // the surviving core POSTs — otherwise both read the same head of the
                 // shared queue and double-send.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }
@@ -1207,7 +2376,7 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = { serviceName: 'changed' }
                 logs.captureLog({ body: 'b' }) // _getCore rebuilds → second core arms its timer
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
@@ -1222,17 +2391,17 @@ describe('posthog-logs', () => {
                 // the old console core so its armed timer can't double-send the shared
                 // `_consoleQueue`.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as VitestMock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }
                 })
 
-                logs._captureConsoleLog({ body: 'a' }) // arms the first console core's timer
+                logs.captureConsoleLog({ body: 'a' }) // arms the first console core's timer
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, serviceName: 'changed' }
-                logs._captureConsoleLog({ body: 'b' }) // _getConsoleCore rebuilds → new timer
+                logs.captureConsoleLog({ body: 'b' }) // _getConsoleCore rebuilds → new timer
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
@@ -1244,11 +2413,11 @@ describe('posthog-logs', () => {
 
         describe('reset with captureLog', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('should clear the buffer and cancel pending flush', () => {
@@ -1261,7 +2430,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue).toHaveLength(0)
 
                 // Advancing time should not trigger a flush
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(5000)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
         })
@@ -1278,7 +2447,7 @@ describe('posthog-logs', () => {
                     isAuthenticated: false,
                     siteApps: [],
                 }
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect((logs as any)._isLoaded).toBe(true)
 
@@ -1300,16 +2469,16 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(0)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
             })
         })

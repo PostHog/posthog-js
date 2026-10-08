@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
 
   describe('flush', () => {
     beforeEach(() => {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 5,
         fetchRetryCount: 3,
@@ -17,9 +17,57 @@ describe('PostHog Core', () => {
     })
 
     it("doesn't fail when queue is empty", async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
       expect(mocks.fetch).not.toHaveBeenCalled()
+    })
+
+    it.each([200, 201, 202, 204, 299])('reports HTTP %i as a successful write', async (status) => {
+      const onFlush = vi.fn()
+      const onError = vi.fn()
+      posthog.on('flush', onFlush)
+      posthog.on('error', onError)
+      mocks.fetch.mockResolvedValue(new Response(null, { status }))
+      posthog.capture('test-event')
+
+      await posthog.flush()
+
+      expect(onFlush).toHaveBeenCalledTimes(1)
+      expect(onError).not.toHaveBeenCalled()
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toEqual([])
+    })
+
+    it('preserves response consumption for HTTP 302 feature flag reads', async () => {
+      const json = vi.fn().mockResolvedValue({ featureFlags: { 'test-flag': true } })
+      mocks.fetch.mockResolvedValue({ status: 302, text: async () => '', json })
+
+      await expect(posthog.getFlags('distinct-id')).resolves.toMatchObject({
+        success: true,
+        response: { featureFlags: { 'test-flag': true } },
+      })
+      expect(json).toHaveBeenCalledTimes(1)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([300, 302, 304])('does not report HTTP %i as a successful write', async (status) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 5,
+        flushInterval: 0,
+        fetchRetryCount: 0,
+      })
+      const onFlush = vi.fn()
+      const onError = vi.fn()
+      posthog.on('flush', onFlush)
+      posthog.on('error', onError)
+      mocks.fetch.mockResolvedValue(new Response(null, { status }))
+      posthog.capture('test-event')
+
+      await expect(posthog.flush()).rejects.toMatchObject({ name: 'PostHogFetchHttpError', status })
+
+      expect(onFlush).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledTimes(1)
+      expect(onError.mock.calls[0][0].message).toContain(`HTTP error while fetching PostHog: status=${status}`)
     })
 
     it('flush messages once called', async () => {
@@ -49,8 +97,112 @@ describe('PostHog Core', () => {
       ])
     })
 
+    it('waits for pending promises that enqueue events before flushing', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        }).then(() => {
+          posthog.capture('pending-event')
+        })
+      )
+
+      const flushPromise = posthog.flushWithPendingPromises()
+      await waitForPromises()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+
+      resolvePending()
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'pending-event' }])
+    })
+
+    it('does not wait for unrelated pending promises added after flush starts', async () => {
+      const successfulMessages: any[] = []
+      let resolvePending!: () => void
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(
+        new Promise<void>((resolve) => {
+          resolvePending = resolve
+        })
+      )
+
+      const flushPromise = posthog.flushWithPendingPromises()
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+      resolvePending()
+
+      await expect(flushPromise).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
+    it('flushes queued events even if a pending promise rejects', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(Promise.reject(new Error('pending failure')))
+
+      await expect(posthog.flushWithPendingPromises()).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
+    it('regular flush does not wait for pending promises', async () => {
+      const successfulMessages: any[] = []
+
+      mocks.fetch.mockImplementation(async (_, options) => {
+        const batch = JSON.parse((options.body || '') as string).batch
+
+        successfulMessages.push(...batch)
+        return Promise.resolve({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        })
+      })
+
+      posthog.capture('queued-event')
+      posthog.addPendingPromise(new Promise<void>(() => {}))
+
+      await expect(posthog.flush()).resolves.not.toThrow()
+      expect(successfulMessages).toMatchObject([{ event: 'queued-event' }])
+    })
+
     it.each([
-      ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
+      ['with ReadableStream body', { cancel: vi.fn().mockResolvedValue(undefined) }, true],
       ['with null body', null, false],
     ])('consumes response body after flush (%s)', async (_label, body, expectCancel) => {
       const cancelFn = body?.cancel
@@ -65,7 +217,7 @@ describe('PostHog Core', () => {
       })
 
       posthog.capture('test-event-1')
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
 
       if (expectCancel) {
@@ -73,7 +225,250 @@ describe('PostHog Core', () => {
       }
     })
 
-    it.each([400, 500])('responds with an error after retries with %s error', async (status) => {
+    describe('response body deadlines', () => {
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 5,
+          fetchRetryCount: 3,
+          fetchRetryDelay: 100,
+          requestTimeout: 1000,
+          preloadFeatureFlags: false,
+        })
+      })
+
+      it('does not retry capture after a successful response body cancellation stalls', async () => {
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        const flushPromise = posthog.flush()
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(flushPromise).resolves.toBeUndefined()
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('does not retry logs after a successful response body cancellation stalls', async () => {
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
+
+        const sendPromise = posthog._sendLogsBatch({ resourceLogs: [] })
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('does not retry metrics after a successful response body cancellation stalls', async () => {
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
+
+        const sendPromise = posthog._sendMetricsBatch({ resourceMetrics: [] })
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('preserves terminal HTTP status and reports when the error response body stalls', async () => {
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        const text = vi.fn(() => new Promise<string>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 400,
+          text,
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
+
+        expect(error).toMatchObject({ name: 'PostHogFetchHttpError', status: 400, bodyReadTimedOut: false })
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).not.toHaveBeenCalled()
+
+        const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        await vi.advanceTimersByTimeAsync(1000)
+        await textExpectation
+
+        expect(error.bodyReadTimedOut).toBe(true)
+        await expect(error.json).rejects.toHaveProperty('name', 'AbortError')
+        expect(text).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('does not read an error response body after its absolute deadline', async () => {
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        const text = vi.fn().mockResolvedValue('too late')
+        mocks.fetch.mockResolvedValue({
+          status: 400,
+          text,
+          json: () => Promise.resolve({ error: 'bad request' }),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        expect(error.bodyReadTimedOut).toBe(true)
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('caches the error response body across text and JSON access', async () => {
+        const text = vi.fn().mockResolvedValue('{"error":"bad request"}')
+        const json = vi.fn().mockResolvedValue({ error: 'bad request' })
+        mocks.fetch.mockResolvedValue({ status: 400, text, json })
+
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
+
+        expect(text).not.toHaveBeenCalled()
+        await expect(error.text).resolves.toBe('{"error":"bad request"}')
+        await expect(error.json).resolves.toEqual({ error: 'bad request' })
+        expect(text).toHaveBeenCalledTimes(1)
+        expect(json).not.toHaveBeenCalled()
+      })
+
+      it('cancels stalled retryable HTTP error bodies without waiting for them', async () => {
+        const text = vi.fn(() => new Promise<string>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        mocks.fetch.mockImplementation(async () => ({
+          status: 500,
+          text,
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        }))
+
+        posthog.capture('test-event-1')
+        const errorPromise = posthog.flush().catch((error) => error)
+        await vi.advanceTimersByTimeAsync(300)
+
+        const error = await errorPromise
+        expect(error).toMatchObject({ name: 'PostHogFetchHttpError', status: 500, bodyReadTimedOut: false })
+        expect(mocks.fetch).toHaveBeenCalledTimes(4)
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).toHaveBeenCalledTimes(3)
+        expect(vi.getTimerCount()).toBe(0)
+
+        const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1000)
+        await textExpectation
+        expect(error.bodyReadTimedOut).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(4)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('bounds an injected fetch that ignores abort and cancels its late response', async () => {
+        let resolveFetch!: (response: any) => void
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 5,
+          fetchRetryCount: 0,
+          requestTimeout: 1000,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolveFetch = resolve
+            })
+        )
+
+        posthog.capture('test-event-1')
+        const flushPromise = posthog.flush()
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(flushPromise).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+        expect(vi.getTimerCount()).toBe(0)
+
+        resolveFetch({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel },
+        })
+        await waitForPromises()
+
+        expect(cancel).toHaveBeenCalledTimes(1)
+      })
+
+      it('clears the request deadline after successful response consumption', async () => {
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        await expect(posthog.flush()).resolves.toBeUndefined()
+
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it.each([
+        ['remote config', (client: PostHogCoreTestClient) => (client as any).getRemoteConfig()],
+        ['feature flags', (client: PostHogCoreTestClient) => client.getFlags('distinct-id')],
+        ['surveys', (client: PostHogCoreTestClient) => client.getSurveysStateless()],
+      ])('bounds a stalled body for required %s responses', async (_name, request) => {
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          requestTimeout: 1000,
+          fetchRetryCount: 0,
+          remoteConfigRequestTimeoutMs: 1000,
+          featureFlagsRequestTimeoutMs: 1000,
+          featureFlagsRequestMaxRetries: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        })
+
+        const requestPromise = request(posthog)
+        await vi.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await requestPromise
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+    })
+
+    it.each([400, 401, 403])('responds with an error without retries with %s error', async (status) => {
       mocks.fetch.mockImplementation(() => {
         return Promise.resolve({
           status: status,
@@ -83,12 +478,27 @@ describe('PostHog Core', () => {
       })
       posthog.capture('test-event-1')
 
-      const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([408, 429, 500])('responds with an error after retries with %s error', async (status) => {
+      mocks.fetch.mockImplementation(() => {
+        return Promise.resolve({
+          status: status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+      })
+      posthog.capture('test-event-1')
+
+      const flushExpectation = expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      await vi.advanceTimersByTimeAsync(299)
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1)
+      await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
-      expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(500)
     })
 
     it('responds with an error after retries with network error ', async () => {
@@ -97,12 +507,12 @@ describe('PostHog Core', () => {
       })
       posthog.capture('test-event-1')
 
-      const time = Date.now()
-      jest.useRealTimers()
-      await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+      const flushExpectation = expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+      await vi.advanceTimersByTimeAsync(299)
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1)
+      await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
-      expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(500)
     })
 
     it('skips when client is disabled', async () => {
@@ -122,7 +532,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not get stuck in a loop when new events are added while flushing', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       mocks.fetch.mockImplementation(async () => {
         posthog.capture('another-event')
         await delay(10)
@@ -136,6 +546,145 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
       await posthog.flush()
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('coalesces flush calls made while a flush is already queued', async () => {
+      vi.useRealTimers()
+      let resolveFetch!: () => void
+      mocks.fetch.mockImplementation(async () => {
+        await new Promise<void>((resolve) => (resolveFetch = resolve))
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('test-event-1')
+      const inFlight = posthog.flush()
+      await waitForPromises() // let the first flush start its fetch
+
+      const queued = posthog.flush()
+      const coalesced = posthog.flush()
+
+      expect(coalesced).toBe(queued)
+      expect(queued).not.toBe(inFlight)
+
+      resolveFetch()
+      await expect(inFlight).resolves.not.toThrow()
+      await expect(queued).resolves.not.toThrow()
+      // the follow-up found an empty queue, so only one fetch happened
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('sends events captured during an in-flight flush via the coalesced follow-up', async () => {
+      vi.useRealTimers()
+      const batches: any[][] = []
+      let resolveFirstFetch!: () => void
+      mocks.fetch.mockImplementation(async (_, options) => {
+        batches.push(JSON.parse((options.body || '') as string).batch)
+        if (batches.length === 1) {
+          await new Promise<void>((resolve) => (resolveFirstFetch = resolve))
+        }
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('first')
+      const inFlight = posthog.flush()
+      await waitForPromises() // first flush has read the queue and is mid-fetch
+
+      posthog.capture('second')
+      const followUp = posthog.flush()
+      posthog.capture('third')
+      expect(posthog.flush()).toBe(followUp)
+
+      resolveFirstFetch()
+      await Promise.all([inFlight, followUp])
+
+      expect(batches[0]).toMatchObject([{ event: 'first' }])
+      expect(batches[1]).toMatchObject([{ event: 'second' }, { event: 'third' }])
+    })
+
+    it('preserves replacement events captured into a full queue during an in-flight flush', async () => {
+      vi.useRealTimers()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 3,
+        maxQueueSize: 3,
+        flushInterval: 0,
+        fetchRetryCount: 0,
+        preloadFeatureFlags: false,
+      })
+
+      const batches: any[][] = []
+      let resolveFirstFetch!: () => void
+      mocks.fetch.mockImplementation(async (_, options) => {
+        batches.push(JSON.parse((options.body || '') as string).batch)
+        if (batches.length === 1) {
+          await new Promise<void>((resolve) => (resolveFirstFetch = resolve))
+        }
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('initial-1')
+      posthog.capture('initial-2')
+      posthog.capture('initial-3')
+      const inFlight = posthog.flush()
+      await waitForPromises() // first flush has snapshotted the full queue and is mid-fetch
+
+      posthog.capture('replacement-1')
+      posthog.capture('replacement-2')
+      posthog.capture('replacement-3')
+
+      resolveFirstFetch()
+      await inFlight
+
+      const queuedEvents = (posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue) || []).map(
+        (item) => item.message.event
+      )
+      expect(queuedEvents).toEqual(['replacement-1', 'replacement-2', 'replacement-3'])
+
+      await posthog.flush()
+
+      expect(batches).toHaveLength(2)
+      expect(batches[0]).toMatchObject([{ event: 'initial-1' }, { event: 'initial-2' }, { event: 'initial-3' }])
+      expect(batches[1]).toMatchObject([
+        { event: 'replacement-1' },
+        { event: 'replacement-2' },
+        { event: 'replacement-3' },
+      ])
+    })
+
+    it('does not chain one flush per capture while flushes fail', async () => {
+      vi.useRealTimers()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 2,
+        fetchRetryCount: 0,
+        preloadFeatureFlags: false,
+      })
+      mocks.fetch.mockImplementation(() => Promise.reject(new Error('network down')))
+
+      for (let i = 0; i < 20; i++) {
+        posthog.capture(`offline-event-${i}`)
+      }
+      await delay(50) // let the flush chain settle
+
+      // all 20 captures coalesced into a single flush — not one flush per capture
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toHaveLength(20)
+
+      // coalescing doesn't leave flushing permanently stuck
+      posthog.capture('offline-event-20')
+      await delay(50)
+      expect(mocks.fetch).toHaveBeenCalledTimes(2)
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toHaveLength(21)
     })
 
     it('should flush all events even if larger than batch size', async () => {
@@ -223,7 +772,7 @@ describe('PostHog Core', () => {
     })
 
     it('should stop at first error', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10, fetchRetryDelay: 1 })
       posthog['maxBatchSize'] = 1 // a bit contrived because usually maxBatchSize >= flushAt
       const successfulMessages: any[] = []
@@ -256,6 +805,103 @@ describe('PostHog Core', () => {
       expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toMatchObject([
         { message: { event: 'test-event-3' } },
       ])
+    })
+  })
+
+  describe('OTLP batch senders', () => {
+    // All three share one `_sendOtlpBatch`; the table pins them to the same
+    // classification so a wrapper can't reintroduce a per-signal retry policy.
+    const senders = {
+      logs: (client: PostHogCoreTestClient) => client._sendLogsBatch({ resourceLogs: [] }),
+      metrics: (client: PostHogCoreTestClient) => client._sendMetricsBatch({ resourceMetrics: [] }),
+      traces: (client: PostHogCoreTestClient) => client._sendTracesBatch({ resourceSpans: [] }),
+    }
+
+    const cases: [number, string][] = [
+      [300, 'fatal'],
+      [302, 'fatal'],
+      [304, 'fatal'],
+      [408, 'retry-later'],
+      [429, 'retry-later'],
+      [500, 'retry-later'],
+      [503, 'retry-later'],
+      [413, 'too-large'],
+      [400, 'fatal'],
+      [401, 'fatal'],
+    ]
+
+    describe.each(Object.entries(senders))('%s', (_name, send) => {
+      it.each([200, 202, 204, 299])('accepts HTTP %i without consuming a response body', async (status) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { preloadFeatureFlags: false })
+        const response = new Response(null, { status })
+        const json = vi.spyOn(response, 'json')
+        const text = vi.spyOn(response, 'text')
+        mocks.fetch.mockResolvedValue(response)
+
+        await expect(send(posthog)).resolves.toMatchObject({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(json).not.toHaveBeenCalled()
+        expect(text).not.toHaveBeenCalled()
+      })
+
+      it.each(cases)('classifies an exhausted %i as %s', async (status, kind) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({ kind })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      // The classification cases run with retries off, so they never reach the
+      // `retryCheck` the senders share. This pins it: 413 has to leave the
+      // transport on the first response for the caller to shrink its batch and
+      // retry the same records, where a 5xx is worth re-sending as-is.
+      it.each([
+        [408, 3],
+        [429, 3],
+        [500, 3],
+        [503, 3],
+        [413, 1],
+        [400, 1],
+      ])('sends %i %i time(s) before returning', async (status, attempts) => {
+        vi.useRealTimers()
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 2,
+          fetchRetryDelay: 1,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await send(posthog)
+        expect(mocks.fetch).toHaveBeenCalledTimes(attempts)
+      })
+
+      it('carries the HTTP error on a retry-later outcome', async () => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status: 503,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({
+          error: { name: 'PostHogFetchHttpError', status: 503 },
+        })
+      })
     })
   })
 })

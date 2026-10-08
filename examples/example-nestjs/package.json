@@ -6,7 +6,7 @@
     },
     "main": "src/main.ts",
     "license": "MIT",
-    "packageManager": "pnpm@10.15.0",
+    "packageManager": "pnpm@10.33.0",
     "scripts": {
         "start": "ts-node -r reflect-metadata src/main.ts"
     },

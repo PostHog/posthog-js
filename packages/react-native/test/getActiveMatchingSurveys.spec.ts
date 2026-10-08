@@ -3,7 +3,7 @@ import { Survey, SurveyMatchType, SurveySchedule, SurveyType } from '@posthog/co
 import { FeatureFlagValue } from '@posthog/core'
 
 // Mock the native-deps module
-jest.mock('../src/native-deps', () => ({
+vi.mock('../src/native-deps', () => ({
   currentDeviceType: 'Mobile',
 }))
 
@@ -291,6 +291,7 @@ describe('getActiveMatchingSurveys', () => {
         }),
       ]
 
+      mockActivatedSurveys.add('seen-survey-1')
       const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
 
       expect(result).toHaveLength(1)
@@ -353,6 +354,24 @@ describe('getActiveMatchingSurveys', () => {
       const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
 
       expect(result).toHaveLength(0)
+    })
+
+    it.each([
+      ['seen in a previous iteration', 'repeating-survey_1', 1],
+      ['already seen in the current iteration', 'repeating-survey_2', 0],
+      ['seen before it became repeating (bare id key)', 'repeating-survey', 1],
+    ])('repeating survey %s -> %s shown', (_name, seenKey, expectedLength) => {
+      const surveys = [
+        createMockSurvey({
+          id: 'repeating-survey',
+          schedule: SurveySchedule.Recurring,
+          current_iteration: 2,
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, [seenKey], mockActivatedSurveys)
+
+      expect(result).toHaveLength(expectedLength)
     })
   })
 

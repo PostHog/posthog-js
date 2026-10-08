@@ -1,13 +1,6 @@
 import type { CaptureLogOptions, LogSeverityLevel } from '@posthog/types'
 import type { LogSdkContext } from './types'
-import {
-  buildOtlpLogRecord,
-  buildOtlpLogsPayload,
-  getOtlpSeverityNumber,
-  getOtlpSeverityText,
-  toOtlpAnyValue,
-  toOtlpKeyValueList,
-} from './logs-utils'
+import { buildOtlpLogRecord, buildOtlpLogsPayload, getOtlpSeverityNumber, getOtlpSeverityText } from './logs-utils'
 
 const browserSdkContext: LogSdkContext = {
   distinctId: 'user-123',
@@ -64,89 +57,53 @@ describe('logs-utils', () => {
     })
   })
 
-  describe('toOtlpAnyValue', () => {
-    it('converts strings', () => {
-      expect(toOtlpAnyValue('hello')).toEqual({ stringValue: 'hello' })
-    })
-
-    it('converts integers', () => {
-      expect(toOtlpAnyValue(42)).toEqual({ intValue: 42 })
-      expect(toOtlpAnyValue(0)).toEqual({ intValue: 0 })
-      expect(toOtlpAnyValue(-7)).toEqual({ intValue: -7 })
-    })
-
-    it('converts floats to doubleValue', () => {
-      expect(toOtlpAnyValue(3.14)).toEqual({ doubleValue: 3.14 })
-    })
-
-    it('converts booleans', () => {
-      expect(toOtlpAnyValue(true)).toEqual({ boolValue: true })
-      expect(toOtlpAnyValue(false)).toEqual({ boolValue: false })
-    })
-
-    // JSON has no representation for non-finite floats; without explicit
-    // handling, JSON.stringify silently turns them into `null` and the value
-    // is lost server-side.
-    it('converts NaN to stringValue', () => {
-      expect(toOtlpAnyValue(NaN)).toEqual({ stringValue: 'NaN' })
-    })
-
-    it('converts +Infinity to stringValue', () => {
-      expect(toOtlpAnyValue(Infinity)).toEqual({ stringValue: 'Infinity' })
-    })
-
-    it('converts -Infinity to stringValue', () => {
-      expect(toOtlpAnyValue(-Infinity)).toEqual({ stringValue: '-Infinity' })
-    })
-
-    it('converts arrays of strings to arrayValue', () => {
-      expect(toOtlpAnyValue(['a', 'b'])).toEqual({
-        arrayValue: { values: [{ stringValue: 'a' }, { stringValue: 'b' }] },
-      })
-    })
-
-    it('converts mixed primitive arrays recursively', () => {
-      expect(toOtlpAnyValue([1, 'x', true])).toEqual({
-        arrayValue: {
-          values: [{ intValue: 1 }, { stringValue: 'x' }, { boolValue: true }],
+  describe('buildOtlpLogRecord attribute reads', () => {
+    // Reading `options.attributes` happens before the encoder's per-key guard.
+    it('marks an attribute whose getter throws without dropping the record', () => {
+      const attributes = {
+        ok: 1,
+        get bad(): number {
+          throw new Error('disposed store')
         },
+      }
+      const record = buildOtlpLogRecord({ body: 'x', attributes }, {})
+      expect(record.attributes).toContainEqual({ key: 'ok', value: { intValue: '1' } })
+      expect(record.attributes).toContainEqual({ key: 'bad', value: { stringValue: '[Unserializable]' } })
+    })
+
+    // Plain assignment hits the prototype setter and the attribute vanishes.
+    it('keeps an attribute literally named __proto__', () => {
+      const attributes = JSON.parse('{"__proto__": {"a": 1}, "normal": "n"}')
+      const record = buildOtlpLogRecord({ body: 'x', attributes }, {})
+      expect(record.attributes.map((a) => a.key)).toContain('__proto__')
+    })
+
+    it('coerces a non-string body', () => {
+      // A non-string stringValue is refused for the whole request.
+      const record = buildOtlpLogRecord({ body: 12345 as unknown as string }, {})
+      expect(record.body).toEqual({ stringValue: '12345' })
+    })
+
+    // `String()` throws on these, and buildOtlpLogRecord is called straight from
+    // captureLog — beforeSend can also hand back any body.
+    it('marks a body that cannot be coerced to a string', () => {
+      const throwing = {
+        toString() {
+          throw new Error('boom')
+        },
+      } as unknown as string
+      expect(() => buildOtlpLogRecord({ body: throwing }, {})).not.toThrow()
+      expect(buildOtlpLogRecord({ body: throwing }, {}).body).toEqual({ stringValue: '[Unserializable]' })
+      expect(buildOtlpLogRecord({ body: Object.create(null) }, {}).body).toEqual({
+        stringValue: '[Unserializable]',
       })
     })
 
-    it('JSON-stringifies plain objects', () => {
-      expect(toOtlpAnyValue({ a: 1, b: 'two' })).toEqual({
-        stringValue: '{"a":1,"b":"two"}',
-      })
-    })
-  })
+    it('keeps the record when the attributes object itself cannot be read', () => {
+      const revocable = Proxy.revocable({ a: 1 }, {})
+      revocable.revoke()
 
-  describe('toOtlpKeyValueList', () => {
-    it('converts a record to key-value list', () => {
-      expect(
-        toOtlpKeyValueList({
-          name: 'test',
-          count: 5,
-          active: true,
-        })
-      ).toEqual([
-        { key: 'name', value: { stringValue: 'test' } },
-        { key: 'count', value: { intValue: 5 } },
-        { key: 'active', value: { boolValue: true } },
-      ])
-    })
-
-    it('handles empty record', () => {
-      expect(toOtlpKeyValueList({})).toEqual([])
-    })
-
-    it('skips null and undefined values', () => {
-      expect(
-        toOtlpKeyValueList({
-          kept: 'yes',
-          nullish: null,
-          missing: undefined,
-        })
-      ).toEqual([{ key: 'kept', value: { stringValue: 'yes' } }])
+      expect(buildOtlpLogRecord({ body: 'x', attributes: revocable.proxy }, {}).body).toEqual({ stringValue: 'x' })
     })
   })
 
@@ -161,6 +118,30 @@ describe('logs-utils', () => {
       expect(record.observedTimeUnixNano).toBeDefined()
       expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
     })
+
+    it('stamps both timestamps from the event time when the record is built late', () => {
+      const occurredAtMs = Date.now() - 5000
+      const record = buildOtlpLogRecord({ body: 'buffered' }, minimalSdkContext, undefined, occurredAtMs)
+
+      expect(record.timeUnixNano).toBe(String(occurredAtMs) + '000000')
+      // The logs spec requires the client to keep the two equal.
+      expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+    })
+
+    it.each([undefined, NaN, 'nope' as unknown as number])(
+      'falls back to now when the event time is %p',
+      (occurredAtMs) => {
+        const before = Date.now()
+        const record = buildOtlpLogRecord({ body: 'x' }, minimalSdkContext, undefined, occurredAtMs)
+        // Divide and the 19-digit nanosecond value loses its last digits to float.
+        const stampedMs = Number(record.timeUnixNano.slice(0, -6))
+
+        expect(record.timeUnixNano).toMatch(/^\d+000000$/)
+        expect(stampedMs).toBeGreaterThanOrEqual(before)
+        expect(stampedMs).toBeLessThanOrEqual(Date.now())
+        expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+      }
+    )
 
     it('maps severity levels correctly', () => {
       const record = buildOtlpLogRecord({ body: 'test', level: 'error' }, minimalSdkContext)

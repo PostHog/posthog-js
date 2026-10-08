@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type {
   CompatibleRequestHandlerExtra,
@@ -8,39 +9,40 @@ import type {
   MCPRequestLike,
   MCPServerLike,
   McpEvent,
+  SessionInfo,
   UserIdentity,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
-import { log } from './logger'
 import { captureEvent } from './capture'
+import { stampClientIdentity } from './client-identity'
+import { stampTransportIdentity } from './transport-identity'
 
 /**
- * Bounded LRU cache for session identities, capped at `maxSize` entries so a
- * long-lived server can't accumulate identities for unboundedly many sessions.
- * One instance lives on each server's tracking data — it is NOT shared across
- * server instances, so identities never bleed between servers.
+ * Bounded LRU cache, capped at `maxSize` entries so a long-lived server cannot
+ * accumulate state for unboundedly many sessions. One instance lives on each
+ * server's tracking data and is never shared across server instances.
  */
-export class IdentityCache {
-  private readonly _cache = new Map<string, UserIdentity>()
+export class BoundedCache<T> {
+  private readonly _cache = new Map<string, T>()
   private readonly _maxSize: number
 
   constructor(maxSize = 1000) {
     this._maxSize = maxSize
   }
 
-  get(sessionId: string): UserIdentity | undefined {
-    const identity = this._cache.get(sessionId)
-    if (identity === undefined) {
+  get(key: string): T | undefined {
+    const value = this._cache.get(key)
+    if (value === undefined) {
       return
     }
     // Touch: re-insert so it counts as most-recently-used.
-    this._cache.delete(sessionId)
-    this._cache.set(sessionId, identity)
-    return identity
+    this._cache.delete(key)
+    this._cache.set(key, value)
+    return value
   }
 
-  set(sessionId: string, identity: UserIdentity): void {
-    this._cache.delete(sessionId)
+  set(key: string, value: T): void {
+    this._cache.delete(key)
 
     if (this._cache.size >= this._maxSize) {
       const oldestKey = this._cache.keys().next().value
@@ -49,17 +51,19 @@ export class IdentityCache {
       }
     }
 
-    this._cache.set(sessionId, identity)
+    this._cache.set(key, value)
   }
 
-  has(sessionId: string): boolean {
-    return this._cache.has(sessionId)
+  has(key: string): boolean {
+    return this._cache.has(key)
   }
 
   size(): number {
     return this._cache.size
   }
 }
+
+export class IdentityCache extends BoundedCache<UserIdentity> {}
 
 const _serverTracking = new WeakMap<MCPServerLike, MCPAnalyticsData>()
 
@@ -117,18 +121,30 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
 }
 
 /**
- * Resolves the optional `identify` callback, dedupes against the server's identity
- * cache, and publishes an `$identify` event only when the identity has materially changed.
+ * Resolves the optional `identify` callback on every request (the resolved
+ * identity is what stamps `distinct_id`/`$set` onto events), but publishes the
+ * `$identify` event at most once per session: at `initialize`, when a
+ * long-lived server first sees the identity, or when it materially changes.
  */
 export async function handleIdentify(
   server: MCPServerLike,
   data: MCPAnalyticsData,
   sessionId: string,
   request: MCPRequestLike,
-  extra?: CompatibleRequestHandlerExtra
-): Promise<void> {
+  requestAttribution: SessionInfo,
+  extra?: CompatibleRequestHandlerExtra,
+  /**
+   * True when this session id came from an agent-carried `conversation_id`
+   * rather than the transport. Such a session is brand new and was never
+   * announced at `initialize`, whatever `data.sessionSource` still says about
+   * the connection.
+   */
+  sessionFromConversation = false
+): Promise<UserIdentity | undefined> {
+  const identityBeforeRequest = data.identifiedSessions.get(sessionId)
+  const sessionSourceBeforeIdentify = data.sessionSource
   if (!data.options.identify) {
-    return
+    return identityBeforeRequest
   }
 
   const identifyEvent: McpEvent = {
@@ -138,6 +154,8 @@ export async function handleIdentify(
     parameters: { request, extra },
     timestamp: new Date(),
   }
+  stampClientIdentity(identifyEvent, request, extra, server)
+  stampTransportIdentity(identifyEvent, extra)
 
   try {
     const identityResult =
@@ -146,19 +164,45 @@ export async function handleIdentify(
     if (identityResult) {
       const previousIdentity = data.identifiedSessions.get(sessionId)
       const mergedIdentity = mergeIdentities(previousIdentity, identityResult)
-      const hasChanged = !(previousIdentity && areIdentitiesEqual(previousIdentity, mergedIdentity))
+      // "First seen" means new to this instance's cache — which on a stateless
+      // pod (fresh instrument() per request) is every request. A token session
+      // was already announced by whichever pod handled `initialize`, so only the
+      // handshake, or a genuine change a long-lived server observed, publishes
+      // $identify. Every event still carries distinct_id/$set regardless, so
+      // person properties are never lost. Known accepted gap (ADR-0003): an
+      // identity resolving only after `initialize` on a token session gets no
+      // standalone $identify, so its pre-identify events aren't aliased onto
+      // the user.
+      const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
+      const firstSeen = previousIdentity === undefined
+      const announcedAtInitialize =
+        !sessionFromConversation && sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
+      const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)
 
-      if (hasChanged) {
-        log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
-        captureEvent(server, identifyEvent)
+      if (shouldPublish) {
+        data.logger(`Identified session ${sessionId}`)
+        captureEvent(server, identifyEvent, data.logger, withIdentity(requestAttribution, mergedIdentity))
       }
-    } else {
-      log(`Warning: Supplied identify function returned null for session ${sessionId}`)
+      return mergedIdentity
     }
+
+    data.logger(`Warning: Supplied identify function returned null for session ${sessionId}`)
   } catch (error) {
-    log(`Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`)
+    data.logger(
+      `Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`
+    )
+  }
+  return identityBeforeRequest
+}
+
+export function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity | undefined): SessionInfo {
+  return {
+    ...sessionInfo,
+    identifyActorGivenId: identity?.distinctId,
+    identifyActorData: identity?.properties || {},
+    identifyActorGroups: identity?.groups,
   }
 }
 
@@ -178,20 +222,31 @@ export async function resolveEventProperties(
   try {
     return (await data.options.eventProperties(request, extra)) ?? null
   } catch (e) {
-    log(`eventProperties callback error: ${e}`)
+    data.logger(`eventProperties callback error: ${e}`)
     return null
   }
 }
 
+/**
+ * Names what a request is about, for `$identify`. `resources/read` addresses its
+ * subject by `uri` rather than `name`, so an identify published from a read used
+ * to report `Unknown`.
+ */
 function getRequestResourceName(request: unknown): string {
   if (!request || typeof request !== 'object' || !('params' in request)) {
     return 'Unknown'
   }
 
   const params = request.params
-  if (!params || typeof params !== 'object' || !('name' in params)) {
+  if (!params || typeof params !== 'object') {
     return 'Unknown'
   }
 
-  return typeof params.name === 'string' ? params.name : 'Unknown'
+  for (const key of ['name', 'uri'] as const) {
+    const value = (params as Record<string, unknown>)[key]
+    if (typeof value === 'string') {
+      return value
+    }
+  }
+  return 'Unknown'
 }

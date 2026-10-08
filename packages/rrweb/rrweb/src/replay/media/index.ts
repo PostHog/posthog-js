@@ -204,13 +204,12 @@ export class MediaManager {
       }
     } catch (error) {
       this.warn(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/restrict-template-expressions
         `Failed to replay media interactions: ${error.message || error}`,
       );
     }
   }
 
-  public addMediaElements(node: Node, timeOffset: number, mirror: Mirror) {
+  public addMediaElements(node: Node, timeOffset: number, mirror: Mirror): void {
     if (!this.isSupportedMediaElement(node)) return;
     const target = node;
     const serializedNode = mirror.getMeta(target);
@@ -277,7 +276,7 @@ export class MediaManager {
     target: HTMLMediaElement | RRMediaElement;
     timeOffset: number;
     mutation: mediaInteractionData;
-  }) {
+  }): void {
     if (!SUPPORTED_MEDIA_ELEMENT_NAMES.includes(target.nodeName)) {
       return;
     }
@@ -298,7 +297,7 @@ export class MediaManager {
     return SUPPORTED_MEDIA_ELEMENT_NAMES.includes(node.nodeName);
   }
 
-  public reset() {
+  public reset(): void {
     this.mediaMap.clear();
   }
 }

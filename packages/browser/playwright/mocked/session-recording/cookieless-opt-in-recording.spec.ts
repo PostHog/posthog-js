@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { trackRecordingRequests } from '../utils/recording-requests'
 import { BrowserContext, Page } from '@playwright/test'
 import { PostHogConfig } from '@/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
@@ -42,9 +43,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             opt_out_capturing_persistence_type: 'localStorage',
         }
 
-        // No recorder or snapshot call initially because we're opted out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        const recordingRequests = trackRecordingRequests(page)
 
         await startWith(customerConfig, page, context)
 
@@ -52,6 +51,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview'])
+        expect(recordingRequests).toEqual([])
 
         // Now the user gives consent and opts in
         await page.waitingForNetworkCausedBy({
@@ -92,9 +92,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
             capture_pageview: true,
         }
 
-        // No recorder should load initially because on_reject treats pending consent as opted out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        const recordingRequests = trackRecordingRequests(page)
 
         await startWith(config, page, context)
 
@@ -102,6 +100,7 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe([])
+        expect(recordingRequests).toEqual([])
 
         // Now opt in - recording should start automatically
         await page.waitingForNetworkCausedBy({
@@ -120,6 +119,65 @@ test.describe('Session Recording - cookieless mode with opt-in', () => {
         await page.locator('[data-cy-input]').type('test after consent')
         await pollUntilEventCaptured(page, '$snapshot')
         await assertThatRecordingStarted(page)
+    })
+
+    test('disposes an active recorder when another tab rejects shared consent', async ({ page, context }) => {
+        const config: Partial<PostHogConfig> = {
+            cookieless_mode: 'on_reject',
+            opt_out_capturing_persistence_type: 'localStorage',
+            capture_pageview: false,
+            autocapture: false,
+            request_batching: false,
+            disable_compression: true,
+        }
+        const snapshotBodies: string[] = []
+        page.on('request', (request) => {
+            if (new URL(request.url()).pathname === '/ses/') {
+                snapshotBodies.push(request.postData() || '')
+            }
+        })
+        await startWith(config, page, context)
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await page.evaluate(() =>
+                    (window as WindowWithPostHog).posthog!.opt_in_capturing({ captureEventName: false })
+                )
+            },
+        })
+        await page.locator('[data-cy-input]').type('before rejection')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+
+        const otherTab = await context.newPage()
+        await startWith(config, otherTab, context)
+        await otherTab.evaluate(() => (window as WindowWithPostHog).posthog!.opt_out_capturing())
+        await page.resetCapturedEvents()
+        const sensitiveContent = 'private-content-after-shared-rejection'
+        await page.evaluate((sensitiveContent) => {
+            const ph = (window as WindowWithPostHog).posthog!
+            ph.capture(
+                '$snapshot',
+                {
+                    $session_id: ph.get_session_id(),
+                    $snapshot_data: [{ type: 5, timestamp: Date.now(), data: { tag: sensitiveContent, payload: {} } }],
+                },
+                { _url: ph.requestRouter.endpointFor('api', '/ses/'), _noTruncate: true }
+            )
+            ph.capture('after-shared-rejection')
+        }, sensitiveContent)
+        expect(
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog!
+                return { recorderDetached: !ph.sessionRecording, sessionDetached: !ph.sessionManager }
+            })
+        ).toEqual({ recorderDetached: true, sessionDetached: true })
+
+        await page.locator('[data-cy-input]').type(sensitiveContent)
+        await page.waitForTimeout(250)
+        await page.expectCapturedEventsToBe(['after-shared-rejection'])
+        expect(snapshotBodies.join('\n')).not.toContain(sensitiveContent)
+        await otherTab.close()
     })
 
     test('session recording auto-starts after opt_in_capturing without explicit startSessionRecording call', async ({

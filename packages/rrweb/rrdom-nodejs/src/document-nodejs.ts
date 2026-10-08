@@ -1,5 +1,7 @@
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
-import type { NWSAPI } from 'nwsapi';
+import nwsapi, { type NWSAPI } from 'nwsapi';
+import cssom from 'cssom';
+import cssstyle from 'cssstyle';
 import type { CSSStyleDeclaration as CSSStyleDeclarationType } from 'cssstyle';
 import {
   BaseRRCDATASection,
@@ -13,18 +15,13 @@ import {
   ClassList,
   type IRRDocument,
   type CSSStyleDeclaration,
+  type IRRNode,
 } from '@posthog/rrdom';
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
-const nwsapi = require('nwsapi');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
-const cssom = require('cssom');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
-const cssstyle = require('cssstyle');
 
 export class RRWindow {
   scrollLeft = 0;
   scrollTop = 0;
-  scrollTo(options?: ScrollToOptions) {
+  scrollTo(options?: ScrollToOptions): void {
     if (!options) return;
     if (typeof options.left === 'number') this.scrollLeft = options.left;
     if (typeof options.top === 'number') this.scrollTop = options.top;
@@ -36,7 +33,6 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
   private _nwsapi: NWSAPI | undefined;
   get nwsapi(): NWSAPI {
     if (!this._nwsapi) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
       this._nwsapi = nwsapi({
         document: this as unknown as Document,
         DOMException: null as unknown as new (
@@ -53,41 +49,36 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     return this._nwsapi;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get documentElement(): RRElement | null {
     return super.documentElement as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get body(): RRElement | null {
     return super.body as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get head() {
     return super.head as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get implementation(): RRDocument {
     return this;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get firstElementChild(): RRElement | null {
     return this.documentElement;
   }
 
-  appendChild(childNode: BaseRRNode) {
+  appendChild(childNode: BaseRRNode): IRRNode {
     return super.appendChild(childNode);
   }
 
-  insertBefore(newChild: BaseRRNode, refChild: BaseRRNode | null) {
+  insertBefore(newChild: BaseRRNode, refChild: BaseRRNode | null): IRRNode {
     return super.insertBefore(newChild, refChild);
   }
 
@@ -114,13 +105,10 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
   }
 
   createDocument(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _namespace: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _qualifiedName: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _doctype?: DocumentType | null,
-  ) {
+  ): RRDocument {
     return new RRDocument();
   }
 
@@ -128,7 +116,7 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     qualifiedName: string,
     publicId: string,
     systemId: string,
-  ) {
+  ): RRDocumentType {
     const documentTypeNode = new RRDocumentType(
       qualifiedName,
       publicId,
@@ -170,23 +158,32 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     return element;
   }
 
-  createElementNS(_namespaceURI: string, qualifiedName: string) {
+  createElementNS(
+    _namespaceURI: string,
+    qualifiedName: string,
+  ):
+    | RRElement
+    | RRMediaElement
+    | RRCanvasElement
+    | RRIFrameElement
+    | RRImageElement
+    | RRStyleElement {
     return this.createElement(qualifiedName as keyof HTMLElementTagNameMap);
   }
 
-  createComment(data: string) {
+  createComment(data: string): RRComment {
     const commentNode = new RRComment(data);
     commentNode.ownerDocument = this;
     return commentNode;
   }
 
-  createCDATASection(data: string) {
+  createCDATASection(data: string): RRCDATASection {
     const sectionNode = new RRCDATASection(data);
     sectionNode.ownerDocument = this;
     return sectionNode;
   }
 
-  createTextNode(data: string) {
+  createTextNode(data: string): RRText {
     const textNode = new RRText(data);
     textNode.ownerDocument = this;
     return textNode;
@@ -199,7 +196,6 @@ export class RRElement extends BaseRRElement {
   private _style: CSSStyleDeclarationType;
   constructor(tagName: string) {
     super(tagName);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this._style = new cssstyle.CSSStyleDeclaration();
     const style = this._style;
     Object.defineProperty(this.attributes, 'style', {
@@ -212,7 +208,6 @@ export class RRElement extends BaseRRElement {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get style() {
     return this._style as unknown as CSSStyleDeclaration;
@@ -230,17 +225,17 @@ export class RRElement extends BaseRRElement {
     return super.insertBefore(newChild, refChild) as BaseRRNode;
   }
 
-  getAttribute(name: string) {
+  getAttribute(name: string): string | null {
     const upperName = name && name.toLowerCase();
     if (upperName in this.attributes) return this.attributes[upperName];
     return null;
   }
 
-  setAttribute(name: string, attribute: string) {
+  setAttribute(name: string, attribute: string): void {
     this.attributes[name.toLowerCase()] = attribute;
   }
 
-  removeAttribute(name: string) {
+  removeAttribute(name: string): void {
     delete this.attributes[name.toLowerCase()];
   }
 
@@ -338,14 +333,13 @@ export class RRCanvasElement extends RRElement {
 export class RRStyleElement extends RRElement {
   private _sheet: CSSStyleSheet | null = null;
 
-  get sheet() {
+  get sheet(): CSSStyleSheet | null {
     if (!this._sheet) {
       let result = '';
       for (const child of this.childNodes)
         if (child.RRNodeType === RRNodeType.Text)
           result += (child as RRText).textContent;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
-      this._sheet = cssom.parse(result);
+      this._sheet = cssom.parse(result) as unknown as CSSStyleSheet;
     }
     return this._sheet;
   }

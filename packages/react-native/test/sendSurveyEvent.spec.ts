@@ -27,7 +27,7 @@ describe('sendSurveyEvent', () => {
 
   beforeEach(() => {
     mockPostHog = {
-      capture: jest.fn(),
+      capture: vi.fn(),
     }
   })
 
@@ -312,7 +312,7 @@ describe('dismissedSurveyEvent', () => {
 
   beforeEach(() => {
     mockPostHog = {
-      capture: jest.fn(),
+      capture: vi.fn(),
     }
   })
 

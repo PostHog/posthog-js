@@ -1,16 +1,35 @@
+import { compileModsAsync, withAppBuildGradle, withXcodeProject } from '@expo/config-plugins'
 import { spawnSync } from 'child_process'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 
+import * as postHogExpoPluginModule from '../src/tooling/expoconfig'
 import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
   addPostHogWithBundledScriptsToBundleShellScript,
+  applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
+  setPostHogAndroidNativeSymbolsExtension,
+  removePostHogAndroidNativeSymbolsExtension,
+  buildAndroidDotenvFileGradleValue,
+  buildAndroidForceGradleLine,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
+  buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  moveDsymUploadBuildPhaseToEnd,
+  resolveDotenvFileProp,
   resolveNativeSymbolUpload,
+  resolveReleaseModeProp,
+  updateHermesReleaseModeGradleProperties,
+  updateDotenvFileGradleProperties,
+  updateMainActivityNewIntentOverride,
 } from '../src/tooling/expoconfig'
+
+const postHogExpoPlugin = (postHogExpoPluginModule as any).default
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
 
@@ -60,17 +79,16 @@ describe('disableUserScriptSandboxing', () => {
   })
 })
 
-// Extracts the argument that would become $1 inside posthog-xcode.sh when
-// the wrapped line is executed by the shell. The shell runs:
-//   /bin/sh <posthog-xcode.sh-path> <...rest>
-// so $1 is the token immediately after the posthog-xcode.sh path.
-const extractArg1 = (wrappedLine: string): string => {
-  // The line looks like: /bin/sh `<node eval>` <arg1> ...
-  // Split on the backtick-delimited posthog-xcode.sh path expression, then
-  // take the first whitespace-separated token from whatever follows it.
-  const afterPosthog = wrappedLine.split(/`[^`]+`/)[1] ?? ''
-  return afterPosthog.trim().split(/\s+/)[0]
-}
+const SENTRY_REACT_NATIVE_XCODE_PATH =
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"`"
+
+// Mirrors @sentry/react-native's Expo config-plugin transformation so these
+// tests cover both plugin execution orders without adding Sentry as a dependency.
+const addSentryWithBundledScriptsToBundleShellScript = (script: string): string =>
+  script.replace(
+    /^.*?(packager|scripts)\/react-native-xcode\.sh\s*(\\'\\\\")?/m,
+    (match) => `/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${match}`
+  )
 
 const expectValidShellSyntax = (script: string): void => {
   const result = spawnSync('/bin/sh', ['-n'], { input: script, encoding: 'utf8' })
@@ -84,7 +102,7 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
     expect(wrapped).toContain('posthog-xcode.sh')
     expect(wrapped).toContain('react-native-xcode.sh')
-    expect(wrapped.startsWith('/bin/sh ')).toBe(true)
+    expect(wrapped.startsWith('/bin/sh ')).toBe(false)
     expect(wrapped.indexOf('posthog-xcode.sh')).toBeLessThan(wrapped.indexOf('react-native-xcode.sh'))
   })
 
@@ -95,22 +113,32 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expect(wrapped).toContain('packager/react-native-xcode.sh')
   })
 
-  // Regression tests for issue #3682:
-  // When the Expo bundle phase already contains a /bin/sh prefix (common in
-  // Expo SDK 53+ and plain RN projects), posthog-xcode.sh receives /bin/sh as
-  // $1, which makes the REACT_NATIVE_XCODE variable resolve to /bin/sh instead
-  // of react-native-xcode.sh, silently breaking the PACKAGER_SOURCEMAP_FILE patch.
-  it.each([
-    ['simple path (no shell prefix)', '../node_modules/react-native/scripts/react-native-xcode.sh'],
-    [
-      'shell-prefixed command (Expo SDK 53+ / plain RN)',
-      '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh',
-    ],
-  ])('arg1 passed to posthog-xcode.sh is react-native-xcode.sh path, not /bin/sh — %s', (_desc, original) => {
+  it('preserves a shell-prefixed React Native command for argument forwarding', () => {
+    const original = '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh'
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
-    const arg1 = extractArg1(wrapped)
-    expect(arg1).toContain('react-native-xcode.sh')
-    expect(arg1).not.toBe('/bin/sh')
+
+    expect(wrapped).toContain('/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh')
+    expectValidShellSyntax(wrapped)
+  })
+
+  it('composes outside an existing Sentry wrapper', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const sentryWrapped = `/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${reactNativeCommand}`
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(sentryWrapped)
+
+    expect(wrapped.indexOf('posthog-xcode.sh')).toBeLessThan(wrapped.indexOf('sentry-xcode.sh'))
+    expect(wrapped).toContain(`/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${reactNativeCommand}`)
+    expectValidShellSyntax(wrapped)
+  })
+
+  it('remains composable when Sentry wraps it afterwards', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const postHogWrapped = addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)
+    const sentryWrapped = addSentryWithBundledScriptsToBundleShellScript(postHogWrapped)
+
+    expect(sentryWrapped).toBe(`/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${postHogWrapped}`)
+    expect(sentryWrapped).not.toContain(`${SENTRY_REACT_NATIVE_XCODE_PATH} /bin/sh`)
+    expectValidShellSyntax(sentryWrapped)
   })
 
   it('preserves the full Expo backtick command when wrapping react-native-xcode.sh', () => {
@@ -127,13 +155,21 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expectValidShellSyntax(wrapped)
   })
 
-  it('passes skipOnConflict before the react-native-xcode.sh command', () => {
-    const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
-    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, true)
+  it.each([
+    ['skipOnConflict', true, false, 'export POSTHOG_SKIP_ON_CONFLICT=1\n'],
+    ['force', false, true, 'export POSTHOG_FORCE=1\n'],
+  ])(
+    'exports %s before the wrapped command so outer wrappers inherit it',
+    (_option, skipOnConflict, force, exported) => {
+      const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
+      const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, skipOnConflict, undefined, force)
 
-    expect(wrapped).toContain('--posthog-skip-on-conflict -- node_modules/react-native/scripts/react-native-xcode.sh')
-    expectValidShellSyntax(wrapped)
-  })
+      expect(wrapped).toContain(exported)
+      expect(wrapped.match(/^export POSTHOG_/gm)).toHaveLength(1)
+      expect(wrapped).not.toContain('--posthog-skip-on-conflict')
+      expectValidShellSyntax(wrapped)
+    }
+  )
 })
 
 describe('modifyExistingXcodeBuildScript', () => {
@@ -148,19 +184,65 @@ describe('modifyExistingXcodeBuildScript', () => {
     const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
     modifyExistingXcodeBuildScript(script, true)
     const parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
 
-  it('updates skipOnConflict on an already wrapped bundle phase', () => {
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('updates %s on an already wrapped bundle phase', (_option, skipOnConflict, force, variable) => {
     const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
     modifyExistingXcodeBuildScript(script)
-    modifyExistingXcodeBuildScript(script, true)
-    let parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('--posthog-skip-on-conflict --')
+    modifyExistingXcodeBuildScript(script, skipOnConflict, undefined, force)
+    expect(JSON.parse(script.shellScript)).toContain(`export ${variable}=1`)
 
-    modifyExistingXcodeBuildScript(script, false)
-    parsed = JSON.parse(script.shellScript)
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain(variable)
+  })
+
+  it('adds and removes the release mode export as the prop changes', () => {
+    // Reverting `releaseMode` in app.json has to remove the export, or the build keeps uploading
+    // release-independent source maps after the user asked for the default back.
+    const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
+
+    modifyExistingXcodeBuildScript(script, false, 'event')
+    expect(JSON.parse(script.shellScript)).toContain('export POSTHOG_RELEASE_MODE=event')
+
+    modifyExistingXcodeBuildScript(script, false, 'symbol-set')
+    expect(JSON.parse(script.shellScript)).toContain('export POSTHOG_RELEASE_MODE=symbol-set')
+
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain('POSTHOG_RELEASE_MODE')
+  })
+
+  it('migrates an existing shell-prefixed PostHog wrapper to a composable invocation', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const oldWrapped = `/bin/sh ${addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)}`
+    const script = { shellScript: JSON.stringify(oldWrapped) }
+
+    modifyExistingXcodeBuildScript(script)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed.startsWith('/bin/sh ')).toBe(false)
+    expect(parsed).toContain('posthog-xcode.sh')
+  })
+
+  it('migrates a shell-prefixed wrapper and legacy skip argument together', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const currentWrapped = addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)
+    const legacyWrapped = `/bin/sh ${currentWrapped.replace(
+      ` ${reactNativeCommand}`,
+      ` --posthog-skip-on-conflict -- ${reactNativeCommand}`
+    )}`
+    const script = { shellScript: JSON.stringify(legacyWrapped) }
+
+    modifyExistingXcodeBuildScript(script, true)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed.startsWith('/bin/sh ')).toBe(false)
     expect(parsed).not.toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(parsed).toContain(` ${reactNativeCommand}`)
   })
 
   it('wraps Expo backtick bundle phase shellScript without creating invalid shell syntax', () => {
@@ -205,19 +287,27 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script)
     expect(script.shellScript).toBe(original)
   })
+
+  it('warns instead of throwing when the bundle phase is missing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(() => modifyExistingXcodeBuildScript(undefined)).not.toThrow()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Bundle React Native code and images'))
+    warn.mockRestore()
+  })
 })
 
-const mockXcodeProjectForBuildPhase = (
-  existingPhase: any = undefined
-): { pbxItemByComment: jest.Mock; addBuildPhase: jest.Mock } => ({
-  pbxItemByComment: jest.fn(() => existingPhase),
-  addBuildPhase: jest.fn(),
+const mockXcodeProjectForBuildPhase = (existingPhase: any = undefined, buildPhases: any[] = []) => ({
+  pbxItemByComment: vi.fn(() => existingPhase),
+  addBuildPhase: vi.fn(),
+  getFirstTarget: vi.fn(() => ({ firstTarget: { buildPhases } })),
 })
 
 describe('buildDsymUploadShellScript', () => {
   it('produces valid shell syntax with and without source', () => {
     expectValidShellSyntax(buildDsymUploadShellScript())
     expectValidShellSyntax(buildDsymUploadShellScript(true))
+    expectValidShellSyntax(buildDsymUploadShellScript(false, true))
+    expectValidShellSyntax(buildDsymUploadShellScript(true, true))
   })
 
   it('reuses posthog-ios upload-symbols.sh and probes both Pods and SwiftPM paths', () => {
@@ -235,6 +325,16 @@ describe('buildDsymUploadShellScript', () => {
   it('exports POSTHOG_INCLUDE_SOURCE=1 when includeSource is requested', () => {
     expect(buildDsymUploadShellScript(true)).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
+
+  it.each([
+    ['POSTHOG_SKIP_ON_CONFLICT', true, false],
+    ['POSTHOG_FORCE', false, true],
+  ])('exports %s=1 only when its option is requested', (variable, skipOnConflict, force) => {
+    expect(buildDsymUploadShellScript()).not.toContain(variable)
+    expect(buildDsymUploadShellScript(true)).not.toContain(variable)
+    expect(buildDsymUploadShellScript(false, skipOnConflict, force)).toContain(`export ${variable}=1`)
+    expect(buildDsymUploadShellScript(true, skipOnConflict, force)).toContain(`export ${variable}=1`)
+  })
 })
 
 describe('addDsymUploadBuildPhase', () => {
@@ -247,6 +347,9 @@ describe('addDsymUploadBuildPhase', () => {
     expect(files).toEqual([])
     expect(isa).toBe('PBXShellScriptBuildPhase')
     expect(comment).toBe('Upload PostHog Debug Symbols')
+    expect(opts.inputPaths).toEqual([
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
     expect(opts.shellPath).toBe('/bin/sh')
     expect(opts.shellScript).toContain('upload-symbols.sh')
     expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
@@ -259,10 +362,337 @@ describe('addDsymUploadBuildPhase', () => {
     expect(opts.shellScript).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
+  it.each([
+    ['skipOnConflict', true, false, 'POSTHOG_SKIP_ON_CONFLICT'],
+    ['force', false, true, 'POSTHOG_FORCE'],
+  ])('forwards %s into the phase script', (_option, skipOnConflict, force, variable) => {
+    const xp = mockXcodeProjectForBuildPhase(undefined)
+    addDsymUploadBuildPhase(xp, false, skipOnConflict, force)
+    const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
+    expect(opts.shellScript).toContain(`export ${variable}=1`)
+    expect(opts.shellScript.match(/^export POSTHOG_/gm)).toHaveLength(1)
+  })
+
+  it('refreshes a phase written by an SDK without the force option', () => {
+    const existing = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript(true, false)),
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true, false, true)
+
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(true, false, true)))
+  })
+
   it('is idempotent — does not add a second phase when one already exists', () => {
     const xp = mockXcodeProjectForBuildPhase({ isa: 'PBXShellScriptBuildPhase' })
     addDsymUploadBuildPhase(xp)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
+  })
+
+  // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines.
+  const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
+
+  // Verbatim text of the phase as posthog-react-native 4.63 wrote it. The plugin refreshes a phase
+  // only when its text matches something the plugin generated, so a project prebuilt by that SDK
+  // depends on this exact text staying in the list. Kept as literals on purpose: deriving it from
+  // the current generator would hide a change to the shared lines.
+  const LEGACY_DSYM_SCRIPT_TAIL = [
+    'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
+    'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
+    'if [ -f "$PODS_SCRIPT" ]; then',
+    '  /bin/sh "$PODS_SCRIPT"',
+    'elif [ -f "$SPM_SCRIPT" ]; then',
+    '  /bin/sh "$SPM_SCRIPT"',
+    'else',
+    '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
+    'fi',
+  ]
+  const legacyDsymPhases: Array<[string, boolean, boolean, string[]]> = [
+    [
+      'no options',
+      false,
+      false,
+      [
+        '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+        '# upload-symbols.sh ships inside the posthog-ios dependency.',
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'includeSource and skipOnConflict',
+      true,
+      true,
+      [
+        '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+        '# upload-symbols.sh ships inside the posthog-ios dependency.',
+        '# Also upload native source files for source-code context around crashes.',
+        'export POSTHOG_INCLUDE_SOURCE=1',
+        '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+        'export POSTHOG_SKIP_ON_CONFLICT=1',
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+  ]
+
+  it.each(legacyDsymPhases)(
+    'refreshes a phase written by an SDK without release-mode support (%s)',
+    (_case, includeSource, skipOnConflict, legacyLines) => {
+      const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(legacyLines.join('\n')) }
+      const xp = mockXcodeProjectForBuildPhase(existing)
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
+    }
+  )
+
+  // Verbatim release-mode block as posthog-react-native 4.64.0 through 4.66.3 wrote it, with the
+  // given first line. Kept as literals for the same reason as the 4.63 fixtures above: the
+  // migration in the plugin derives these variants from the current generator, and only a frozen
+  // copy of the published text can catch that derivation drifting.
+  const releaseModeDsymBlock = (modeLine: string): string[] => [
+    modeLine,
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+
+  const DSYM_PHASE_HEAD = [
+    '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+    '# upload-symbols.sh ships inside the posthog-ios dependency.',
+  ]
+  const releaseModeDsymPhases: Array<[string, boolean, boolean, string[]]> = [
+    [
+      'event mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="event"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'symbol-set mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="symbol-set"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'environment-resolved mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'event mode with includeSource and skipOnConflict',
+      true,
+      true,
+      [
+        ...DSYM_PHASE_HEAD,
+        '# Also upload native source files for source-code context around crashes.',
+        'export POSTHOG_INCLUDE_SOURCE=1',
+        '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+        'export POSTHOG_SKIP_ON_CONFLICT=1',
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="event"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+  ]
+
+  it.each(releaseModeDsymPhases)(
+    'migrates a phase written by a release-mode SDK (%s) and stays idempotent',
+    (_case, includeSource, skipOnConflict, legacyLines) => {
+      // A phase left unrecognized would keep its POSTHOG_NO_RELEASE_BIND export, which the pinned
+      // posthog-ios still reads, so locked upgrades would keep uploading dSYMs unbound.
+      const existing: any = {
+        isa: 'PBXShellScriptBuildPhase',
+        shellScript: encodePbx(legacyLines.join('\n')),
+        inputPaths: ['"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"'],
+      }
+      const xp = mockXcodeProjectForBuildPhase(existing)
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
+      expect(existing.shellScript).not.toContain('POSTHOG_NO_RELEASE_BIND')
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
+      expect(existing.inputPaths).toEqual([
+        '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+      ])
+    }
+  )
+
+  it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
+    const existing: any = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript()),
+      inputPaths: ['"$(SRCROOT)/custom-input"'],
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+    expect(existing.inputPaths).toEqual([
+      '"$(SRCROOT)/custom-input"',
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
+
+    addDsymUploadBuildPhase(xp, false, false)
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript()))
+  })
+
+  it('moves an existing plugin-generated phase after extension embedding', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const buildPhases = [
+      { value: 'SOURCES', comment: 'Sources' },
+      { value: 'POSTHOG', comment: 'Upload PostHog Debug Symbols' },
+      { value: 'EXTENSION', comment: 'Embed App Extensions' },
+    ]
+    const xp = mockXcodeProjectForBuildPhase(existing, buildPhases)
+
+    addDsymUploadBuildPhase(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+  })
+
+  it('moves a newly added phase again after a later plugin appends extension embedding', () => {
+    let existing: any
+    const buildPhases = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xp = mockXcodeProjectForBuildPhase(undefined, buildPhases)
+    xp.pbxItemByComment.mockImplementation(() => existing)
+    xp.addBuildPhase.mockImplementation((_files, _isa, comment, _target, options) => {
+      existing = {
+        isa: 'PBXShellScriptBuildPhase',
+        shellScript: encodePbx(options.shellScript),
+      }
+      buildPhases.push({ value: 'POSTHOG', comment })
+    })
+
+    addDsymUploadBuildPhase(xp)
+    buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+    moveDsymUploadBuildPhaseToEnd(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+  })
+
+  it('finalizes phase ordering after all Expo Xcode project mods', async () => {
+    vi.useRealTimers()
+    let uploadPhase: any
+    const bundlePhase = {
+      shellScript: JSON.stringify('../node_modules/react-native/scripts/react-native-xcode.sh'),
+    }
+    const buildPhases: any[] = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xcodeProject = {
+      pbxItemByComment: vi.fn((comment: string) => {
+        if (comment === 'Bundle React Native code and images') {
+          return bundlePhase
+        }
+        if (comment === 'Upload PostHog Debug Symbols') {
+          return uploadPhase
+        }
+      }),
+      addBuildPhase: vi.fn((_files, _isa, comment, _target, options) => {
+        uploadPhase = {
+          isa: 'PBXShellScriptBuildPhase',
+          shellScript: encodePbx(options.shellScript),
+        }
+        buildPhases.push({ value: 'POSTHOG', comment })
+      }),
+      getFirstTarget: vi.fn(() => ({ firstTarget: { buildPhases } })),
+      pbxXCBuildConfigurationSection: vi.fn(() => ({})),
+    }
+
+    let config: any = { name: 'Test', slug: 'test' }
+    config = withXcodeProject(config, (config: any) => {
+      buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+      return config
+    })
+    config = postHogExpoPlugin(config, {
+      disableSandboxing: false,
+      uploadNativeSymbols: true,
+    })
+
+    await config.mods.ios.xcodeproj({ ...config, modRequest: {}, modResults: xcodeProject })
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+    vi.useFakeTimers()
+  })
+
+  it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
+    const stored = encodePbx(buildDsymUploadShellScript(true))
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: stored }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true)
+    expect(existing.shellScript).toBe(stored)
+  })
+
+  it('recognizes a pristine phase stored in Xcode-style \\n-escaped encoding', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: JSON.stringify(buildDsymUploadShellScript()) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+  })
+
+  it('recognizes a pristine phase stored without pbxproj quoting', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: buildDsymUploadShellScript(true) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+  })
+
+  it('leaves a user-customized phase script untouched', () => {
+    const customized = encodePbx(`${buildDsymUploadShellScript()}\necho "my custom step"`)
+    const existing: any = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(customized)
+    expect(existing.inputPaths).toBeUndefined()
   })
 })
 
@@ -289,6 +719,23 @@ describe('buildAndroidSkipOnConflictGradleLine', () => {
     [true, 'project.ext.posthogReactNativeSkipOnConflict = true'],
   ])('serializes skipOnConflict=%s', (skipOnConflict, expected) => {
     expect(buildAndroidSkipOnConflictGradleLine(skipOnConflict)).toBe(expected)
+  })
+})
+
+describe('buildAndroidForceGradleLine', () => {
+  it.each([
+    [false, null],
+    [true, 'project.ext.posthogReactNativeForce = true'],
+  ])('serializes force=%s', (force, expected) => {
+    expect(buildAndroidForceGradleLine(force)).toBe(expected)
+  })
+})
+
+describe('postHogExpoPlugin conflict options', () => {
+  it('stops the prebuild when skipOnConflict and force are both enabled', () => {
+    expect(() => postHogExpoPlugin({ name: 'app', slug: 'app' }, { skipOnConflict: true, force: true })).toThrow(
+      /only one of --skip-on-conflict and --force/
+    )
   })
 })
 
@@ -320,14 +767,40 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     expect(twice.classpathPresent).toBe(true)
   })
 
+  it.each(['1.0.0', '1.4.0', '0.9.9'])('bumps an existing %s classpath that predates native symbols', (version) => {
+    const contents = projectBuildGradle.replace(
+      'classpath("com.android.tools.build:gradle")',
+      `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
+    )
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
+    expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
+  })
+
+  it.each(['1.5.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
+    const contents = `buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")\n    }\n}`
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+  })
+
+  it('keeps a variable-driven classpath and warns that it needs 1.5.0', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const contents =
+      'buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")\n    }\n}'
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.5.0 or later'))
+  })
+
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = 'plugins {\n  id "com.android.application"\n}'
     const result = addPostHogAndroidGradlePluginClasspath(contents)
     expect(result.contents).toBe(contents)
     expect(result.classpathPresent).toBe(false)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
   })
 
   it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = [
       'buildscript {',
       '    repositories { google() }',
@@ -341,6 +814,624 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     // The only dependencies block is in allprojects, outside buildscript — must not be used.
     expect(result.classpathPresent).toBe(false)
     expect(result.contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
+  })
+})
+
+describe('buildIosDotenvFileBuildSetting', () => {
+  it('anchors relative paths one level above the generated ios/ dir', () => {
+    expect(buildIosDotenvFileBuildSetting('.env')).toBe('"$(SRCROOT)/../.env"')
+    expect(buildIosDotenvFileBuildSetting('config/.env.posthog')).toBe('"$(SRCROOT)/../config/.env.posthog"')
+  })
+
+  it('strips a leading ./ before joining', () => {
+    expect(buildIosDotenvFileBuildSetting('./.env')).toBe('"$(SRCROOT)/../.env"')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildIosDotenvFileBuildSetting('/secrets/.env')).toBe('"/secrets/.env"')
+  })
+
+  it('escapes quotes and backslashes for the pbxproj serialization', () => {
+    expect(buildIosDotenvFileBuildSetting('we"ird\\path.env')).toBe('"$(SRCROOT)/../we\\"ird\\\\path.env"')
+  })
+})
+
+describe('applyDotenvFileBuildSetting', () => {
+  it('sets POSTHOG_CLI_DOTENV_FILE on every build configuration', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+    }
+  })
+
+  it('removes the setting again when the prop is absent', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp)
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings).not.toHaveProperty('POSTHOG_CLI_DOTENV_FILE')
+    }
+  })
+
+  it('preserves existing build settings', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.PRODUCT_NAME).toBe('"MyApp"')
+  })
+
+  it('is idempotent — running twice yields the same result', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+  })
+})
+
+describe('resolveDotenvFileProp', () => {
+  it('treats undefined, empty, and whitespace-only values as unset', () => {
+    expect(resolveDotenvFileProp(undefined)).toBeUndefined()
+    expect(resolveDotenvFileProp('')).toBeUndefined()
+    expect(resolveDotenvFileProp('   ')).toBeUndefined()
+  })
+
+  it('trims surrounding whitespace from real values', () => {
+    expect(resolveDotenvFileProp(' .env ')).toBe('.env')
+    expect(resolveDotenvFileProp('.env.production')).toBe('.env.production')
+  })
+})
+
+describe('buildAndroidDotenvFileGradleValue', () => {
+  it('anchors relative paths one level above the generated android/ dir', () => {
+    expect(buildAndroidDotenvFileGradleValue('.env')).toBe('../.env')
+    expect(buildAndroidDotenvFileGradleValue('./.env')).toBe('../.env')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildAndroidDotenvFileGradleValue('/secrets/.env')).toBe('/secrets/.env')
+  })
+})
+
+describe('updateDotenvFileGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+    { type: 'empty' },
+  ]
+
+  it('appends the posthog.dotenvFile entry when the prop is set', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.dotenvFile', value: '../.env' }])
+  })
+
+  it('replaces an existing entry instead of duplicating it', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    const result = updateDotenvFileGradleProperties(withEntry, 'config/.env.posthog')
+    expect(result.filter((item) => item.key === 'posthog.dotenvFile')).toEqual([
+      { type: 'property', key: 'posthog.dotenvFile', value: '../config/.env.posthog' },
+    ])
+  })
+
+  it('removes the entry when the prop is absent', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(updateDotenvFileGradleProperties(withEntry)).toEqual(unrelated)
+  })
+
+  it('leaves unrelated properties untouched', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result.slice(0, unrelated.length)).toEqual(unrelated)
+  })
+})
+
+describe('updateHermesReleaseModeGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+  ]
+
+  it('writes the mode under a key com.posthog.android does not read', () => {
+    // posthog.releaseMode would also steer the R8 mapping upload, which always binds now.
+    const result = updateHermesReleaseModeGradleProperties([...unrelated], 'symbol-set')
+
+    expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.hermesReleaseMode', value: 'symbol-set' }])
+  })
+
+  it('leaves a legacy posthog.releaseMode entry alone', () => {
+    // The legacy key is deprecated user-owned config, so the prebuild must not rewrite it. The
+    // gradle scripts warn about it and read it as a fallback instead.
+    const legacyEntry = { type: 'property', key: 'posthog.releaseMode', value: 'event' }
+    const legacy = [...unrelated, legacyEntry]
+
+    const result = updateHermesReleaseModeGradleProperties(legacy, 'event')
+
+    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([legacyEntry])
+    expect(result.filter((item) => item.key === 'posthog.hermesReleaseMode')).toEqual([
+      { type: 'property', key: 'posthog.hermesReleaseMode', value: 'event' },
+    ])
+  })
+
+  it('replaces its own entry instead of duplicating it', () => {
+    const once = updateHermesReleaseModeGradleProperties([...unrelated], 'event')
+    const twice = updateHermesReleaseModeGradleProperties(once, 'symbol-set')
+
+    expect(twice.filter((item) => item.key === 'posthog.hermesReleaseMode')).toEqual([
+      { type: 'property', key: 'posthog.hermesReleaseMode', value: 'symbol-set' },
+    ])
+  })
+})
+
+describe('resolveReleaseModeProp', () => {
+  it('treats an unset or blank prop as unconfigured', () => {
+    // Undefined makes the prebuild write nothing, so the build scripts own the event default and
+    // can soften it to a bound upload on a posthog-cli predating the flag.
+    expect(resolveReleaseModeProp()).toBeUndefined()
+    expect(resolveReleaseModeProp('  ')).toBeUndefined()
+  })
+
+  it('reads POSTHOG_RELEASE_MODE when the prop is absent', () => {
+    // A configured mode is written into the bundle phase, and that beats the variable at build
+    // time. Reading it here is what keeps the prebuild-time opt-out working for an Expo project.
+    expect(resolveReleaseModeProp(undefined, 'symbol-set')).toBe('symbol-set')
+    expect(resolveReleaseModeProp('event', 'symbol-set')).toBe('event')
+  })
+
+  it('stops the prebuild on a typo rather than falling back to the default', () => {
+    expect(resolveReleaseModeProp(' event ')).toBe('event')
+    expect(() => resolveReleaseModeProp('evnet')).toThrow("was 'evnet'")
+  })
+})
+
+const kotlinMainActivity = `package com.example
+
+import com.facebook.react.ReactActivity
+
+class MainActivity : ReactActivity() {
+  override fun getMainComponentName(): String = "main"
+}
+`
+
+const javaMainActivity = `package com.example;
+
+import com.facebook.react.ReactActivity;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  protected String getMainComponentName() {
+    return "main";
+  }
+}
+`
+
+describe('updateMainActivityNewIntentOverride', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('injects a Kotlin override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+
+    expect(result).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(result).toContain('    setIntent(intent)\n    super.onNewIntent(intent)')
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('super.onNewIntent(intent)'))
+    expect(result.indexOf('class MainActivity')).toBeLessThan(result.indexOf('onNewIntent'))
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('injects a Java override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(javaMainActivity, 'java', true)
+
+    expect(result).toContain('  @Override\n  public void onNewIntent(android.content.Intent intent) {')
+    expect(result).toContain('    setIntent(intent);\n    super.onNewIntent(intent);')
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('is idempotent for %s', (language, source) => {
+    const once = updateMainActivityNewIntentOverride(source, language, true)
+    const twice = updateMainActivityNewIntentOverride(once, language, true)
+
+    expect(twice).toBe(once)
+    expect(once.split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('restores the original %s file when disabled', (language, source) => {
+    const patched = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(updateMainActivityNewIntentOverride(patched, language, false)).toBe(source)
+  })
+
+  it('leaves an existing override alone and explains what to add', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('replaces a stale managed block rather than stacking a second one', () => {
+    const patched = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+    const stale = patched.replace('setIntent(intent)', 'setIntent(intent) // hand-edited')
+
+    expect(updateMainActivityNewIntentOverride(stale, 'kt', true)).toBe(patched)
+  })
+
+  it('skips a file with no recognizable MainActivity class body', () => {
+    const source = 'package com.example\n\nobject NotAnActivity\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('skips a file whose braces do not balance', () => {
+    const source = 'class MainActivity : ReactActivity() {\n  fun broken() {\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('patches a file that only mentions onNewIntent in a comment', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  // TODO: forward onNewIntent to the router\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain(
+      'override fun onNewIntent(intent: android.content.Intent) {'
+    )
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('still manages the block after the file is normalized to CRLF', () => {
+    const source = kotlinMainActivity.replace(/\n/g, '\r\n')
+    const patched = updateMainActivityNewIntentOverride(source, 'kt', true).replace(/\r?\n/g, '\r\n')
+
+    expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', false)).toBe(source)
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', true).split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('inserts into MainActivity and not a later class in the same file', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun noop() {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('ignores a commented-out class MainActivity above the real one', () => {
+    const source = [
+      '// class MainActivity : ReactActivity() { }',
+      'class MainActivity : ReactActivity() {',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('patches when onNewIntent appears only inside a comment', () => {
+    const source = [
+      'class MainActivity : ReactActivity() {',
+      '  // override fun onNewIntent(intent: Intent) {}',
+      '  override fun getMainComponentName(): String = "main"',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain('setIntent(intent)')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('refuses a file whose block comment never closes', () => {
+    const source = ['class MainActivity : ReactActivity() {', '  /* never closed', '  fun x() {}', ''].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('leaves a Java file whose text block contains a brace', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  String s = """',
+      '    }',
+      '    """;',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('leaves a Kotlin file whose existing override sits below a nested block comment', () => {
+    const source = [
+      'import com.facebook.react.ReactActivity',
+      'class MainActivity : ReactActivity() {',
+      '  /*',
+      '  fun retiredHandler() {',
+      '    /* retired implementation */',
+      '  }',
+      '  */',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('treats a Java block comment as ending at the first close', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  /* outer /* inner */',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('patches MainActivity when a later class in the same file overrides onNewIntent', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun onNewIntent(intent: Intent) {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  // A `"}"` field would end the class early for a scanner that counts every brace, hiding the real
+  // override from the scoped check, so the second override we then insert breaks the build.
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        '  private val closing = "}"\n\n  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        '  private final String closing = "}";\n\n  @Override\n  public void onNewIntent(Intent intent) {\n    super.onNewIntent(intent);\n  }\n\n  @Override\n  protected String getMainComponentName'
+      ),
+    ],
+  ])('keeps an existing %s override that follows a "}" string literal', (language, source) => {
+    expect(updateMainActivityNewIntentOverride(source, language, true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        [
+          '  private val open = "{"',
+          "  private val char = '{'",
+          '  private val raw = """}"""',
+          '  private val template = "${ "}" }" // }',
+          '  /* { */',
+          '  override fun getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        [
+          '  private final String open = "{";',
+          "  private final char c = '{';",
+          '  private final String escaped = "\\\\{\\"}";',
+          '  // }',
+          '  /* { */',
+          '  @Override\n  protected String getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+  ])('patches a %s file whose literals and comments contain lone braces', (language, source) => {
+    const result = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(result).toContain('setIntent(intent)')
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('getMainComponentName'))
+    expect(updateMainActivityNewIntentOverride(result, language, false)).toBe(source)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('skips a file with an unterminated string rather than guessing where the class ends', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  private val broken = "}\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+})
+
+describe('postHogExpoPlugin Android native symbols', () => {
+  const projectRoots: string[] = []
+  const projectBuildGradle = [
+    'buildscript {',
+    '    repositories {',
+    '        google()',
+    '        mavenCentral()',
+    '    }',
+    '    dependencies {',
+    '        classpath("com.android.tools.build:gradle")',
+    '    }',
+    '}',
+  ].join('\n')
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.facebook.react"',
+    '',
+    'android {',
+    '    namespace "com.example"',
+    '}',
+  ].join('\n')
+
+  const compilePlugin = async (projectContents = projectBuildGradle, extraProps: Record<string, unknown> = {}) => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
+    const androidRoot = path.join(projectRoot, 'android')
+    const appRoot = path.join(androidRoot, 'app')
+    projectRoots.push(projectRoot)
+    const sourceRoot = path.join(appRoot, 'src/main/java/com/example')
+    fs.mkdirSync(sourceRoot, { recursive: true })
+    fs.writeFileSync(path.join(androidRoot, 'build.gradle'), projectContents)
+    fs.writeFileSync(path.join(appRoot, 'build.gradle'), appBuildGradle)
+    fs.writeFileSync(path.join(androidRoot, 'gradle.properties'), '')
+    fs.writeFileSync(path.join(sourceRoot, 'MainActivity.kt'), kotlinMainActivity)
+
+    const withEarlierAppGradlePlugin = withAppBuildGradle(
+      { name: 'PostHog config plugin test', slug: 'posthog-config-plugin-test' } as any,
+      (config) => {
+        config.modResults.contents += '\n// Added by earlier config plugin'
+        return config
+      }
+    )
+    const config = postHogExpoPlugin(withEarlierAppGradlePlugin, {
+      uploadNativeSymbols: true,
+      disableSandboxing: false,
+      ...extraProps,
+    })
+    await compileModsAsync(config, { projectRoot, platforms: ['android'] })
+
+    return {
+      project: fs.readFileSync(path.join(androidRoot, 'build.gradle'), 'utf8'),
+      app: fs.readFileSync(path.join(appRoot, 'build.gradle'), 'utf8'),
+    }
+  }
+
+  beforeEach(() => {
+    // The MainActivity patch announces itself on every first prebuild.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    for (const projectRoot of projectRoots.splice(0)) {
+      fs.rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('writes the conflict-behavior ext property the gradle upload reads', async () => {
+    const result = await compilePlugin(projectBuildGradle, { force: true })
+
+    expect(result.app).toContain('project.ext.posthogReactNativeForce = true')
+    expect(result.app).not.toContain('posthogReactNativeSkipOnConflict')
+  })
+
+  it('applies the Android plugin when an earlier config plugin registers appBuildGradle first', async () => {
+    const result = await compilePlugin()
+
+    expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
+    expect(result.app).toContain('// Added by earlier config plugin')
+    expect(result.app).toContain('apply plugin: "com.posthog.android"')
+  })
+
+  it('does not apply the Android plugin when its classpath cannot be configured', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const projectContents = 'plugins {\n    id "com.android.application"\n}'
+      const result = await compilePlugin(projectContents)
+
+      expect(result.project).toBe(projectContents)
+      expect(result.app).not.toContain('apply plugin: "com.posthog.android"')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+})
+
+describe('setPostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.posthog.android"',
+    '',
+    'android {',
+    '}',
+  ].join('\n')
+
+  it('enables native symbol upload right after the plugin apply line', () => {
+    const result = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    const lines = result.split('\n')
+    const applyIdx = lines.indexOf('apply plugin: "com.posthog.android"')
+    expect(lines.slice(applyIdx + 2, applyIdx + 6)).toEqual([
+      'posthog {',
+      '    uploadNativeSymbols = true',
+      '    includeNativeSymbolSources = false',
+      '}',
+    ])
+  })
+
+  it('is idempotent and follows a changed includeSource', () => {
+    const once = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, false)).toBe(once)
+    const withSource = setPostHogAndroidNativeSymbolsExtension(once, true)
+    expect(withSource).toBe(setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true))
+    expect(withSource).toContain('includeNativeSymbolSources = true')
+    expect(withSource.split('posthog {')).toHaveLength(2)
+  })
+
+  it('leaves the file unchanged when the plugin is not applied', () => {
+    const contents = 'apply plugin: "com.android.application"\n'
+    expect(setPostHogAndroidNativeSymbolsExtension(contents, false)).toBe(contents)
+  })
+
+  it('is idempotent on a CRLF file', () => {
+    const crlf = appBuildGradle.replace(/\n/g, '\r\n')
+    const once = setPostHogAndroidNativeSymbolsExtension(crlf, true)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, true)).toBe(once)
+    expect(removePostHogAndroidNativeSymbolsExtension(once)).toBe(crlf)
+    expect(removePostHogAndroidNativeSymbolsExtension(once.replace(/\r?\n/g, '\r\n'))).toBe(crlf)
+  })
+})
+
+describe('removePostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = 'apply plugin: "com.posthog.android"\n\nandroid {\n}\n'
+
+  it('removes the managed block', () => {
+    const withBlock = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true)
+    expect(removePostHogAndroidNativeSymbolsExtension(withBlock)).toBe(appBuildGradle)
+  })
+
+  it('leaves a file without the block unchanged', () => {
+    expect(removePostHogAndroidNativeSymbolsExtension(appBuildGradle)).toBe(appBuildGradle)
   })
 })
 

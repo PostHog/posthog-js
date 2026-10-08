@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 /**
  * MCP SDK Compatibility Helpers
@@ -63,7 +64,7 @@ export function createWrappedTool(originalTool: RegisteredTool, wrappedFunction:
   return {
     ...originalTool,
     [key]: wrappedFunction,
-  } as RegisteredTool
+  }
 }
 
 // --- Zod schema internal property helpers ---
@@ -96,6 +97,58 @@ export function isZ4Schema(schema: unknown): boolean {
   return !!(schema as ZodV4Internal)._zod
 }
 
+function isZodTypeLike(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'parse' in value &&
+    typeof value.parse === 'function' &&
+    'safeParse' in value &&
+    typeof value.safeParse === 'function'
+  )
+}
+
+export function isZodRawShapeCompat(schema: unknown): schema is Record<string, unknown> {
+  // A Zod v4 pipe exposes its `in` and `out` schemas as own fields, so a Zod schema is never a raw shape
+  return !!schema && typeof schema === 'object' && !isZodTypeLike(schema) && Object.values(schema).some(isZodTypeLike)
+}
+
+interface ZodWrapperDef {
+  type?: unknown
+  schema?: unknown
+  in?: unknown
+  out?: unknown
+  innerType?: unknown
+}
+
+const MAX_UNWRAP_DEPTH = 8
+
+function zodDef(schema: unknown): ZodWrapperDef | undefined {
+  return (isZ4Schema(schema) ? (schema as ZodV4Internal)._zod?.def : (schema as ZodV3Internal)._def) as
+    | ZodWrapperDef
+    | undefined
+}
+
+/**
+ * Follows Zod wrappers to the schema that parses the caller's input: v3 effects
+ * (refine, transform, preprocess) and pipelines, v4 pipes (which include
+ * transforms), and optional, nullable, default, catch, and readonly wrappers.
+ * A v4 `z.preprocess` is a pipe whose input side is the transform, so its output side is followed.
+ */
+export function unwrapInputSchema(schema: unknown): unknown {
+  let current = schema
+  for (let depth = 0; depth < MAX_UNWRAP_DEPTH && isZodTypeLike(current); depth++) {
+    const def = zodDef(current)
+    const pipeInput = def?.in !== undefined && zodDef(def.in)?.type === 'transform' ? def.out : def?.in
+    const inner = def?.schema ?? pipeInput ?? def?.innerType
+    if (!inner) {
+      break
+    }
+    current = inner
+  }
+  return current
+}
+
 export function getObjectShape(schema: unknown): Record<string, unknown> | undefined {
   if (!schema || typeof schema !== 'object') {
     return
@@ -125,6 +178,24 @@ export function getObjectShape(schema: unknown): Record<string, unknown> | undef
   }
 
   return rawShape
+}
+
+/**
+ * Reads the method name a `setRequestHandler` registration is for.
+ *
+ * The two SDK majors disagree on what the first argument is: v1 passes the Zod
+ * schema for the request and carries the method as a literal on its shape, v2
+ * passes the method string itself. A registration we cannot name is one we
+ * cannot match against a patch — which is how a handler registered after
+ * `instrument()` on v2 ends up replacing our wrapper instead of being wrapped.
+ */
+export function readRequestHandlerMethod(requestSchema: unknown): string | undefined {
+  if (typeof requestSchema === 'string') {
+    return requestSchema
+  }
+  const shape = getObjectShape(requestSchema)
+  const method = shape?.method ? getLiteralValue(shape.method) : undefined
+  return typeof method === 'string' ? method : undefined
 }
 
 export function getLiteralValue(schema: unknown): unknown {

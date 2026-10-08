@@ -1,5 +1,464 @@
 # @posthog/mcp
 
+## 0.22.2
+
+### Patch Changes
+
+- [#5162](https://github.com/PostHog/posthog-js/pull/5162) [`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c) Thanks [@pauldambra](https://github.com/pauldambra)! - Sanitize each tool response once instead of twice, and replace image, audio and binary blocks before the scan, so tool calls with large results cost less CPU. Redact PostHog tokens that URL field decoding exposes.
+  (2026-10-07)
+- Updated dependencies [[`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c)]:
+  - @posthog/core@1.57.2
+
+## 0.22.1
+
+### Patch Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/core@1.57.0
+
+## 0.22.0
+
+### Minor Changes
+
+- [#5165](https://github.com/PostHog/posthog-js/pull/5165) [`3394548`](https://github.com/PostHog/posthog-js/commit/339454849c6efa3a309f1d4905e1016abb5e4863) Thanks [@OrbitingBucket](https://github.com/OrbitingBucket)! - Strip SDK-owned analytics arguments on fresh low-level server instances through `resolveOriginalTool`.
+  (2026-10-05)
+
+## 0.21.4
+
+### Patch Changes
+
+- [#5161](https://github.com/PostHog/posthog-js/pull/5161) [`9e42cc2`](https://github.com/PostHog/posthog-js/commit/9e42cc202c3d7c68641dd77b3131f2076b40e004) Thanks [@pauldambra](https://github.com/pauldambra)! - Make oversized events cheaper to truncate. The depth reduction now starts at the first depth that removes anything, so shallow payloads such as rows of data no longer normalize and measure the whole event again for each depth that changes nothing.
+  (2026-10-02)
+
+## 0.21.3
+
+### Patch Changes
+
+- [#5186](https://github.com/PostHog/posthog-js/pull/5186) [`80b9e5f`](https://github.com/PostHog/posthog-js/commit/80b9e5f6520f5261c706176039da8879da50fc58) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Sanitize only the part of a long string that the captured event can keep, so a tool call returning megabytes of HTML or text no longer blocks the event loop while it is scanned. A 10 MB HTML response now costs about 5 ms to capture instead of 2.7 s. The captured event does not change.
+  (2026-10-02)
+
+## 0.21.2
+
+### Patch Changes
+
+- [#5160](https://github.com/PostHog/posthog-js/pull/5160) [`1ed05cf`](https://github.com/PostHog/posthog-js/commit/1ed05cf253612aa8c45bc17723f364ff778c405c) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop copying the full tool list into `$mcp_response` on `$mcp_tools_list` events, so instrumented servers answer `tools/list` faster.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 0.21.1
+
+### Patch Changes
+
+- [#5157](https://github.com/PostHog/posthog-js/pull/5157) [`e2a3e3d`](https://github.com/PostHog/posthog-js/commit/e2a3e3d90c4d50e5333c1d0b9ea0f15745e6b247) Thanks [@gesh](https://github.com/gesh)! - Add the configured server build to custom events captured through `PostHogMCP`.
+  (2026-09-30)
+
+## 0.21.0
+
+### Minor Changes
+
+- [#5136](https://github.com/PostHog/posthog-js/pull/5136) [`be66818`](https://github.com/PostHog/posthog-js/commit/be66818539cc1bd16cbd969f3b3e8072026206ed) Thanks [@gesh](https://github.com/gesh)! - Add optional MCP server build metadata
+  (2026-09-28)
+
+## 0.20.0
+
+### Minor Changes
+
+- [#5130](https://github.com/PostHog/posthog-js/pull/5130) [`4d58499`](https://github.com/PostHog/posthog-js/commit/4d584990e5d9e331193e07c4ccda1592d414abb1) Thanks [@gesh](https://github.com/gesh)! - Record declared input aliases in automatic MCP instrumentation.
+  (2026-09-28)
+
+## 0.19.0
+
+### Minor Changes
+
+- [#5117](https://github.com/PostHog/posthog-js/pull/5117) [`51699b4`](https://github.com/PostHog/posthog-js/commit/51699b4b575505a1378fc6766767b9ef636063c2) Thanks [@pauldambra](https://github.com/pauldambra)! - Record which declared parameter aliases a tool call relied on as `$mcp_input_aliases_used`, from a server-owned `inputAliases` map.
+  (2026-09-28)
+
+- [#5048](https://github.com/PostHog/posthog-js/pull/5048) [`466da07`](https://github.com/PostHog/posthog-js/commit/466da07b12730515be7f933d3f7367a29e422898) Thanks [@pauldambra](https://github.com/pauldambra)! - Record safe tool input field names for automatic and custom MCP servers. Unknown names are `[redacted]` by default; `shouldRecordInputKey` replaces that rule.
+  (2026-09-28)
+
+## 0.18.1
+
+### Patch Changes
+
+- [#5112](https://github.com/PostHog/posthog-js/pull/5112) [`74295fd`](https://github.com/PostHog/posthog-js/commit/74295fd632aa3eeab67f243938b7a1633e6ecd68) Thanks [@gesh](https://github.com/gesh)! - Keep MCP conversation sessions consistent across user messages.
+  (2026-09-25)
+
+## 0.18.0
+
+### Minor Changes
+
+- [#5074](https://github.com/PostHog/posthog-js/pull/5074) [`7133bdb`](https://github.com/PostHog/posthog-js/commit/7133bdb7e5eb4a15f834f6f4d634cfab2de64ee2) Thanks [@gesh](https://github.com/gesh)! - Add conversation and session correlation helpers for custom MCP dispatchers.
+  (2026-09-23)
+
+## 0.17.0
+
+### Minor Changes
+
+- [#4924](https://github.com/PostHog/posthog-js/pull/4924) [`be40430`](https://github.com/PostHog/posthog-js/commit/be40430a467d41a807a09aa03f02d192b6b04d24) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Enable model capture and conversation correlation by default. Advertised tool schemas gain an `llm_model` argument (never enforced at dispatch) and eligible tool results gain a conversation handle; `instrument(server, posthog, { captureModel: false, enableConversationId: false })` restores the previous shape. Fresh low-level instances now read both arguments under the ADR-0011 rule instead of staying silent.
+  (2026-09-17)
+
+## 0.16.4
+
+### Patch Changes
+
+- [#5009](https://github.com/PostHog/posthog-js/pull/5009) [`b4f58eb`](https://github.com/PostHog/posthog-js/commit/b4f58eb0ddec084f4011f080cb7fdc0461ed7ad6) Thanks [@gesh](https://github.com/gesh)! - Use conversation IDs for `get_more_tools` and `send_feedback` calls handled by fresh server instances.
+  (2026-09-17)
+
+## 0.16.3
+
+### Patch Changes
+
+- [#4967](https://github.com/PostHog/posthog-js/pull/4967) [`916e163`](https://github.com/PostHog/posthog-js/commit/916e16394de38e01789309ea314f23e6ad436c46) Thanks [@gesh](https://github.com/gesh)! - Inject the get_more_tools tool only on the first tools/list page, so a paginated catalogue's concatenated listing carries it once instead of once per page. A real first-page tool with the same name still wins (warning logged); a real tool on a later page is shadowed, with a warning when a client fetches that page — rename the SDK's tool with the `missingCapabilityToolName` option if your catalogue uses the name.
+  (2026-09-16)
+
+## 0.16.2
+
+### Patch Changes
+
+- [#4953](https://github.com/PostHog/posthog-js/pull/4953) [`2a6ddb9`](https://github.com/PostHog/posthog-js/commit/2a6ddb90b400df06a082bae32519ca08273d3926) Thanks [@gesh](https://github.com/gesh)! - Inject the send_feedback tool only on the first tools/list page (the request with no cursor), so a paginated catalogue's concatenated listing carries it once instead of once per page. A real first-page tool with the same name still wins: the SDK warns, skips injection, and forwards its calls. A real tool that only appears on a later page is not detected — the SDK logs a warning when a client fetches that page; rename the SDK's tool with `collectFeedback: { toolName }` if your catalogue uses the name.
+  (2026-09-15)
+
+## 0.16.1
+
+### Patch Changes
+
+- [#4915](https://github.com/PostHog/posthog-js/pull/4915) [`a5c1182`](https://github.com/PostHog/posthog-js/commit/a5c1182647cd82890d3b66dca1eeb27b8e4c0b91) Thanks [@gesh](https://github.com/gesh)! - Harden feedback validation, error handling, and tool-name collision routing.
+  (2026-09-14)
+
+## 0.16.0
+
+### Minor Changes
+
+- [#4870](https://github.com/PostHog/posthog-js/pull/4870) [`cc6373b`](https://github.com/PostHog/posthog-js/commit/cc6373bf42ba1cd777c6f7ecb5596e18d8df1cd5) Thanks [@gesh](https://github.com/gesh)! - Add the `send_feedback` virtual tool (new `collectFeedback` option): an honest, general agent-feedback channel with missing capabilities as the priority category. Every call emits a new `$mcp_feedback` event with `$mcp_feedback_type` and the other `$mcp_feedback_*` properties. Hosts can rename the tool, replace its description, declare `extraProperties` (captured as `$mcp_feedback_<key>`), and route reports to a real backend via `onFeedback` (`instrument()` path) or `prepareToolCall().feedbackReport` + `captureFeedback()` + `sendFeedbackResult()` (custom-dispatcher path). `reportMissing` / `get_more_tools` / `$mcp_missing_capability` are unchanged; new integrations should enable only `collectFeedback`.
+  (2026-09-11)
+
+## 0.15.0
+
+### Minor Changes
+
+- [#4830](https://github.com/PostHog/posthog-js/pull/4830) [`39420d8`](https://github.com/PostHog/posthog-js/commit/39420d893556a64c2514b523dddf00b8044856a4) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture resource discovery and reads from instrumented MCP servers. URL credential redaction (userinfo, credential-named query and fragment parameters) now applies to every captured string, including existing `$mcp_tool_call` parameters, responses, and error messages, so URLs already flowing through tool-call data will show `%5Bredacted%5D` values after upgrading.
+  (2026-09-10)
+
+## 0.14.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+  - posthog-node@5.51.8
+
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
+## 0.13.1
+
+### Patch Changes
+
+- [#4783](https://github.com/PostHog/posthog-js/pull/4783) [`6e9f931`](https://github.com/PostHog/posthog-js/commit/6e9f93123007a549142dac183f55ab648140005f) Thanks [@gesh](https://github.com/gesh)! - Reduce personal data in `$mcp_intent`, which is agent-narrated free text and could previously carry personal data a model read aloud.
+  - Automatically redact structured personal identifiers — email addresses, phone numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is captured. Redaction is always on, scoped to the intent only (structured tool `arguments` and results are untouched, since the same shapes are often legitimate data there), and best-effort for those well-defined shapes rather than free-form names or addresses. Identifiers grouped with Unicode spaces, dots, or slashes (as produced by copy-paste) and SSNs with space/dot separators are recognized. The email pattern uses bounded quantifiers so a pathological intent cannot cause quadratic-time backtracking.
+  - Strengthen the default injected `context` prompt so agents are less likely to write personal data in the first place: the privacy rule is now explicit and lists the identifiers to avoid, and it tells the agent to refer to people and accounts by role ('a user', 'the customer') rather than by identity.
+
+  `context: false` and `beforeSend` remain the ways to drop the field entirely. (2026-09-07)
+
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
+## 0.13.0
+
+### Minor Changes
+
+- [#4735](https://github.com/PostHog/posthog-js/pull/4735) [`cbadf11`](https://github.com/PostHog/posthog-js/commit/cbadf116d776c6184d37752b7d39fb35215f989f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add self-reported model capture to the `PostHogMCP` custom-dispatcher path. The preparation helpers preserve application-owned fields and work across stateless server replicas when given the original tool descriptor. Tool calls and missing-capability reports can record the model properties.
+  (2026-09-03)
+
+### Patch Changes
+
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
+## 0.12.0
+
+### Minor Changes
+
+- [#4633](https://github.com/PostHog/posthog-js/pull/4633) [`5a652e9`](https://github.com/PostHog/posthog-js/commit/5a652e9f93d1c126e54397863c55e8a067377d29) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add opt-in `captureModel` option: injects a required `llm_model` parameter into every tool — including the `get_more_tools` virtual tool — so the calling agent self-reports the model it runs as, captured as `$mcp_llm_model` with `$mcp_llm_model_source = "self_reported"`. Stripping the argument before the handler runs and capturing the property both require confirmed SDK ownership of the parameter: a customer-declared `llm_model` is never stolen or captured, and a low-level `Server` that builds a fresh instance per request records nothing (see the README). An honest `"unknown"` from the agent is dropped rather than recorded.
+  (2026-08-27)
+
+### Patch Changes
+
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7), [`dfc3b59`](https://github.com/PostHog/posthog-js/commit/dfc3b59af4edf2b661626041134c79700c514853)]:
+  - @posthog/core@1.49.1
+  - posthog-node@5.51.4
+
+## 0.11.7
+
+### Patch Changes
+
+- [#4542](https://github.com/PostHog/posthog-js/pull/4542) [`0fe77e8`](https://github.com/PostHog/posthog-js/commit/0fe77e84a61f5cf532e69f5388b034fe7af5b343) Thanks [@gesh](https://github.com/gesh)! - Return conversation IDs as data-only tool output to avoid prompt-injection warnings from clients with stale schemas.
+  (2026-08-18)
+
+## 0.11.6
+
+### Patch Changes
+
+- [#4515](https://github.com/PostHog/posthog-js/pull/4515) [`5698fd5`](https://github.com/PostHog/posthog-js/commit/5698fd503ad84a13ec9ff6ffb3e88a986ec79968) Thanks [@gesh](https://github.com/gesh)! - Attribute `$mcp_tool_call` and `$mcp_initialize` to the client that made the request. Both stamped client identity after awaiting the `identify` callback, so a handshake arriving on the same server instance meanwhile could rename the event; `$mcp_initialize` additionally read the previously handshaked client rather than the one in its own request body.
+  (2026-08-13)
+
+## 0.11.5
+
+### Patch Changes
+
+- [#4504](https://github.com/PostHog/posthog-js/pull/4504) [`48b1a0c`](https://github.com/PostHog/posthog-js/commit/48b1a0ce7f914a8dc15dc2c58fe6802954a917bb) Thanks [@gesh](https://github.com/gesh)! - Resolve `identify` on `tools/list`, so listings attribute to a person instead of falling back to the session id.
+  (2026-08-13)
+
+- [#4502](https://github.com/PostHog/posthog-js/pull/4502) [`bc2ec32`](https://github.com/PostHog/posthog-js/commit/bc2ec32d921d7cb49301290b32e814476ee1b9ac) Thanks [@gesh](https://github.com/gesh)! - Capture `$mcp_intent` on servers that build a fresh instance per request, where the `context` argument was previously discarded.
+
+  The SDK records the agent's answer to its injected `context` parameter only when it can confirm the parameter is one it injected — a fact learned while serving `tools/list` and cached on the server instance. Where the next request builds a new instance, that instance never served a listing, so the intent of every call was thrown away. The trigger is instance lifetime, not statelessness: a server that is stateless at the transport but keeps one long-lived server object was never affected, and a per-request instance on MCP SDK v1 was affected just as much as on v2.
+
+  Reading the argument and removing it are now separate decisions. Stripping still requires positive ownership and fails closed, because deleting an argument the application declared costs the customer their tool call. Reading costs at worst a mislabelled property, so it now happens whenever ownership cannot be resolved.
+
+  The trade-off: on such a server, a `context` parameter the application declared itself is recorded as `$mcp_intent`. Set `context: false` to disable injection and capture together, or drop the property in `beforeSend`. (2026-08-13)
+
+- [#4514](https://github.com/PostHog/posthog-js/pull/4514) [`245afe6`](https://github.com/PostHog/posthog-js/commit/245afe627d67ba9b00e35132c72e1686d491b9df) Thanks [@gesh](https://github.com/gesh)! - Preserve the `tools/list` response envelope, so instrumenting a paginated tool catalogue no longer hides its later pages.
+
+  The listing wrapper rebuilt the response as `{ tools }`, discarding every other field the application's handler had set — on both SDK majors. Most visibly `nextCursor`: a client stops enumerating when the cursor is absent, so tools on later pages became undiscoverable the moment `instrument()` was applied, with no error on either side. The wrapper now spreads the response and replaces only `tools`, which also preserves the 2026-07-28 caching directives `ttlMs` / `cacheScope` and result `_meta`. `$mcp_tools_list` captures the response as sent, envelope included. (2026-08-13)
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+
+## 0.11.4
+
+### Patch Changes
+
+- [#4482](https://github.com/PostHog/posthog-js/pull/4482) [`9dd5e6c`](https://github.com/PostHog/posthog-js/commit/9dd5e6c7acb07a7282904e9eeabd7a612b9021f5) Thanks [@gesh](https://github.com/gesh)! - Keep the conversation-id prompt-back out of `$mcp_error_message`.
+
+  With `enableConversationId` on, a `[SERVER]: Reuse conversation_id=…` block is appended to a tool result so the agent echoes the handle back on later calls. The captured error was read from that already-appended result, so a failed call reported `"intentional failure [SERVER]: Reuse conversation_id=019f…"` — a fresh uuid inside the error message on every call, which splits one recurring failure into a new error group each time it happens.
+
+  The error is now read from the result as the tool produced it, before the handle is written in. It bites hardest on MCP SDK v2, where a thrown error is flattened into an `isError` result before the SDK hands it to us, so that result is the only description of the failure available. The agent still receives the prompt-back on failed calls — that is when it matters most, since otherwise the retry starts a new conversation and the failure and its fix land in different sessions. (2026-08-10)
+
+- [#4466](https://github.com/PostHog/posthog-js/pull/4466) [`fe3ea18`](https://github.com/PostHog/posthog-js/commit/fe3ea183c3871a297a1701f6a69bb4d246efbe4a) Thanks [@gesh](https://github.com/gesh)! - Gate `Mcp-Session-Id` minting on the protocol revision the request declares.
+
+  The 2026-07-28 revision removed protocol-level sessions: a server must not mint or echo `Mcp-Session-Id` under it. Until now that held only by accident — the mint hangs off the `initialize` handler and 2026-07-28 has no handshake — so compliance depended on an SDK routing detail rather than on anything the SDK checks.
+
+  The era is now resolved per request, from the version an `initialize` body declares or, failing that, from the same fallback chain that resolves client identity. Nothing branches on which SDK major is installed: one v2 server serves both revisions, request by request. An unknown version counts as legacy, so a v1 client that declares nothing keeps the session header it has always had. (2026-08-10)
+
+## 0.11.3
+
+### Patch Changes
+
+- [#4465](https://github.com/PostHog/posthog-js/pull/4465) [`9ffdb00`](https://github.com/PostHog/posthog-js/commit/9ffdb00c9abe7f5c52da44b3342b74fe5dc2f361) Thanks [@gesh](https://github.com/gesh)! - Record the protocol version for 2025-11-25 traffic served by a per-request server.
+
+  That revision carries the negotiated version at the `initialize` handshake, so an MCP SDK v2 server built per HTTP request has no way to know it: the instance handling a later `tools/call` never saw the handshake, and a legacy-era request carries no `_meta` envelope for the identity chain to read. Those events went out with no `$mcp_protocol_version`.
+
+  The chain gains the one carrier that era does have — the `MCP-Protocol-Version` request header, which 2025-11-25 requires a client to send on every request after `initialize`. It is read after the protocol-level envelope and `params._meta` and before the server's own accessors, so a modern-era request still prefers the value the protocol gives it, and no era is branched on. (2026-08-10)
+
+## 0.11.2
+
+### Patch Changes
+
+- [#4463](https://github.com/PostHog/posthog-js/pull/4463) [`b8e5d06`](https://github.com/PostHog/posthog-js/commit/b8e5d0602fb2bc52e91d86d1347973fa2fcb213a) Thanks [@gesh](https://github.com/gesh)! - Resolve client name, version and protocol version through a fallback chain, so events from an MCP SDK v2 server carry them.
+
+  MCP SDK v2 lifts the reserved `io.modelcontextprotocol/*` keys — `clientInfo`, `protocolVersion`, `clientCapabilities` — out of `params._meta` while parsing a request, and puts them on the request envelope. We only read `params._meta`, which is empty by the time a handler runs, so `$mcp_client_name`, `$mcp_client_version` and `$mcp_protocol_version` went missing on exactly the modern-era traffic that carries them per request rather than at `initialize`.
+
+  Identity is now resolved field by field through three sources in order: the v2 request envelope, then `params._meta`, then the server's own `getClientVersion()` and (v2-only) `getNegotiatedProtocolVersion()`. A chain rather than a branch, because the same v2 server serves 2025-era requests routinely — era is a per-request property, never a module constant — and because a field one source cannot answer may still be known to the next. (2026-08-10)
+
+- [#4464](https://github.com/PostHog/posthog-js/pull/4464) [`8b5165e`](https://github.com/PostHog/posthog-js/commit/8b5165e0c6a40e97597b9890d197fabc2cb4e5d5) Thanks [@gesh](https://github.com/gesh)! - Install and type-check cleanly on a project that has only MCP SDK v2.
+
+  `@modelcontextprotocol/sdk` (v1) was a required peer, so installing `@posthog/mcp` into a project built on `@modelcontextprotocol/server` (v2) pulled the entire v1 SDK in as an auto-installed peer — 87 packages where 1 was wanted — and tooling that walks the dependency tree reported it as missing when it was absent. Both majors are now declared and both are optional, which is what the code has always assumed: no `@modelcontextprotocol/*` package is imported at runtime, and server shapes are detected structurally.
+
+  Making the peer optional exposed a second half of the same problem. The published type declarations still imported `CallToolResult` and `ListToolsResult` from `@modelcontextprotocol/sdk/types.js`, so a consumer without the v1 SDK hit `TS2307` on an install that otherwise worked — fine at runtime, broken under `tsc` without `skipLibCheck`. Those MCP wire shapes are now declared structurally in `types.ts` too.
+
+  The shapes we read are open-ended, so a value typed by either SDK assigns to them. What the package hands back is typed precisely and stays assignable to the SDK's own `CallToolResult`, so `getMoreToolsResult()` can still be returned straight from a tool callback. (2026-08-10)
+
+## 0.11.1
+
+### Patch Changes
+
+- [#4462](https://github.com/PostHog/posthog-js/pull/4462) [`2fc1211`](https://github.com/PostHog/posthog-js/commit/2fc12118f173d673937feb714bf94aa4df1c0826) Thanks [@gesh](https://github.com/gesh)! - Instrument high-level `McpServer` instances from MCP TypeScript SDK v2, and read request headers from either SDK major.
+
+  The compatibility gate required `typeof server.tool === 'function'`. SDK v2 dropped the deprecated `tool()` in favour of `registerTool()`, so every v2 high-level server failed the check — and since `instrument()` catches compatibility failures and returns a working-looking handle, it failed silently: no throw, no warning at the call site, and no `$mcp_*` events at all. The gate now accepts either registration method, and every shape question it asks is answered by a structural probe in the new `detect.ts` rather than by a version or protocol constant.
+
+  Opening the gate is also what first sends v2-shaped request context to header reads, so both halves ship together. The SDK's own reads go through a new `getRequestHeaders(extra)`, which takes headers from v2's `ctx.http.req` (a WHATWG `Request`, whose headers only answer to `.get()`) as well as v1's `extra.requestInfo.headers`, and returns a plain lowercase-keyed object either way. It is duck-typed on `.entries` rather than `instanceof Headers`, so a `Headers` from another realm — workerd and other edge runtimes — is read correctly.
+
+  `getRequestHeaders` is exported, because `identify`, `intentFallback`, `eventProperties` and `beforeSend` still receive the SDK's `extra` unchanged — we deliberately do not synthesise a v1 `requestInfo` on v2, as a partially faked shape is worse than an absent one. Hosts reading headers in a callback migrate in one line:
+
+  ````ts
+  import { getRequestHeaders } from '@posthog/mcp'
+
+  identify: async (request, extra) => {
+    const auth = getRequestHeaders(extra)?.['authorization']
+    // ...
+  }
+  ``` (2026-08-10)
+  ````
+
+## 0.11.0
+
+### Minor Changes
+
+- [#4419](https://github.com/PostHog/posthog-js/pull/4419) [`e3be62f`](https://github.com/PostHog/posthog-js/commit/e3be62f3bb36fed0b9301b454370d91122f4a057) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture the calling client's User-Agent and vendor client header on every auto-captured MCP event, as `$mcp_client_user_agent` and `$mcp_vendor_client`.
+
+  MCP's own `clientInfo` can't tell a vendor's products apart — Anthropic reports `clientInfo.name = "claude-code"` from the CLI, the Agent SDK, the VS Code extension and the desktop app alike, so `$mcp_client_name` collapses them into one bucket. The surface is only visible in the User-Agent parenthetical (`claude-code/2.1.0 (cli)` vs `(sdk-ts)` vs `(claude-vscode)`), so capturing it is what lets you see which of your integrations traffic actually comes from.
+
+  Automatic on HTTP transports (`instrument()` reads the headers per request); stdio and in-memory servers, which have no headers, are unchanged. On the `PostHogMCP` custom-dispatcher path, pass `clientUserAgent` / `vendorClient` on your capture calls. Both values are recorded raw — PostHog resolves them to friendly product labels at query time, so labels keep improving without an SDK upgrade. (2026-08-07)
+
+## 0.10.9
+
+### Patch Changes
+
+- [#4461](https://github.com/PostHog/posthog-js/pull/4461) [`f457521`](https://github.com/PostHog/posthog-js/commit/f4575212113fb48f73a23695fa883aa6e06e8447) Thanks [@gesh](https://github.com/gesh)! - Wrap request handlers registered with a method string, and stop breaking three-argument registrations. MCP TypeScript SDK v2 calls `setRequestHandler('tools/call', handler)` where v1 passed a Zod schema, so `instrument()` could not name those registrations and left them unwrapped — a handler bound after `instrument()` silently replaced the analytics wrapper, and no `$mcp_tool_call` or `$mcp_tools_list` was captured. Frameworks that attach handlers post-construction, such as `@rekog/mcp-nest`, do exactly this on every request.
+
+  The patched `setRequestHandler` now also forwards every argument it is given. v2's three-argument form for custom methods — `setRequestHandler(method, { params, result }, handler)` — previously lost its handler and threw `setRequestHandler: handler is required`, taking down the host server rather than just instrumentation. (2026-08-07)
+
+- [#4450](https://github.com/PostHog/posthog-js/pull/4450) [`69e47bd`](https://github.com/PostHog/posthog-js/commit/69e47bd1b1f276258a25958f2608d0e8a2f88f5c) Thanks [@gesh](https://github.com/gesh)! - Register the synthetic `tools/call` fallback by writing into the server's handler map instead of calling `setRequestHandler`. Instrumenting a low-level `Server` that never declared a `tools` capability no longer fails with `Server does not support tools` and leaves instrumentation half-applied — it now instruments cleanly, and answers a call for a tool no dispatcher claims with `Unknown tool: <name>`. This also removes the last runtime `@modelcontextprotocol/sdk` import from the published bundle; the SDK is now referenced only as a type.
+  (2026-08-07)
+
+## 0.10.8
+
+### Patch Changes
+
+- [#4433](https://github.com/PostHog/posthog-js/pull/4433) [`c514a34`](https://github.com/PostHog/posthog-js/commit/c514a34e82c5ccd3995b64d6cf1f8b878413f52c) Thanks [@gesh](https://github.com/gesh)! - Deliver the `conversation_id` session handle on errored tool results, and inject it into
+  the virtual `get_more_tools` tool. A first call that fails no longer sends the agent's
+  retry into a different conversation, and a reported capability gap now groups with the
+  work that hit it. (2026-08-06)
+
+- [#4428](https://github.com/PostHog/posthog-js/pull/4428) [`7322893`](https://github.com/PostHog/posthog-js/commit/732289369cdfeee30b0c6dcbed9957b60e8c630f) Thanks [@gesh](https://github.com/gesh)! - Use an agent-supplied `conversation_id` as the session anchor, so tool calls in one
+  conversation share a `$session_id` across reconnects, restarts, and per-request server
+  instances. Only a handle the SDK could have minted is accepted; a value the agent invented
+  is replaced with a fresh one, so two callers cannot land in the same session by sending the
+  same string. (2026-08-06)
+
+- [#4431](https://github.com/PostHog/posthog-js/pull/4431) [`955df8d`](https://github.com/PostHog/posthog-js/commit/955df8d0feb2ff5ac494431295f738ea7af4e0cf) Thanks [@gesh](https://github.com/gesh)! - Mirror the `conversation_id` session handle into `structuredContent` for tools whose
+  output schema declares `_mcp_instructions`. Clients that read structured results never
+  saw the handle in `content`, so correlation for those tools was zero. (2026-08-06)
+
+- [#4430](https://github.com/PostHog/posthog-js/pull/4430) [`e6d9295`](https://github.com/PostHog/posthog-js/commit/e6d9295a5382dd6be7f6d87e2ddf65f57ed24e01) Thanks [@gesh](https://github.com/gesh)! - Declare an optional `_mcp_instructions` property on the output schema of tools that
+  advertise one, when `enableConversationId` is on. Inert by itself — it is the schema
+  declaration that makes a later change able to mirror the conversation handle into
+  `structuredContent` without failing client-side validation. (2026-08-06)
+- Updated dependencies [[`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc), [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - posthog-node@5.48.1
+  - @posthog/core@1.46.9
+
+## 0.10.7
+
+### Patch Changes
+
+- [#4357](https://github.com/PostHog/posthog-js/pull/4357) [`632049c`](https://github.com/PostHog/posthog-js/commit/632049cc8b3ba3a9dc76d00be68ebe7de9eaa69d) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent concurrent MCP requests from leaking identity and session attribution.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
+## 0.10.6
+
+### Patch Changes
+
+- [#4356](https://github.com/PostHog/posthog-js/pull/4356) [`1eab19a`](https://github.com/PostHog/posthog-js/commit/1eab19a7b80ed275059cb17d9b513e8fbac6d94e) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve real missing-capability tools when their names collide with the configured virtual tool.
+  Restore `$mcp_tool_call` analytics for low-level servers that register their tool dispatcher after instrumentation. (2026-08-04)
+
+## 0.10.5
+
+### Patch Changes
+
+- [#4359](https://github.com/PostHog/posthog-js/pull/4359) [`d2f5041`](https://github.com/PostHog/posthog-js/commit/d2f504156faee7fe008388c70ec451339002cd3a) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate logger configuration per instrumented MCP server.
+  (2026-08-04)
+
+## 0.10.4
+
+### Patch Changes
+
+- [#4379](https://github.com/PostHog/posthog-js/pull/4379) [`4d8df50`](https://github.com/PostHog/posthog-js/commit/4d8df50bea343aee7626483d4c3be9703bafc024) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve tool-owned analytics arguments across event capture, low-level servers, and strict schemas.
+  (2026-08-04)
+
+## 0.10.3
+
+### Patch Changes
+
+- [#4355](https://github.com/PostHog/posthog-js/pull/4355) [`57f371e`](https://github.com/PostHog/posthog-js/commit/57f371e540968afaa8a0fe9aec8a53ef1db6b654) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve user-defined `context` and `conversation_id` tool arguments.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+  - posthog-node@5.47.4
+
+## 0.10.2
+
+### Patch Changes
+
+- [#4358](https://github.com/PostHog/posthog-js/pull/4358) [`575c5e7`](https://github.com/PostHog/posthog-js/commit/575c5e75cc4f7ad39ac41001994e76194765bdbf) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact sensitive exception messages and large binary payload encodings from MCP analytics.
+  (2026-07-31)
+
+## 0.10.1
+
+### Patch Changes
+
+- [#4237](https://github.com/PostHog/posthog-js/pull/4237) [`23ce761`](https://github.com/PostHog/posthog-js/commit/23ce761b44f51d1bb46aa07b0e1becbf31ae878c) Thanks [@gesh](https://github.com/gesh)! - Read the MCP client name/version and protocol version from each request's `_meta` (`io.modelcontextprotocol/clientInfo` and `io.modelcontextprotocol/protocolVersion`), so `$mcp_client_name`, `$mcp_client_version`, and `$mcp_protocol_version` keep populating under the MCP 2026-07-28 stateless revision, which removes the `initialize` handshake. Existing clients are unaffected — when `_meta` is absent, the values from the session token / `initialize` still apply.
+  (2026-07-27)
+
+## 0.10.0
+
+### Minor Changes
+
+- [#4210](https://github.com/PostHog/posthog-js/pull/4210) [`e732595`](https://github.com/PostHog/posthog-js/commit/e7325959c4c365895945ae06091fd74439ecb2db) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): capture the negotiated MCP protocol version as `$mcp_protocol_version`
+
+  The SDK now stamps `$mcp_protocol_version` — the MCP spec version negotiated at `initialize` (read off the server's initialize response) — on the `$mcp_initialize` event and on **every** subsequent event for the session (tool calls, listings, and the `$exception` sibling). It's persisted in per-server session info and, on stateless / multi-pod deployments, recovered on other pods from the session token, which now carries the client's requested version in a new `pv` field. Use it to track MCP spec-revision adoption and to break event metrics (error rate, latency) down by spec version.
+
+  `SessionTokenPayload` gains an optional `protocolVersion`, and `PostHogMCP.captureInitialize` accepts an optional `protocolVersion`. (2026-07-21) (2026-07-22)
+
+## 0.9.1
+
+### Patch Changes
+
+- [#4144](https://github.com/PostHog/posthog-js/pull/4144) [`3c8e17e`](https://github.com/PostHog/posthog-js/commit/3c8e17e5a8c83083a15e8075f766b7b75cebdcc5) Thanks [@gesh](https://github.com/gesh)! - fix(mcp): publish `$identify` at most once per session instead of before every tool call
+
+  On stateless / multi-pod deployments the SDK rebuilds its per-server identity cache on every request, so the dedupe check saw an empty cache each time and emitted a standalone `$identify` before every `$mcp_tool_call`. The SDK now publishes `$identify` at most once per session — at `initialize`, when a long-lived server first sees the identity, or when the identity materially changes. Every event still carries `distinct_id`/`$set`, so no person data is lost when a standalone `$identify` is suppressed. (2026-07-15)
+
+## 0.9.0
+
+### Minor Changes
+
+- [#4123](https://github.com/PostHog/posthog-js/pull/4123) [`c8d036e`](https://github.com/PostHog/posthog-js/commit/c8d036e1656aa30a63405a2e672f4695eae5c5b9) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): stable sessions and client metadata on stateless / multi-pod MCP servers
+
+  On stateless servers every request became its own session and `$mcp_client_name`/`$mcp_client_version` were missing after `initialize`. The SDK now mints the `Mcp-Session-Id` response header at `initialize` as a token carrying the session id and client name/version; clients replay it on every request, so any pod recovers both with no server-side store. Auto-minting requires `enableJsonResponse: true` on `StreamableHTTPServerTransport`; SSE-mode servers can set the header at the HTTP layer with the new exports.
+
+  New exports: `encodeSessionId`, `decodeSessionId`, `MCP_SESSION_HEADER`, `SessionTokenPayload`, `newSessionId`. (2026-07-10)
+
+## 0.8.0
+
+### Minor Changes
+
+- [#4032](https://github.com/PostHog/posthog-js/pull/4032) [`93bbc4b`](https://github.com/PostHog/posthog-js/commit/93bbc4b96967db3eb9d1632d2ca273f3a8f1e907) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Stamp `$mcp_error_type` and `$mcp_error_message` on `$mcp_tool_call` (and `$mcp_tools_list`) when a call fails. Previously the only failure signal on the primary event was the `$mcp_is_error` boolean, so breaking failures down by reason meant joining to the `$exception` sibling (which can be disabled, and isn't emitted when no error value is passed). `$mcp_error_type` defaults to the thrown error's type, and `captureToolCall`/`captureToolsList` accept an explicit low-cardinality `errorType` label (e.g. `validation`, `permission`, `timeout`, `rate_limited`) for hosts that classify their own failures.
+  (2026-07-03)
+
+## 0.7.0
+
+### Minor Changes
+
+- [#4025](https://github.com/PostHog/posthog-js/pull/4025) [`5590094`](https://github.com/PostHog/posthog-js/commit/5590094403a1f9484f3e08a5e21311f6adb0cc60) Thanks [@gesh](https://github.com/gesh)! - Stamp the standard PostHog `$lib` / `$lib_version` (value `posthog-node-mcp`) on every event, so MCP events self-identify the same way every other PostHog SDK does. Both emit paths are covered: `PostHogMCP` overrides its library id, and `instrument()` applies it to the client you pass in. Note that posthog-node sets `$lib` at the client level, so for `instrument()` this relabels every event that client sends as `posthog-node-mcp` — pass a client dedicated to your MCP server's analytics.
+  (2026-06-30)
+
+## 0.6.0
+
+### Minor Changes
+
+- [#4022](https://github.com/PostHog/posthog-js/pull/4022) [`d9e19e0`](https://github.com/PostHog/posthog-js/commit/d9e19e020b5e5306887793b80ce861e9ea5097d8) Thanks [@gesh](https://github.com/gesh)! - Emit `$mcp_lib` (`@posthog/mcp`) and `$mcp_lib_version` on every `$mcp_*` event (and the `$exception` sibling) so you can tell which analytics SDK release produced the data. The version was already resolved at runtime but never mapped to a property. Namespaced like `@posthog/ai`'s `$ai_lib` rather than overriding `$lib`, which stays the transport SDK (`posthog-node`).
+  (2026-06-30)
+
+## 0.5.1
+
+### Patch Changes
+
+- [#4009](https://github.com/PostHog/posthog-js/pull/4009) [`ae68de1`](https://github.com/PostHog/posthog-js/commit/ae68de1fd602cfdacbe6d0501583479862e4e252) Thanks [@gesh](https://github.com/gesh)! - Fix `$mcp_client_name` being dropped from every other captured event. `getSessionInfo` cached the client identity but then overwrote the cache with `undefined` on the next event, so consecutive tool calls alternated between carrying and lacking the client name (showing up as a large "other" slice in MCP analytics). The cached client name/version are now reused instead of refetched.
+  (2026-06-29)
+
 ## 0.5.0
 
 ### Minor Changes
@@ -39,7 +498,7 @@
 - [#3936](https://github.com/PostHog/posthog-js/pull/3936) [`06c23d8`](https://github.com/PostHog/posthog-js/commit/06c23d8959a6a5c1c322d7eb722ac4731121a50f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Re-export `PostHog` (and the `PostHogOptions` type) from `@posthog/mcp`, so you can import the client and `instrument` from a single package:
 
   ```ts
-  import { PostHog, instrument } from '@posthog/mcp'
+  import { PostHog, instrument } from "@posthog/mcp";
   ```
 
   `posthog-node` remains a peer dependency (resolved from the host app's installed copy); this only unifies the import. `PostHogMCP` is also already accepted by `instrument()` if you prefer a single client class. (2026-06-23)

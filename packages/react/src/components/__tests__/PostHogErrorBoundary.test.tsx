@@ -1,8 +1,13 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 
 import * as React from 'react'
-import { render } from '@testing-library/react'
-import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorBoundary'
+import { act, fireEvent, render } from '@testing-library/react'
+import type { Mock } from 'vitest'
+import {
+    __POSTHOG_ERROR_MESSAGES,
+    PostHogErrorBoundary,
+    PostHogErrorBoundaryFallbackProps,
+} from '../PostHogErrorBoundary'
 import posthog from 'posthog-js'
 import { setDefaultPostHogInstance } from '../../context/posthog-default'
 
@@ -24,22 +29,24 @@ describe('PostHogErrorBoundary component', () => {
 
     it('should call captureException with error message', () => {
         const { container } = renderWithError({ message: 'Test error', fallback: <div></div> })
-        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Test error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), undefined)
+        expectCapturedReactError()
         expect(container.innerHTML).toBe('<div></div>')
-        expect(console.error).toHaveBeenCalledTimes(1)
-        expect((console.error as any).mock.calls[0][1].message).toEqual('Test error')
+        expect((posthog.captureException as Mock).mock.calls[0][0].message).toBe('Test error')
     })
 
     it('should warn user when fallback is null', () => {
         const { container } = renderWithError({ fallback: null })
-        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), undefined)
+        expectCapturedReactError()
         expect(container.innerHTML).toBe('')
         expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
     })
 
     it('should warn user when fallback is a string', () => {
         const { container } = renderWithError({ fallback: 'hello' })
-        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), undefined)
+        expectCapturedReactError()
         expect(container.innerHTML).toBe('')
         expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
     })
@@ -47,24 +54,113 @@ describe('PostHogErrorBoundary component', () => {
     it('should add additional properties before sending event (as object)', () => {
         const props = { team_id: '1234' }
         renderWithError({ message: 'Kaboom', additionalProperties: props })
-        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), props)
+        expectCapturedReactError()
     })
 
     it('should add additional properties before sending event (as function)', () => {
         const props = { team_id: '1234' }
         renderWithError({
             message: 'Kaboom',
-            additionalProperties: (err: Error) => {
+            additionalProperties: (err: Error, errorInfo: React.ErrorInfo) => {
                 expect(err.message).toBe('Kaboom')
+                expect(errorInfo.componentStack).toContain('PostHogErrorBoundary.test.tsx')
                 return props
             },
         })
-        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), props)
+        expectCapturedReactError()
+    })
+
+    it('should capture the component stack for primitive exceptions', () => {
+        render(
+            <PostHogErrorBoundary fallback={<div></div>}>
+                <ComponentWithUndefinedError />
+            </PostHogErrorBoundary>
+        )
+
+        expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), undefined)
+        const capturedError = (posthog.captureException as Mock).mock.calls[0][0]
+        expect(capturedError).toEqual(
+            expect.objectContaining({
+                message: 'Primitive value captured as exception: undefined',
+                name: 'React ErrorBoundary Error',
+                stack: expect.stringContaining('ComponentWithUndefinedError'),
+            })
+        )
     })
 
     it('should render children without errors', () => {
         const { container } = renderWithoutError()
         expect(container.innerHTML).toBe('<div>Amazing content</div>')
+    })
+
+    it('should recover through the fallback without changing the boundary instance', () => {
+        const boundary = React.createRef<PostHogErrorBoundary>()
+        let resetError: (() => void) | undefined
+        const Fallback = (props: PostHogErrorBoundaryFallbackProps) => {
+            resetError = props.resetError
+            return <button onClick={props.resetError}>Retry</button>
+        }
+        const tree = (broken: boolean) => (
+            <PostHogErrorBoundary ref={boundary} fallback={Fallback}>
+                {broken ? <ComponentWithError message="Recoverable error" /> : <div>Recovered</div>}
+            </PostHogErrorBoundary>
+        )
+        const view = render(tree(false))
+        const originalBoundary = boundary.current
+
+        for (let cycle = 1; cycle <= 2; cycle++) {
+            view.rerender(tree(true))
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+            expect(resetError).toEqual(expect.any(Function))
+
+            view.rerender(tree(false))
+            expect(view.queryByText('Recovered')).toBeNull()
+            fireEvent.click(view.getByText('Retry'))
+
+            expect(view.getByText('Recovered')).toBeTruthy()
+            expect(boundary.current).toBe(originalBoundary)
+            expect(boundary.current?.state).toEqual({ error: null, componentStack: null, exceptionEvent: null })
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+
+            act(() => {
+                resetError?.()
+                resetError?.()
+            })
+            expect(view.getByText('Recovered')).toBeTruthy()
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+        }
+    })
+
+    it('should capture a persistent error again with fresh diagnostics after reset', () => {
+        const firstEvent = { uuid: 'first' }
+        const nextEvent = { uuid: 'next' }
+        ;(posthog.captureException as Mock).mockReturnValueOnce(firstEvent).mockReturnValueOnce(nextEvent)
+        const additionalProperties = vi.fn(() => ({ team_id: '1234' }))
+        const fallback = vi.fn((props: PostHogErrorBoundaryFallbackProps) => (
+            <button onClick={props.resetError}>Retry</button>
+        ))
+        const view = render(
+            <PostHogErrorBoundary fallback={fallback} additionalProperties={additionalProperties}>
+                <ComponentWithError message="Persistent error" />
+            </PostHogErrorBoundary>
+        )
+        const firstProps = fallback.mock.calls[fallback.mock.calls.length - 1][0]
+        expect(firstProps.resetError).toEqual(expect.any(Function))
+        expect(firstProps.exceptionEvent).toBe(firstEvent)
+
+        fireEvent.click(view.getByText('Retry'))
+
+        expect(posthog.captureException).toHaveBeenCalledTimes(2)
+        expect(additionalProperties).toHaveBeenCalledTimes(2)
+        const nextProps = fallback.mock.calls[fallback.mock.calls.length - 1][0]
+        expect(nextProps.error).not.toBe(firstProps.error)
+        expect(nextProps.error).toEqual(expect.objectContaining({ message: 'Persistent error' }))
+        expect(nextProps.exceptionEvent).toBe(nextEvent)
+        expect(nextProps.componentStack).toContain('ComponentWithError')
+        expect(nextProps.resetError).toBe(firstProps.resetError)
+        expect(view.getByText('Retry')).toBeTruthy()
     })
 })
 
@@ -85,20 +181,48 @@ describe('captureException processing', () => {
 
     it('should call capture with a stacktrace', () => {
         renderWithError({ message: 'Kaboom', fallback: <div></div>, additionalProperties: {} })
-        const captureCalls = (posthog.capture as jest.Mock).mock.calls
+        const captureCalls = (posthog.capture as Mock).mock.calls
         expect(captureCalls.length).toBe(1)
         const exceptionList = captureCalls[0][1].$exception_list
-        expect(exceptionList.length).toBe(1)
+        expect(exceptionList.length).toBe(2)
         const stacktrace = exceptionList[0].stacktrace
-        expect(stacktrace.frames.length).toBeGreaterThan(20)
+        expectComponentStackFrames(stacktrace.frames, 'ComponentWithError')
+        expect(exceptionList[0].value).toBe('Kaboom')
+        expect(exceptionList[1].type).toBe('React ErrorBoundary Error')
+        expectComponentStackFrames(exceptionList[1].stacktrace.frames, 'PostHogErrorBoundary')
+    })
+
+    it('should parse the component stack for primitive exceptions', () => {
+        render(
+            <PostHogErrorBoundary fallback={<div></div>}>
+                <ComponentWithUndefinedError />
+            </PostHogErrorBoundary>
+        )
+
+        const captureCalls = (posthog.capture as Mock).mock.calls
+        const exceptionList = captureCalls[0][1].$exception_list
+        expect(exceptionList).toHaveLength(1)
+        expect(exceptionList[0].type).toBe('React ErrorBoundary Error')
+        expectComponentStackFrames(exceptionList[0].stacktrace.frames, 'ComponentWithUndefinedError')
     })
 })
+
+function expectComponentStackFrames(frames: Array<{ function?: string }>, expectedFunction: string) {
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames.some((frame) => frame.function === expectedFunction)).toBe(true)
+}
+
+function expectCapturedReactError() {
+    const capturedError = (posthog.captureException as Mock).mock.calls[0][0]
+    expect(capturedError.cause.name).toBe('React ErrorBoundary Error')
+    expect(capturedError.cause.stack).toContain('PostHogErrorBoundary.test.tsx')
+}
 
 function mockFunction(object: any, funcName: string) {
     const originalFunc = object[funcName]
 
     beforeEach(() => {
-        object[funcName] = jest.fn()
+        object[funcName] = vi.fn()
     })
 
     afterEach(() => {
@@ -108,6 +232,10 @@ function mockFunction(object: any, funcName: string) {
 
 function ComponentWithError({ message }: { message: string }): React.ReactElement {
     throw new Error(message)
+}
+
+function ComponentWithUndefinedError(): React.ReactElement {
+    throw undefined
 }
 
 function RenderWithError({ message = 'Error', fallback, additionalProperties }: any) {

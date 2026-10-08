@@ -1,8 +1,8 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
-import { each } from './utils'
+import { each } from '@posthog/browser-common/utils/general-utils'
 
-import { isArray, isUndefined, clampToRange } from '@posthog/core'
-import { logger } from './utils/logger'
+import { isUndefined, clampToRange } from '@posthog/core'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 
@@ -12,9 +12,15 @@ export class RequestQueue {
     private _queue: QueuedRequestWithOptions[] = []
     private _flushTimeout?: ReturnType<typeof setTimeout>
     private _flushTimeoutMs: number
-    private _sendRequest: (req: QueuedRequestWithOptions) => void
+    private _sendRequest: (
+        req: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ) => void
 
-    constructor(sendRequest: (req: QueuedRequestWithOptions) => void, config?: RequestQueueConfig) {
+    constructor(
+        sendRequest: (req: QueuedRequestWithOptions, transportOverride?: QueuedRequestWithOptions['transport']) => void,
+        config?: RequestQueueConfig
+    ) {
         this._flushTimeoutMs = clampToRange(
             config?.flush_interval_ms || DEFAULT_FLUSH_INTERVAL_MS,
             250,
@@ -44,7 +50,8 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this._sendRequestSafely({ ...req, transport: 'sendBeacon' })
+            // A split beacon's fallback can acknowledge only part of the batch. Keep identifiers pending on unload.
+            this._sendRequestSafely({ ...req, callback: undefined }, 'sendBeacon')
         })
     }
 
@@ -59,27 +66,25 @@ export class RequestQueue {
         }
         this._flushTimeout = setTimeout(() => {
             this._clearFlushTimeout()
-            if (this._queue.length > 0) {
-                const requests = this._formatQueue()
-                for (const key in requests) {
-                    const req = requests[key]
-                    const now = new Date().getTime()
-
-                    if (req.data && isArray(req.data)) {
-                        each(req.data, (data) => {
-                            data['offset'] = Math.abs(data['timestamp'] - now)
-                            delete data['timestamp']
-                        })
-                    }
-                    this._sendRequestSafely(req)
-                }
-            }
+            this._flush()
         }, this._flushTimeoutMs)
     }
 
-    private _sendRequestSafely(req: QueuedRequestWithOptions): void {
+    private _flush(): void {
+        if (this._queue.length > 0) {
+            const requests = this._formatQueue()
+            for (const key in requests) {
+                this._sendRequestSafely(requests[key])
+            }
+        }
+    }
+
+    private _sendRequestSafely(
+        req: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ): void {
         try {
-            this._sendRequest(req)
+            this._sendRequest(req, transportOverride)
         } catch (error) {
             logger.error(error)
         }
@@ -92,16 +97,33 @@ export class RequestQueue {
 
     private _formatQueue(): Record<string, QueuedRequestWithOptions> {
         const requests: Record<string, QueuedRequestWithOptions> = {}
+        const callbacks: Record<string, NonNullable<QueuedRequestWithOptions['callback']>[]> = {}
         each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
-            const key = (req ? req.batchKey : null) || req.url
+            const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { ...req, data: [] }
+                // Drop notifications are opt-in per request, not inherited from the first event in a batch.
+                requests[key] = { ...req, data: [], callback: undefined, fireCallbackOnDrop: undefined }
+                callbacks[key] = []
             }
 
             requests[key].data?.push(req.data)
+            if (req.callback) {
+                callbacks[key].push(req.callback)
+            }
         })
+
+        for (const key in callbacks) {
+            const batchCallbacks = callbacks[key]
+            if (batchCallbacks.length) {
+                requests[key].callback = (response) => {
+                    for (const callback of batchCallbacks) {
+                        callback(response)
+                    }
+                }
+            }
+        }
 
         this._queue = []
         return requests

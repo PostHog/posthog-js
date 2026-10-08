@@ -1,10 +1,11 @@
-/* eslint-disable compat/compat */
 import { render, fireEvent, waitFor } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
+import { createConversationsError } from '../../../extensions/conversations/external/errors'
+import Config from '../../../config'
 
-describe('ConversationsWidget restore request UI', () => {
+describe('ConversationsWidget', () => {
     const config: ConversationsRemoteConfig = {
         enabled: true,
         token: 'test-token',
@@ -13,7 +14,105 @@ describe('ConversationsWidget restore request UI', () => {
     }
 
     beforeEach(() => {
-        Element.prototype.scrollIntoView = jest.fn()
+        Element.prototype.scrollIntoView = vi.fn()
+    })
+
+    describe('greeting links', () => {
+        function renderGreeting(greetingText: string) {
+            return render(
+                <ConversationsWidget
+                    config={{ ...config, greetingText }}
+                    initialState="open"
+                    onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                />
+            )
+        }
+
+        it('renders explicit links using the reply link styling and new-tab protections', () => {
+            const { getByRole, getByText } = renderGreeting(
+                'Welcome! Read [FAQ](https://example.com/faq?q=help&lang=en) or [contact us](mailto:help@example.com).'
+            )
+            const faq = getByRole('link', { name: 'FAQ' })
+            expect(faq).toHaveAttribute('href', 'https://example.com/faq?q=help&lang=en')
+            expect(faq).toHaveAttribute('target', '_blank')
+            expect(faq).toHaveAttribute('rel', 'noopener noreferrer')
+            expect(faq).toHaveAttribute('referrerpolicy', 'no-referrer')
+            expect(faq).toHaveStyle({ textDecoration: 'underline' })
+            expect(getByRole('link', { name: 'contact us' })).toHaveAttribute('href', 'mailto:help@example.com')
+            expect(getByText(/Welcome! Read/)).toHaveTextContent('Welcome! Read FAQ or contact us.')
+        })
+
+        it('preserves plain text and newlines around links', () => {
+            const { getByText, getByRole } = renderGreeting('Hello <friend> & welcome!\n\n[FAQ](/help)\nThank you.')
+            const greeting = getByText(/Hello <friend>/)
+            expect(greeting.textContent).toBe('Hello <friend> & welcome!FAQThank you.')
+            expect(greeting.querySelectorAll('br')).toHaveLength(3)
+            expect(getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/help')
+        })
+
+        it.each([
+            'Hello <friend> & welcome!\nHow can we help?',
+            'Read https://example.com/faq first.',
+            '**Hello** _there_',
+            '[FAQ](https://example.com',
+            '[FAQ]()',
+            '[FAQ](https://example.com "title")',
+            '[FAQ](https://example.com/a(b))',
+            '[outer [FAQ](https://example.com)]',
+            '![FAQ](https://example.com/image.png)',
+        ])('preserves unsupported or plain text literally: %s', (greetingText) => {
+            const { getByText, container } = renderGreeting(greetingText)
+            expect(getByText(greetingText.replace(/\n/g, ''), { exact: true })).toBeInTheDocument()
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+        })
+
+        it('removes the escape backslash without activating the escaped link', () => {
+            const { container, getByRole } = renderGreeting(
+                'Read \\[FAQ](https://example.com/faq) or [help](https://example.com/help).'
+            )
+            expect(container.textContent).toContain('Read [FAQ](https://example.com/faq) or help.')
+            expect(container.querySelectorAll('a[href]')).toHaveLength(1)
+            expect(getByRole('link', { name: 'help' })).toHaveAttribute('href', 'https://example.com/help')
+        })
+
+        it.each([
+            'javascript:evil',
+            'JaVaScRiPt:evil',
+            'java\u0000script:evil',
+            'java\u200bscript:evil',
+            'java\tscript:evil',
+            'java script:evil',
+            'vbscript:evil',
+            'data:text/html,evil',
+            'file:///etc/passwd',
+            '//example.com',
+            'ftp://example.com',
+            'javascript&#58;evil',
+        ])('does not activate unsafe or unsupported URLs: %s', (url) => {
+            const greetingText = `[FAQ](${url})`
+            const { container } = renderGreeting(greetingText)
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+            expect(container.textContent).toContain(greetingText)
+        })
+
+        it('renders HTML and link labels as text, never as markup', () => {
+            const { container, getByRole } = renderGreeting(
+                '<script>alert(1)</script><img src=x onerror=alert(1)> [<b>FAQ</b>](https://example.com/"onclick="evil)'
+            )
+            expect(container.querySelectorAll('script, img, b, [onclick], [onerror]')).toHaveLength(0)
+            expect(getByRole('link', { name: '<b>FAQ</b>' })).toHaveAttribute(
+                'href',
+                'https://example.com/"onclick="evil'
+            )
+            expect(container.textContent).toContain('<script>alert(1)</script><img src=x onerror=alert(1)>')
+        })
+
+        it('does not create a greeting for an empty string', () => {
+            const { queryByText, getByPlaceholderText, container } = renderGreeting('')
+            expect(queryByText('Support')).not.toBeInTheDocument()
+            expect(getByPlaceholderText('Type your message...')).toBeInTheDocument()
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+        })
     })
 
     it('should open restore request view from footer link', () => {
@@ -21,8 +120,8 @@ describe('ConversationsWidget restore request UI', () => {
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
             />
         )
 
@@ -34,12 +133,13 @@ describe('ConversationsWidget restore request UI', () => {
     })
 
     it('should require an email before restore request submit', async () => {
+        const onRequestRestoreLink = vi.fn().mockResolvedValue({ ok: true })
         const { getByText, findByText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={onRequestRestoreLink}
             />
         )
 
@@ -47,15 +147,16 @@ describe('ConversationsWidget restore request UI', () => {
         fireEvent.click(getByText('Send restore link'))
 
         expect(await findByText('Email is required')).toBeInTheDocument()
+        expect(onRequestRestoreLink).not.toHaveBeenCalled()
     })
 
     it('should request restore link and show success message', async () => {
-        const onRequestRestoreLink = jest.fn().mockResolvedValue({ ok: true })
+        const onRequestRestoreLink = vi.fn().mockResolvedValue({ ok: true })
         const { getByText, getByPlaceholderText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
                 onRequestRestoreLink={onRequestRestoreLink}
             />
         )
@@ -72,16 +173,47 @@ describe('ConversationsWidget restore request UI', () => {
         ).toBeInTheDocument()
     })
 
+    it('should render handled restore failures without logging them again', async () => {
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        try {
+            const { getByText, getByPlaceholderText, findByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                    onRequestRestoreLink={vi.fn().mockRejectedValue(error)}
+                />
+            )
+
+            fireEvent.click(getByText('Recover them here'))
+            fireEvent.input(getByPlaceholderText('you@example.com'), { target: { value: 'user@example.com' } })
+            fireEvent.click(getByText('Send restore link'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(errorSpy).not.toHaveBeenCalled()
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
+    })
+
     it('should return to ticket view when closing restore request with multiple tickets', () => {
-        const onViewChange = jest.fn()
+        const onViewChange = vi.fn()
         const { getByText, getByLabelText } = render(
             <ConversationsWidget
                 config={config}
                 initialState="open"
                 initialView="tickets"
                 showTicketList={true}
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
                 onViewChange={onViewChange}
             />
         )
@@ -98,13 +230,79 @@ describe('ConversationsWidget restore request UI', () => {
             <ConversationsWidget
                 config={{ ...config, requireEmail: true }}
                 initialState="open"
-                onSendMessage={jest.fn().mockResolvedValue(undefined)}
-                onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
                 isUserIdentified={false}
                 initialUserTraits={null}
             />
         )
 
         expect(queryByText('Recover them here')).not.toBeInTheDocument()
+    })
+
+    it('should render handled send failures without logging them again', async () => {
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        try {
+            const { getByPlaceholderText, getByLabelText, findByText, queryByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={vi.fn().mockRejectedValue(error)}
+                    onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
+                />
+            )
+
+            fireEvent.input(getByPlaceholderText('Type your message...'), {
+                target: { value: 'A message that should be removed' },
+            })
+            fireEvent.click(getByLabelText('Send message'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(queryByText('A message that should be removed')).not.toBeInTheDocument()
+            expect(errorSpy).not.toHaveBeenCalled()
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
+    })
+
+    it('should log unexpected send failures at error', async () => {
+        const error = new Error('Unexpected send failure')
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        try {
+            const { getByPlaceholderText, getByLabelText, findByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={vi.fn().mockRejectedValue(error)}
+                    onRequestRestoreLink={vi.fn().mockResolvedValue({ ok: true })}
+                />
+            )
+
+            fireEvent.input(getByPlaceholderText('Type your message...'), {
+                target: { value: 'Trigger an unexpected failure' },
+            })
+            fireEvent.click(getByLabelText('Send message'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(errorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[ConversationsWidget]'),
+                'Failed to send message',
+                error
+            )
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
     })
 })

@@ -1,5 +1,367 @@
 # posthog-ai
 
+## 8.13.5
+
+### Patch Changes
+
+- [#5201](https://github.com/PostHog/posthog-js/pull/5201) [`085ffd8`](https://github.com/PostHog/posthog-js/commit/085ffd8b151160a38627ed20833daf41b524205c) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.129.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.126.0`, in `peerDependencies`) (2026-10-06)
+
+## 8.13.4
+
+### Patch Changes
+
+- [#5113](https://github.com/PostHog/posthog-js/pull/5113) [`41f1243`](https://github.com/PostHog/posthog-js/commit/41f1243882210095a5841460a73b76c70708f96d) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Anthropic streaming tool call arguments when a thinking or server tool block precedes the tool call.
+  (2026-09-30)
+
+- [#5056](https://github.com/PostHog/posthog-js/pull/5056) [`9ddb74c`](https://github.com/PostHog/posthog-js/commit/9ddb74c7804e7f850d46c2087ce97e2244c21da9) Thanks [@brandon-julio-t](https://github.com/brandon-julio-t)! - Fix missing cache-read and cache-write token reporting in OpenAI Agents traces.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 8.13.3
+
+### Patch Changes
+
+- [#5088](https://github.com/PostHog/posthog-js/pull/5088) [`882606d`](https://github.com/PostHog/posthog-js/commit/882606dc43831c9683e528f28feb699532d3f7d7) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool calls and results in captured generation input
+  (2026-09-30)
+
+## 8.13.2
+
+### Patch Changes
+
+- [#5087](https://github.com/PostHog/posthog-js/pull/5087) [`2bce7b2`](https://github.com/PostHog/posthog-js/commit/2bce7b2f448868080d6a3b987df812ca7b20a22f) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool call IDs in captured generations.
+  (2026-09-24)
+
+## 8.13.1
+
+### Patch Changes
+
+- [#5039](https://github.com/PostHog/posthog-js/pull/5039) [`15914bd`](https://github.com/PostHog/posthog-js/commit/15914bdc04f1b57fb0b992fd1f853dc6c35c3982) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.126.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.125.0`, in `peerDependencies`) (2026-09-21)
+
+## 8.13.0
+
+### Minor Changes
+
+- [#5000](https://github.com/PostHog/posthog-js/pull/5000) [`1dfde0e`](https://github.com/PostHog/posthog-js/commit/1dfde0ee8c6edf3380f7326990ffb8010f5d5fae) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll()` now works without a label. It fetches the latest version of every prompt in one request and warms the cache for plain `prompts.get(name)` calls. Previously the label was required by the method's type, and the server treats any label value as a filter, so there was no way to batch-fetch unlabeled prompts.
+  (2026-09-17)
+
+## 8.12.1
+
+### Patch Changes
+
+- [#4961](https://github.com/PostHog/posthog-js/pull/4961) [`8fb9367`](https://github.com/PostHog/posthog-js/commit/8fb9367d853d6c87cb6eb90eb0f79bbbc64afe88) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - Fix `prompts.getAll` returning an empty result instead of an error on PostHog servers that do not support fetching prompts by label.
+  (2026-09-15)
+
+## 8.12.0
+
+### Minor Changes
+
+- [#4824](https://github.com/PostHog/posthog-js/pull/4824) [`7ca1cdc`](https://github.com/PostHog/posthog-js/commit/7ca1cdc327aaae75a2b6181942abb6ddade50214) Thanks [@posthog](https://github.com/apps/posthog)! - Add a Claude Agent SDK integration that captures LLM analytics for `@anthropic-ai/claude-agent-sdk` queries
+  (2026-09-15)
+
+## 8.11.2
+
+### Patch Changes
+
+- [#4955](https://github.com/PostHog/posthog-js/pull/4955) [`e88501a`](https://github.com/PostHog/posthog-js/commit/e88501ae76ace417fcb43b20de25bf3015bbce63) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.125.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.123.0`, in `peerDependencies`) (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+  - posthog-node@5.52.3
+
+## 8.11.1
+
+### Patch Changes
+
+- [#4943](https://github.com/PostHog/posthog-js/pull/4943) [`abf9123`](https://github.com/PostHog/posthog-js/commit/abf91231698de63691f22eeb928709d5c4f78f44) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent tool argument serialization failures from disrupting Vercel tracing and LangChain callbacks.
+  (2026-09-14)
+
+## 8.11.0
+
+### Minor Changes
+
+- [#4903](https://github.com/PostHog/posthog-js/pull/4903) [`825d830`](https://github.com/PostHog/posthog-js/commit/825d8301f13a1bc8984458d030853c7799746267) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll({ label: 'production' })` fetches every prompt that carries a label in one request and stores them in the prompt cache, so later `get(name, { label })` calls are cache hits. Apps with many prompts no longer need one request per prompt per cache cycle. Against a PostHog server that does not support labels on the prompt list endpoint yet, the call fails with a clear error instead of caching wrong versions.
+  (2026-09-10)
+
+## 8.10.4
+
+### Patch Changes
+
+- [#4818](https://github.com/PostHog/posthog-js/pull/4818) [`475743c`](https://github.com/PostHog/posthog-js/commit/475743c0cf2c8c067def69bccf8b5b7c411cdc97) Thanks [@bernatixer](https://github.com/bernatixer)! - fix(ai): only record a service tier the provider actually served. The requested `service_tier` no longer reaches `$ai_model_parameters` from any capture path — OpenAI error paths, the LangChain callback, and Anthropic events (whose `'auto'`/`'standard_only'` request values were previously recorded) — so cost processing cannot price tokens at an unconfirmed tier. The LangChain callback now reads the served tier from the response (message `response_metadata` or `generationInfo`, depending on the adapter), and OpenAI and LangChain generations additionally emit the served tier as the explicit `$ai_service_tier` event property, which cost processing prices from.
+  (2026-09-10)
+
+## 8.10.3
+
+### Patch Changes
+
+- [#4775](https://github.com/PostHog/posthog-js/pull/4775) [`2fad74b`](https://github.com/PostHog/posthog-js/commit/2fad74b1caff63d7736026f8e8a3e91319e04dd3) Thanks [@posthog](https://github.com/apps/posthog)! - Hold a stale prompt in the cache for a cooldown after a failed refetch, instead of going back to the network on every `prompts.get()` call. A rate-limited client now stays on cache until the limit clears. On a 429 the cooldown follows the server's `Retry-After` header.
+  (2026-09-09)
+
+## 8.10.2
+
+### Patch Changes
+
+- [#4820](https://github.com/PostHog/posthog-js/pull/4820) [`56e0a44`](https://github.com/PostHog/posthog-js/commit/56e0a44f0721d63172bd53394446c6707a6b8765) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.123.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.121.0`, in `peerDependencies`) (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
+## 8.10.1
+
+### Patch Changes
+
+- [#4736](https://github.com/PostHog/posthog-js/pull/4736) [`c16a7ce`](https://github.com/PostHog/posthog-js/commit/c16a7ce9997a37a48119645d43fddf51384cf9c5) Thanks [@bernatixer](https://github.com/bernatixer)! - Only terminal Responses API statuses become `$ai_stop_reason` (a queued or in-progress background run no longer records a lifecycle state as its stop reason), and the native OpenAI wrapper now names a truncated run by `incomplete_details.reason` (e.g. `max_output_tokens`) instead of the bare `incomplete`, matching the LangChain callback
+  (2026-09-03)
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
+## 8.10.0
+
+### Minor Changes
+
+- [#4687](https://github.com/PostHog/posthog-js/pull/4687) [`657b173`](https://github.com/PostHog/posthog-js/commit/657b17367d9e2e8884f44976fafc5305d8866b33) Thanks [@AhmadHammad21](https://github.com/AhmadHammad21)! - Add a Google ADK (`@google/adk`) observability adapter. `@posthog/ai/adk` exposes `PostHogADKPlugin`, an ADK `BasePlugin` that captures a full `$ai_generation` event (input, output, model, token usage, latency, finish reason, trace id, session id, distinct id and groups) for every model call an ADK agent makes, funnelling through the shared `captureAiGeneration` primitive so PostHog derives cost from the model and tokens.
+  (2026-09-02)
+
+## 8.9.3
+
+### Patch Changes
+
+- [#4700](https://github.com/PostHog/posthog-js/pull/4700) [`a105b77`](https://github.com/PostHog/posthog-js/commit/a105b77cf1c61df8e8e4f547f5bbe467893644c3) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture `$ai_stop_reason` from LangChain runs that use the OpenAI Responses API.
+
+  The callback only understood Chat Completions vocabulary (`finish_reason` / `stop_reason`), so Responses API runs, which report `status` and `incomplete_details.reason` instead, never carried a stop reason. The Chat Completions keys keep priority, and `incomplete_details.reason` outranks `status`, so an early stop names its cause (for example `max_output_tokens`) instead of just `incomplete`. (2026-09-01)
+
+- Updated dependencies [[`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a)]:
+  - @posthog/core@1.50.1
+
+## 8.9.2
+
+### Patch Changes
+
+- [#4664](https://github.com/PostHog/posthog-js/pull/4664) [`86fe9da`](https://github.com/PostHog/posthog-js/commit/86fe9dab9faf3d8e259d250f914e1cbbaa2a0b17) Thanks [@bernatixer](https://github.com/bernatixer)! - Interrupted or cancelled streams now report the token usage and latency they actually observed, instead of zeros, across the OpenAI, Anthropic, Gemini, Azure and Vercel wrappers. When usage was never reported, token counts and override costs are omitted entirely, so `$ai_input_tokens` can be absent where it was previously always `0`.
+  (2026-09-01)
+
+## 8.9.1
+
+### Patch Changes
+
+- [#4698](https://github.com/PostHog/posthog-js/pull/4698) [`5ae5c29`](https://github.com/PostHog/posthog-js/commit/5ae5c2992d0f06dd9416fc453011214e4e36046b) Thanks [@dependabot](https://github.com/apps/dependabot)! - Preserve Anthropic workspace IDs on wrapped provider promises and support `@anthropic-ai/sdk` versions from 0.112.3 through 0.120.x.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+  - posthog-node@5.51.5
+
+## 8.9.0
+
+### Minor Changes
+
+- [#4556](https://github.com/PostHog/posthog-js/pull/4556) [`a47b232`](https://github.com/PostHog/posthog-js/commit/a47b2326860b986915945d88b6a7689968617740) Thanks [@gouveags](https://github.com/gouveags)! - Add LangChain v1 agent middleware for AI observability.
+  (2026-08-27)
+
+### Patch Changes
+
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+  - posthog-node@5.51.3
+
+## 8.8.1
+
+### Patch Changes
+
+- [#4609](https://github.com/PostHog/posthog-js/pull/4609) [`da5d0ee`](https://github.com/PostHog/posthog-js/commit/da5d0ee5c948d4038a0d32470db35a3df02d69be) Thanks [@marandaneto](https://github.com/marandaneto)! - Share OpenAI-compatible telemetry reducers across OpenAI and Azure and align Azure usage, tools, stop reason, web search, background output, and sanitization telemetry.
+  (2026-08-25)
+- Updated dependencies [[`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084), [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - posthog-node@5.51.2
+  - @posthog/core@1.48.11
+
+## 8.8.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+
+## 8.7.1
+
+### Patch Changes
+
+- [#4473](https://github.com/PostHog/posthog-js/pull/4473) [`9b5922f`](https://github.com/PostHog/posthog-js/commit/9b5922ffcf9f01ae6a0b834ff1cafc2f0ac521a4) Thanks [@fivestarspicy](https://github.com/fivestarspicy)! - fix(gemini): declare Gemini's cache accounting model on generations with cache reads, so ingestion prices cached tokens from `$ai_cache_reporting_exclusive` instead of inferring it from the token counts
+  (2026-08-07)
+
+## 8.7.0
+
+### Minor Changes
+
+- [#4319](https://github.com/PostHog/posthog-js/pull/4319) [`4d379bb`](https://github.com/PostHog/posthog-js/commit/4d379bb327ed76cca9c9c9734f72f585c15fb057) Thanks [@kdawgwilk](https://github.com/kdawgwilk)! - Support AI SDK v7 provider peers for OpenTelemetry integrations and reject v7 models passed to the legacy `withTracing` wrapper.
+  (2026-08-07)
+
+## 8.6.8
+
+### Patch Changes
+
+- [#4189](https://github.com/PostHog/posthog-js/pull/4189) [`2831de1`](https://github.com/PostHog/posthog-js/commit/2831de1450da3126b6d8f1b6e7b72a7018a9e3bb) Thanks [@Fortiz2305](https://github.com/Fortiz2305)! - Report cache-write tokens for the OpenAI wrapper. OpenAI-compatible providers that follow Anthropic's cache-write convention (e.g. Claude via OpenRouter) return cache-write tokens in the response usage (`prompt_tokens_details.cache_write_tokens` for Chat Completions, `input_tokens_details.cache_write_tokens` for Responses), but the wrapper only surfaced cache reads. It now populates `$ai_cache_creation_input_tokens` across Chat Completions and Responses (streaming, non-streaming, and `parse()`), so ingestion can price the cache-write premium for Claude/Anthropic models instead of under-reporting cost on cache-heavy calls. Completes the cache-aware cost fix started in #4071 (#3615).
+  (2026-08-06)
+
+- [#4236](https://github.com/PostHog/posthog-js/pull/4236) [`d36a421`](https://github.com/PostHog/posthog-js/commit/d36a42186ade2c6eae957ae13020fd1af6a4bdcb) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Anthropic cache creation TTL breakdowns in streaming and LangChain generation events.
+  (2026-08-06)
+- Updated dependencies [[`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc), [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - posthog-node@5.48.1
+  - @posthog/core@1.46.9
+
+## 8.6.7
+
+### Patch Changes
+
+- [#4416](https://github.com/PostHog/posthog-js/pull/4416) [`5a585b2`](https://github.com/PostHog/posthog-js/commit/5a585b22541cdec231a1875b3f956221cfc843e7) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Capture the reasoning text of assistant turns replayed in a Vercel AI SDK prompt. The input mapper read a non-existent `reasoning` field instead of the spec's `text`, so `$ai_input` reasoning parts arrived empty for multi-step agentic loops.
+  (2026-08-05)
+
+## 8.6.6
+
+### Patch Changes
+
+- [#4365](https://github.com/PostHog/posthog-js/pull/4365) [`63d87d8`](https://github.com/PostHog/posthog-js/commit/63d87d8d970c69d0974f5034590a244c22dfb4bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Track OpenAI and Azure background Responses through their terminal state.
+  (2026-08-04)
+
+## 8.6.5
+
+### Patch Changes
+
+- [#4366](https://github.com/PostHog/posthog-js/pull/4366) [`1aa1690`](https://github.com/PostHog/posthog-js/commit/1aa1690974e649170c075cc0d16523cee61ad522) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture failed and incomplete Responses API results correctly.
+  (2026-08-04)
+
+- [#4364](https://github.com/PostHog/posthog-js/pull/4364) [`2c6c614`](https://github.com/PostHog/posthog-js/commit/2c6c6145ded013765b418aaa306b70835acdfe2f) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact binary content consistently across AI integrations.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
+## 8.6.4
+
+### Patch Changes
+
+- [#4406](https://github.com/PostHog/posthog-js/pull/4406) [`e2e88f6`](https://github.com/PostHog/posthog-js/commit/e2e88f662d38385359d5021bf30d61b119644951) Thanks [@github-actions](https://github.com/apps/github-actions)! - Capture Vercel AI SDK provider error status codes in `$ai_http_status`.
+  (2026-08-04)
+
+- [#4360](https://github.com/PostHog/posthog-js/pull/4360) [`98bd34b`](https://github.com/PostHog/posthog-js/commit/98bd34b0589083a2afe6f0dd8b95dcdafffa999d) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve provider SDK promise helpers when instrumenting requests, and accept the full Anthropic and Azure OpenAI client options, including custom fetch, timeout, and retry settings.
+  (2026-08-04)
+
+## 8.6.3
+
+### Patch Changes
+
+- [#4361](https://github.com/PostHog/posthog-js/pull/4361) [`0d79b00`](https://github.com/PostHog/posthog-js/commit/0d79b00404f1884ce8c9b17f496dd99d4a81bf40) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve stream cancellation and backpressure while monitoring AI responses.
+  (2026-08-04)
+
+- [#4362](https://github.com/PostHog/posthog-js/pull/4362) [`cd4da1b`](https://github.com/PostHog/posthog-js/commit/cd4da1b373967541d1f3be0a73d45eba74f1e69b) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent telemetry failures from affecting provider calls and errors.
+  (2026-08-04)
+
+## 8.6.2
+
+### Patch Changes
+
+- [#4370](https://github.com/PostHog/posthog-js/pull/4370) [`ea64094`](https://github.com/PostHog/posthog-js/commit/ea640947085a3d317666223b64fae5adbd75cc54) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture Chat Completions usage from OpenAI Agents spans.
+  (2026-08-04)
+
+- [#4368](https://github.com/PostHog/posthog-js/pull/4368) [`45c0559`](https://github.com/PostHog/posthog-js/commit/45c05596566236405a60ed579d60ffe6ae9a891f) Thanks [@marandaneto](https://github.com/marandaneto)! - Remove the undeclared OpenTelemetry core runtime dependency.
+  (2026-08-04)
+
+- [#4369](https://github.com/PostHog/posthog-js/pull/4369) [`6e2f33a`](https://github.com/PostHog/posthog-js/commit/6e2f33aea42ee98e3c6bbe0d99bec80a23d788b3) Thanks [@marandaneto](https://github.com/marandaneto)! - Resolve OpenAI Agents APIs through the declared peer dependency.
+  (2026-08-04)
+
+- [#4371](https://github.com/PostHog/posthog-js/pull/4371) [`a9a78c0`](https://github.com/PostHog/posthog-js/commit/a9a78c0f2768a2083a439a067002f51f656127cd) Thanks [@marandaneto](https://github.com/marandaneto)! - Support current LangChain message usage and response metadata.
+  (2026-08-04)
+
+- [#4363](https://github.com/PostHog/posthog-js/pull/4363) [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely capture circular and otherwise unknown telemetry values with a shared JSON-safe value converter.
+  (2026-08-04)
+
+- [#4367](https://github.com/PostHog/posthog-js/pull/4367) [`5483f25`](https://github.com/PostHog/posthog-js/commit/5483f25f7f8f370089a05240f7fd0045fe1db504) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle Vercel AI stream errors and cancellation exactly once.
+  (2026-08-04)
+- Updated dependencies [[`d4ffb83`](https://github.com/PostHog/posthog-js/commit/d4ffb83a1bebeb99edc8e9452a674c146c22f033), [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8)]:
+  - posthog-node@5.47.8
+  - @posthog/core@1.46.6
+
+## 8.6.1
+
+### Patch Changes
+
+- [#4345](https://github.com/PostHog/posthog-js/pull/4345) [`484c482`](https://github.com/PostHog/posthog-js/commit/484c482975d3d14ae37d6b5e0ef87622683be26c) Thanks [@willwearing](https://github.com/willwearing)! - Treat LangGraph control-flow exceptions (`GraphInterrupt`, `NodeInterrupt`, `ParentCommand`, and other `is_bubble_up` errors) as non-error trace and span completions in the LangChain callback, surfacing pending interrupts as `$ai_output_state` under the `__interrupt__` key.
+  (2026-08-03)
+
+## 8.6.0
+
+### Minor Changes
+
+- [#4335](https://github.com/PostHog/posthog-js/pull/4335) [`9a453b9`](https://github.com/PostHog/posthog-js/commit/9a453b9bd52fab2821b4f063f1759bdab78147a3) Thanks [@marco-g-pm](https://github.com/marco-g-pm)! - The OpenAI Agents SDK `groupId` now also maps to `$ai_session_id` on `$ai_trace` and span events, so grouped runs show up as sessions in PostHog AI observability. `$ai_group_id` is still emitted alongside it.
+  (2026-07-30)
+
+### Patch Changes
+
+- [#4336](https://github.com/PostHog/posthog-js/pull/4336) [`1eb04c1`](https://github.com/PostHog/posthog-js/commit/1eb04c1c2daa02019c42dd8c5f55476ebdb7c5c6) Thanks [@marco-g-pm](https://github.com/marco-g-pm)! - Fix LangChain spans being named after their class instead of the runnable. LangChain passes `runName` as a bare string, which the name resolver skipped because it only inspected object arguments, so every tool span was captured as `DynamicStructuredTool` rather than the tool's own name.
+  (2026-07-30)
+
+## 8.5.0
+
+### Minor Changes
+
+- [#4329](https://github.com/PostHog/posthog-js/pull/4329) [`5baf90a`](https://github.com/PostHog/posthog-js/commit/5baf90a6cacf8a3a31c2702dbdf3c32510b20b2e) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `Prompts.get()` results now include `config`, the JSON object of model parameters or agent configuration stored with the prompt version in PostHog prompt management (`null` when the version has none). Config is carried through the client-side cache and the stale-cache fallback, and each result gets its own copy so mutating `result.config` cannot pollute later cache hits. The hardcoded `fallback` string has no config, so use defensive access like `(result.config ?? {}).temperature`.
+  (2026-07-30)
+
+## 8.4.3
+
+### Patch Changes
+
+- [#4306](https://github.com/PostHog/posthog-js/pull/4306) [`05088ff`](https://github.com/PostHog/posthog-js/commit/05088fffbaaaf47b1d777c27c4cec641ff509351) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(ai): prefer the OpenAI `service_tier` reported by the response for accurate cost attribution
+  (2026-07-29)
+
+## 8.4.2
+
+### Patch Changes
+
+- [#4072](https://github.com/PostHog/posthog-js/pull/4072) [`0369b09`](https://github.com/PostHog/posthog-js/commit/0369b09f1f8004ed6161c4bd24d05e2565f88900) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(ai): capture OpenAI `service_tier` in `$ai_model_parameters` so PostHog can correctly attribute costs for flex and priority tier requests
+  (2026-07-29)
+
+## 8.4.1
+
+### Patch Changes
+
+- [#4196](https://github.com/PostHog/posthog-js/pull/4196) [`b96a066`](https://github.com/PostHog/posthog-js/commit/b96a0664ad7bf237653f2fcca152739a63253f2c) Thanks [@reclaim-admin](https://github.com/reclaim-admin)! - Redact base64 content from LangChain trace and span input and output state.
+  (2026-07-28)
+
+## 8.4.0
+
+### Minor Changes
+
+- [#4163](https://github.com/PostHog/posthog-js/pull/4163) [`45f5488`](https://github.com/PostHog/posthog-js/commit/45f54889a5e51b537cd3d8dda65d81ad9b81667a) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - feat(ai): add a `label` option to `Prompts.get()` to fetch the prompt version a label (e.g. `production`) currently points to. Labeled fetches are cached separately, results carry the resolved `label`, and a warning is logged when the server does not resolve the requested label (older PostHog versions ignore the parameter and return the latest version).
+  (2026-07-17)
+
+## 8.3.1
+
+### Patch Changes
+
+- [#4071](https://github.com/PostHog/posthog-js/pull/4071) [`182434f`](https://github.com/PostHog/posthog-js/commit/182434fd4db9ba8bb93b86e515be874afa9d975a) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - fix(ai): declare `$ai_cache_reporting_exclusive: false` on OpenAI wrapper events so ingestion no longer double-bills cached input tokens for Claude models served through OpenAI-compatible hosts (e.g. OpenRouter). The flag stays unset when callers pass their own input or cache token counts through `posthogProperties`, so existing passthrough workarounds keep reporting correctly.
+  (2026-07-16)
+
+## 8.3.0
+
+### Minor Changes
+
+- [#4084](https://github.com/PostHog/posthog-js/pull/4084) [`f4b453a`](https://github.com/PostHog/posthog-js/commit/f4b453ac477212816f3cc3df681d5de7494bd70e) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional error callback support to the OpenAI Agents tracing processor.
+  (2026-07-07)
+
+## 8.2.3
+
+### Patch Changes
+
+- [#4076](https://github.com/PostHog/posthog-js/pull/4076) [`68640de`](https://github.com/PostHog/posthog-js/commit/68640de9d7020b996489dd0ce582334f22c4bee5) Thanks [@bamtheboozle](https://github.com/bamtheboozle)! - fix: prevent unhandled promise rejection from crashing the host process when a streamed provider response errors mid-flight (OpenAI, Azure OpenAI, Anthropic wrappers)
+  (2026-07-06)
+
 ## 8.2.2
 
 ### Patch Changes

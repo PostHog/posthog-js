@@ -1,7 +1,7 @@
 import type { Mirror } from '@posthog/rrweb-snapshot';
 import { genId } from '@posthog/rrweb-snapshot';
 import type { CrossOriginIframeMessageEvent } from '../types';
-import { callSafely } from '../utils';
+import { callSafely, removeEventListenerSafely } from '../utils';
 import CrossOriginIframeMirror from './cross-origin-iframe-mirror';
 import { findAndRemoveIframeBuffer } from './observer';
 import { EventType, NodeType, IncrementalSource } from '@posthog/rrweb-types';
@@ -17,7 +17,8 @@ export class IframeManager {
   private iframes: WeakMap<HTMLIFrameElement, true> = new WeakMap();
   private crossOriginIframeMap: WeakMap<MessageEventSource, HTMLIFrameElement> =
     new WeakMap();
-  public crossOriginIframeMirror = new CrossOriginIframeMirror(genId);
+  public crossOriginIframeMirror: CrossOriginIframeMirror =
+    new CrossOriginIframeMirror(genId);
   public crossOriginIframeStyleMirror: CrossOriginIframeMirror;
   public crossOriginIframeRootIdMap: WeakMap<HTMLIFrameElement, number> =
     new WeakMap();
@@ -76,7 +77,7 @@ export class IframeManager {
     }
   }
 
-  public addIframe(iframeEl: HTMLIFrameElement) {
+  public addIframe(iframeEl: HTMLIFrameElement): void {
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);
@@ -85,7 +86,7 @@ export class IframeManager {
   public registerLoadListenerDisposer(
     iframeEl: HTMLIFrameElement,
     disposer: () => void,
-  ) {
+  ): void {
     let bucket = this.loadListenerDisposers.get(iframeEl);
     if (!bucket) {
       bucket = new Set();
@@ -106,7 +107,7 @@ export class IframeManager {
   }
 
   // Drops the id mapping for a moved iframe; element-keyed state survives.
-  public forgetIframeId(iframeId: number) {
+  public forgetIframeId(iframeId: number): void {
     this.attachedIframes.delete(iframeId);
     this.iframeElementsById.delete(iframeId);
   }
@@ -122,20 +123,20 @@ export class IframeManager {
     const bucket = this.pageHideHandlers.get(iframeEl);
     if (!bucket) return;
     bucket.forEach(({ win, handler }) => {
-      callSafely(() => win.removeEventListener('pagehide', handler));
+      removeEventListenerSafely(win, 'pagehide', handler);
     });
     this.pageHideHandlers.delete(iframeEl);
   }
 
-  public addLoadListener(cb: (iframeEl: HTMLIFrameElement) => unknown) {
+  public addLoadListener(cb: (iframeEl: HTMLIFrameElement) => unknown): void {
     this.loadListener = cb;
   }
 
-  public addPageHideListener(cb: (iframeEl: HTMLIFrameElement) => unknown) {
+  public addPageHideListener(cb: (iframeEl: HTMLIFrameElement) => unknown): void {
     this.pageHideListener = cb;
   }
 
-  public removeLoadListener() {
+  public removeLoadListener(): void {
     this.loadListener = undefined;
   }
 
@@ -151,7 +152,7 @@ export class IframeManager {
   public attachIframe(
     iframeEl: HTMLIFrameElement,
     childSn: serializedNodeWithId,
-  ) {
+  ): void {
     const iframeId = this.trackIframeContent(iframeEl, childSn);
     // Accumulate every contentDocument across loads (blank → src → blank).
     if (iframeEl.contentDocument) {
@@ -213,9 +214,9 @@ export class IframeManager {
         if (iframeEl.contentDocument) {
           this.mirror.removeNodeFromMap(iframeEl.contentDocument);
         }
-        if (iframeEl.contentWindow) {
-          this.crossOriginIframeMap.delete(iframeEl.contentWindow);
-        }
+        // The WindowProxy belongs to the iframe's browsing context and survives
+        // document navigations. Keep its mapping until the iframe is detached so
+        // a cross-origin destination can relay its new snapshot to this iframe.
       };
       pageHideWindow.addEventListener('pagehide', handler);
       if (!bucket) {
@@ -452,7 +453,7 @@ export class IframeManager {
     }
   }
 
-  public removeIframeById(iframeId: number) {
+  public removeIframeById(iframeId: number): void {
     const entry = this.attachedIframes.get(iframeId);
     // attachedIframes / mirror may both be empty for iframes removed
     // before first load; iframeElementsById covers that case.
@@ -473,9 +474,7 @@ export class IframeManager {
         capturedWins.forEach((capturedWin) => {
           const handler = this.nestedIframeListeners.get(capturedWin);
           if (handler) {
-            callSafely(() =>
-              capturedWin.removeEventListener('message', handler),
-            );
+            removeEventListenerSafely(capturedWin, 'message', handler);
             this.nestedIframeListeners.delete(capturedWin);
           }
           this.crossOriginIframeMap.delete(capturedWin);
@@ -486,7 +485,7 @@ export class IframeManager {
       // attachIframe (preserves SecurityError handling from #163).
       if (win && this.nestedIframeListeners.has(win)) {
         const handler = this.nestedIframeListeners.get(win)!;
-        callSafely(() => win.removeEventListener('message', handler));
+        removeEventListenerSafely(win, 'message', handler);
         this.nestedIframeListeners.delete(win);
       }
 
@@ -517,7 +516,7 @@ export class IframeManager {
 
   // Catches iframes removed inside a removed subtree (only the
   // ancestor's id appears in m.removes).
-  public cleanupDetachedIframes() {
+  public cleanupDetachedIframes(): void {
     if (this.attachedIframes.size === 0) return;
     const orphaned: number[] = [];
     this.attachedIframes.forEach((_entry, iframeId) => {
@@ -528,7 +527,7 @@ export class IframeManager {
     orphaned.forEach((iframeId) => this.removeIframeById(iframeId));
   }
 
-  public reattachIframes() {
+  public reattachIframes(): void {
     this.attachedIframes.forEach(({ content }, iframeId) => {
       // Verify the iframe ID is still in the mirror (still being tracked by rrweb)
       // If removed, the mirror would have been cleaned up via removeNodeFromMap()
@@ -553,14 +552,14 @@ export class IframeManager {
     });
   }
 
-  public destroy() {
+  public destroy(): void {
     if (this.recordCrossOriginIframes) {
-      window.removeEventListener('message', this.messageHandler);
+      removeEventListenerSafely(window, 'message', this.messageHandler);
     }
 
     // Clean up nested iframe listeners
     this.nestedIframeListeners.forEach((handler, contentWindow) => {
-      callSafely(() => contentWindow.removeEventListener('message', handler));
+      removeEventListenerSafely(contentWindow, 'message', handler);
     });
     this.nestedIframeListeners.clear();
 

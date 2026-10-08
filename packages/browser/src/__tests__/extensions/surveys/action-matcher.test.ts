@@ -21,7 +21,7 @@ describe('action-matcher', () => {
         instance = createMockPostHog({
             config: config,
             persistence: new PostHogPersistence(config),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: vi.fn(),
         })
     })
 
@@ -91,6 +91,21 @@ describe('action-matcher', () => {
 
         actionMatcher.on('$match_event_name', createCaptureResult('$mypageview'))
         expect(pageViewActionMatched).toBeTruthy()
+    })
+
+    it('keeps earlier actions when actions are registered incrementally', () => {
+        const firstAction = createAction(3, '$first_action')
+        const secondAction = createAction(4, '$second_action')
+        const actionMatcher = new ActionMatcher(instance)
+        const matchedActions: string[] = []
+        actionMatcher._addActionHook((actionName) => matchedActions.push(actionName))
+
+        actionMatcher.register([firstAction])
+        actionMatcher.register([secondAction])
+        actionMatcher.on('$first_action', createCaptureResult('$first_action'))
+        actionMatcher.on('$second_action', createCaptureResult('$second_action'))
+
+        expect(matchedActions).toEqual(expect.arrayContaining([firstAction.name, secondAction.name]))
     })
 
     it('can match action on current_url exact', () => {

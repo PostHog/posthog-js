@@ -24,7 +24,6 @@ export default function Home() {
             </dd>
             <dt>NavigatorUAData brands</dt>
             <dd>
-                {/* eslint-disable-next-line compat/compat */}
                 <code>{JSON.stringify((navigator as any).userAgentData?.brands)}</code>
             </dd>
         </dl>

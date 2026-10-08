@@ -1,0 +1,37 @@
+default_install_hook_types = ["pre-commit", "pre-push"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "oxlint"
+name = "oxlint"
+language = "system"
+entry = "pnpm exec oxlint --fix --report-unused-disable-directives-severity error"
+files = '\.(ts|tsx|js|jsx|mjs|cjs)$'
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "oxfmt-code"
+name = "oxfmt (code)"
+language = "system"
+entry = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern"
+files = '\.(ts|tsx|js|jsx|mjs|cjs)$'
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "oxfmt-data"
+name = "oxfmt (JSON and Markdown)"
+language = "system"
+entry = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern"
+files = '\.(json|md)$'
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "protect-main-branch"
+name = "prevent pushes from main"
+language = "system"
+entry = "sh scripts/check-protected-branch.sh"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]

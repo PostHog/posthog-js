@@ -67,6 +67,26 @@ describe('number-utils', () => {
         },
       ],
       [
+        'honors a fallback of 0 instead of falling back to max',
+        {
+          value: 'invalid',
+          min: 0,
+          max: 100,
+          expected: 0,
+          fallback: 0,
+        },
+      ],
+      [
+        'clamps a fallback of 0 up to min',
+        {
+          value: 'invalid',
+          min: 10,
+          max: 100,
+          expected: 10,
+          fallback: 0,
+        },
+      ],
+      [
         'returns the max value when fallback is not valid',
         {
           value: 'invalid',

@@ -1,5 +1,5 @@
-import React, { ReactNode, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import React, { ReactNode, useMemo, useRef, useState } from 'react'
+import { LayoutChangeEvent, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
@@ -15,9 +15,10 @@ import {
 import {
   defaultRatingLabelOpacity,
   getContrastingTextColor,
-  getDisplayOrderChoices,
+  getMaxFontSizeMultiplier,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
+import { getDisplayOrderChoices } from '../survey-shuffling'
 import {
   SurveyQuestion,
   SurveyRatingDisplay,
@@ -39,14 +40,25 @@ interface QuestionCommonProps {
 // Wraps question content in a scrollable region with a sticky BottomSection
 // (Submit button) at the bottom. The ScrollView has flexShrink: 1 so it
 // shrinks to fit when the parent modal is capped at its keyboard-aware
-// maxHeight, keeping Submit visible regardless of survey length.
+// maxHeight, keeping Submit visible regardless of survey length. Scrolling is
+// enabled only while the content overflows the viewport, so short surveys don't
+// scroll or bounce.
 function QuestionLayout({ children, footer }: { children: ReactNode; footer: ReactNode }): JSX.Element {
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [contentHeight, setContentHeight] = useState(0)
+  // 1px threshold absorbs sub-pixel layout rounding.
+  const isOverflowing = contentHeight > viewportHeight + 1
+
   return (
     <View style={questionLayoutStyles.container}>
       <ScrollView
         style={questionLayoutStyles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        scrollEnabled={isOverflowing}
+        bounces={isOverflowing}
+        onLayout={(e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_width, height) => setContentHeight(height)}
       >
         {children}
       </ScrollView>
@@ -110,6 +122,7 @@ export function OpenTextQuestion({
       />
       <View style={styles.textInputContainer}>
         <TextInput
+          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
           style={[
             styles.textInput,
             {
@@ -133,6 +146,7 @@ export function OpenTextQuestion({
         />
         {requirementsHint && (
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'validationHint')}
             style={[
               styles.validationHint,
               { color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor) },
@@ -232,7 +246,7 @@ export function RatingQuestion({
           )}
           {question.display === SurveyRatingDisplay.Number && (
             <View style={[styles.ratingOptionsNumber, { borderColor: appearance.borderColor }]}>
-              {getScaleNumbers(question.scale).map((number, idx) => {
+              {getScaleNumbers(question.scale).map((number, idx, numbers) => {
                 const active = rating === number
                 return (
                   <RatingButton
@@ -241,6 +255,13 @@ export function RatingQuestion({
                     active={active}
                     appearance={appearance}
                     num={number}
+                    accessibilityLabel={[
+                      String(number),
+                      question.question,
+                      idx === 0 ? question.lowerBoundLabel : idx === numbers.length - 1 ? question.upperBoundLabel : '',
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
                     setActiveNumber={(response) => {
                       setRating(response)
                       if (question.skipSubmitButton) {
@@ -255,17 +276,25 @@ export function RatingQuestion({
         </View>
         <View style={styles.ratingText}>
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.upperBoundLabel ? '50%' : undefined,
+              textAlign: 'left',
             }}
           >
             {question.lowerBoundLabel}
           </Text>
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
+              flexShrink: 1,
+              maxWidth: question.lowerBoundLabel ? '50%' : undefined,
+              textAlign: 'right',
             }}
           >
             {question.upperBoundLabel}
@@ -282,12 +311,14 @@ export function RatingButton({
   active,
   appearance,
   setActiveNumber,
+  accessibilityLabel,
 }: {
   index: number
   num: number
   active: boolean
   appearance: SurveyAppearanceTheme
   setActiveNumber: (num: number) => void
+  accessibilityLabel?: string
 }): JSX.Element {
   const backgroundColor = active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
   // Active state always auto-calculates for contrast; inactive uses inputTextColor override if provided
@@ -297,6 +328,9 @@ export function RatingButton({
 
   return (
     <TouchableOpacity
+      accessibilityRole="radio"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ checked: active }}
       style={[
         styles.ratingsNumber,
         index === 0 && { borderLeftWidth: 0 },
@@ -304,7 +338,9 @@ export function RatingButton({
       ]}
       onPress={() => setActiveNumber(num)}
     >
-      <Text style={{ color: textColor }}>{num}</Text>
+      <Text maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingNumber')} style={{ color: textColor }}>
+        {num}
+      </Text>
     </TouchableOpacity>
   )
 }
@@ -319,10 +355,17 @@ export function MultipleChoiceQuestion({
   question = question as MultipleSurveyQuestion
   const isSingleChoice = question.type === SurveyQuestionType.SingleChoice
   const allowMultiple = question.type === SurveyQuestionType.MultipleChoice
-  const openChoice = question.hasOpenChoice ? question.choices[question.choices.length - 1] : null
+  const openChoiceIndex = question.hasOpenChoice ? question.choices.length - 1 : -1
   const choices = useMemo(() => getDisplayOrderChoices(question as MultipleSurveyQuestion), [question])
-  const [selectedChoices, setSelectedChoices] = useState<string[]>([])
+  // Choice labels change with survey translations; keep selection tied to the original order.
+  const [selectedChoiceIndices, setSelectedChoiceIndices] = useState<number[]>([])
   const [openEndedInput, setOpenEndedInput] = useState('')
+  const openEndedInputRef = useRef<TextInput>(null)
+  const selectOpenChoice = () => {
+    setSelectedChoiceIndices((prev) =>
+      prev.includes(openChoiceIndex) ? prev : allowMultiple ? [...prev, openChoiceIndex] : [openChoiceIndex]
+    )
+  }
 
   // Only skip submit for single-choice questions without open choice
   const shouldSkipSubmit = question.skipSubmitButton && isSingleChoice && !question.hasOpenChoice
@@ -334,12 +377,14 @@ export function MultipleChoiceQuestion({
           text={question.buttonText ?? appearance.submitButtonText}
           submitDisabled={
             !question.optional &&
-            (selectedChoices.length === 0 ||
-              (openChoice !== null && selectedChoices.includes(openChoice) && openEndedInput.length === 0))
+            (selectedChoiceIndices.length === 0 ||
+              (selectedChoiceIndices.includes(openChoiceIndex) && openEndedInput.length === 0))
           }
           appearance={appearance}
           onSubmit={() => {
-            const result = selectedChoices.map((c) => (c === openChoice ? openEndedInput : c))
+            const result = selectedChoiceIndices.map((index) =>
+              index === openChoiceIndex ? openEndedInput : choices[index]
+            )
             onSubmit(allowMultiple ? result : result[0])
           }}
           skipSubmitButton={shouldSkipSubmit}
@@ -353,52 +398,71 @@ export function MultipleChoiceQuestion({
         appearance={appearance}
       />
       <View style={styles.multipleChoiceOptions}>
-        {choices.map((choice: string, idx: number) => {
-          const isOpenChoice = choice === openChoice
-          const isSelected = selectedChoices.includes(choice)
+        {choices.map((choice: string, choiceIndex: number) => {
+          const isOpenChoice = choiceIndex === openChoiceIndex
+          const isSelected = selectedChoiceIndices.includes(choiceIndex)
 
           const choiceTextColor = appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
 
           return (
-            <Pressable
-              key={idx}
+            <View
+              key={choiceIndex}
               style={[
                 styles.choiceOption,
                 { backgroundColor: appearance.inputBackground },
                 isSelected ? { borderColor: getContrastingTextColor(appearance.backgroundColor) } : {},
               ]}
-              onPress={() => {
-                if (allowMultiple) {
-                  setSelectedChoices(
-                    isSelected ? selectedChoices.filter((c) => c !== choice) : [...selectedChoices, choice]
-                  )
-                } else {
-                  setSelectedChoices([choice])
-                  if (shouldSkipSubmit && !isOpenChoice) {
-                    onSubmit(choice)
-                  }
-                }
-              }}
             >
-              <View style={styles.choiceText}>
-                <Text style={{ flexGrow: 1, color: choiceTextColor }}>
+              <Pressable
+                style={[styles.choiceText, isOpenChoice && { paddingBottom: 0 }]}
+                accessibilityRole={isSingleChoice ? 'radio' : 'checkbox'}
+                accessibilityLabel={choice}
+                accessibilityState={{ checked: isSelected }}
+                onPress={() => {
+                  if (allowMultiple) {
+                    setSelectedChoiceIndices(
+                      isSelected
+                        ? selectedChoiceIndices.filter((index) => index !== choiceIndex)
+                        : [...selectedChoiceIndices, choiceIndex]
+                    )
+                  } else {
+                    setSelectedChoiceIndices([choiceIndex])
+                    if (shouldSkipSubmit && !isOpenChoice) {
+                      onSubmit(choice)
+                    }
+                  }
+                  if (isOpenChoice && (!allowMultiple || !isSelected)) {
+                    openEndedInputRef.current?.focus()
+                  } else {
+                    openEndedInputRef.current?.blur()
+                  }
+                }}
+              >
+                <Text
+                  maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'choice')}
+                  style={{ flexGrow: 1, color: choiceTextColor }}
+                >
                   {choice}
                   {isOpenChoice ? ':' : ''}
                 </Text>
                 <View style={styles.rightCheckArea}>{isSelected && <CheckSVG />}</View>
-              </View>
+              </Pressable>
               {isOpenChoice && (
                 <TextInput
+                  ref={openEndedInputRef}
+                  accessibilityLabel={choice}
+                  maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
                   style={styles.openEndedInput}
+                  onFocus={selectOpenChoice}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
                     if (!isSelected) {
-                      setSelectedChoices(allowMultiple ? [...selectedChoices, choice] : [choice])
+                      setSelectedChoiceIndices(allowMultiple ? [...selectedChoiceIndices, choiceIndex] : [choiceIndex])
                     }
                   }}
                 />
               )}
-            </Pressable>
+            </View>
           )
         })}
       </View>
@@ -477,6 +541,7 @@ const styles = createSafeStyleSheet({
   ratingText: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
     padding: 10,
   },
   multipleChoiceOptions: {
@@ -488,16 +553,18 @@ const styles = createSafeStyleSheet({
     borderWidth: 1,
     borderColor: 'grey',
     borderRadius: 5,
-    padding: 10,
   },
   choiceText: {
     flexDirection: 'row',
+    padding: 10,
   },
   rightCheckArea: {
     flexGrow: 0,
   },
   openEndedInput: {
-    padding: 5,
+    paddingTop: 5,
+    paddingHorizontal: 15,
+    paddingBottom: 15,
   },
   validationHint: {
     fontSize: 12,

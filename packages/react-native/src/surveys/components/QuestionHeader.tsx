@@ -4,8 +4,10 @@ import { Text, View } from 'react-native'
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
+  closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -26,9 +28,17 @@ export function QuestionHeader({
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.question, { color: textColor }]}>{question}</Text>
+      <Text
+        maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'question')}
+        style={[styles.question, { color: textColor }]}
+      >
+        {question}
+      </Text>
       {shouldRenderDescription(description, descriptionContentType) && (
-        <Text style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}>
+        <Text
+          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
+          style={[styles.description, { color: textColor, opacity: defaultDescriptionOpacity }]}
+        >
           {description}
         </Text>
       )}
@@ -39,6 +49,7 @@ export function QuestionHeader({
 const styles = createSafeStyleSheet({
   container: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   question: {
     fontSize: 18,

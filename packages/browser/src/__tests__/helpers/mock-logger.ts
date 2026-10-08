@@ -1,17 +1,15 @@
-import type { Logger } from '@posthog/core'
+import type { PosthogJsLogger } from '@posthog/browser-common/utils/logger'
 
-jest.mock('../../utils/logger', () => {
-    const mockLogger: Logger = {
-        _log: jest.fn(),
-        debug: jest.fn(),
-        critical: jest.fn(),
-        uninitializedWarning: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        createLogger: () => {
-            return mockLogger
-        },
+vi.mock('@posthog/browser-common/utils/logger', () => {
+    const mockLogger: PosthogJsLogger = {
+        _log: vi.fn(),
+        debug: vi.fn(),
+        critical: vi.fn(),
+        uninitializedWarning: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        createLogger: vi.fn(() => mockLogger),
     }
     return {
         logger: mockLogger,
@@ -19,15 +17,14 @@ jest.mock('../../utils/logger', () => {
     }
 })
 
-import { isFunction } from '@posthog/core'
-import { logger } from '../../utils/logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 export const clearLoggerMocks = () => {
-    Object.values(logger).forEach((mock: any) => {
-        if (isFunction(mock.mockClear)) {
+    Object.values(logger).forEach((mock) => {
+        if (vi.isMockFunction(mock)) {
             mock.mockClear()
         }
     })
 }
 
-export const mockLogger: jest.Mocked<Logger> = logger as any
+export const mockLogger = vi.mocked(logger)

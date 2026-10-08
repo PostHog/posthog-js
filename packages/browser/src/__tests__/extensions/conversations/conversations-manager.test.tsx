@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+import type { Mock as VitestMock } from 'vitest'
 import { ConversationsManager } from '../../../extensions/conversations/external'
 import {
     ConversationsRemoteConfig,
@@ -9,29 +9,30 @@ import {
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import '@testing-library/jest-dom'
-import { act } from '@testing-library/preact'
+import { act, fireEvent, screen } from '@testing-library/preact'
+import Config from '../../../config'
 
 // Mock the persistence layer
-jest.mock('../../../extensions/conversations/external/persistence', () => {
+vi.mock('../../../extensions/conversations/external/persistence', () => {
     return {
-        ConversationsPersistence: jest.fn().mockImplementation(() => {
+        ConversationsPersistence: vi.fn().mockImplementation(() => {
             let storedTicketId: string | null = null
             return {
-                getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
-                setWidgetSessionId: jest.fn(),
-                loadTicketId: jest.fn(() => storedTicketId),
-                saveTicketId: jest.fn((ticketId: string) => {
+                getOrCreateWidgetSessionId: vi.fn().mockReturnValue('test-widget-session-id'),
+                setWidgetSessionId: vi.fn(),
+                loadTicketId: vi.fn(() => storedTicketId),
+                saveTicketId: vi.fn((ticketId: string) => {
                     storedTicketId = ticketId
                 }),
-                clearTicketId: jest.fn(() => {
+                clearTicketId: vi.fn(() => {
                     storedTicketId = null
                 }),
-                loadWidgetState: jest.fn().mockReturnValue('closed'),
-                saveWidgetState: jest.fn(),
-                loadUserTraits: jest.fn().mockReturnValue(null),
-                saveUserTraits: jest.fn(),
-                clearWidgetSessionId: jest.fn(),
-                clearAll: jest.fn(() => {
+                loadWidgetState: vi.fn().mockReturnValue('closed'),
+                saveWidgetState: vi.fn(),
+                loadUserTraits: vi.fn().mockReturnValue(null),
+                saveUserTraits: vi.fn(),
+                clearWidgetSessionId: vi.fn(),
+                clearAll: vi.fn(() => {
                     storedTicketId = null
                 }),
             }
@@ -94,8 +95,8 @@ describe('ConversationsManager', () => {
         // Clear DOM and mocks
         document.body.innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
-        jest.useFakeTimers()
+        vi.clearAllMocks()
+        vi.useFakeTimers()
         window.history.replaceState({}, '', '/')
         mockRestoreResponse = {
             statusCode: 200,
@@ -107,7 +108,7 @@ describe('ConversationsManager', () => {
         }
 
         // Mock scrollIntoView which is not implemented in JSDOM
-        Element.prototype.scrollIntoView = jest.fn()
+        Element.prototype.scrollIntoView = vi.fn()
 
         // Setup mock config (widgetEnabled: true by default for most tests)
         mockConfig = {
@@ -126,7 +127,7 @@ describe('ConversationsManager', () => {
                 token: 'test-token',
                 api_host: 'https://test.posthog.com',
             },
-            _send_request: jest.fn((options) => {
+            _send_request: vi.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues
                 const url = options.url as string
                 const method = options.method as string
@@ -160,30 +161,30 @@ describe('ConversationsManager', () => {
                 }
             }),
             requestRouter: {
-                endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
+                endpointFor: vi.fn((_type: string, path: string) => `https://test.posthog.com${path}`),
             },
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            get_property: jest.fn().mockReturnValue(undefined),
-            get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
-            get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            get_property: vi.fn().mockReturnValue(undefined),
+            get_session_id: vi.fn().mockReturnValue('test-session-id-123'),
+            get_session_replay_url: vi.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
                 props: {
                     $name: 'Test User',
                     $email: 'test@example.com',
                 },
-                get_property: jest.fn(),
-                register: jest.fn(),
-                unregister: jest.fn(),
-                isDisabled: jest.fn().mockReturnValue(false),
+                get_property: vi.fn(),
+                register: vi.fn(),
+                unregister: vi.fn(),
+                isDisabled: vi.fn().mockReturnValue(false),
             },
-            capture: jest.fn(),
-            on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
-            _isIdentified: jest.fn().mockReturnValue(false), // Default to anonymous user
+            capture: vi.fn(),
+            on: vi.fn().mockReturnValue(vi.fn()), // Returns unsubscribe function
+            _isIdentified: vi.fn().mockReturnValue(false), // Default to anonymous user
         } as unknown as PostHog
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
         if (manager) {
             manager.destroy()
         }
@@ -193,7 +194,19 @@ describe('ConversationsManager', () => {
     const flushPromises = async () => {
         await act(async () => {
             await Promise.resolve()
-            jest.runAllTimers()
+            vi.runAllTimers()
+        })
+    }
+
+    // Flush the async poll chain WITHOUT running timers. The poll loop schedules its
+    // next tick only after the (floating) request promise resolves, so tests that send
+    // and then advance timers in one function must drain microtasks in between.
+    // vi.runAllTimers() would loop forever here because the loop reschedules itself.
+    const flushMicrotasks = async () => {
+        await act(async () => {
+            for (let i = 0; i < 20; i++) {
+                await Promise.resolve()
+            }
         })
     }
 
@@ -260,11 +273,21 @@ describe('ConversationsManager', () => {
             expect(mockPosthog.capture).not.toHaveBeenCalledWith('$conversations_widget_loaded', expect.anything())
         })
 
-        it('should get user traits from PostHog persistence', () => {
+        it('should get user traits from PostHog persistence', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
-
-            // User traits are accessed via mockPosthog.persistence.props
+            await flushPromises()
             expect(mockPosthog.persistence?.props).toBeDefined()
+            mockPosthog.persistence!.props.$name = 'Distinct Name'
+            mockPosthog.persistence!.props.$email = 'distinct@example.com'
+            await act(async () => {
+                await manager.sendMessage('Traits probe')
+            })
+            expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'POST',
+                    data: expect.objectContaining({ traits: { name: 'Distinct Name', email: 'distinct@example.com' } }),
+                })
+            )
         })
     })
 
@@ -363,7 +386,7 @@ describe('ConversationsManager', () => {
             await flushPromises()
         })
 
-        it('should render widget to DOM when show() is called', () => {
+        it('should render widget to DOM during construction', () => {
             // Widget is already rendered from beforeEach via constructor
             expect(document.getElementById('ph-conversations-widget-container')).toBeInTheDocument()
             expect(manager.isVisible()).toBe(true)
@@ -397,9 +420,7 @@ describe('ConversationsManager', () => {
         })
 
         it('should respect saved widget state when re-rendering', async () => {
-            // Widget starts closed by default
-            // The persistence mock returns 'closed' for loadWidgetState
-            // so re-rendering should keep it closed
+            ;(manager['_persistence'].loadWidgetState as VitestMock).mockReturnValue('open')
             act(() => {
                 manager.hide()
             })
@@ -409,8 +430,9 @@ describe('ConversationsManager', () => {
             })
             await flushPromises()
 
-            // Widget should be rendered but in closed state (not forced open)
             expect(manager.isVisible()).toBe(true)
+            expect(screen.getByRole('button', { name: 'Close', exact: true })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Open chat', exact: true })).not.toBeInTheDocument()
         })
     })
 
@@ -446,7 +468,7 @@ describe('ConversationsManager', () => {
 
             // The re-attach watcher runs every second.
             act(() => {
-                jest.advanceTimersByTime(1000)
+                vi.advanceTimersByTime(1000)
             })
 
             if (expectInDocument) {
@@ -507,7 +529,7 @@ describe('ConversationsManager', () => {
             }
             manager = new ConversationsManager(configWithWidgetDisabled, mockPosthog)
 
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             act(() => {
                 manager.show()
@@ -523,12 +545,182 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('request failure logging', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            vi.clearAllMocks()
+        })
+
+        it.each(['getMessages', 'markAsRead', 'getTickets', 'requestRestoreLink', 'restoreFromToken'] as const)(
+            'does not re-log handled status-zero failures from %s',
+            async (method) => {
+                const networkError = new TypeError('Failed to fetch')
+                ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                    options.callback({ statusCode: 0, error: networkError })
+                })
+
+                const requests = {
+                    getMessages: () => manager.getMessages('ticket-123'),
+                    markAsRead: () => manager.markAsRead('ticket-123'),
+                    getTickets: () => manager.getTickets(),
+                    requestRestoreLink: () => manager.requestRestoreLink('person@example.com'),
+                    restoreFromToken: () => manager.restoreFromToken('restore-token'),
+                }
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const infoSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+                try {
+                    await expect(requests[method]()).rejects.toMatchObject({
+                        kind: 'network',
+                        message: 'Unable to reach the server. Please check your connection and try again.',
+                    })
+                    expect(warnSpy).not.toHaveBeenCalled()
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    infoSpy.mockRestore()
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
+        it.each([
+            {
+                failure: 'HTTP',
+                response: { statusCode: 500, json: { detail: 'Internal server error' } },
+                kind: 'http',
+                message: 'Internal server error',
+            },
+            {
+                failure: 'rate limit',
+                response: { statusCode: 429 },
+                kind: 'rate_limit',
+                message: 'Too many requests. Please wait before trying again.',
+            },
+            {
+                failure: 'invalid response',
+                response: { statusCode: 200 },
+                kind: 'invalid_response',
+                message: 'Invalid response from server',
+            },
+        ])(
+            'logs restore retries once at warning severity for $failure failures',
+            async ({ response, kind, message }) => {
+                ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                    options.callback(response)
+                })
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+                try {
+                    await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind, message })
+                    expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                    expect(warnSpy).toHaveBeenCalledTimes(1)
+                    expect(warnSpy).toHaveBeenCalledWith(
+                        expect.stringContaining('[ConversationsManager]'),
+                        'Restore token exchange failed, retrying once',
+                        expect.objectContaining({ kind, message })
+                    )
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
+        it('warns once for a bare status-zero polling response', async () => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await expect(manager.getTickets()).rejects.toMatchObject({ kind: 'network' })
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Network error fetching tickets'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('warns once for a bare status-zero restore response', async () => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind: 'network' })
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Restore token exchange failed, retrying once',
+                    expect.objectContaining({ kind: 'network' })
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it.each([429, 500])('logs HTTP polling status %s only once', async (statusCode) => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await (manager as any)._loadTickets()
+                expect(errorSpy).toHaveBeenCalledTimes(1)
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to fetch tickets',
+                    { status: statusCode }
+                )
+            } finally {
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+    })
+
     describe('sendMessage', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
             // Clear mocks after initialization (which calls getTickets)
-            jest.clearAllMocks()
+            vi.clearAllMocks()
         })
 
         it('should send a message through the API', async () => {
@@ -546,6 +738,86 @@ describe('ConversationsManager', () => {
                     }),
                 })
             )
+        })
+
+        it('should reject with a handled network error without relogging the transport failure', async () => {
+            const networkError = new TypeError('Failed to fetch')
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 0, error: networkError })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'network',
+                    message: 'Unable to reach the server. Please check your connection and try again.',
+                })
+                expect(warnSpy).not.toHaveBeenCalled()
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should keep send-message rate limits at warning severity', async () => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 429 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'rate_limit',
+                    message: 'Too many requests. Please wait before trying again.',
+                })
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Rate limited sending message'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should log and reject with a handled HTTP error for a server failure', async () => {
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 500, json: { detail: 'Server unavailable' } })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'http',
+                    message: 'Server unavailable',
+                })
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to send message',
+                    { status: 500 }
+                )
+                expect(warnSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
         })
 
         it('should track message sent event', async () => {
@@ -577,7 +849,7 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             await act(async () => {
                 await manager.sendMessage('Second message')
@@ -616,14 +888,14 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Send second message to existing ticket
             await act(async () => {
                 await manager.sendMessage('Second message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as VitestMock).mock.calls[0][0]
             // session_id and replay_url should be included for debugging context
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             expect(sendRequestCall.data.session_context).toEqual({
@@ -637,7 +909,7 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Force new ticket
             await act(async () => {
@@ -660,13 +932,13 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session ID gracefully', async () => {
             // Mock get_session_id to return empty string
-            ;(mockPosthog.get_session_id as jest.Mock).mockReturnValue('')
+            ;(mockPosthog.get_session_id as VitestMock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as VitestMock).mock.calls[0][0]
             expect(sendRequestCall.data.session_id).toBeUndefined()
             // session_context should still be present (has current_url)
             expect(sendRequestCall.data.session_context).toBeDefined()
@@ -674,13 +946,13 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session replay URL gracefully', async () => {
             // Mock get_session_replay_url to return empty string
-            ;(mockPosthog.get_session_replay_url as jest.Mock).mockReturnValue('')
+            ;(mockPosthog.get_session_replay_url as VitestMock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as VitestMock).mock.calls[0][0]
             // session_id should still be present
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             // session_context should have current_url, replay_url is undefined when empty
@@ -703,7 +975,7 @@ describe('ConversationsManager', () => {
 
         it('should handle error during session context capture without failing message send', async () => {
             // Mock get_session_id to throw an error
-            ;(mockPosthog.get_session_id as jest.Mock).mockImplementation(() => {
+            ;(mockPosthog.get_session_id as VitestMock).mockImplementation(() => {
                 throw new Error('Session ID error')
             })
 
@@ -721,35 +993,24 @@ describe('ConversationsManager', () => {
                 })
             )
         })
-
-        // Note: Error handling tests are skipped because they conflict with Jest fake timers
-        // The polling mechanism uses setTimeout which runs during jest.runAllTimers()
-        // and causes unhandled rejections that crash the test runner.
-        // Error handling is tested implicitly through the API implementation.
-        it.skip('should handle send error gracefully', () => {
-            // This test is skipped due to Jest fake timer conflicts
-        })
-
-        it.skip('should handle rate limit error', () => {
-            // This test is skipped due to Jest fake timer conflicts
-        })
     })
 
     describe('message polling', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
-            // Send a message to create a ticket
+            // Send a message to create a ticket, then let the poll loop schedule its next tick
             await act(async () => {
                 await manager.sendMessage('Hello!')
             })
-            jest.clearAllMocks()
+            await flushMicrotasks()
+            vi.clearAllMocks()
         })
 
         it('should poll for messages at regular intervals', async () => {
-            // Advance time by poll interval (5 seconds)
+            // Widget is closed by default, so it polls at the slower 15s cadence
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(15000)
             })
 
             // Should have made a getMessages request
@@ -757,28 +1018,29 @@ describe('ConversationsManager', () => {
                 expect.objectContaining({
                     url: expect.stringContaining('/widget/messages/ticket-123'),
                     method: 'GET',
+                    timestampMode: 'query',
                 })
             )
         })
 
         it('should include widget_session_id in getMessages request', async () => {
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    url: expect.stringContaining('widget_session_id='),
+                    url: expect.stringContaining('widget_session_id=test-widget-session-id'),
                 })
             )
         })
 
         it('should not include distinct_id in getMessages request for security', async () => {
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(15000)
             })
 
-            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
+            const calls = (mockPosthog._send_request as VitestMock).mock.calls
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
@@ -787,10 +1049,301 @@ describe('ConversationsManager', () => {
             manager['_currentView'] = 'restore_request'
 
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
+
+        describe('status 0 circuit breaker', () => {
+            let nextStatusCode = 200
+
+            const pollWith = async (statusCode: number) => {
+                nextStatusCode = statusCode
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+
+            const setOnline = (value: boolean) => {
+                Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
+            }
+
+            beforeEach(() => {
+                nextStatusCode = 200
+                ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                    options.callback({
+                        statusCode: nextStatusCode,
+                        json: nextStatusCode === 200 ? createMockGetMessagesResponse() : null,
+                    })
+                })
+            })
+
+            afterEach(() => {
+                delete (window.navigator as any).onLine
+            })
+
+            it('stops polling after 3 consecutive online status-0 failures', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('also gates direct polling entrypoints after the breaker trips', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+
+                await act(async () => {
+                    await manager['_pollMessages']()
+                    await manager['_pollTickets']()
+                })
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+            })
+
+            it('resets the polling status-0 budget after any HTTP response', async () => {
+                await pollWith(0)
+                await pollWith(0)
+                await pollWith(500)
+                await pollWith(0)
+                await pollWith(0)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(6)
+            })
+
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
+                setOnline(false)
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                setOnline(true)
+
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
+
+            it('reopens polling on the online event', async () => {
+                for (let i = 0; i < 3; i++) {
+                    await pollWith(0)
+                }
+                await pollWith(0)
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(3)
+
+                window.dispatchEvent(new Event('online'))
+                await pollWith(0)
+
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+            })
+        })
+    })
+
+    describe('polling backpressure', () => {
+        const getRequestUrls = (): string[] =>
+            (mockPosthog._send_request as VitestMock).mock.calls.map((call) => call[0].url as string)
+
+        it('does not poll when there are no conversations', async () => {
+            // Default mock serves an empty ticket list, so the widget boots with
+            // nothing to poll and the loop should pause itself.
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            vi.clearAllMocks()
+
+            act(() => {
+                vi.advanceTimersByTime(60000)
+            })
+
+            expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
+
+        it('resumes polling after a message is sent', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+            vi.clearAllMocks()
+
+            // Loop was paused at boot (no tickets); sending must restart it.
+            act(() => {
+                vi.advanceTimersByTime(15000)
+            })
+
+            expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
+        })
+
+        it('polls at the faster open cadence while the widget is open', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+
+            // Open the widget, then flush the immediate poll the state change triggers.
+            act(() => {
+                manager['_handleStateChange']('open')
+            })
+            await flushMicrotasks()
+            vi.clearAllMocks()
+
+            // 5s is enough while open, whereas a closed widget would need 15s.
+            act(() => {
+                vi.advanceTimersByTime(5000)
+            })
+
+            expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
+        })
+
+        it('backs off exponentially after repeated 429 poll responses and recovers on success', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager['_currentTicketId'] = 'ticket-123'
+            manager['_currentView'] = 'messages'
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(5000)
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(10000)
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(20000)
+
+            // A successful poll clears the backoff and returns to the normal cadence.
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+            })
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_consecutivePollingRateLimitFailures']).toBe(0)
+            expect(manager['_nextPollDelayMs']()).toBe(15000)
+        })
+
+        it('does not spawn parallel poll loops when the widget is toggled rapidly', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+
+            // Toggle open/closed several times in one tick. Each toggle stops and
+            // restarts the loop; without generation guarding, the in-flight chains
+            // would each reschedule and we'd end up with multiple concurrent timers.
+            act(() => {
+                manager['_handleStateChange']('closed')
+                manager['_handleStateChange']('open')
+                manager['_handleStateChange']('closed')
+                manager['_handleStateChange']('open')
+            })
+            await flushMicrotasks()
+            vi.clearAllMocks()
+
+            // One open interval should produce exactly one poll, not several.
+            act(() => {
+                vi.advanceTimersByTime(5000)
+            })
+
+            const getMessagesCalls = (mockPosthog._send_request as VitestMock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/messages/ticket-123')
+            )
+            expect(getMessagesCalls).toHaveLength(1)
+        })
+
+        it('recovers immediately when the browser comes back online during a 429 backoff', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+
+            // Drive several 429s so the next poll is scheduled far out (backoff).
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+            for (const delay of [15000, 5000, 10000, 20000]) {
+                await act(async () => {
+                    vi.advanceTimersByTime(delay)
+                })
+                await flushMicrotasks()
+            }
+            expect(manager['_nextPollDelayMs']()).toBeGreaterThan(15000)
+
+            // Server recovers; coming back online must poll now, not after the backoff.
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+            })
+            vi.clearAllMocks()
+            act(() => {
+                window.dispatchEvent(new Event('online'))
+            })
+            await flushMicrotasks()
+
+            const getMessagesCalls = (mockPosthog._send_request as VitestMock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/messages/ticket-123')
+            )
+            expect(getMessagesCalls).toHaveLength(1)
+            expect(manager['_consecutivePollingRateLimitFailures']).toBe(0)
+            for (const [delay, expected] of [
+                [15000, 2],
+                [15000, 3],
+                [10000, 3],
+                [5000, 4],
+            ]) {
+                await act(async () => {
+                    vi.advanceTimersByTime(delay)
+                })
+                await flushMicrotasks()
+                expect(
+                    (mockPosthog._send_request as VitestMock).mock.calls.filter(
+                        ([request]) => request.method === 'GET' && request.url.includes('/widget/messages/ticket-123')
+                    )
+                ).toHaveLength(expected)
+            }
+        })
+
+        it('caps the 429 backoff at one minute', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager['_currentTicketId'] = 'ticket-123'
+            manager['_currentView'] = 'messages'
+            ;(mockPosthog._send_request as VitestMock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+
+            for (let i = 0; i < 8; i++) {
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+
+            expect(manager['_nextPollDelayMs']()).toBe(60000)
         })
     })
 
@@ -806,6 +1359,7 @@ describe('ConversationsManager', () => {
 
         it('should have an unsubscribe function', () => {
             expect(manager['_unsubscribeIdentifyListener']).toBeDefined()
+            expect(manager['_unsubscribeIdentifyListener']).toBe(vi.mocked(mockPosthog.on).mock.results[0].value)
         })
     })
 
@@ -815,12 +1369,33 @@ describe('ConversationsManager', () => {
             await flushPromises()
         })
 
-        // Note: This test is skipped because Jest fake timers interact poorly with
-        // the polling mechanism. The polling starts immediately on initialization
-        // and uses setInterval, which makes it difficult to test the destroy behavior.
-        // The actual destroy() method does call clearInterval and stop polling correctly.
-        it.skip('should stop polling on destroy', async () => {
-            // Test skipped due to Jest fake timer conflicts with polling
+        it('should stop polling on destroy', async () => {
+            await act(async () => {
+                await manager.sendMessage('Start polling')
+            })
+            await flushMicrotasks()
+            const messageRequests = () =>
+                vi
+                    .mocked(mockPosthog._send_request)
+                    .mock.calls.filter(
+                        ([request]) => request.method === 'GET' && request.url.includes('/widget/messages/ticket-123')
+                    ).length
+            const initial = messageRequests()
+            expect(initial).toBeGreaterThan(0)
+            await act(async () => {
+                vi.advanceTimersByTime(15000)
+            })
+            await flushMicrotasks()
+            expect(messageRequests()).toBe(initial + 1)
+            manager.destroy()
+            const atDestroy = messageRequests()
+            for (let i = 0; i < 4; i++) {
+                await act(async () => {
+                    vi.advanceTimersByTime(15000)
+                })
+                await flushMicrotasks()
+            }
+            expect(messageRequests()).toBe(atDestroy)
         })
 
         it('should remove widget from DOM on destroy', () => {
@@ -833,12 +1408,11 @@ describe('ConversationsManager', () => {
         })
 
         it('should unsubscribe from identify listener on destroy', () => {
-            const mockUnsubscribe = jest.fn()
-            manager['_unsubscribeIdentifyListener'] = mockUnsubscribe
-
+            const mockUnsubscribe = vi.mocked(mockPosthog.on).mock.results[0].value
             manager.destroy()
-
-            expect(mockUnsubscribe).toHaveBeenCalled()
+            expect(mockUnsubscribe).toHaveBeenCalledTimes(1)
+            manager.destroy()
+            expect(mockUnsubscribe).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -859,7 +1433,7 @@ describe('ConversationsManager', () => {
                         method: 'POST',
                         url: expect.stringContaining('/api/conversations/v1/widget/message'),
                         data: expect.objectContaining({
-                            widget_session_id: expect.any(String),
+                            widget_session_id: 'test-widget-session-id',
                             distinct_id: 'test-distinct-id',
                             message: 'Hello!',
                             traits: expect.objectContaining({
@@ -881,16 +1455,18 @@ describe('ConversationsManager', () => {
                 await act(async () => {
                     await manager.sendMessage('Hello!')
                 })
-                jest.clearAllMocks()
+                await flushMicrotasks()
+                vi.clearAllMocks()
 
-                // Trigger poll
+                // Trigger poll (widget closed by default -> 15s cadence)
                 act(() => {
-                    jest.advanceTimersByTime(5000)
+                    vi.advanceTimersByTime(15000)
                 })
 
                 expect(mockPosthog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'GET',
+                        timestampMode: 'query',
                         url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
                         headers: {
                             'X-Conversations-Token': 'test-token',
@@ -899,8 +1475,8 @@ describe('ConversationsManager', () => {
                 )
 
                 // Verify widget_session_id is in URL
-                const callArgs = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
-                expect(callArgs.url).toContain('widget_session_id=')
+                const callArgs = vi.mocked(mockPosthog._send_request).mock.calls[0][0]
+                expect(new URL(callArgs.url).searchParams.get('widget_session_id')).toBe('test-widget-session-id')
             })
 
             it('should update _currentTicketId when getMessages is called with explicit ticketId', async () => {
@@ -945,7 +1521,7 @@ describe('ConversationsManager', () => {
                 })
                 expect(manager['_currentTicketId']).toBe('switched-ticket-999')
 
-                jest.clearAllMocks()
+                vi.clearAllMocks()
 
                 // Send another message - should go to the switched ticket
                 await act(async () => {
@@ -964,14 +1540,18 @@ describe('ConversationsManager', () => {
         })
 
         describe('markAsRead API', () => {
-            // Note: This test is skipped because the markAsRead flow requires:
-            // 1. Widget to be open
-            // 2. getMessages to return unread_count > 0
-            // 3. Then _markMessagesAsRead to be called automatically
-            // This involves complex state transitions that are difficult to test with fake timers.
-            // The actual markAsRead API implementation is tested indirectly through other tests.
-            it.skip('should call markAsRead API with correct format when unread messages exist', () => {
-                // Test skipped due to complexity with fake timers and state transitions
+            it('should call markAsRead API with correct format when unread messages exist', async () => {
+                manager['_unreadCount'] = 2
+                const response = await manager.markAsRead('ticket-unread')
+                expect(mockPosthog._send_request).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        url: 'https://test.posthog.com/api/conversations/v1/widget/messages/ticket-unread/read',
+                        method: 'POST',
+                        headers: { 'X-Conversations-Token': 'test-token' },
+                        data: { widget_session_id: 'test-widget-session-id' },
+                    })
+                )
+                expect(response).toEqual({ success: true, unread_count: 0 })
             })
 
             it('should update _currentTicketId when markAsRead is called with explicit ticketId', async () => {
@@ -1037,6 +1617,8 @@ describe('ConversationsManager', () => {
             })
 
             expect(manager['_currentTicketId']).toBe('ticket-123')
+            expect(manager['_persistence'].saveTicketId).toHaveBeenCalledWith('ticket-123')
+            expect(manager['_persistence'].loadTicketId()).toBe('ticket-123')
         })
 
         it('should load saved widget state when re-rendered after hide', async () => {
@@ -1052,8 +1634,67 @@ describe('ConversationsManager', () => {
             })
             await flushPromises()
             expect(manager.isVisible()).toBe(true)
+            expect(screen.getByRole('button', { name: 'Open chat', exact: true })).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Close', exact: true })).not.toBeInTheDocument()
             // Widget state is loaded from persistence in _initializeWidget
             // The persistence mock returns 'closed' for loadWidgetState
+        })
+    })
+
+    describe('single open ticket navigation', () => {
+        const openTicket = {
+            id: 'ticket-open-1',
+            status: 'open',
+            message_count: 2,
+            created_at: '2023-01-01T00:00:00Z',
+            last_message_at: '2023-01-01T00:05:00Z',
+            last_message: 'still waiting on this',
+            unread_count: 0,
+        }
+
+        // Serve a fixed set of tickets for the tickets endpoint, keeping the other
+        // endpoint responses from the default mock so message/greeting flows still work.
+        const serveTickets = (tickets: unknown[]): void => {
+            vi.mocked(mockPosthog._send_request).mockImplementation((options: any) => {
+                const url = options.url as string
+                const method = options.method as string
+                if (method === 'GET' && url.includes('/widget/tickets')) {
+                    options.callback({ statusCode: 200, json: { results: tickets, has_more: false } })
+                } else if (method === 'GET' && url.includes('/widget/messages/')) {
+                    options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+                } else if (method === 'POST' && url.includes('/read')) {
+                    options.callback({ statusCode: 200, json: createMockMarkAsReadResponse() })
+                }
+            })
+        }
+
+        // Flush pending microtasks without running the recurring polling timers
+        // (vi.runAllTimers would loop forever once _startPolling has set intervals).
+        const flushMicrotasks = async (): Promise<void> => {
+            await act(async () => {
+                await Promise.resolve()
+                await Promise.resolve()
+            })
+        }
+
+        it('lets a user with one open ticket reach the ticket list to start a new conversation', async () => {
+            serveTickets([openTicket])
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            // The widget boots straight into the single open conversation
+            fireEvent.click(screen.getByLabelText('Open chat'))
+            await flushMicrotasks()
+
+            // Back-to-tickets navigation must be present so the user isn't locked in
+            const backButton = screen.getByLabelText('Back to conversations')
+            expect(backButton).toBeInTheDocument()
+
+            // Going back reveals the ticket list, which exposes "New conversation"
+            fireEvent.click(backButton)
+            await flushMicrotasks()
+
+            expect(screen.getByText('New conversation')).toBeInTheDocument()
         })
     })
 })

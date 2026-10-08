@@ -14,6 +14,7 @@ import {
   getServerURL,
   launchPuppeteer,
   startServer,
+  waitForCondition,
   waitForRAF,
   waitForIFrameLoad,
 } from '../utils';
@@ -646,6 +647,66 @@ describe('cross origin iframes', function (this: ISuite) {
         'window.snapshots',
       )) as eventWithTime[];
       await assertSnapshot(snapshots);
+    });
+
+    it("continues relaying after an iframe navigates through the parent's origin", async () => {
+      await ctx.page.goto(`${ctx.serverURL}/html/blank.html`);
+      await injectRecordScript(ctx.page.mainFrame());
+
+      await ctx.page.evaluate((url) => {
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        return new Promise((resolve) => {
+          iframe.onload = resolve;
+        });
+      }, `${ctx.serverBURL}/html/blank.html`);
+
+      const iframe = ctx.page.mainFrame().childFrames()[0];
+      await injectRecordScript(iframe);
+      await waitForCondition(() =>
+        ctx.page.evaluate(
+          (incrementalSnapshotType) =>
+            (window as unknown as IWindow).snapshots.some(
+              (event) =>
+                event.type === incrementalSnapshotType &&
+                (event.data as mutationData).isAttachIframe,
+            ),
+          EventType.IncrementalSnapshot,
+        ),
+      );
+
+      await iframe.goto(`${ctx.serverURL}/html/hello-world.html`);
+      await waitForCondition(() =>
+        ctx.page.evaluate(
+          (incrementalSnapshotType) =>
+            (window as unknown as IWindow).snapshots.filter(
+              (event) =>
+                event.type === incrementalSnapshotType &&
+                (event.data as mutationData).isAttachIframe,
+            ).length >= 2,
+          EventType.IncrementalSnapshot,
+        ),
+      );
+
+      await ctx.page.evaluate(() => {
+        (window as unknown as IWindow).snapshots = [];
+      });
+      await iframe.goto(`${ctx.serverBURL}/html/form.html`);
+      await injectRecordScript(iframe);
+
+      const attachment = await waitForCondition(() =>
+        ctx.page.evaluate(
+          (incrementalSnapshotType) =>
+            (window as unknown as IWindow).snapshots.find(
+              (event) =>
+                event.type === incrementalSnapshotType &&
+                (event.data as mutationData).isAttachIframe,
+            ),
+          EventType.IncrementalSnapshot,
+        ),
+      );
+      expect(JSON.stringify(attachment)).toContain('"tagName":"form"');
     });
   });
 });

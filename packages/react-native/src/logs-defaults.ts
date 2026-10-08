@@ -57,7 +57,7 @@ export function resolveLogsConfig(config: PostHogLogsConfig | undefined): Resolv
     terminationFlushBudgetMs: DEFAULT_TERMINATION_FLUSH_BUDGET_MS,
     // Merge platform-detected attrs first so user-provided `resourceAttributes`
     // wins on any conflict. Never throw if `Platform` is unavailable in
-    // unusual envs (web bundle, jest without RN preset) — fall back silently.
+    // unusual envs (web bundle, vi without RN preset) — fall back silently.
     resourceAttributes: {
       ...defaultResourceAttributes(),
       ...config?.resourceAttributes,

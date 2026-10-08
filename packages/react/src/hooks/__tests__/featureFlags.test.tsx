@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { isUndefined } from '../../utils/type-utils'
@@ -9,8 +10,6 @@ import {
     useFeatureFlagResult,
     useActiveFeatureFlags,
 } from '../index'
-
-jest.useFakeTimers()
 
 const ACTIVE_FEATURE_FLAGS = ['example_feature_true', 'multivariate_feature', 'example_feature_payload']
 
@@ -35,7 +34,8 @@ describe('feature flag hooks', () => {
 
     beforeEach(() => {
         posthog = {
-            isFeatureEnabled: (flag: string) => !!FEATURE_FLAG_STATUS[flag],
+            isFeatureEnabled: (flag: string) =>
+                isUndefined(FEATURE_FLAG_STATUS[flag]) ? undefined : !!FEATURE_FLAG_STATUS[flag],
             getFeatureFlag: (flag: string) => FEATURE_FLAG_STATUS[flag],
             getFeatureFlagPayload: (flag: string) => FEATURE_FLAG_PAYLOADS[flag],
             getFeatureFlagResult: (flag: string) => {
@@ -66,14 +66,13 @@ describe('feature flag hooks', () => {
             } as unknown as PostHog['featureFlags'],
         } as unknown as PostHog
 
-        // eslint-disable-next-line react/display-name
         renderProvider = ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
     })
 
     it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
-        ['missing', false],
+        ['missing', undefined],
         ['multivariate_feature', true],
         ['example_feature_payload', true],
     ])('should get the boolean feature flag', (flag, expected) => {
@@ -90,10 +89,14 @@ describe('feature flag hooks', () => {
         ['multivariate_feature', undefined],
         ['example_feature_payload', FEATURE_FLAG_PAYLOADS.example_feature_payload],
     ])('should get the payload feature flag', (flag, expected) => {
+        const getter = vi.spyOn(posthog, 'getFeatureFlagResult')
         const { result } = renderHook(() => useFeatureFlagPayload(flag), {
             wrapper: renderProvider,
         })
         expect(result.current).toEqual(expected)
+        expect(getter).toHaveBeenCalledTimes(2)
+        expect(getter).toHaveBeenNthCalledWith(1, flag, { send_event: false })
+        expect(getter).toHaveBeenNthCalledWith(2, flag, { send_event: false })
     })
 
     it('should return the active feature flags', () => {
@@ -125,7 +128,6 @@ describe('feature flag hooks', () => {
             } as unknown as PostHog['featureFlags'],
         } as unknown as PostHog
 
-        // eslint-disable-next-line react/display-name
         const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
             <PostHogProvider client={client}>{children}</PostHogProvider>
         )
@@ -159,7 +161,7 @@ describe('feature flag hooks', () => {
                 } as unknown as PostHog['featureFlags'],
             } as unknown as PostHog
 
-            // eslint-disable-next-line react/display-name
+            // oxlint-disable-next-line react-js/display-name
             return ({ children }: { children: React.ReactNode }) => (
                 <PostHogProvider client={client}>{children}</PostHogProvider>
             )
@@ -197,7 +199,6 @@ describe('feature flag hooks', () => {
                 } as unknown as PostHog['featureFlags'],
             } as unknown as PostHog
 
-            // eslint-disable-next-line react/display-name
             const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                 <PostHogProvider client={client}>{children}</PostHogProvider>
             )
@@ -227,7 +228,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )
@@ -291,7 +291,7 @@ describe('feature flag hooks', () => {
             it('re-renders when onFeatureFlags fires', () => {
                 let capturedCallback: (() => void) | undefined
                 const client = {
-                    getFeatureFlagResult: jest.fn().mockReturnValue({
+                    getFeatureFlagResult: vi.fn().mockReturnValue({
                         key: 'flag',
                         enabled: true,
                         variant: undefined,
@@ -306,7 +306,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )
@@ -318,7 +317,7 @@ describe('feature flag hooks', () => {
                     variant: undefined,
                     payload: undefined,
                 })
-                ;(client.getFeatureFlagResult as jest.Mock).mockReturnValue({
+                ;(client.getFeatureFlagResult as Mock).mockReturnValue({
                     key: 'flag',
                     enabled: true,
                     variant: 'new-variant',
@@ -340,7 +339,7 @@ describe('feature flag hooks', () => {
 
         describe('cleanup', () => {
             it('unsubscribes from onFeatureFlags on unmount', () => {
-                const unsubscribe = jest.fn()
+                const unsubscribe = vi.fn()
                 const client = {
                     getFeatureFlagResult: () => undefined,
                     onFeatureFlags: () => unsubscribe,
@@ -349,7 +348,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )

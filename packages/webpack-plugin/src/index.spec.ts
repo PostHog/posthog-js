@@ -6,21 +6,18 @@ import { runSourcemapCli } from '@posthog/plugin-utils'
 import { PosthogWebpackPlugin } from './index'
 import type { ResolvedPluginConfig } from './config'
 
-const mockLoggerError = jest.fn()
+const mockLoggerError = vi.hoisted(() => vi.fn())
 
-jest.mock(
-    '@posthog/core',
-    () => ({
-        createLogger: () => ({ error: mockLoggerError }),
-    }),
-    { virtual: true }
-)
-
-jest.mock('@posthog/plugin-utils', () => ({
-    runSourcemapCli: jest.fn().mockResolvedValue(undefined),
+vi.mock('@posthog/core', () => ({
+    createLogger: () => ({ error: mockLoggerError }),
 }))
 
-const runSourcemapCliMock = runSourcemapCli as jest.MockedFunction<typeof runSourcemapCli>
+vi.mock('@posthog/plugin-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/plugin-utils')>()),
+    runSourcemapCli: vi.fn().mockResolvedValue(undefined),
+}))
+
+const runSourcemapCliMock = runSourcemapCli as vi.MockedFunction<typeof runSourcemapCli>
 
 const config: ResolvedPluginConfig = {
     personalApiKey: 'phx_test',
@@ -31,6 +28,7 @@ const config: ResolvedPluginConfig = {
     sourcemaps: {
         enabled: true,
         deleteAfterUpload: true,
+        releaseMode: 'symbol-set',
     },
 }
 
@@ -42,6 +40,7 @@ function createCompilation(outputDirectory: string, chunks: TestChunk[], assets:
         outputOptions: { path: outputDirectory },
         chunks: new Set(chunks),
         getAssets: () => assets,
+        getAsset: () => ({ info: { posthogChunkId: 'test-id' } }),
     } as unknown as webpack.Compilation
 }
 
@@ -54,6 +53,18 @@ async function exists(filePath: string): Promise<boolean> {
     }
 }
 
+function createCompiler(version: string | undefined): {
+    compiler: webpack.Compiler
+    sourceMapDevToolPlugin: vi.Mock
+} {
+    const sourceMapDevToolPlugin = vi.fn().mockImplementation(() => ({ apply: vi.fn() }))
+    const compiler = {
+        webpack: { SourceMapDevToolPlugin: sourceMapDevToolPlugin, version },
+        hooks: { done: { tapAsync: vi.fn() }, compilation: { tap: vi.fn() } },
+    } as unknown as webpack.Compiler
+    return { compiler, sourceMapDevToolPlugin }
+}
+
 describe('PosthogWebpackPlugin', () => {
     let outputDirectory: string
 
@@ -64,7 +75,7 @@ describe('PosthogWebpackPlugin', () => {
     })
 
     afterEach(async () => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         await fs.rm(outputDirectory, { force: true, recursive: true })
     })
 
@@ -103,6 +114,111 @@ describe('PosthogWebpackPlugin', () => {
         expect(await exists(cssSourceMap)).toBe(expectedExists)
     })
 
+    it.each<{ releaseMode: 'event' | 'symbol-set'; version: string | undefined; expected: boolean; label: string }>([
+        {
+            releaseMode: 'event',
+            version: '5.108.1',
+            expected: true,
+            label: 'enables webpack debug ids in event release mode on webpack >= 5.104',
+        },
+        {
+            releaseMode: 'event',
+            version: '6.0.0',
+            expected: true,
+            label: 'enables webpack debug ids in event release mode on webpack 6',
+        },
+        {
+            releaseMode: 'event',
+            version: '5.103.9',
+            expected: false,
+            label: 'skips debug ids on webpacks that mishandle them with hidden source maps',
+        },
+        {
+            releaseMode: 'event',
+            version: undefined,
+            expected: false,
+            label: 'skips debug ids when the compiler reports no webpack version',
+        },
+        {
+            releaseMode: 'event',
+            version: 'nightly',
+            expected: false,
+            label: 'skips debug ids when the webpack version is unparsable',
+        },
+        {
+            releaseMode: 'symbol-set',
+            version: '5.108.1',
+            expected: false,
+            label: 'does not enable debug ids in symbol-set release mode',
+        },
+    ])('$label', ({ releaseMode, version, expected }) => {
+        const testConfig = {
+            ...config,
+            sourcemaps: { ...config.sourcemaps, releaseMode },
+        }
+        const { compiler, sourceMapDevToolPlugin } = createCompiler(version)
+
+        new PosthogWebpackPlugin(testConfig, true).apply(compiler)
+
+        expect(sourceMapDevToolPlugin).toHaveBeenCalledTimes(1)
+        const options = sourceMapDevToolPlugin.mock.calls[0][0]
+        if (expected) {
+            expect(options.debugIds).toBe(true)
+        } else {
+            // Absent rather than false: webpacks predating the option reject unknown keys.
+            expect(options).not.toHaveProperty('debugIds')
+        }
+    })
+
+    it('uploads only instrumented JavaScript and deletes only its adjacent maps', async () => {
+        const files = ['app.js', 'app.js.map', 'untouched.js.map', 'style.css']
+        await Promise.all(files.map((file) => fs.writeFile(path.join(outputDirectory, file), 'unchanged')))
+        const compilation = createCompilation(outputDirectory, [{ files: new Set(['app.js', 'style.css']) }], [])
+        await new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)
+        expect(runSourcemapCliMock).toHaveBeenCalledWith(config, {
+            filePaths: [path.join(outputDirectory, 'app.js')],
+            command: 'upload',
+        })
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(false)
+        expect(await fs.readFile(path.join(outputDirectory, 'app.js'), 'utf8')).toBe('unchanged')
+        expect(await exists(path.join(outputDirectory, 'untouched.js.map'))).toBe(true)
+    })
+
+    it('retains JavaScript and CSS maps when upload fails', async () => {
+        await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
+        await fs.writeFile(path.join(outputDirectory, 'app.css.map'), '{}')
+        runSourcemapCliMock.mockRejectedValueOnce(new Error('upload failed'))
+        const compilation = createCompilation(
+            outputDirectory,
+            [{ files: new Set(['app.js']) }],
+            [{ name: 'app.css.map' }]
+        )
+        await expect(new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)).rejects.toThrow(
+            'upload failed'
+        )
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(true)
+        expect(await exists(path.join(outputDirectory, 'app.css.map'))).toBe(true)
+    })
+
+    it('logs JavaScript map deletion failures without failing the successful upload', async () => {
+        await fs.writeFile(path.join(outputDirectory, 'app.js.map'), '{}')
+        const originalRm = fs.rm.bind(fs)
+        vi.spyOn(fs, 'rm').mockImplementation(async (file, options) => {
+            if (file === path.join(outputDirectory, 'app.js.map')) throw new Error('permission denied')
+            return originalRm(file, options)
+        })
+        const compilation = createCompilation(outputDirectory, [{ files: new Set(['app.js']) }], [])
+        await expect(
+            new PosthogWebpackPlugin(config, true).processSourceMaps(compilation, config)
+        ).resolves.toBeUndefined()
+        expect(await exists(path.join(outputDirectory, 'app.js.map'))).toBe(true)
+        expect(mockLoggerError).toHaveBeenCalledWith(
+            'PostHog sourcemaps uploaded, but failed to delete source map:',
+            path.join(outputDirectory, 'app.js.map'),
+            expect.any(Error)
+        )
+    })
+
     it('continues deleting CSS source maps and logs each deletion failure', async () => {
         const originalRm = fs.rm.bind(fs)
         const failedCssSourceMap = path.join(outputDirectory, 'static/css/app.css.map')
@@ -111,7 +227,7 @@ describe('PosthogWebpackPlugin', () => {
         await fs.writeFile(failedCssSourceMap, '{}')
         await fs.writeFile(deletedCssSourceMap, '{}')
 
-        jest.spyOn(fs, 'rm').mockImplementation(async (filePath, options) => {
+        vi.spyOn(fs, 'rm').mockImplementation(async (filePath, options) => {
             if (filePath === failedCssSourceMap) {
                 throw new Error('permission denied')
             }

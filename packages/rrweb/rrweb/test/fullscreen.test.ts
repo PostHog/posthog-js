@@ -194,6 +194,9 @@ describe('record/replay native fullscreen', () => {
     const baseline = events[0].timestamp;
     const enterOffset = fs[0].timestamp - baseline;
     const exitOffset = fs[1].timestamp - baseline;
+    const snapshotOffset =
+      events.filter((e) => e.type === EventType.FullSnapshot)[0].timestamp -
+      baseline;
 
     await page.evaluate(`window.events = ${JSON.stringify(events)}`);
     await page.evaluate(`
@@ -220,7 +223,11 @@ describe('record/replay native fullscreen', () => {
     };
 
     const activeOffset = Math.floor((enterOffset + exitOffset) / 2);
-    const beforeOffset = Math.max(enterOffset - 1, 0);
+    // strictly after the snapshot, so recording timing jitter can't land this
+    // checkpoint on the snapshot-boundary path — that path has its own test
+    // ('pausing exactly at its timestamp' in replayer.test.ts); this one is
+    // about the marker surviving scrubs
+    const beforeOffset = Math.max(enterOffset - 1, snapshotOffset + 1);
     const off = { hasMarker: false, isPinned: false };
     const on = { hasMarker: true, isPinned: true };
 

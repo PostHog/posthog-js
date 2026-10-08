@@ -1,7 +1,9 @@
+import type { Mock as VitestMock } from 'vitest'
 import { mockLogger } from './helpers/mock-logger'
 
-import { uuidv7 } from '../uuidv7'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import * as transport from '../request'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { knownUnsafeEditableEvent, UUID_REGEX } from '@posthog/core'
@@ -39,54 +41,99 @@ describe('posthog core - before send', () => {
     const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'before_send'>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
         return Object.assign(posthog, {
-            _send_request: jest.fn(),
+            _send_retriable_request: vi.fn(),
         })
     }
 
     beforeEach(() => {
-        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+        vi.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     it('can reject an event', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toBeUndefined()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
+
+    it.each([true, false])(
+        'can collect an event without native delivery when before_send returns null (batching: %s)',
+        async (request_batching) => {
+            const collected: CaptureResult[] = []
+            const posthog = await createPosthogInstance(uuidv7(), {
+                request_batching,
+                capture_pageview: false,
+                autocapture: false,
+                disable_session_recording: true,
+                advanced_disable_feature_flags: true,
+                before_send: (event) => {
+                    collected.push(event)
+                    return null
+                },
+            })
+            const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
+            const retry = vi.spyOn(posthog._retryQueue!, 'retriableRequest')
+            const send = vi.spyOn(transport, 'request')
+            try {
+                expect(posthog.capture(eventName, { source: 'collector' })).toBeUndefined()
+                await vi.advanceTimersByTimeAsync(30_000)
+
+                expect(collected).toEqual([
+                    expect.objectContaining({
+                        event: eventName,
+                        uuid: expect.stringMatching(UUID_REGEX),
+                        properties: expect.objectContaining({ source: 'collector' }),
+                    }),
+                ])
+                expect(enqueue).not.toHaveBeenCalled()
+                expect(retry).not.toHaveBeenCalled()
+                expect(send).not.toHaveBeenCalled()
+            } finally {
+                enqueue.mockRestore()
+                retry.mockRestore()
+                send.mockRestore()
+                posthog._requestQueue?.unload()
+                posthog._retryQueue?.unload()
+            }
+        }
+    )
 
     it('can edit an event', () => {
         const posthog = posthogWith({
             before_send: editingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toHaveProperty(['properties', 'edited'], true)
         expect(capturedData).toHaveProperty(['$set', 'edited'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            callback: expect.any(Function),
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
     })
 
     it('uses a valid provided uuid', () => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
         const uuid = uuidv7()
 
         const capturedData = posthog.capture(eventName, {}, { uuid })
@@ -96,7 +143,7 @@ describe('posthog core - before send', () => {
 
     it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
@@ -108,7 +155,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -117,39 +164,75 @@ describe('posthog core - before send', () => {
     })
 
     it('can take an array of fns', () => {
+        const finalHook = vi.fn((cr: CaptureResult) => ({
+            ...cr,
+            properties: { ...cr.properties, edited_two: true },
+        }))
         const posthog = posthogWith({
             before_send: [
-                (cr) => {
-                    cr.properties = { ...cr.properties, edited_one: true }
-                    return cr
-                },
+                (cr) => ({ ...cr, properties: { ...cr.properties, edited_one: true } }),
                 (cr) => {
                     if (cr.event === 'to reject') {
                         return null
                     }
-                    return cr
+                    return {
+                        ...cr,
+                        properties: {
+                            ...cr.properties,
+                            second_saw_first: cr.properties.edited_one === true,
+                        },
+                    }
                 },
-                (cr) => {
-                    cr.properties = { ...cr.properties, edited_two: true }
-                    return cr
-                },
+                finalHook,
             ],
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
 
-        expect(capturedData.filter((cd) => !!cd)).toHaveLength(1)
+        expect(capturedData[1]).toBeUndefined()
+        expect(finalHook).toHaveBeenCalledTimes(1)
+        expect(finalHook).toHaveBeenCalledWith(expect.objectContaining({ event: eventName }))
+        expect(posthog._send_retriable_request).toHaveBeenCalledTimes(1)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
-        expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            callback: expect.any(Function),
-            compression: 'best-available',
-            data: capturedData[0],
-            method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
+        expect(capturedData[0]).toHaveProperty(['properties', 'second_saw_first'], true)
+        expect(capturedData[0]).toHaveProperty(['properties', 'edited_two'], true)
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData[0],
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
+    })
+
+    it('fails closed when a before_send function throws', () => {
+        const error = new Error('before_send failed')
+        const sentinel = vi.fn((event: CaptureResult) => event)
+        const posthog = posthogWith({
+            before_send: [
+                (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
+                () => {
+                    throw error
+                },
+                sentinel,
+            ],
         })
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
+        let capturedData: CaptureResult | undefined
+
+        expect(() => {
+            capturedData = posthog.capture(eventName, {}, {})
+        }).not.toThrow()
+
+        expect(capturedData).toBeUndefined()
+        expect(sentinel).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
+        expect(mockLogger.error).toHaveBeenCalledWith(`Error in beforeSend function for event '${eventName}':`, error)
     })
 
     it('can sanitize $set event', () => {
@@ -159,19 +242,22 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
         expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
-        expect(posthog._send_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            callback: expect.any(Function),
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
     })
 
     it('warned when making arbitrary event invalid', () => {
@@ -181,37 +267,37 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
         expect(capturedData).not.toHaveProperty(['properties', 'value'], 'provided')
-        expect(posthog._send_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            callback: expect.any(Function),
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
         expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
         )
     })
 
-    it('logs a warning when rejecting an unsafe to edit event', () => {
+    it.each(knownUnsafeEditableEvent)('logs a warning when rejecting unsafe event %s', (unsafeEvent) => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
-        // chooses a random string from knownUnEditableEvent
-        const randomUnsafeEditableEvent =
-            knownUnsafeEditableEvent[Math.floor(Math.random() * knownUnsafeEditableEvent.length)]
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
+        expect(posthog.capture(unsafeEvent, {}, {})).toBeUndefined()
 
-        posthog.capture(randomUnsafeEditableEvent, {}, {})
-
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.warn).toHaveBeenCalledWith(
-            `Event '${randomUnsafeEditableEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
+            `Event '${unsafeEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
         )
     })
 
@@ -232,12 +318,12 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_retriable_request as VitestMock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toBeUndefined()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' had its 'token' property removed in a beforeSend function. This property is required for ingestion, so the event will be dropped.`
         )

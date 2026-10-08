@@ -108,7 +108,7 @@ export class RRWebPluginCanvasWebRTCReplay {
   private streamNodeMap = new Map<string, number>();
   private streams = new Set<MediaStream>();
   private runningStreams = new WeakSet<MediaStream>();
-  public signalReceive(msg: RTCSessionDescriptionInit) {
+  public signalReceive(msg: RTCSessionDescriptionInit): void {
     if (!this.peer) {
       this.peer = new SimplePeer({
         initiator: false,

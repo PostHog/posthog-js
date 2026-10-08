@@ -154,6 +154,16 @@ describe('extractPrefillParamsFromUrl', () => {
             })
         })
 
+        it.each(['unused=a=%', 'q1=a=%', 'q1=a=%E0%A4', '%ZZ=value', 'auto_submit=true=%'])(
+            'ignores malformed encoding in %s without losing valid parameters',
+            (malformed) => {
+                expect(extractPrefillParamsFromUrl(`?q0=1&${malformed}&q2=a%3Db`)).toEqual({
+                    params: { 0: ['1'], 2: ['a=b'] },
+                    autoSubmit: false,
+                })
+            }
+        )
+
         it('should handle empty parameter values', () => {
             const result = extractPrefillParamsFromUrl('?q0=&q1=1')
             expect(result.params).toEqual({
@@ -172,13 +182,26 @@ describe('extractPrefillParamsFromUrl', () => {
             })
         })
 
-        it('should handle multiple equals signs in value', () => {
-            // Note: split('=') only splits on first '=', so 'q0=a=b=c' becomes key='q0', value='a'
-            // This is the actual behavior of the implementation
-            const result = extractPrefillParamsFromUrl('?q0=a=b=c')
-            expect(result.params).toEqual({
-                0: ['a'], // Only 'a' is captured, not 'a=b=c'
+        it.each(['?q0=a=b=c', '?q0=a%3Db%3Dc', '?q0=a=b%3Dc', '?q0==', '?q0='])(
+            'should preserve the entire question value in %s',
+            (search) => {
+                const expectedValues = new URLSearchParams(search).getAll('q0')
+                const result = extractPrefillParamsFromUrl(search)
+                expect(result).toEqual({ params: { 0: expectedValues }, autoSubmit: false })
+            }
+        )
+
+        it('should preserve repeated values while ignoring empty keys and key-only parameters', () => {
+            const result = extractPrefillParamsFromUrl('?q0=a=b=c&q0=&q1&q2=2&=ignored&&auto_submit=true')
+            expect(result).toEqual({
+                params: { 0: ['a=b=c', ''], 2: ['2'] },
+                autoSubmit: true,
             })
+        })
+
+        it('should not treat an auto_submit value with an equals sign as true', () => {
+            const result = extractPrefillParamsFromUrl('?q0=1&auto_submit=true=extra')
+            expect(result).toEqual({ params: { 0: ['1'] }, autoSubmit: false })
         })
 
         it('should handle duplicate auto_submit parameters', () => {
@@ -1022,6 +1045,22 @@ describe('calculatePrefillStartIndex', () => {
             const result = calculatePrefillStartIndex(createSurvey(questions), prefilledIndices, responses)
             expect(result.startQuestionIndex).toBe(2) // questions.length = survey complete
             expect(result.skippedResponses).toEqual({ '$survey_response_q-end': 'No' })
+        })
+
+        it('should stop after max iterations when branching creates a cycle', () => {
+            const cyclicQuestion: SurveyQuestion = {
+                ...ratingQuestionWithSkip,
+                branching: {
+                    type: SurveyQuestionBranchingType.SpecificQuestion,
+                    index: 0,
+                },
+            }
+            const responses = { '$survey_response_q-rating': 7 }
+
+            const result = calculatePrefillStartIndex(createSurvey([cyclicQuestion]), [0], responses)
+
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual(responses)
         })
 
         it('should handle specific question branching', () => {

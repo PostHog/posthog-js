@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useEffect, useMemo, useRef, JSX } from 'react'
+import React, { MouseEventHandler, ReactElement, useEffect, useMemo, useRef } from 'react'
 import { isNull } from '../../utils/type-utils'
 
 /**
@@ -20,7 +20,7 @@ export function VisibilityAndClickTracker({
     onClick?: MouseEventHandler<HTMLDivElement>
     trackView: boolean
     options?: IntersectionObserverInit
-}): JSX.Element {
+}): ReactElement<any, any> {
     const ref = useRef<HTMLDivElement>(null)
 
     const observerOptions = useMemo(
@@ -28,14 +28,14 @@ export function VisibilityAndClickTracker({
             threshold: 0.1,
             ...options,
         }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // oxlint-disable-next-line react/exhaustive-deps
         [options?.threshold, options?.root, options?.rootMargin]
     )
 
     useEffect(() => {
         if (isNull(ref.current) || !trackView) return
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const observer = new IntersectionObserver(([entry]) => onIntersect(entry), observerOptions)
         observer.observe(ref.current)
         return () => observer.disconnect()

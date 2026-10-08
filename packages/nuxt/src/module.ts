@@ -1,10 +1,12 @@
-import { defineNuxtModule, addPlugin, createResolver, addServerPlugin, addImportsDir } from '@nuxt/kit'
+import { defineNuxtModule, addPlugin, createResolver, addServerPlugin, addImportsDir, getNuxtVersion } from '@nuxt/kit'
+import type { Nitro, NitroConfig } from 'nitropack/types'
 import type { PostHogConfig } from 'posthog-js'
 import type { PostHogOptions } from 'posthog-node'
 import type {} from 'nuxt/app'
 import { resolveBinaryPath, spawnLocal } from '@posthog/plugin-utils'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import { existsSync } from 'node:fs'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -53,6 +55,15 @@ export interface ModuleOptions {
   sourcemaps: SourcemapsConfig | undefined
 }
 
+declare module '@nuxt/schema' {
+  interface NuxtConfig {
+    posthogConfig?: Partial<ModuleOptions>
+  }
+  interface NuxtOptions {
+    posthogConfig?: ModuleOptions
+  }
+}
+
 export interface PostHogCommon {
   publicKey: string
   host: string
@@ -81,8 +92,9 @@ export default defineNuxtModule<ModuleOptions>({
     const resolver = createResolver(import.meta.url)
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
     const normalizedHost = normalizeHost(options.host)
-    addPlugin(resolver.resolve('./runtime/vue-plugin'))
-    addServerPlugin(resolver.resolve('./runtime/nitro-plugin'))
+    addPlugin({ src: resolver.resolve('./runtime/vue-plugin'), mode: 'client' })
+    const nitroPlugin = Number.parseInt(getNuxtVersion(nuxt), 10) >= 5 ? 'nitro-plugin-v3' : 'nitro-plugin-v2'
+    addServerPlugin(resolver.resolve(`./runtime/${nitroPlugin}`))
     addImportsDir(resolver.resolve('./runtime/composables'))
 
     Object.assign(nuxt.options.runtimeConfig.public, {
@@ -103,17 +115,15 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     const sourcemapsConfig = options.sourcemaps
-    let outputDir: string | undefined
     let publicDir: string | undefined
     let serverDir: string | undefined
 
-    nuxt.hook('nitro:init', (nitro) => {
+    nuxt.hook('nitro:init', (nitro: Nitro) => {
       publicDir = nitro.options.output?.publicDir
       serverDir = nitro.options.output?.serverDir
-      outputDir = nitro.options.output?.dir
     })
 
-    nuxt.hook('nitro:config', (nitroConfig) => {
+    nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
       nitroConfig.rollupConfig = {
         ...(nitroConfig.rollupConfig || {}),
         output: {
@@ -131,6 +141,7 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     let isBuildProcess = false
+    let publicSourcemapsUploaded = false
 
     const posthogCliRunner = () => {
       const cliBinaryPath =
@@ -166,6 +177,13 @@ export default defineNuxtModule<ModuleOptions>({
         // Inject public sourcemaps
         // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
         await cliRunner(getInjectArgs(publicDir, sourcemapsConfig))
+        // Upload here in both deletion modes: this hook runs before Nitro writes the server
+        // bundle, so a preset that nests the server directory inside the public one
+        // (`cloudflare-pages`) never sends the server chunks through this upload as well.
+        // With `deleteAfterUpload` the upload also has to run before Nitro generates its
+        // asset manifest.
+        await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
+        publicSourcemapsUploaded = true
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
       }
@@ -173,21 +191,36 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('close', async () => {
       // We don't want to run this process during prepare and friends
-      if (!isBuildProcess || !serverDir || !outputDir) return
+      if (!isBuildProcess || !serverDir || !publicDir) return
+      // Each directory is handled on its own: a failing server command must not skip the
+      // public upload, which is the only client sourcemap upload of the build when the
+      // early upload failed.
       try {
-        // Inject server sourcemaps
-        await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
-        // Upload all assets
-        await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
+        // Nitro reports a serverDir for every build but only writes one when it builds a
+        // server bundle. `ssr: false` still builds one, so read the directory on disk
+        // instead of `nuxt.options.ssr` (#3005). Only injected directories are uploaded:
+        // the CLI fails an upload of chunks that carry no chunk id.
+        if (existsSync(serverDir)) {
+          await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
+          await cliRunner(getUploadArgs(serverDir, sourcemapsConfig))
+        }
       } catch (error) {
-        console.error('Failed to process server sourcemaps:', error)
+        console.error(`Failed to process or upload server sourcemaps (${serverDir}):`, error)
+      }
+      if (!publicSourcemapsUploaded) {
+        try {
+          // Keep the public sourcemaps on disk here: Nitro's asset manifest already lists them.
+          await cliRunner(getUploadArgs(publicDir, { ...sourcemapsConfig, deleteAfterUpload: false }))
+        } catch (error) {
+          console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
+        }
       }
     })
   },
 })
 
-function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
-  const processOptions: string[] = ['sourcemap', 'inject', '--ignore', '**/node_modules/**', '--directory', directory]
+function getReleaseArgs(sourcemapsConfig: SourcemapsConfig) {
+  const processOptions: string[] = []
 
   const releaseName = sourcemapsConfig.releaseName ?? sourcemapsConfig.project
   if (releaseName) {
@@ -206,8 +239,30 @@ function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   return processOptions
 }
 
+function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
+  return [
+    'sourcemap',
+    'inject',
+    '--ignore',
+    '**/node_modules/**',
+    '--directory',
+    directory,
+    ...getReleaseArgs(sourcemapsConfig),
+  ]
+}
+
 function getUploadArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
-  const processOptions: string[] = ['sourcemap', 'upload', '--ignore', '**/node_modules/**', '--directory', directory]
+  // Without the release flags the CLI derives a release from the checkout directory, so each
+  // upload creates a second release next to the configured one.
+  const processOptions: string[] = [
+    'sourcemap',
+    'upload',
+    '--ignore',
+    '**/node_modules/**',
+    '--directory',
+    directory,
+    ...getReleaseArgs(sourcemapsConfig),
+  ]
 
   if (sourcemapsConfig.deleteAfterUpload ?? true) {
     processOptions.push('--delete-after')

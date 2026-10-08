@@ -21,7 +21,7 @@ describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
@@ -29,7 +29,7 @@ describe('PostHog Core', () => {
 
   describe('capture', () => {
     it('should capture an event', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       posthog.capture('custom-event')
 
@@ -61,25 +61,44 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should allow overriding the timestamp', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+    it('should preserve Date timestamp overrides until serializing the equivalent UTC instant', async () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      const timestamp = new Date('2021-01-02T03:04:05.000+05:30')
+      const captureListener = vi.fn()
+      posthog.on('capture', captureListener)
 
-      posthog.capture('custom-event', { foo: 'bar' }, { timestamp: new Date('2021-01-02') })
+      posthog.capture('custom-event', {}, { timestamp })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
+      const queue = posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue)
+      expect(queue[0].message.timestamp).toBe(timestamp)
+
+      await posthog.flush()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.000Z',
+      })
+    })
+
+    it('should normalize string timestamp overrides from untyped callers at serialization', async () => {
+      const timestamp = '2021-01-02T03:04:05.123456+05:30'
+      const captureListener = vi.fn()
+      posthog.on('capture', captureListener)
+
+      posthog.capture('custom-event', {}, { timestamp: timestamp as unknown as Date })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
       await waitForPromises()
       const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body).toMatchObject({
-        api_key: 'TEST_API_KEY',
-        batch: [
-          {
-            event: 'custom-event',
-            timestamp: '2021-01-02T00:00:00.000Z',
-          },
-        ],
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.123456Z',
       })
     })
 
     it('should allow overriding the uuid', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       const id = uuidv7()
 
@@ -142,7 +161,7 @@ describe('PostHog Core', () => {
 
   describe('before_send', () => {
     it('should allow dropping events by returning null', async () => {
-      const beforeSend = jest.fn().mockReturnValue(null)
+      const beforeSend = vi.fn().mockReturnValue(null)
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         before_send: beforeSend,
@@ -163,7 +182,7 @@ describe('PostHog Core', () => {
     })
 
     it('should allow modifying events', async () => {
-      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
             ...event,
@@ -199,13 +218,13 @@ describe('PostHog Core', () => {
     })
 
     it('should support an array of before_send functions', async () => {
-      const beforeSend1 = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend1 = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return { ...event, properties: { ...event.properties, from_first: true } }
         }
         return event
       })
-      const beforeSend2 = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend2 = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return { ...event, properties: { ...event.properties, from_second: true } }
         }
@@ -238,14 +257,14 @@ describe('PostHog Core', () => {
     })
 
     it('should stop processing if any function in the array returns null', async () => {
-      const beforeSend1 = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend1 = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return { ...event, properties: { ...event.properties, from_first: true } }
         }
         return event
       })
-      const beforeSend2 = jest.fn().mockReturnValue(null)
-      const beforeSend3 = jest.fn((event: CaptureEvent | null) => event)
+      const beforeSend2 = vi.fn().mockReturnValue(null)
+      const beforeSend3 = vi.fn((event: CaptureEvent | null) => event)
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         before_send: [beforeSend1, beforeSend2, beforeSend3],
@@ -260,10 +279,38 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
 
+    it('should fail closed when a before_send function throws', async () => {
+      const error = new Error('before_send failed')
+      const sentinel = vi.fn((event: CaptureEvent | null) => event)
+      const captureListener = vi.fn()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: [
+          (event) => event && { ...event, properties: { ...event.properties, transformed: true } },
+          () => {
+            throw error
+          },
+          sentinel,
+        ],
+      })
+      const errorSpy = vi.spyOn((posthog as any)._logger, 'error').mockImplementation(() => {})
+      posthog.on('capture', captureListener)
+
+      expect(() => posthog.capture('custom-event')).not.toThrow()
+      await waitForPromises()
+
+      expect(sentinel).not.toHaveBeenCalled()
+      expect(captureListener).not.toHaveBeenCalled()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toBeUndefined()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith("Error in before_send function for event 'custom-event':", error)
+      errorSpy.mockRestore()
+    })
+
     it('should pass timestamp and uuid through before_send', async () => {
       const customDate = new Date('2023-06-15')
       const customUuid = uuidv7()
-      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      const beforeSend = vi.fn((event: CaptureEvent | null) => event)
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         before_send: beforeSend,
@@ -285,7 +332,7 @@ describe('PostHog Core', () => {
     it('should allow modifying timestamp and uuid in before_send', async () => {
       const modifiedDate = new Date('2020-01-01T00:00:00.000Z')
       const modifiedUuid = uuidv7()
-      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
             ...event,
@@ -320,7 +367,7 @@ describe('PostHog Core', () => {
     it.each(invalidUuidCases)(
       'should generate a new uuid when before_send returns an invalid %s',
       async (_, invalidUuid) => {
-        const beforeSend = jest.fn((event: CaptureEvent | null) => {
+        const beforeSend = vi.fn((event: CaptureEvent | null) => {
           if (event) {
             return {
               ...event,
@@ -346,7 +393,7 @@ describe('PostHog Core', () => {
     )
 
     it('should expose $set and $set_once from identify events', async () => {
-      const beforeSend = jest.fn((event: CaptureEvent | null) => event)
+      const beforeSend = vi.fn((event: CaptureEvent | null) => event)
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 1,
         before_send: beforeSend,
@@ -365,7 +412,7 @@ describe('PostHog Core', () => {
     })
 
     it('should allow modifying $set in before_send for identify events', async () => {
-      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
             ...event,
@@ -394,7 +441,7 @@ describe('PostHog Core', () => {
     })
 
     it('should allow removing $set_once in before_send', async () => {
-      const beforeSend = jest.fn((event: CaptureEvent | null) => {
+      const beforeSend = vi.fn((event: CaptureEvent | null) => {
         if (event) {
           return {
             ...event,

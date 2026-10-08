@@ -1,9 +1,10 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { Event, McpEvent } from '../types'
-import { sanitizeCapturedValue } from './mcp-payloads'
+import type { ErrorProperties, Event, McpEvent } from '../types'
+import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
 
@@ -14,8 +15,8 @@ function isRecord(value: unknown): value is SanitizedRecord {
 /**
  * Sanitizes an event by redacting non-text content blocks from responses
  * and large base64-encoded strings from parameters, and applying the same
- * string redaction (PostHog tokens, base64 blobs, sensitive keys) to the
- * agent-supplied intent.
+ * string redaction (PostHog tokens, base64 blobs, sensitive keys) to values
+ * supplied by the agent.
  *
  * This is a synchronous operation that returns a new object without mutating the original.
  * It should run after customer redaction in the event pipeline.
@@ -31,14 +32,51 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.parameters = sanitizeParameters(result.parameters)
   }
 
-  // The intent comes straight from an agent-narrated `context` string, so it
-  // can contain a secret the LLM read aloud. Redact it like any other captured
-  // value rather than shipping it raw as `$mcp_intent`.
+  // Every event type, not just `resources/read`: `$identify` and the `$exception`
+  // sibling carry the same name, and a tool or prompt name is free text an
+  // application can spell as a URL too.
+  if (result.resourceName != null) {
+    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
+  }
+
+  // The intent comes straight from an agent-narrated `context` string, so it can
+  // contain a secret the LLM read aloud or personal data it narrated about the
+  // user. `sanitizeFreeText` adds structured PII redaction (emails, phone numbers,
+  // IPs, cards, SSNs) to the passes every captured value gets, in the one order
+  // that works — see its doc comment. PII redaction is scoped to the intent only:
+  // structured tool parameters and responses often hold the same shapes as
+  // legitimate data.
   if (result.userIntent != null) {
-    result.userIntent = sanitizeCapturedValue(result.userIntent) as string
+    result.userIntent = sanitizeFreeText(result.userIntent)
+  }
+
+  if (result.llmModel != null) {
+    result.llmModel = sanitizeCapturedValue(result.llmModel) as string
+  }
+
+  if (result.error != null) {
+    result.error = sanitizeExceptionValues(result.error)
   }
 
   return result
+}
+
+/**
+ * Sanitizes exception messages before they fan out to both the primary MCP
+ * event's error-message property and the `$exception` sibling.
+ */
+function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
+  if (!Array.isArray(error.$exception_list)) {
+    return error
+  }
+
+  return {
+    ...error,
+    $exception_list: error.$exception_list.map((exception) => ({
+      ...exception,
+      value: sanitizeCapturedValue(exception.value) as string,
+    })),
+  }
 }
 
 /**
@@ -46,42 +84,26 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
  * with informative redaction messages.
  */
 function sanitizeResponse(response: unknown): unknown {
-  if (response == null || typeof response !== 'object') {
-    return sanitizeCapturedValue(response)
+  // Sanitize each kept block on its own, so the pass never scans the data of replaced blocks.
+  if (isRecord(response) && Array.isArray(response.content)) {
+    const result = sanitizeCapturedValue({ ...response, content: [] }) as SanitizedRecord
+    result.content = response.content.map(sanitizeContentBlock)
+    return result
   }
-
-  const sanitized = sanitizeCapturedValue(response)
-  if (!isRecord(sanitized)) {
-    return sanitized
-  }
-
-  const result: SanitizedRecord = { ...sanitized }
-  const content = result.content
-  if (Array.isArray(content)) {
-    result.content = content.map(sanitizeContentBlock)
-  }
-
-  if (result.structuredContent != null && typeof result.structuredContent === 'object') {
-    result.structuredContent = sanitizeCapturedValue(result.structuredContent)
-  }
-
-  return result
+  return sanitizeCapturedValue(response)
 }
 
 /**
  * Sanitizes a single content block based on its type discriminator.
  */
 function sanitizeContentBlock(block: unknown): unknown {
-  if (block == null || typeof block !== 'object') {
-    return block
-  }
-
   if (!isRecord(block)) {
-    return block
+    return sanitizeCapturedValue(block)
   }
 
   switch (block.type) {
     case 'text':
+    case 'resource_link':
       return sanitizeCapturedValue(block)
 
     case 'image':
@@ -99,13 +121,10 @@ function sanitizeContentBlock(block: unknown): unknown {
     case 'resource':
       return sanitizeResourceBlock(block)
 
-    case 'resource_link':
-      return sanitizeCapturedValue(block)
-
     default:
       return {
         type: 'text',
-        text: `[unsupported content type "${block.type}" redacted - not supported by PostHog MCP analytics]`,
+        text: `[unsupported content type "${sanitizeCapturedValue(block.type)}" redacted - not supported by PostHog MCP analytics]`,
       }
   }
 }

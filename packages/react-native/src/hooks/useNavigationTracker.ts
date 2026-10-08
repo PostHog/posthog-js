@@ -14,6 +14,7 @@ function _useNavigationTracker(
   navigationRef?: PostHogNavigationRef,
   client?: PostHog
 ): void {
+  // oxlint-disable-next-line react-hooks/rules-of-hooks -- This internal function is exported as useNavigationTracker.
   const posthog = useOverridablePostHog(client, 'useNavigationTracker')
 
   if (!OptionalReactNativeNavigation) {
@@ -21,12 +22,12 @@ function _useNavigationTracker(
     throw new Error('No OptionalReactNativeNavigation')
   }
 
-  let routes: any = undefined
+  let navigationState: any = undefined
   let navigation: any = navigationRef
 
   try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    routes = OptionalReactNativeNavigation.useNavigationState((state: any) => state?.routes)
+    // oxlint-disable-next-line react/rules-of-hooks
+    navigationState = OptionalReactNativeNavigation.useNavigationState((state: any) => state)
   } catch (error) {
     // useNavigationState might not be available in static navigation setups
     // We'll rely on the navigation object to get the current route
@@ -35,7 +36,7 @@ function _useNavigationTracker(
 
   try {
     if (!navigation) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
+      // oxlint-disable-next-line react/rules-of-hooks
       navigation = OptionalReactNativeNavigation.useNavigation()
     }
   } catch (error) {
@@ -45,7 +46,7 @@ function _useNavigationTracker(
     return
   }
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // oxlint-disable-next-line react/rules-of-hooks
   const trackRoute = useCallback((): void => {
     if (!navigation || !posthog) {
       return
@@ -57,7 +58,7 @@ function _useNavigationTracker(
       currentNavigation = navigation.current
     }
 
-    let currentRoute = undefined
+    let currentRoute: any = undefined
 
     // NOTE: This method is not typed correctly but is available and takes care of parsing the router state correctly
     try {
@@ -83,14 +84,7 @@ function _useNavigationTracker(
       return
     }
 
-    const { state } = currentRoute
-    let { name, params } = currentRoute
-
-    if (state?.routes?.length) {
-      const route = state.routes[state.routes.length - 1]
-      name = route.name
-      params = route.params
-    }
+    const { name, params } = currentRoute
 
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'
 
@@ -100,16 +94,16 @@ function _useNavigationTracker(
     }
   }, [navigation, options, posthog])
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // oxlint-disable-next-line react/rules-of-hooks
   useEffect(() => {
     // NOTE: The navigation stacks may not be fully rendered initially. This means the first route can be missed (it doesn't update useNavigationState)
     // If missing we simply wait a tick and call it again.
-    if (!routes) {
-      setTimeout(trackRoute, 1)
-      return
+    if (!navigationState) {
+      const timeout = setTimeout(trackRoute, 1)
+      return () => clearTimeout(timeout)
     }
     trackRoute()
-  }, [routes, trackRoute])
+  }, [navigationState, trackRoute])
 }
 
 export const useNavigationTracker = OptionalReactNativeNavigation

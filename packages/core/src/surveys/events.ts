@@ -1,3 +1,4 @@
+import { SurveyWithIteration } from './keys'
 import { SurveyResponses, SurveyResponseValue } from '../types'
 import { isArray, isNullish, isUndefined } from '../utils'
 
@@ -27,7 +28,8 @@ export function getSurveyResponseValue(
 
 export function buildSurveyResponseProperties(
   responses: SurveyResponses = {},
-  survey: SurveyForResponses
+  survey: SurveyForResponses,
+  questionSnapshots?: Record<string, string>
 ): Record<string, unknown> {
   const oldFormatResponses: SurveyResponses = {}
   survey.questions.forEach((question: SurveyQuestionForResponses) => {
@@ -44,11 +46,53 @@ export function buildSurveyResponseProperties(
   return {
     $survey_questions: survey.questions.map((question: SurveyQuestionForResponses) => ({
       id: question.id,
-      question: question.question,
+      question: questionSnapshots?.[question.id ?? ''] ?? question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
     ...responses,
     ...oldFormatResponses,
+  }
+}
+
+export function recordSurveyAnswer(
+  { responses, questionSnapshots = {} }: { responses: SurveyResponses; questionSnapshots?: Record<string, string> },
+  questionId: string,
+  response: SurveyResponseValue,
+  question?: SurveyQuestionForResponses
+): { responses: SurveyResponses; questionSnapshots: Record<string, string> } {
+  // Snapshot the question text as it appeared to the user right now, so that
+  // $survey_questions[].question in sent/dismissed events reflects the language
+  // the user saw when they answered, not the language active at event-fire time.
+  return {
+    responses: { ...responses, [getSurveyResponseKey(questionId)]: response },
+    questionSnapshots: question?.id ? { ...questionSnapshots, [question.id]: question.question } : questionSnapshots,
+  }
+}
+
+export function buildSurveyResponseEventProperties({
+  event,
+  survey,
+  responses = {},
+  submissionId,
+  completed,
+  surveyLanguage,
+  questionSnapshots,
+}: {
+  event: 'sent' | 'dismissed' | 'abandoned'
+  survey: SurveyForResponses
+  responses?: SurveyResponses
+  submissionId?: string
+  completed?: boolean
+  surveyLanguage?: string | null
+  questionSnapshots?: Record<string, string>
+}): Record<string, unknown> {
+  return {
+    ...(!isUndefined(submissionId) && { $survey_submission_id: submissionId }),
+    ...(event === 'sent'
+      ? !isUndefined(completed) && { $survey_completed: completed }
+      : { $survey_partially_completed: surveyHasResponses(responses) }),
+    ...(surveyLanguage && { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage }),
+    ...buildSurveyResponseProperties(responses, survey, questionSnapshots),
   }
 }
 
@@ -72,9 +116,4 @@ type SurveyQuestionForResponses = {
 
 type SurveyForResponses = {
   questions: SurveyQuestionForResponses[]
-}
-
-type SurveyWithIteration = {
-  id: string
-  current_iteration?: number | null
 }

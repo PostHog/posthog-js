@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { JSX } from 'react'
+import React, { ReactElement } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isUndefined } from '../utils/type-utils'
 import { VisibilityAndClickTrackers } from './internal/VisibilityAndClickTrackers'
@@ -23,7 +23,7 @@ export function PostHogFeature({
     trackInteraction,
     trackView,
     ...props
-}: PostHogFeatureProps): JSX.Element | null {
+}: PostHogFeatureProps): ReactElement<any, any> | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
     const posthog = usePostHog()
@@ -32,7 +32,9 @@ export function PostHogFeature({
     const shouldTrackView = trackView ?? true
 
     if (!isUndefined(variant)) {
-        if (isUndefined(match) || variant === match) {
+        // Without a match, any enabled value (true or a variant key) shows the feature. A flag that
+        // evaluated off is `false`, and must show the fallback like a missing flag does.
+        if (isUndefined(match) ? variant !== false : variant === match) {
             const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
             return (
                 <VisibilityAndClickTrackers

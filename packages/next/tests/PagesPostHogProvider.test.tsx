@@ -2,16 +2,17 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { PostHogProvider } from '../src/pages/PostHogProvider'
 
-const mockClientPostHogProvider = jest.fn(({ children }: { children: React.ReactNode }) => (
-    <div data-testid="client-provider">{children}</div>
-))
-jest.mock('../src/client/ClientPostHogProvider', () => ({
+const mockClientPostHogProvider = vi.hoisted(() => vi.fn())
+vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientPostHogProvider(props),
 }))
 
 describe('Pages PostHogProvider', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
+        mockClientPostHogProvider.mockImplementation(({ children }: { children: React.ReactNode }) => (
+            <div data-testid="client-provider">{children}</div>
+        ))
     })
 
     it('renders children inside ClientPostHogProvider', () => {
@@ -35,7 +36,7 @@ describe('Pages PostHogProvider', () => {
 
     it('warns and renders children without ClientPostHogProvider when apiKey is empty and env var is not set', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         render(
             <PostHogProvider apiKey="">
@@ -139,13 +140,15 @@ describe('Pages PostHogProvider', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
-    it('passes bootstrap prop through to ClientPostHogProvider', () => {
+    it('passes clientOptions.bootstrap to ClientPostHogProvider', () => {
         const bootstrap = { featureFlags: { 'flag-a': true } }
         render(
-            <PostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <PostHogProvider apiKey="phc_test123" clientOptions={{ bootstrap }}>
                 <div>Child</div>
             </PostHogProvider>
         )
-        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap }))
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({ options: expect.objectContaining({ bootstrap }) })
+        )
     })
 })

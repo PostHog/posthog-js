@@ -1,5 +1,135 @@
 # @posthog/nuxt
 
+## 1.7.91
+
+### Patch Changes
+
+- [#4985](https://github.com/PostHog/posthog-js/pull/4985) [`d14b608`](https://github.com/PostHog/posthog-js/commit/d14b608e1260092b6abaf845ebf81f99f8553c22) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Nuxt runtime plugin type declarations.
+  (2026-09-16)
+- Updated dependencies [[`ec4062b`](https://github.com/PostHog/posthog-js/commit/ec4062bf42667a86f9daf84e744e253471a98a96)]:
+  - posthog-js@1.433.6
+
+## 1.7.90
+
+### Patch Changes
+
+- [#4942](https://github.com/PostHog/posthog-js/pull/4942) [`38e3453`](https://github.com/PostHog/posthog-js/commit/38e34539585f9454e62d8252328e07d91fcb4939) Thanks [@marandaneto](https://github.com/marandaneto)! - Strip queries from Nuxt server exception paths and honor serverConfig.disable_capture_url_hashes for fragments.
+  (2026-09-14)
+- Updated dependencies [[`a5d094f`](https://github.com/PostHog/posthog-js/commit/a5d094f44f722935b539c346a92ae98a797e8762)]:
+  - posthog-js@1.431.7
+
+## 1.7.89
+
+### Patch Changes
+
+- [#4779](https://github.com/PostHog/posthog-js/pull/4779) [`41d37a5`](https://github.com/PostHog/posthog-js/commit/41d37a5487efd1c8dcaf53cc40e2fab2e5af294f) Thanks [@posthog](https://github.com/apps/posthog)! - Inject the Nitro server chunks before upload, upload only injected directories, upload the public source maps in one step regardless of the deletion mode, and pass the configured release to every source map command.
+  (2026-09-07)
+- Updated dependencies [[`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d)]:
+  - @posthog/core@1.51.0
+  - posthog-js@1.428.0
+
+## 1.7.88
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+- Updated dependencies [[`c207020`](https://github.com/PostHog/posthog-js/commit/c20702023ed05de61799e4d186b7dd1d040ce251), [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`fd4ece8`](https://github.com/PostHog/posthog-js/commit/fd4ece8db1aa313f09724a747e4d450ecdc77da2), [`d73455e`](https://github.com/PostHog/posthog-js/commit/d73455e470822483abbf0e0a20bb3c8fa1bc6e2e), [`95b159a`](https://github.com/PostHog/posthog-js/commit/95b159a6491c29de87ca0aaf5ea40c787cf0518d), [`24f1937`](https://github.com/PostHog/posthog-js/commit/24f193719a7d87a2b66591c3ab903031bbea62a6), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2), [`21dcebd`](https://github.com/PostHog/posthog-js/commit/21dcebd3361a2fe24b022601b8131ae85a3f077d)]:
+  - posthog-js@1.427.3
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
+## 1.7.87
+
+### Patch Changes
+
+- [#4737](https://github.com/PostHog/posthog-js/pull/4737) [`c589ab8`](https://github.com/PostHog/posthog-js/commit/c589ab8f5f06df627bbd0e1899aebd17839be310) Thanks [@cat-ph](https://github.com/cat-ph)! - Bump `@posthog/cli` to `~0.16.2`, which fixes a race in `sourcemap process`: inject and upload used to walk the directory roots separately, so a bundler still writing into the output directory mid-run (e.g. Turbopack's background filesystem-cache flush on Next.js 16.3+) could hand upload a chunk inject never stamped and abort the build with "Chunk ID not found". The CLI now uploads exactly the pairs it injected, and `--delete-after` cleanup skips files that vanished or changed after upload instead of failing the build.
+  (2026-09-02)
+- Updated dependencies [[`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2), [`9b4008a`](https://github.com/PostHog/posthog-js/commit/9b4008a03ef12e3150d906ca638f24403bc67a41), [`77797c9`](https://github.com/PostHog/posthog-js/commit/77797c9e983f053ee362e98ee880e79b17512ac9)]:
+  - @posthog/plugin-utils@2.0.0
+  - posthog-js@1.425.1
+
+## 1.7.86
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+- Updated dependencies [[`ca030a6`](https://github.com/PostHog/posthog-js/commit/ca030a66bacd0f084845838e19c0f0b18d54e468), [`325870a`](https://github.com/PostHog/posthog-js/commit/325870a3b6473b1dd302fa66b9a98a02287eb825)]:
+  - posthog-js@1.418.11
+
+## 1.7.85
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+  - posthog-js@1.418.6
+  - posthog-node@5.49.2
+
+## 1.7.84
+
+### Patch Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.13.0`, which ships the `release resolve` command the rollup plugin's event release mode spawns.
+  (2026-08-19)
+- Updated dependencies [[`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c), [`3e0edff`](https://github.com/PostHog/posthog-js/commit/3e0edff32a6a6285876026fae35a402d7faef004)]:
+  - @posthog/plugin-utils@1.2.0
+  - posthog-js@1.418.2
+
+## 1.7.83
+
+### Patch Changes
+
+- [#4445](https://github.com/PostHog/posthog-js/pull/4445) [`b2a445a`](https://github.com/PostHog/posthog-js/commit/b2a445a32e685ec810edc0abb2eb05edbdaabdef) Thanks [@onmax](https://github.com/onmax)! - Load the browser SDK only on the client and select explicit Nitro 2 or Nitro 3 runtime imports for Nuxt 3, 4, and 5 compatibility.
+  (2026-08-17)
+- Updated dependencies [[`8d74821`](https://github.com/PostHog/posthog-js/commit/8d74821112fae5e23fb86e4f457cfda03aac10df)]:
+  - posthog-js@1.417.4
+
+## 1.7.82
+
+### Patch Changes
+
+- [#4516](https://github.com/PostHog/posthog-js/pull/4516) [`1c5bf6f`](https://github.com/PostHog/posthog-js/commit/1c5bf6fecb1edf49b0cb813d7ee63f2b47ba063e) Thanks [@marandaneto](https://github.com/marandaneto)! - Bump `@posthog/cli` to `~0.11.1`.
+  (2026-08-13)
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f), [`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+  - posthog-js@1.416.1
+
+## 1.7.81
+
+### Patch Changes
+
+- [#4277](https://github.com/PostHog/posthog-js/pull/4277) [`060f03a`](https://github.com/PostHog/posthog-js/commit/060f03a0a065e99b11d1e3aaae13362ceb3ea54f) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete uploaded public sourcemaps before Nitro generates its asset manifest to prevent stale entries from causing runtime 500 errors.
+  (2026-07-27)
+
+## 1.7.80
+
+### Patch Changes
+
+- [#4055](https://github.com/PostHog/posthog-js/pull/4055) [`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0) Thanks [@marandaneto](https://github.com/marandaneto)! - Retry `/flags` requests that receive HTTP 502 or 504 responses across SDKs that use the shared core flags client.
+  (2026-07-02)
+- Updated dependencies [[`64e04ba`](https://github.com/PostHog/posthog-js/commit/64e04ba043b25d1f88435c5885132000d3117bb0)]:
+  - @posthog/core@1.39.4
+  - posthog-node@5.39.3
+
+## 1.7.79
+
+### Patch Changes
+
+- [#4002](https://github.com/PostHog/posthog-js/pull/4002) [`1f16027`](https://github.com/PostHog/posthog-js/commit/1f160272aa45fc0a6a3dca5247ab634f49613558) Thanks [@jojosenthusiast](https://github.com/jojosenthusiast)! - Skip server sourcemap injection when `ssr: false` so client-only builds still upload their sourcemaps instead of failing on the missing server output (#3005).
+  (2026-07-01)
+
+## 1.7.78
+
+### Patch Changes
+
+- [#4005](https://github.com/PostHog/posthog-js/pull/4005) [`ace8824`](https://github.com/PostHog/posthog-js/commit/ace8824481b9ab81cee06c03692ca29ed125c168) Thanks [@ioannisj](https://github.com/ioannisj)! - Augment `@nuxt/schema` so `posthogConfig` is a known key on `NuxtConfig`/`NuxtOptions`. Without this, using `posthogConfig` in `nuxt.config.ts` (as the wizard generates) reports a TS2353 error.
+  (2026-06-30)
+
 ## 1.7.77
 
 ### Patch Changes
