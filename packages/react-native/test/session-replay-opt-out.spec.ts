@@ -6,6 +6,9 @@ import { waitForExpect } from './test-utils'
 // Same native bridge mock as the manual recording spec: isEnabled() reports whether the
 // recorder is actually running, which is how the SDK confirms a start or a stop.
 let nativeRecording = false
+// Native's own consent flag, set through setOptOut(). Like posthog-ios, startRecording() is
+// ignored while it is set.
+let nativeOptedOut = false
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePluginVersion: '1.4.0',
@@ -17,6 +20,7 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
     identify: vi.fn(async () => {}),
     startRecording: vi.fn(async () => {}),
     stopRecording: vi.fn(async () => {}),
+    setOptOut: vi.fn(async () => {}),
   },
 }))
 
@@ -28,6 +32,7 @@ const replay = OptionalReactNativePlugin as unknown as {
   identify: vi.Mock
   startRecording: vi.Mock
   stopRecording: vi.Mock
+  setOptOut: vi.Mock
 }
 
 Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
@@ -47,6 +52,7 @@ describe('PostHog RN session replay follows consent', () => {
 
   beforeEach(() => {
     nativeRecording = false
+    nativeOptedOut = false
     currentSessionRecording = { endpoint: '/s/' }
     currentFlags = {}
 
@@ -61,7 +67,13 @@ describe('PostHog RN session replay follows consent', () => {
       nativeRecording = true
     })
     replay.startRecording.mockImplementation(async () => {
-      nativeRecording = true
+      if (!nativeOptedOut) {
+        nativeRecording = true
+      }
+    })
+    replay.setOptOut.mockReset()
+    replay.setOptOut.mockImplementation(async (optOut: boolean) => {
+      nativeOptedOut = optOut
     })
     replay.stopRecording.mockImplementation(async () => {
       nativeRecording = false
@@ -144,6 +156,30 @@ describe('PostHog RN session replay follows consent', () => {
     await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
     expect(posthog.getSessionId()).not.toBe(sessionBeforeOptOut)
     expect(replay.stopRecording).not.toHaveBeenCalled()
+    expect(nativeOptedOut).toBe(false)
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('refused to start session recording'))
+  })
+
+  it('leaves a recording the app stopped stopped when the user opts back in', async () => {
+    posthog = newPostHog({ enableSessionReplay: true })
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(nativeRecording).toBe(true))
+    await posthog.stopSessionRecording()
+    // posthog-ios optIn() reinstalls its integrations, which restarts the recorder by itself.
+    replay.setOptOut.mockImplementation(async (optOut: boolean) => {
+      nativeOptedOut = optOut
+      if (!optOut) {
+        nativeRecording = true
+      }
+    })
+
+    await posthog.optOut()
+    await posthog.optIn()
+    // Give the opt-in evaluation time to run; nothing may start.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(nativeRecording).toBe(false)
+    expect(replay.startRecording).not.toHaveBeenCalled()
   })
 
   it('does not record while opted out, and starts once the user opts in', async () => {
