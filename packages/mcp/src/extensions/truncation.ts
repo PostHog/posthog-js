@@ -20,7 +20,7 @@ const MAX_STACK_FRAMES = 50
 const MAX_CONTENT_TEXT_LENGTH = 32_768
 
 // --- Truncation markers ---
-const TRUNCATION_SUFFIX = '...'
+export const TRUNCATION_SUFFIX = '...'
 
 type MutableEvent = Partial<Event | McpEvent> & Record<string, unknown>
 type MutableRecord = Record<string, unknown>
@@ -321,6 +321,9 @@ function collectStringPaths(
   currentPath: string[],
   results: Array<{ path: string[]; length: number }>
 ): void {
+  if (currentPath.length === 1 && currentPath[0] === 'serverBuild') {
+    return
+  }
   if (typeof obj === 'string' && obj.length > 100) {
     results.push({ path: [...currentPath], length: obj.length })
     return
@@ -363,6 +366,8 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
   }
 }
 
+const REDUCIBLE_FIELDS = ['parameters', 'response', 'identifyActorData', 'error'] as const
+
 /**
  * Ensures an event fits within MAX_EVENT_BYTES by progressively reducing
  * normalization depth, then truncating largest string fields as a last resort.
@@ -373,43 +378,51 @@ function truncateToSize(event: MutableEvent): MutableEvent {
     return event
   }
 
-  // Progressive depth reduction
-  for (let depth = MAX_DEPTH - 1; depth >= 1; depth--) {
-    const reduced: MutableEvent = { ...event }
-    if (reduced.parameters != null) {
-      reduced.parameters = normalize(reduced.parameters, depth)
-    }
-    if (reduced.response != null) {
-      reduced.response = normalize(reduced.response, depth)
-    }
-    if (reduced.identifyActorData != null) {
-      reduced.identifyActorData = normalize(reduced.identifyActorData, depth) as Event['identifyActorData']
-    }
-    if (reduced.error != null) {
-      reduced.error = normalize(reduced.error, depth) as Event['error']
-    }
-
+  // Progressive depth reduction, from the first depth that collapses anything.
+  // Any deeper depth leaves the event as it is, and it is already too large.
+  const nesting = Math.max(...REDUCIBLE_FIELDS.map((field) => nestingDepth(event[field])))
+  let atDepthOne: MutableEvent | undefined
+  for (let depth = nesting - 1; depth >= 1; depth--) {
+    const reduced = normalizeReducibleFields(event, depth)
     if (jsonByteSize(reduced) <= MAX_EVENT_BYTES) {
       return reduced
     }
+    if (depth === 1) {
+      atDepthOne = reduced
+    }
   }
 
-  // Last resort: truncate largest string fields
-  const minimal: MutableEvent = { ...event }
-  if (minimal.parameters != null) {
-    minimal.parameters = normalize(minimal.parameters, 1)
-  }
-  if (minimal.response != null) {
-    minimal.response = normalize(minimal.response, 1)
-  }
-  if (minimal.identifyActorData != null) {
-    minimal.identifyActorData = normalize(minimal.identifyActorData, 1) as Event['identifyActorData']
-  }
-  if (minimal.error != null) {
-    minimal.error = normalize(minimal.error, 1) as Event['error']
-  }
+  // Last resort: truncate largest string fields. Reuse the loop's depth-1
+  // result when it already computed one, instead of normalizing again.
+  return truncateLargestFields(atDepthOne ?? normalizeReducibleFields(event, 1), MAX_EVENT_BYTES)
+}
 
-  return truncateLargestFields(minimal, MAX_EVENT_BYTES)
+/**
+ * The number of object and array levels in `value`, up to `limit`. `normalize`
+ * at this depth or deeper collapses nothing.
+ */
+function nestingDepth(value: unknown, limit: number = MAX_DEPTH): number {
+  if (limit === 0 || value === null || typeof value !== 'object') {
+    return 0
+  }
+  let deepest = 0
+  for (const item of Array.isArray(value) ? value : Object.values(value)) {
+    deepest = Math.max(deepest, nestingDepth(item, limit - 1))
+    if (deepest === limit - 1) {
+      break
+    }
+  }
+  return deepest + 1
+}
+
+function normalizeReducibleFields(event: MutableEvent, depth: number): MutableEvent {
+  const reduced: MutableEvent = { ...event }
+  for (const field of REDUCIBLE_FIELDS) {
+    if (reduced[field] != null) {
+      ;(reduced as MutableRecord)[field] = normalize(reduced[field], depth)
+    }
+  }
+  return reduced
 }
 
 /**

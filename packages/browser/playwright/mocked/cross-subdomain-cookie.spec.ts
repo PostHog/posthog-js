@@ -120,7 +120,12 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     expect(
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('previous_user_property'))
     ).toBeUndefined()
-    await expect.poll(() => flagsRequests.length).toBeGreaterThan(0)
+    await expect
+        .poll(() => {
+            const request = flagsRequests[flagsRequests.length - 1]
+            return request && getFlagsPayload(request).distinct_id
+        })
+        .toBe(resetAnonymousId)
     const flagsPayload = getFlagsPayload(flagsRequests[flagsRequests.length - 1])
     expect(flagsPayload.distinct_id).toBe(resetAnonymousId)
     expect(flagsPayload.person_properties).not.toHaveProperty('plan')

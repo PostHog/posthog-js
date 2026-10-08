@@ -139,6 +139,7 @@ test.describe('product tours - wait period', () => {
         expect(storedValue).toBeTruthy()
         const parsed = new Date(JSON.parse(storedValue!))
         expect(parsed.getTime()).toBeGreaterThan(Date.now() - 60_000) // within last minute
+        expect(parsed.getTime()).toBeLessThanOrEqual(Date.now())
     })
 
     test('second tour blocked by wait period after first tour shown', async ({ page, context }) => {

@@ -1483,6 +1483,11 @@ export function usePopupVisibility(
                 return
             }
             setIsPopupVisible(true)
+            try {
+                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            } catch {
+                // localStorage is not always available (e.g. in cross-origin iframes).
+            }
             window.dispatchEvent(new Event('PHSurveyShown'))
             if (!skipShownEvent) {
                 posthog.capture(SurveyEventName.SHOWN, {
@@ -1493,11 +1498,6 @@ export function usePopupVisibility(
                     ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
-            }
-            try {
-                localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
-            } catch {
-                // localStorage is not always available (e.g. in cross-origin iframes).
             }
         }
 

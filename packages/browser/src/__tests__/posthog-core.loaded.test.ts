@@ -1,7 +1,8 @@
-import { createPosthogInstance } from './helpers/posthog-instance'
+import { createPosthogInstance, requirePostHogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig } from '../types'
+import { isArray } from '@posthog/core'
 
 vi.useFakeTimers()
 
@@ -13,7 +14,8 @@ describe('loaded() with flags', () => {
             api_host: 'https://app.posthog.com',
             disable_compression: true,
             ...config,
-            loaded: (ph) => {
+            loaded: (publicInstance) => {
+                const ph = requirePostHogInstance(publicInstance)
                 ph.capture = vi.fn()
                 ph._send_request = vi.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
                 ph._start_queue_if_opted_in = vi.fn()
@@ -61,7 +63,7 @@ describe('loaded() with flags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
@@ -87,7 +89,7 @@ describe('loaded() with flags', () => {
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga' },
@@ -100,7 +102,7 @@ describe('loaded() with flags', () => {
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
-            expect(instance._send_request.mock.calls[1][0]).toMatchObject({
+            expect(vi.mocked(instance._send_request).mock.calls[1][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2',
                 data: {
                     groups: { org: 'bazinga2' },
@@ -120,7 +122,7 @@ describe('loaded() with flags', () => {
             vi.advanceTimersByTime(10)
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            expect(vi.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/flags/?v=2&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
@@ -131,21 +133,23 @@ describe('loaded() with flags', () => {
         it('does not load flags on init when advanced_disable_feature_flags_on_first_load is true, but group() still triggers reload', async () => {
             instance = await createPosthog({
                 advanced_disable_feature_flags_on_first_load: true,
-                loaded: (ph) => {
-                    ph.group('org', 'bazinga', { name: 'Shelly' })
-                },
             })
 
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
+            vi.advanceTimersByTime(10)
+            expect(instance.featureFlags._callFlagsEndpoint).not.toHaveBeenCalled()
+            expect(instance._send_request).not.toHaveBeenCalled()
 
-            // Advance past the 5ms debounce timer — the group() call still triggers reloadFeatureFlags
+            instance.group('org', 'bazinga', { name: 'Shelly' })
             vi.advanceTimersByTime(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             // The group() triggered reload doesn't set disable_flags
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
+            const requestData = vi.mocked(instance._send_request).mock.calls[0][0].data
+            if (!requestData || isArray(requestData)) throw new Error('Expected a single flags request')
+            expect(requestData.disable_flags).toEqual(undefined)
 
             vi.advanceTimersByTime(10) // Ensure no additional calls
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)

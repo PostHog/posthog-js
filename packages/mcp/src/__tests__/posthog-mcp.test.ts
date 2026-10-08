@@ -1,3 +1,6 @@
+import { PostHog } from 'posthog-node'
+import { describe, expect, it, vi } from 'vitest'
+
 import { getMoreToolsResult, getToolInputProperties, PostHogMCP } from '../index'
 import { PostHogMCPAnalyticsEvent, PostHogMCPAnalyticsProperty } from '../extensions/constants'
 import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
@@ -44,6 +47,76 @@ describe('PostHogMCP', () => {
   })
 
   // `$lib` / `$lib_version` identity is covered for both emit paths in lib-identity.test.ts.
+
+  it('adds the configured server build to captured events', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({ toolName: 'execute-sql', isError: false })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('does not let custom properties replace the configured server build', async () => {
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.captureToolCall({
+        toolName: 'execute-sql',
+        isError: false,
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+      await tick()
+
+      expect(onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties.$mcp_server_build).toBe('abc123')
+    } finally {
+      await client.shutdown()
+    }
+  })
+
+  it('rejects a server build that cannot be recorded exactly', () => {
+    expect(() => newClient({ serverBuild: 'b'.repeat(257) })).toThrow('serverBuild must not exceed 256 characters.')
+  })
+
+  it('adds the configured server build when inherited capture events do not provide one', async () => {
+    const captureEvent = vi.spyOn(PostHog.prototype, 'capture').mockImplementation(() => undefined)
+    const captureImmediate = vi.spyOn(PostHog.prototype, 'captureImmediate').mockResolvedValue(undefined)
+    const client = newClient({ serverBuild: 'abc123' })
+    try {
+      client.capture({ distinctId: 'user-123', event: 'custom event', properties: { existing: true } })
+      client.capture({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: undefined },
+      })
+      await client.captureImmediate({
+        distinctId: 'user-123',
+        event: 'immediate event',
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+
+      expect(captureEvent).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'custom event',
+        properties: { existing: true, $mcp_server_build: 'abc123' },
+      })
+      expect(captureEvent).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'undefined build event',
+        properties: { $mcp_server_build: 'abc123' },
+      })
+      expect(captureImmediate).toHaveBeenCalledWith({
+        distinctId: 'user-123',
+        event: 'immediate event',
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+    } finally {
+      await client.shutdown()
+      vi.restoreAllMocks()
+    }
+  })
 
   describe('captureToolCall', () => {
     it('emits $mcp_tool_call with canonical properties, identity, and groups', async () => {

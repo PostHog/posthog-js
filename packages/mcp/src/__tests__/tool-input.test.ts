@@ -96,6 +96,13 @@ describe('getToolInputProperties', () => {
       })
     })
 
+    it('shows server-declared alias names when no schema is available', () => {
+      expect(getToolInputProperties({ experimentId: 1, other: 2 }, undefined, { inputAliases })).toEqual({
+        $mcp_input_keys: ['experimentId', '[redacted]'],
+        $mcp_input_aliases_used: ['experimentId:id'],
+      })
+    })
+
     it('does not record an alias when the canonical name was also sent', () => {
       expect(getToolInputProperties({ id: 1, experiment_id: 2 }, schema, { inputAliases })).toEqual({
         $mcp_input_keys: ['experiment_id', 'id'],

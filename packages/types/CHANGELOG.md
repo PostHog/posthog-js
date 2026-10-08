@@ -1,5 +1,33 @@
 # @posthog/types
 
+## 1.415.1
+
+### Patch Changes
+
+- [#5004](https://github.com/PostHog/posthog-js/pull/5004) [`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e) Thanks [@posthog](https://github.com/apps/posthog)! - Stop carousel and pager arrow controls from capturing false `$rageclick` events. The rageclick content ignorelist, active from the `2025-11-30` config defaults, now also covers arrow glyphs (`→`, `←`, `›`, `‹`, `»`, `«`, `▶`, `◀`, `❯`, `❮`). The built-in word keywords match whole words wherever they appear, including inside a list you pass yourself, so "Preview" keeps capturing; other word keywords you add still match as substrings. Keywords now match against the clicked control (the nearest button, link, ARIA control or `cursor: pointer` wrapper), reading its label from the control's whole subtree instead of every ancestor up to the body, so a region labelled "Featured carousel" no longer suppresses the buttons inside it. A control's own text or `aria-label` wins over an icon's `aria-label` inside it, so clicking the icon and clicking the text agree. Set `rageclick: { content_ignorelist: false }` to keep capturing these events.
+  (2026-10-06)
+
+## 1.415.0
+
+### Minor Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+
+## 1.414.0
+
+### Minor Changes
+
+- [#5190](https://github.com/PostHog/posthog-js/pull/5190) [`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d) Thanks [@gesh](https://github.com/gesh)! - Add opt-in WebMCP tool call capture for MCP Analytics.
+  (2026-10-06)
+
+## 1.413.0
+
+### Minor Changes
+
+- [#4794](https://github.com/PostHog/posthog-js/pull/4794) [`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Add `onActiveMatchingSurveysChanged` to subscribe to survey eligibility updates with safe unsubscribe and recoverable load-error reporting.
+  (2026-09-29)
+
 ## 1.412.4
 
 ### Patch Changes

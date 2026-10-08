@@ -108,8 +108,8 @@ function initPerformanceObserver(
     win: IWindow,
     options: Required<NetworkRecordOptions>
 ): listenerHandler | undefined {
-    // the customer's `maskRequestFn` runs synchronously in here. rrweb tears down every observer it has
-    // registered when a plugin throws, so a throw would cost the whole recording, not just this batch
+    // Masking errors are isolated per record. Guard initial entry collection/preparation too:
+    // rrweb tears down all registered observers if plugin initialization throws.
     try {
         cb({
             requests: initialEntries(win, options).flatMap((entry) =>
@@ -523,7 +523,9 @@ function prepareRequest(
     // use timeOrigin if we really can't gather a start time
     const timestamp = Math.floor(timeOrigin + (start || 0))
 
-    const entryJSON = entry ? entry.toJSON() : { name: url }
+    // toJSON() keeps browser objects such as PerformanceServerTiming,
+    // and postMessage from a cross-origin iframe cannot clone them
+    const entryJSON = entry ? JSON.parse(JSON.stringify(entry.toJSON())) : { name: url }
 
     const requests: CapturedNetworkRequest[] = [
         {
@@ -947,6 +949,7 @@ function initNetworkObserver(
     ) as Required<NetworkRecordOptions>
 
     let active = true
+    let maskingFailureLogged = false
     const cb: networkCallback = (data) => {
         // Body reads and timing lookups can finish after this observer is replaced.
         if (!active) {
@@ -963,7 +966,21 @@ function initNetworkObserver(
                 return
             }
 
-            const maskedRequest = networkOptions.maskRequestFn(request)
+            let maskedRequest: CapturedNetworkRequest | null | undefined
+            try {
+                maskedRequest = networkOptions.maskRequestFn(request)
+            } catch {
+                if (!maskingFailureLogged) {
+                    maskingFailureLogged = true
+                    logger.warn(
+                        'Network capture masking callback failed; dropping the record. Further masking failures will not be logged for this observer.'
+                    )
+                }
+                if (!isServerTiming) {
+                    parentRequestDropped = true
+                }
+                return
+            }
             if (!isServerTiming) {
                 // A null-filtered initial parent is replaced by a strict URL-less fallback so replay keeps its
                 // required timing metadata. Treat that fallback as dropped for derived server timings, which

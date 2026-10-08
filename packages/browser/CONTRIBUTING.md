@@ -10,17 +10,36 @@ After the initial build, run `pnpm dev` (or `pnpm start`) in this package to wat
 
 Modern Rolldown bundles use its built-in Oxc transformer with an ES2015 syntax ceiling and the existing minimum browser versions. Babel remains for `array.full.es5.js` (Oxc cannot emit ES5) and the three slim/extension entries: replacing their transformer currently loses source-map names required by the private-property ABI check. TestCafe also still uses Babel. Terser remains the minifier for every runtime bundle.
 
-React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
-
 To test watch mode on Linux or macOS, run `pnpm turbo --filter=posthog-js build` followed by `pnpm test:dev-watch` from the repository root. The test temporarily edits browser and record entry points, verifies runtime and declaration rebuilds, then restores the source files and stops the watchers. Run it in an idle checkout without other builds or watchers. CI runs it after the unit tests.
+
+### Private-property ABI and declarations
+
+Production property mangling is a cross-bundle contract, not just a size optimization. `module.slim.js` and `extension-bundles.js` share Terser's property-name cache; `module.slim.no-external.js` preserves property names, so properties exchanged across that boundary must be reserved. Preserve the ABI and overlap classifications in `terser-cross-bundle-properties.cjs` and the reserved names in `rollup.config.mjs`. The postbuild checker, `scripts/check-mangled-property-consistency.js`, derives original private-property names from source maps: changing transformers or dropping map names can invalidate the check even when bundles execute.
+
+Keep TypeScript semantic checking and declaration generation; Rolldown bundles the emitted declarations rather than replacing those checks. Preserve canonical PostHog type references across entrypoints (classes with private fields are nominally typed), required inlined upstream types, and the published unbundled `dist/src` declarations. The built-output tests in `src/__tests__/entrypoints/module.test.ts` cover these contracts.
+
+Browser extension UI uses the configured Preact JSX runtime (`jsxImportSource: preact` in `tsconfig.json`), not the separate React bindings. React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
+
+### Old-browser syntax and built-ins
+
+IE11 is not in the supported-browser list, but `array.full.es5.js` still uses IE11-compatible Babel targets in `rollup.config.mjs`. CI's `.github/workflows/es-check.yml` validates ES5/ES6 bundle syntax. Syntax validation and down-level compilation do not establish runtime built-in availability: a missing prototype method can still throw in valid ES5 code.
+
+The polyfill canary in `src/__tests__/entrypoints/module.test.ts` evaluates all four web-vitals bundles in a frame with the post-baseline built-ins they call removed, then checks that those built-ins were installed. Preserve it when updating dependencies or transforms; `es-check` alone cannot detect missing polyfills.
+
+The IE11 BrowserStack job in `.github/workflows/testcafe.yml` also sets `BROWSERSLIST` to include IE11 for the Babel preset used by TestCafe's injected `ClientFunction` wrappers. Preserve those wrapper targets separately from the SDK bundle targets: otherwise modern wrapper syntax can make `posthog.init` hang silently.
 
 ## Testing
 
-> [!NOTE]
-> Run `pnpm build` at least once before running tests.
+Use root Turbo commands to bootstrap prerequisites, for example `pnpm turbo run test:unit test:built --filter=posthog-js` from the repository root. The browser unit task requires browser, workspace-dependency, and React build outputs. Direct package commands assume these outputs exist; rebuild stale artifacts after source changes.
 
-- Unit tests: run `pnpm test`.
-- Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox.
+Run the following package commands from `packages/browser`:
+
+- **Unit tests (Vitest):** `pnpm test:unit` runs the source suite, including built-output checks. In particular, `src/__tests__/entrypoints/module.test.ts` reads `dist` during collection; the full suite is not build-free. For iteration, select a focused source test with `pnpm exec vitest run src/path/to/test.test.ts` and check that it does not depend on built artifacts.
+- **Functional tests:** `pnpm test:functional` exercises integration behavior with mocked APIs. `pnpm test` runs both unit and functional suites.
+- **Playwright:** real-browser tests; for a focused noninteractive run use `pnpm exec playwright test path/to/test.spec.ts --reporter=line`. The default HTML reporter can wait after local failures. UI runs, such as `pnpm exec playwright test --ui --project webkit --project firefox`, are intentionally interactive.
+- **TestCafe E2E:** high-level integration with a live PostHog instance and BrowserStack; see the setup below.
+
+Focused runs do not replace the root [CI-aligned checks](../../CONTRIBUTING.md#ci-aligned-checks). Select relevant compatibility, build/watch, declaration, packaging, and live-browser checks when changing those contracts.
 
 ### Comparing `array.js` bundle size
 
@@ -44,22 +63,17 @@ After all this, run:
 2. Export BrowserStack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
 3. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 
-### Running the local create react app example
+### Running the local Next.js playground
 
-You can use the create react app setup in `packages/browser/playground/nextjs` to test `posthog-js` as an npm module in a Next.js application.
+Use `playground/nextjs` (from the repository root) to test `posthog-js` as an npm module in a Next.js application. Its initialization in `playground/nextjs/src/posthog.ts` reads `NEXT_PUBLIC_POSTHOG_KEY` and `NEXT_PUBLIC_POSTHOG_HOST`.
 
 1. Run `posthog` locally on port `8000` (`DEBUG=1 TEST=1 ./bin/start`).
 2. Run `python manage.py setup_dev --no-data` on the `posthog` repo to set up a demo account.
 3. Copy the project API key from `http://localhost:8000/project/settings` for the last step.
-4. Run `cd packages/browser/playground/nextjs`.
-5. Run `pnpm install-deps` to install dependencies.
-6. Run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev` to start the application.
-
-### Tiers of testing
-
-1. Unit tests - verify behavior in small, focused chunks.
-2. Browser tests - run in real browsers to cover timing, browser requests, and other high-level behavior.
-3. TestCafe E2E tests - integrate with a real PostHog instance and should stay very high level.
+4. From this repository's root, run `pnpm build` followed by `pnpm package` to generate the local SDK tarballs used by the playground.
+5. From the repository root, run `cd playground/nextjs`.
+6. Run `pnpm install` to install dependencies.
+7. Run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev` to start the application.
 
 ## Developing together with another project
 

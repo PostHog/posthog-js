@@ -15,7 +15,8 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()

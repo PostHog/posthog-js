@@ -12,6 +12,7 @@ import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
+import { validateServerBuild } from './extensions/server-build'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/feedback'
@@ -54,11 +55,10 @@ import type {
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   const logger = createLogger(options?.logger)
 
-  // Fail fast on a `collectFeedback` config error (reserved extra key,
-  // undeclared extraRequired). Above the graceful-degradation try so it throws
-  // out of instrument() like PostHogMCP's constructor does — inside the catch it
-  // would silently disable ALL analytics for the server, not just feedback.
+  // Fail fast on config errors. Keep these checks above the graceful-degradation
+  // try so invalid config does not silently disable all analytics for the server.
   // `options?.` — untyped JavaScript can pass null options (see logger-isolation.test.ts).
+  validateServerBuild(options?.serverBuild)
   const feedbackOptions = resolveCollectFeedbackOptions(options?.collectFeedback)
   if (feedbackOptions) {
     getFeedbackToolDescriptor(feedbackOptions)

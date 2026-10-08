@@ -307,16 +307,8 @@ test.describe('Session recording - masking', () => {
             maskTextSelector: remoteMaskingTextSelector,
         })
 
-        const snapshotData = snapshotEvents.map((e) => JSON.stringify(e.properties?.['$snapshot_data']))
-
-        const snapshotsThatIncludeMaskedContent = snapshotData.filter((data) => {
-            const includesMaskedInput = !!data?.includes('hello posthog!')
-
-            const includesMaskedText = !!data?.includes('just some text')
-
-            return includesMaskedInput || includesMaskedText
-        })
-
-        expect(snapshotsThatIncludeMaskedContent.length).toBe(1)
+        const snapshotBytes = JSON.stringify(snapshotEvents.flatMap((e) => e.properties.$snapshot_data))
+        expect(snapshotBytes).toContain('hello posthog!')
+        expect(snapshotBytes).not.toContain('just some text')
     })
 })

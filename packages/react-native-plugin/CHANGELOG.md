@@ -1,5 +1,40 @@
 # @posthog/react-native-plugin
 
+## 2.12.5
+
+### Patch Changes
+
+- [#5207](https://github.com/PostHog/posthog-js/pull/5207) [`f047084`](https://github.com/PostHog/posthog-js/commit/f047084f816817a1b2a5646886d56bbe4c02b5e5) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-android 3.71.6, which keeps replay uploads separate when the session or distinct ID changes and fixes corrupt gzip request bodies on Android.
+  (2026-10-05)
+
+## 2.12.4
+
+### Patch Changes
+
+- [#5193](https://github.com/PostHog/posthog-js/pull/5193) [`e4672b6`](https://github.com/PostHog/posthog-js/commit/e4672b6602b8f03bdf0f81571e5eded63899b985) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require posthog-ios 3.88.2 to fix replay attribution across session and identity changes and a camera-picker replay crash.
+  (2026-10-02)
+
+## 2.12.3
+
+### Patch Changes
+
+- [#5151](https://github.com/PostHog/posthog-js/pull/5151) [`512d4c7`](https://github.com/PostHog/posthog-js/commit/512d4c77747b4b436104d746e8ed160680cda176) Thanks [@arnohillen](https://github.com/arnohillen)! - Require posthog-ios 3.86.1 and posthog-android 3.71.4, which stop session replay when the project is over its mobile session replay quota
+  (2026-09-30)
+
+## 2.12.2
+
+### Patch Changes
+
+- [#5142](https://github.com/PostHog/posthog-js/pull/5142) [`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Require posthog-android 3.71.2, which stops event properties from overriding `$process_person_profile` and `$is_identified` on native events
+  (2026-09-29)
+
+## 2.12.1
+
+### Patch Changes
+
+- [#5135](https://github.com/PostHog/posthog-js/pull/5135) [`7e14f4d`](https://github.com/PostHog/posthog-js/commit/7e14f4de50da7b51c33a22b40357403f6a9236fb) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep the JS layer's `$process_person_profile` and `$is_identified` on fatal JS crashes captured through the Android native SDK, so they stay correct once posthog-android stops letting event properties override them
+  (2026-09-28)
+
 ## 2.12.0
 
 ### Minor Changes

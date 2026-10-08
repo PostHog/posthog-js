@@ -7,6 +7,7 @@ import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   CompatibleToolsListLike,
+  InputAliasMap,
   JsonRecord,
   MCPAnalyticsData,
   MCPRequestLike,
@@ -74,6 +75,16 @@ function resolveToolSchemaSessionId(data: MCPAnalyticsData, extra?: CompatibleRe
   if (token) return token.sessionId
   if (extra?.sessionId) return deriveSessionIdFromMCPSession(extra.sessionId)
   return data.sessionId
+}
+
+function resolveInputAliases(data: MCPAnalyticsData, toolName: string | undefined): InputAliasMap | undefined {
+  if (!toolName || !data.options.resolveInputAliases) return undefined
+  try {
+    return data.options.resolveInputAliases(toolName)
+  } catch (error) {
+    data.logger(`Warning: resolveInputAliases failed for tool ${toolName} - ${error}`)
+    return undefined
+  }
 }
 
 interface TraceToolCallParams {
@@ -188,6 +199,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
       ...preparedEvent.event.properties,
       ...getToolInputProperties(request.params?.arguments ?? {}, schema, {
         shouldRecordInputKey: data.options.shouldRecordInputKey,
+        inputAliases: resolveInputAliases(data, request.params?.name),
       }),
     }
   }
@@ -806,7 +818,7 @@ export async function handleListToolsRequest(
     return response
   }
 
-  event.response = response
+  event.response = toolsListEnvelope(response)
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
@@ -832,6 +844,13 @@ function collectListedToolNames(tools: CompatibleToolsListLike['tools'] | undefi
   }
   const names = tools.map((tool) => tool?.name).filter((name): name is string => typeof name === 'string')
   return names.length > 0 ? names : undefined
+}
+
+// `listedToolNames` already names the tools. A copy of the full descriptors would be
+// sanitized and truncated on the request path, and a large catalogue loses most of it.
+function toolsListEnvelope(response: CompatibleToolsListLike): Record<string, unknown> | undefined {
+  const { tools: _tools, ...envelope } = response
+  return Object.keys(envelope).length > 0 ? envelope : undefined
 }
 
 async function getTracedToolsList(

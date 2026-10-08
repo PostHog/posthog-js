@@ -1,7 +1,16 @@
 // Native signatures are pinned to posthog-node 5.52.4 (see README.md).
 import { randomUUID } from 'node:crypto'
 
-export const routes = ['/setup', '/capture', '/capture_ai', '/flush', '/get_feature_flag', '/reload_feature_flags']
+export const routes = [
+    '/setup',
+    '/capture',
+    '/capture_ai',
+    '/identify',
+    '/alias',
+    '/flush',
+    '/get_feature_flag',
+    '/reload_feature_flags',
+]
 export const failure = (kind, code, message) => ({ kind: 'harness', failure: { kind, code, message } })
 class BindingGap extends Error {
     constructor(kind, code, message) {
@@ -194,6 +203,19 @@ export class Binding {
                         `${route}/send_feature_flags`
                     )
                 result = route === '/capture' ? this.client.capture(mapped) : this.client.captureAi(mapped)
+            } else if (route === '/identify') {
+                const mapped = rename(
+                    args,
+                    { distinct_id: 'distinctId', set: 'properties', disable_geoip: 'disableGeoip' },
+                    route
+                )
+                // `set` contains literal user properties, including any reserved-looking keys.
+                if (own(args, 'set')) mapped.properties = { $set: args.set }
+                result = this.client.identify(mapped)
+            } else if (route === '/alias') {
+                result = this.client.alias(
+                    rename(args, { distinct_id: 'distinctId', alias: 'alias', disable_geoip: 'disableGeoip' }, route)
+                )
             } else if (route === '/flush') {
                 checkKeys(args, [], route)
                 result = await this.client.flush()
@@ -220,7 +242,11 @@ export class Binding {
                 kind: 'sdk',
                 outcome: classify(
                     result,
-                    route === '/capture' || route === '/flush' || route === '/reload_feature_flags'
+                    route === '/capture' ||
+                        route === '/identify' ||
+                        route === '/alias' ||
+                        route === '/flush' ||
+                        route === '/reload_feature_flags'
                 ),
             }
         } catch (error) {

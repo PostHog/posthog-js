@@ -1,110 +1,19 @@
-# AGENTS.md
+# Browser package instructions
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Root [AGENTS.md](../../AGENTS.md) applies. Read the root [CONTRIBUTING.md](../../CONTRIBUTING.md) and this package's [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Development Commands
+## Runtime and build safeguards
 
-### Build and Development
+- Preserve consent/opt-out and privacy behavior across capture, persistence, and extensions.
+- Eligible captures use the batching queue; unbatched/immediate captures bypass it. Preserve both queued and direct/retriable delivery paths.
+- In browser source covered by the custom lint rules, use `@posthog/core` helpers such as `isArray`, `isNull`, and `isUndefined` rather than native checks. Respect file-specific overrides in the root `.oxlintrc.json`, especially Playwright's array/null/undefined exemptions.
+- Keep extension UI on the configured Preact JSX runtime; React bindings belong to the separate React package.
+- Preserve TypeScript semantic checking/declaration generation, canonical PostHog type references, and published declaration paths. Preserve cross-bundle private-property ABI, reserved names, and source-map names required by the postbuild checker; see [build constraints](./CONTRIBUTING.md#private-property-abi-and-declarations).
+- Keep ES5/old-browser compatibility safeguards: syntax checks do not establish built-in availability. Preserve the built web-vitals polyfill canary in `src/__tests__/entrypoints/module.test.ts` and IE11 TestCafe wrapper targets; see [compatibility details](./CONTRIBUTING.md#old-browser-syntax-and-built-ins).
 
-- `pnpm build` - Build the library (TypeScript compilation + Rolldown bundling)
-- `pnpm dev` - Start development with file watching
-- `pnpm start` - Alias for `pnpm dev`; see [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup
-- `pnpm clean` - Remove build artifacts (lib/, dist/, react/dist/)
+## Focused validation
 
-### Testing
-
-- `pnpm test` - Run all tests (unit + functional)
-- `pnpm test:unit` - Run unit tests only
-- `pnpm test:unit:surveys` - Run survey-specific unit tests
-- `pnpm test:functional` - Run functional tests
-- `pnpm test-watch` - Run unit tests in watch mode
-- `pnpm test:typecheck` - Run TypeScript type checking on tests
-
-### Code Quality
-
-- `pnpm lint` - Lint source and playwright code
-- `pnpm lint:fix` - Auto-fix linting issues
-- `pnpm format` - Format code with Oxfmt
-- `pnpm format:check` - Check code formatting with Oxfmt
-- `pnpm typecheck` - TypeScript type checking
-
-### E2E Testing
-
-- `pnpm playwright` - Run Playwright tests across browsers
-- `pnpm playwright-ui` - Run Playwright with UI
-- `pnpm playwright:surveys` - Run survey-specific Playwright tests
-- `pnpm playwright:surveys:ui` - Run survey Playwright tests with UI
-
-### Single Test Execution
-
-- `jest src/path/to/test.test.ts` - Run specific unit test
-- `pnpm exec playwright test path/to/test.spec.ts` - Run specific Playwright test
-
-## Architecture Overview
-
-### Core Structure
-
-- **posthog-core.ts** - Main PostHog class with all public APIs
-- **config.ts** - Configuration management and defaults
-- **posthog-persistence.ts** - Browser storage management (localStorage, cookies)
-- **posthog-featureflags.ts** - Feature flag functionality
-- **posthog-surveys.ts** - Survey management and display
-- **request-queue.ts** - Event batching and network request handling
-- **sessionid.ts** - Session management
-
-### Extensions Architecture
-
-The `/src/extensions/` directory contains modular features:
-
-- **surveys.tsx** - Survey UI components (Preact-based)
-- **replay/sessionrecording.ts** - Session recording functionality
-- **autocapture/** - Automatic event capture
-- **toolbar.ts** - PostHog toolbar integration
-- **sentry-integration.ts** - Sentry error tracking integration
-- **segment-integration.ts** - Segment analytics integration
-
-### Key Concepts
-
-- **Extensions Pattern** - Features are modular extensions that can be enabled/disabled
-- **Event Queue** - All events go through a request queue for batching and retry logic
-- **Persistence Layer** - Unified storage abstraction over localStorage/cookies
-- **Remote Config** - Dynamic configuration loaded from PostHog servers
-- **Consent Management** - GDPR-compliant consent handling
-
-### Build System
-
-- **TypeScript** compilation to `lib/` directory
-- **Rolldown** runtime and declaration bundling; **TypeScript** still generates and checks declarations
-- **Preact** for UI components (surveys, toolbar)
-- **Lightning CSS** for CSS processing, nesting transforms, and minification
-- **Terser** for minification with property mangling
-
-### Testing Strategy
-
-1. **Unit Tests** (Jest) - Core functionality, utils, individual classes
-2. **Functional Tests** - Integration testing with mocked APIs
-3. **Playwright Tests** - Real browser automation testing
-4. **TestCafe E2E** - Full integration with real PostHog instance
-
-### Package Management
-
-- Uses **pnpm** (not npm) for dependency management
-- Workspace setup with `@posthog/core` internal dependency
-- Optional peer dependencies for Angular compiler support
-
-### Lint Rules
-
-Custom Oxlint rules enforce using `@posthog/core` type-check helpers instead of native JS:
-
-- **No `Array.isArray()`** — use `isArray()` from `@posthog/core`
-- **No `=== null`** — use `isNull()` from `@posthog/core`
-- **No `=== undefined`** — use `isUndefined()` from `@posthog/core`
-
-These are all available via `import { isArray, isNull, isUndefined } from '@posthog/core'`.
-
-### Important Notes
-
-- Must run `pnpm build` before running tests
-- React/Preact components in extensions use JSX factory `h`
-- Property mangling used in production builds for size optimization
-- IE11 is not in our supported browsers list, but the ES5 bundle (`array.full.es5.js`) is still built with IE11-compatible Babel targets (hard-coded in `rollup.config.mjs`) and validated by `es-check` in CI. `es-check` parses syntax only, so it never sees a call to a missing prototype method: the "do we need a new polyfill?" canary is the built-bundle test in `src/__tests__/entrypoints/module.test.ts`, which evaluates the web-vitals bundles in a frame with the post-baseline built-ins removed. The browserstack IE11 testcafe job (`.github/workflows/testcafe.yml`) sets a `BROWSERSLIST` env var to feed IE11 into the `@babel/preset-env` that testcafe uses to transpile its injected `ClientFunction` wrappers — without that, testcafe ships modern syntax into the IE11 page and `posthog.init` hangs silently
+- Bootstrap the full browser unit suite through root Turbo (for example, `pnpm turbo run test:unit test:built --filter=posthog-js` from the repository root). It requires browser, dependency, and React outputs and reads `dist`; direct package commands assume prerequisites exist. Rebuild stale artifacts.
+- For iteration, select a source test that does not read built outputs. From `packages/browser`, run `pnpm exec vitest run src/path/to/test.test.ts`.
+- From `packages/browser`, run focused Playwright tests with `pnpm exec playwright test path/to/test.spec.ts --reporter=line`. UI commands are intentionally interactive.
+- Follow the package [testing guide](./CONTRIBUTING.md#testing) for relevant compatibility/build/packaging/live checks and the root [CI-aligned checks](../../CONTRIBUTING.md#ci-aligned-checks) for final validation; focused tests do not replace them.
