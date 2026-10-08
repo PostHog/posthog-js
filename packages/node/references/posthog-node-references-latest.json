@@ -484,7 +484,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged. In particular, a cached inactive definition is a conclusive `false` result locally, while remote evaluation omits globally inactive flags and therefore leaves those keys absent.\n**Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the first time each flag value is read for a user. Experiments use these events as exposures. The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override it, so one snapshot can serve both experiment flags and flags that should send no events. `getFlagPayload()` never sends events.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -3072,7 +3072,7 @@
           "name": "disable_capture_url_hashes"
         },
         {
-          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)\n\nIn posthog-node this is also the default for reads from an `evaluateFlags()` snapshot\n(`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a\nsingle-flag getter, to override it for that call.",
           "type": "boolean",
           "name": "sendFeatureFlagEvent"
         },
@@ -3595,7 +3595,7 @@
           "name": "disable_capture_url_hashes"
         },
         {
-          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)\n\nIn posthog-node this is also the default for reads from an `evaluateFlags()` snapshot\n(`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a\nsingle-flag getter, to override it for that call.",
           "type": "boolean",
           "name": "sendFeatureFlagEvent"
         },

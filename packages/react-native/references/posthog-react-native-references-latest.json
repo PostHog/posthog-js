@@ -3174,7 +3174,7 @@
           "name": "disable_capture_url_hashes"
         },
         {
-          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)",
+          "description": "Whether to track that `getFeatureFlag` was called (used by Experiments)\n\nIn posthog-node this is also the default for reads from an `evaluateFlags()` snapshot\n(`isEnabled()` / `getFlag()`). Pass `sendFeatureFlagEvents` to one of those reads, or to a\nsingle-flag getter, to override it for that call.",
           "type": "boolean",
           "name": "sendFeatureFlagEvent"
         },

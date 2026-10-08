@@ -1,5 +1,5 @@
 ---
-'posthog-node': patch
+'posthog-node': minor
 ---
 
-Respect the `sendFeatureFlagEvent: false` client option when reading flags from an `evaluateFlags()` snapshot, so `isEnabled()` and `getFlag()` no longer send `$feature_flag_called` events.
+Reads from an `evaluateFlags()` snapshot now honor `sendFeatureFlagEvent: false`, and `isEnabled()` / `getFlag()` accept a `sendFeatureFlagEvents` option that overrides it for one read. If you set `sendFeatureFlagEvent: false` and rely on snapshot reads for experiment exposures, pass `sendFeatureFlagEvents: true` on those reads.

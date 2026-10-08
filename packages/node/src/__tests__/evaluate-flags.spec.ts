@@ -380,30 +380,76 @@ describe('evaluateFlags', () => {
     })
   })
 
-  describe('sendFeatureFlagEvent client option', () => {
+  describe('$feature_flag_called settings for snapshot reads', () => {
+    const flagCalledKeys = (): string[] =>
+      captures.filter((m) => m.event === '$feature_flag_called').map((m) => m.properties.$feature_flag)
+
     beforeEach(() => {
       mockedFetch.mockImplementation(apiImplementationV4(flagsResponseFixture()))
     })
 
-    it('does not fire $feature_flag_called events from snapshot reads when the option is false', async () => {
-      setup({ sendFeatureFlagEvent: false })
+    it.each<[boolean | undefined, boolean | undefined, boolean]>([
+      [undefined, undefined, true],
+      [true, undefined, true],
+      [false, undefined, false],
+      [undefined, true, true],
+      [false, true, true],
+      [undefined, false, false],
+      [true, false, false],
+    ])(
+      'with client option %s and read option %s, isEnabled() and getFlag() send events: %s',
+      async (clientOption, readOption, sendsEvents) => {
+        setup(clientOption === undefined ? {} : { sendFeatureFlagEvent: clientOption })
+        const readOptions = readOption === undefined ? undefined : { sendFeatureFlagEvents: readOption }
+        const flags = await posthog.evaluateFlags('user-1')
+
+        // Read the payload before any value read so dedupe can't hide an event from it.
+        expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+
+        expect(flags.isEnabled('boolean-flag', readOptions)).toBe(true)
+        expect(flags.getFlag('variant-flag', readOptions)).toBe('variant-value')
+
+        await waitForPromises()
+        expect(flagCalledKeys().sort()).toEqual(sendsEvents ? ['boolean-flag', 'variant-flag'] : [])
+      }
+    )
+
+    it.each<[string, (flags: FeatureFlagEvaluations) => unknown]>([
+      ['the snapshot', (flags) => flags.getFlag('variant-flag', { sendFeatureFlagEvents: true })],
+      ['getFeatureFlag()', () => posthog.getFeatureFlag('variant-flag', 'user-1', { sendFeatureFlagEvents: true })],
+    ])(
+      'leaves the dedupe cache untouched on suppressed reads, so a later opted-in read through %s sends one event',
+      async (_, optedInRead) => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        try {
+          setup({ sendFeatureFlagEvent: false })
+          const flags = await posthog.evaluateFlags('user-1')
+          flags.getFlag('variant-flag')
+          flags.isEnabled('variant-flag', { sendFeatureFlagEvents: false })
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual([])
+
+          await optedInRead(flags)
+          await optedInRead(flags)
+
+          await waitForPromises()
+          expect(flagCalledKeys()).toEqual(['variant-flag'])
+        } finally {
+          warnSpy.mockRestore()
+        }
+      }
+    )
+
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('still marks reads silenced by %s as accessed for onlyAccessed()', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
       const flags = await posthog.evaluateFlags('user-1')
-
-      expect(flags.isEnabled('boolean-flag')).toBe(true)
-      expect(flags.isEnabled('disabled-flag')).toBe(false)
-      expect(flags.getFlag('variant-flag')).toBe('variant-value')
-      expect(flags.getFlag('missing-flag')).toBeUndefined()
-      expect(flags.getFlagPayload('variant-flag')).toEqual({ key: 'value' })
-
-      await waitForPromises()
-      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
-    })
-
-    it('still tracks accessed flags for onlyAccessed() when the option is false', async () => {
-      setup({ sendFeatureFlagEvent: false })
-      const flags = await posthog.evaluateFlags('user-1')
-      flags.isEnabled('boolean-flag')
-      flags.getFlag('variant-flag')
+      flags.isEnabled('boolean-flag', readOptions)
+      flags.getFlag('variant-flag', readOptions)
 
       const accessed = flags.onlyAccessed()
       expect(accessed.keys.sort()).toEqual(['boolean-flag', 'variant-flag'])
@@ -417,44 +463,63 @@ describe('evaluateFlags', () => {
         '$feature/variant-flag': 'variant-value',
         $active_feature_flags: ['boolean-flag', 'variant-flag'],
       })
-      expect(captures.filter((m) => m.event === '$feature_flag_called')).toHaveLength(0)
+      expect(flagCalledKeys()).toEqual([])
     })
 
-    it.each([
-      ['unset', {}],
-      ['true', { sendFeatureFlagEvent: true }],
-    ])('fires one $feature_flag_called event per flag read when the option is %s', async (_, overrides) => {
-      setup(overrides)
+    it.each<[string, Partial<PostHogOptions>, { sendFeatureFlagEvents: boolean } | undefined]>([
+      ['the client option', { sendFeatureFlagEvent: false }, undefined],
+      ['the read option', {}, { sendFeatureFlagEvents: false }],
+    ])('sends no flag_missing event for a missing key silenced by %s', async (_, clientOptions, readOptions) => {
+      setup(clientOptions)
       const flags = await posthog.evaluateFlags('user-1')
-      flags.isEnabled('boolean-flag')
-      flags.getFlag('boolean-flag')
-      flags.isEnabled('disabled-flag')
-      flags.getFlag('variant-flag')
-      flags.getFlag('missing-flag')
-      flags.getFlagPayload('variant-flag')
 
+      expect(flags.isEnabled('missing-flag', readOptions)).toBe(false)
+      expect(flags.getFlag('missing-flag', readOptions)).toBeUndefined()
+      await waitForPromises()
+      expect(flagCalledKeys()).toEqual([])
+
+      flags.getFlag('missing-flag', { sendFeatureFlagEvents: true })
       await waitForPromises()
       const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
-      expect(flagCalled.map((m) => m.properties.$feature_flag).sort()).toEqual([
-        'boolean-flag',
-        'disabled-flag',
-        'missing-flag',
-        'variant-flag',
-      ])
+      expect(flagCalled).toHaveLength(1)
+      expect(flagCalled[0].properties).toMatchObject({
+        $feature_flag: 'missing-flag',
+        $feature_flag_error: 'flag_missing',
+      })
     })
 
-    it('keeps the per-call sendFeatureFlagEvents override on the legacy getters', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-      setup({ sendFeatureFlagEvent: false })
+    describe.each<[string, (flags: FeatureFlagEvaluations) => FeatureFlagEvaluations]>([
+      ['only()', (flags) => flags.only(['boolean-flag'])],
+      [
+        'onlyAccessed()',
+        (flags) => {
+          flags.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })
+          return flags.onlyAccessed()
+        },
+      ],
+    ])('on a snapshot returned by %s', (_, slice) => {
+      it('a read option of true overrides a client option of false', async () => {
+        setup({ sendFeatureFlagEvent: false })
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
 
-      const flags = await posthog.evaluateFlags('user-1')
-      flags.isEnabled('boolean-flag')
-      await posthog.getFeatureFlag('variant-flag', 'user-1', { sendFeatureFlagEvents: true })
+        expect(sliced.isEnabled('boolean-flag')).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
 
-      await waitForPromises()
-      const flagCalled = captures.filter((m) => m.event === '$feature_flag_called')
-      expect(flagCalled.map((m) => m.properties.$feature_flag)).toEqual(['variant-flag'])
-      warnSpy.mockRestore()
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: true })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual(['boolean-flag'])
+      })
+
+      it('a read option of false silences a default-on client', async () => {
+        setup()
+        const sliced = slice(await posthog.evaluateFlags('user-1'))
+
+        expect(sliced.isEnabled('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        expect(sliced.getFlag('boolean-flag', { sendFeatureFlagEvents: false })).toBe(true)
+        await waitForPromises()
+        expect(flagCalledKeys()).toEqual([])
+      })
     })
   })
 
