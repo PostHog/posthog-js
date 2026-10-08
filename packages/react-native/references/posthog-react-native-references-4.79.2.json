@@ -2,7 +2,7 @@
   "id": "posthog-react-native",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "4.79.2",
     "id": "posthog-react-native",
     "title": "PostHog React Native SDK",
     "description": "PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.",
@@ -3348,7 +3348,7 @@
           "name": "$os_version"
         },
         {
-          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
+          "description": "React Native version like \"0.79.6\"",
           "type": "string | null | undefined",
           "name": "$react_native_version"
         },
@@ -3830,7 +3830,7 @@
           "name": "capturePushNotificationSubscriptions"
         },
         {
-          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
+          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated. An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
         },

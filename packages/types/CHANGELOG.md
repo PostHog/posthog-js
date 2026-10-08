@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.415.2
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+
 ## 1.415.1
 
 ### Patch Changes

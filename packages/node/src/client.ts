@@ -169,7 +169,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // flag-definition loads) — both derive from the same per-team server config and converge.
   private _minimalFlagCalledEvents: boolean = false
 
-  distinctIdHasSentFlagCalls: Record<string, Set<string>>
+  // Insertion-ordered LRU of the `$feature_flag_called` keys already reported per distinct id.
+  // Map iteration order is insertion order, so the first entry is always the least recently used.
+  private _distinctIdHasSentFlagCalls: Map<string, Set<string>>
+
+  /**
+   * Snapshot of the `$feature_flag_called` dedupe state, keyed by distinct id.
+   * Adding or deleting keys on the returned object does not affect deduplication;
+   * assigning a whole object replaces the tracker.
+   * @internal
+   * @deprecated Not part of the public API; kept for backwards compatibility.
+   */
+  get distinctIdHasSentFlagCalls(): Record<string, Set<string>> {
+    return Object.fromEntries(this._distinctIdHasSentFlagCalls)
+  }
+
+  set distinctIdHasSentFlagCalls(value: Record<string, Set<string>>) {
+    this._distinctIdHasSentFlagCalls = new Map(Object.entries(value ?? {}))
+  }
 
   // waitUntil debounce state (per-instance)
   private _waitUntilCycle?: {
@@ -278,7 +295,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
-    this.distinctIdHasSentFlagCalls = {}
+    this._distinctIdHasSentFlagCalls = new Map()
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
@@ -2494,20 +2511,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         : ''
     const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
-    if (
-      distinctId in this.distinctIdHasSentFlagCalls &&
-      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
-    ) {
+    const reported = this._distinctIdHasSentFlagCalls.get(distinctId) ?? new Set<string>()
+
+    // Re-insert so the distinct id moves to the most-recently-used end of the map.
+    this._distinctIdHasSentFlagCalls.delete(distinctId)
+    this._distinctIdHasSentFlagCalls.set(distinctId, reported)
+
+    if (reported.has(featureFlagReportedKey)) {
       return
     }
 
-    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-      this.distinctIdHasSentFlagCalls = {}
-    }
-    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
-      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
-    } else {
-      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
+    reported.add(featureFlagReportedKey)
+
+    // Evict only the least recently used distinct ids. Clearing the whole tracker under capacity
+    // pressure would re-send `$feature_flag_called` for every active user at once. The current id
+    // is always kept, even when maxCacheSize is below 1.
+    while (this._distinctIdHasSentFlagCalls.size > Math.max(this.maxCacheSize, 1)) {
+      const lruDistinctId = this._distinctIdHasSentFlagCalls.keys().next().value
+      if (lruDistinctId === undefined) {
+        break
+      }
+      this._distinctIdHasSentFlagCalls.delete(lruDistinctId)
     }
 
     this.capture({
@@ -2897,7 +2921,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     try {
       return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
-      this.distinctIdHasSentFlagCalls = {}
+      this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
   }
