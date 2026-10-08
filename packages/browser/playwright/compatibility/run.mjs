@@ -189,7 +189,8 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             })
         }
         await release('extensions', 'surveys')
-        if (scenario === 'logs' && (await page.evaluate(() => typeof window.__compat.ph.captureLog === 'function'))) {
+        const logsSupported = scenario === 'logs' && (await page.evaluate(() => window.__compat.checkLogSupport()))
+        if (logsSupported) {
             await page.waitForFunction(() => typeof window.__PosthogExtensions__?.logs?.initializeLogs === 'function')
         }
         if (['surveys', 'delayed-loading', 'version-fallback'].includes(scenario)) {
@@ -284,7 +285,7 @@ async function runCell(browser, { engine, mode, comparison, scenario, repeat }) 
             await page.waitForFunction((count) => window.__compat.flagNotifications > count, notifications)
             ui.after = await survey.innerText()
         }
-        if (scenario === 'logs' && (await page.evaluate(() => typeof window.__compat.ph.captureLog === 'function'))) {
+        if (logsSupported) {
             await page.evaluate(() => {
                 window.__compat.phase = 'log'
                 window.__compat.call('captureLog', [

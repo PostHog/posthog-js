@@ -241,6 +241,25 @@ test('browser API harness records return values, throws, callbacks and settled p
     assert.deepEqual(JSON.parse(JSON.stringify(lab.callbacks[0].values)), [{ $kind: 'undefined' }, null, false])
 })
 
+test('current log scenarios require captureLog while historical cores may lack it', () => {
+    const sandbox = { window: {}, addEventListener() {}, Error, Date }
+    vm.runInNewContext(readFileSync(new URL('./harness.js', import.meta.url), 'utf8'), sandbox)
+    const lab = sandbox.window.__compat
+    lab.ph = { captureLog() {} }
+    for (const comparison of ['current', 'historical']) {
+        lab.comparison = comparison
+        assert.equal(lab.checkLogSupport(), true)
+    }
+    delete lab.ph.captureLog
+    lab.comparison = 'current'
+    assert.throws(() => lab.checkLogSupport(), /Current core is missing captureLog/)
+    lab.comparison = 'historical'
+    assert.equal(lab.checkLogSupport(), false)
+    lab.ph.captureLog = 'not callable'
+    lab.comparison = 'current'
+    assert.throws(() => lab.checkLogSupport(), /Current core is missing captureLog/)
+})
+
 test('loader options use supported historical configuration and current fallback mode', () => {
     const sandbox = { window: {}, location: { origin: 'http://fixture.test' }, addEventListener() {}, Error, Date }
     vm.runInNewContext(readFileSync(new URL('./harness.js', import.meta.url), 'utf8'), sandbox)

@@ -101,6 +101,11 @@
         if (lab.scenario === 'logs')
             lab.call('captureLog', [{ body: `compat-log-${phase}`, level: 'info', attributes: { phase } }])
     }
+    lab.checkLogSupport = () => {
+        const supported = typeof lab.ph.captureLog === 'function'
+        if (lab.comparison === 'current' && !supported) throw new Error('Current core is missing captureLog')
+        return supported
+    }
     lab.options = () => ({
         api_host: location.origin,
         ui_host: location.origin,

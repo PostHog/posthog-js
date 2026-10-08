@@ -33,7 +33,7 @@ const manifestPath = join(folder, 'manifest.json')
 const target = join(directory, 'goldens')
 const goldenInventory = () => (existsSync(target) ? inventoryTree(target, 'goldens') : null)
 const before = goldenInventory()
-const run = (name, operation) => {
+const run = (name, operation, { comparisons = 'current,historical', scenarios = 'surveys' } = {}) => {
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
     const result = spawnSync(
         process.execPath,
@@ -46,9 +46,9 @@ const run = (name, operation) => {
             '--modes',
             'npm',
             '--comparisons',
-            'current,historical',
+            comparisons,
             '--scenarios',
-            'surveys',
+            scenarios,
             '--repeats',
             '2',
             '--operation',
@@ -85,11 +85,35 @@ for (const cell of report.results) {
         )
     }
 }
+const logFixture = core.fixtures.npm.path
+writeFileSync(
+    logFixture,
+    readFileSync(logFixture, 'utf8') + '\ndelete Object.getPrototypeOf(window.__compat.ph).captureLog;\n'
+)
+manifest.inputIntegrity = inputInventory(manifest)
+run('logs-canary', 'update', { comparisons: 'current', scenarios: 'logs' })
+const logReport = JSON.parse(readFileSync(join(folder, 'logs-canary/report.json')))
+assert.equal(logReport.completedRuns, 2)
+assert.equal(logReport.passed, false)
+for (const cell of logReport.results) {
+    assert.equal(cell.status, 'failed')
+    for (const run of cell.runs) {
+        assert.equal(run.status, 'failed')
+        const failure = JSON.parse(readFileSync(join(run.folder, 'failure.json')))
+        assert.match(failure.message, /Current core is missing captureLog/)
+        assert(
+            failure.state.api.observations.some(
+                (observation) => observation.method === 'captureLog' && observation.returned?.$kind === 'missing-method'
+            )
+        )
+    }
+}
 const evidence = {
     passed: true,
     folder,
     integrityRejectedChangedBytes: true,
     browserEgressDenied: true,
+    missingCurrentCaptureLogRejected: true,
     nativeThrowDetected: report.results.map((cell) => cell.coreFamily),
     failedRuns: report.completedRuns,
     expectedSnapshotsUnchanged: true,

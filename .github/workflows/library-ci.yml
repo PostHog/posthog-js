@@ -162,6 +162,7 @@ jobs:
           path: |
             test-results/compatibility/**/runs/**
             test-results/compatibility/**/cdn-canary/**
+            test-results/compatibility/**/logs-canary/**
             test-results/compatibility/**/integrity-canary*
             test-results/compatibility/**/evidence.json
             test-results/compatibility/**/egress.json

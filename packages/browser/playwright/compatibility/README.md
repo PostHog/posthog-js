@@ -41,7 +41,7 @@ The execution profile fixes viewport (1024×768), locale, UTC timezone, light co
 
 Scenarios cover core lifecycle, identity/reset/consent/flags, autocapture, surveys, logs, replay, disabled products, extension failure, delayed loading, unload, version fallback, listener cleanup, forms, links, rage/dead clicks, scrolling and heatmaps. Functional, privacy, exact-once delivery and native-loader/UI assertions run in both check and update mode.
 
-Self-tests protect small semantic API/payload changes, nested batch/callback order, exact coverage, repeat equality, historical source attribution and update publication/rollback faults. Live controls first alter an artifact without repinning and require rejection before browser execution. They then pin a throwing survey CDN script and require failures through both current and historical native loaders, with expected snapshots unchanged.
+Self-tests protect small semantic API/payload changes, nested batch/callback order, exact coverage, repeat equality, historical source attribution and update publication/rollback faults. Live controls first alter an artifact without repinning and require rejection before browser execution. They then pin a throwing survey CDN script and require failures through both current and historical native loaders. A separate control removes `captureLog` from the prepared current consumer and requires log scenarios to fail instead of publishing new expectations. Expected snapshots remain unchanged in all controls.
 
 ## Historical coverage and limits
 
