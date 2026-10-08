@@ -1093,7 +1093,7 @@ export class PostHog extends PostHogCore {
    *
    * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
    * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
-   * When opting in after an opt-out, the promise resolves once session replay has been re-evaluated, under a new session if it restarts.
+   * When opting in after an opt-out, the promise resolves once session replay has been re-evaluated; if replay is eligible, it continues under a new session.
    *
    * {@label Privacy}
    *
@@ -1113,7 +1113,7 @@ export class PostHog extends PostHogCore {
     // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
     // work on the next flush), so the token unregistered by optOut() comes back without a restart.
     const nativeOptIn = this._propagateNativeOptOut()
-    // Replay was stopped at opt-out; start it again under a new session. Before initialization
+    // Replay was stopped at opt-out; re-evaluate it under a new session. Before initialization
     // there is nothing to restart, because startup evaluates replay against the saved consent.
     // Waits for native opt-in, because posthog-ios ignores a start while it is opted out.
     if (this._isInitialized && wasOptedOut) {
@@ -3204,10 +3204,7 @@ export class PostHog extends PostHogCore {
       if (!this._sessionReplayNativeInitialized) {
         await this.initializeNativePlugin(options, remoteConfig, true)
       }
-      // Stop whenever native replay is up, regardless of why it's recording: the flags-driven
-      // path (_sessionReplayRecordingActive) and a manual startSessionRecording() call both land
-      // here, and only the former sets that flag. _stopSessionRecording() is a no-op if nothing
-      // is actually running.
+      // Also ends a manual recording, which _sessionReplayRecordingActive doesn't track.
       if (this._sessionReplayNativeInitialized) {
         await this._stopSessionRecording()
       }
