@@ -949,10 +949,13 @@ export class PostHog extends PostHogCore {
     })
   }
 
+  // `disabled` is re-read too while replay is on: native re-samples on its own session
+  // rotation and can start recording without any JS-visible event.
   private _refreshStaleNativeStatus(): void {
     const status = this._nativeSessionReplayDebugProperties?.['$recording_status']
+    const replayOn = this._isEnableSessionReplay() && this._sessionReplayNativeInitialized
     if (
-      (status === 'buffering' || status === 'active') &&
+      (status === 'buffering' || status === 'active' || (status === 'disabled' && replayOn)) &&
       Date.now() - this._nativeSessionReplayDebugRefreshedAt >= NATIVE_REPLAY_STATUS_REFRESH_INTERVAL_MS
     ) {
       this._refreshNativeSessionReplayDebugProperties()
@@ -1900,6 +1903,7 @@ export class PostHog extends PostHogCore {
       if (OptionalReactNativePlugin) {
         try {
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
+          this._refreshNativeSessionReplayDebugProperties()
           this._logger.info(`sessionId rotated from ${this._currentSessionId} to ${sessionId}.`)
         } catch (e) {
           this._logger.error(`Failed to rotate sessionId: ${e}.`)
@@ -1924,6 +1928,7 @@ export class PostHog extends PostHogCore {
     if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
       try {
         OptionalReactNativePlugin.endSession()
+        this._refreshNativeSessionReplayDebugProperties()
         this._logger.info(`Native PostHog session ended.`)
       } catch (e) {
         this._logger.error(`Native PostHog session failed to end: ${e}.`)

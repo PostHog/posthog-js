@@ -912,6 +912,67 @@ describe('PostHog RN session replay debug properties', () => {
     expect(captureOne(client, 'drained').properties.$sdk_debug_replay_internal_buffer_length).toBe(1)
   })
 
+  it('a session rotation re-reads the native map so a newly sampled session reports active', async () => {
+    nativeDebugMap = { $recording_status: 'disabled' }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    expect(captureOne(client).properties.$recording_status).toBe('disabled')
+
+    nativeDebugMap = { $recording_status: 'active' }
+    client.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, Date.now() - 3600 * 1000)
+    captureOne(client, 'rotates the session')
+    await waitForNativeChain(client)
+
+    expect(captureOne(client, 'after rotation').properties.$recording_status).toBe('active')
+  })
+
+  it('resetSessionId re-reads the native map', async () => {
+    nativeDebugMap = { $recording_status: 'disabled' }
+    const client = await readyClient({ enableSessionReplay: true })
+    await waitForNativeChain(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    nativeDebugMap = { $recording_status: 'active' }
+    client.resetSessionId()
+    await waitForNativeChain(client)
+
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalled()
+    expect(captureOne(client, 'after reset').properties.$recording_status).toBe('active')
+  })
+
+  it('a capture re-reads a disabled map once the refresh interval has passed while replay is on', async () => {
+    nativeDebugMap = { $recording_status: 'disabled' }
+    const client = await readyClient({ enableSessionReplay: true })
+    await reloadAndSettle(client)
+    expect(captureOne(client).properties.$recording_status).toBe('disabled')
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    // Native activates on its own, with no rotation or lifecycle event JS can see.
+    nativeDebugMap = { $recording_status: 'active' }
+    captureOne(client, 'inside the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).not.toHaveBeenCalled()
+    expect(captureOne(client, 'still cached').properties.$recording_status).toBe('disabled')
+
+    advanceClock(6_000)
+    captureOne(client, 'after the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).toHaveBeenCalledTimes(1)
+    expect(captureOne(client, 'refreshed').properties.$recording_status).toBe('active')
+  })
+
+  it('a disabled map is not re-read from the capture path while replay is off', async () => {
+    nativeDebugMap = { $recording_status: 'disabled' }
+    const client = await readyClient()
+    await reloadAndSettle(client)
+    pluginMock.getSessionReplayDebugProperties.mockClear()
+
+    advanceClock(6_000)
+    captureOne(client, 'after the interval')
+    await waitForNativeChain(client)
+    expect(pluginMock.getSessionReplayDebugProperties).not.toHaveBeenCalled()
+  })
+
   it('a refresh that was in flight when recording stopped cannot write its stale map back', async () => {
     const client = await readyClient({ enableSessionReplay: true })
     await waitForNativeChain(client)
@@ -936,6 +997,8 @@ describe('PostHog RN session replay debug properties', () => {
     await wait(10)
     expect(gates).toHaveLength(1)
 
+    // Native's state after the stop, for the capture-path re-read a `disabled` map now gets.
+    nativeDebugMap = { $recording_status: 'disabled' }
     const stopping = client.stopSessionRecording()
     await wait(10)
     gates[0]()
