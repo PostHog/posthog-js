@@ -61,7 +61,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.1",
-    "next": "^15.5.22",
+    "next": "^15.5.27",
     "vitest": "catalog:",
     "typescript": "catalog:native"
   },

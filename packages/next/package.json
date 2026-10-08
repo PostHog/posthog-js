@@ -79,7 +79,7 @@
         "@testing-library/react": "^16.1.0",
         "@types/react": "^19.0.0",
         "@vercel/functions": "^3.4.3",
-        "next": "^15.5.22",
+        "next": "^15.5.27",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "typescript": "catalog:native",
