@@ -52,6 +52,19 @@ function prerequisites(tasks, taskId) {
 
 const executable = (tasks) => tasks.filter((task) => task.command !== '<NONEXISTENT>')
 
+test('browser fixture test commands build their shared mock before importing it', () => {
+    const scripts = readJson('packages/browser-next/package.json').scripts
+    for (const [script, runner] of [
+        ['test:browser', 'playwright test --config playwright.config.ts'],
+        ['test:fixture-server', 'node --test scripts/serve-browser-tests.test.mjs'],
+    ]) {
+        assert.deepEqual(scripts[script].split(' && '), [
+            'pnpm --filter @posthog-tooling/sdk-mock-server build',
+            runner,
+        ])
+    }
+})
+
 test('concurrent version generation never exposes an empty module to builds', async () => {
     const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-version-race-'))
     const targets = []

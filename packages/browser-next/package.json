@@ -48,13 +48,13 @@
         "dev": "rslib build -w",
         "test:unit": "vitest run",
         "test:built": "node scripts/check-mixed-module-delivery.mjs",
-        "test:browser": "playwright test --config playwright.config.ts",
+        "test:browser": "pnpm --filter @posthog-tooling/sdk-mock-server build && playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
         "check-types": "node node_modules/typescript-legacy/bin/tsc --noEmit --project tsconfig.json",
         "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-        "test:fixture-server": "node --test scripts/serve-browser-tests.test.mjs"
+        "test:fixture-server": "pnpm --filter @posthog-tooling/sdk-mock-server build && node --test scripts/serve-browser-tests.test.mjs"
     },
     "dependencies": {
         "@posthog/browser-common": "workspace:^",
