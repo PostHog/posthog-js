@@ -2766,6 +2766,29 @@ describe('PostHog Node.js', () => {
       expect(captureSpy).toHaveBeenCalledTimes(3)
     })
 
+    it.each([-1, 0.5])('never evicts the current distinct id when maxCacheSize is %s', (maxCacheSize) => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+
+      for (let i = 0; i < 3; i++) {
+        ;(posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId: 'user-1',
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+      }
+
+      expect(captureSpy).toHaveBeenCalledTimes(1)
+    })
+
     it('$feature_flag_called is called appropriately when querying flags', async () => {
       mockedFetch.mockClear()
 

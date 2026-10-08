@@ -2524,8 +2524,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     reported.add(featureFlagReportedKey)
 
     // Evict only the least recently used distinct ids. Clearing the whole tracker under capacity
-    // pressure would re-send `$feature_flag_called` for every active user at once.
-    while (this._distinctIdHasSentFlagCalls.size > this.maxCacheSize) {
+    // pressure would re-send `$feature_flag_called` for every active user at once. The current id
+    // is always kept, even when maxCacheSize is below 1.
+    while (this._distinctIdHasSentFlagCalls.size > Math.max(this.maxCacheSize, 1)) {
       const lruDistinctId = this._distinctIdHasSentFlagCalls.keys().next().value
       if (lruDistinctId === undefined) {
         break
