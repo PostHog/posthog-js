@@ -561,10 +561,7 @@ export abstract class PostHogCoreStateless {
     properties?: PostHogEventProperties
   }): PostHogEventProperties {
     const userProperties = payload.properties || {}
-    let properties: PostHogEventProperties = {
-      ...userProperties,
-      ...this.getCommonEventProperties(), // Common PH props
-    }
+    let properties = this.mergeCommonEventProperties(userProperties)
     applyCallerFeatureFlagOverrides(properties, userProperties)
     // Customer hooks (before_send) run after this filter and may deliberately re-add stripped
     // properties; the SDK itself must not enrich beyond allowlisted keys past this point.
@@ -579,6 +576,17 @@ export abstract class PostHogCoreStateless {
       distinct_id: payload.distinct_id,
       event: payload.event,
       properties,
+    }
+  }
+
+  /**
+   * Merges the common PostHog properties into an event's properties. Stateless clients stamp them
+   * last, so callers can't override them.
+   */
+  protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
+    return {
+      ...properties,
+      ...this.getCommonEventProperties(),
     }
   }
 
