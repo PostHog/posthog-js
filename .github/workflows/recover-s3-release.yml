@@ -272,7 +272,7 @@ jobs:
             - name: Audit runner egress
               uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
               with:
-                egress-policy: audit
+                  egress-policy: audit
 
             - name: Notify Slack - S3 recovery approval needed
               continue-on-error: true
@@ -506,7 +506,7 @@ jobs:
                   if-no-files-found: error
 
     upload-s3:
-        name: Recover posthog-js S3 (${{ matrix.region.name }})
+        name: Recover immutable posthog-js S3 (${{ matrix.region.name }})
         needs: [validate, approve-recovery, build-s3-artifacts, build-toolbar]
         if: >-
             always() &&
@@ -527,7 +527,7 @@ jobs:
             - name: Audit runner egress
               uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
               with:
-                egress-policy: audit
+                  egress-policy: audit
 
             - name: Checkout current release tooling
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -584,18 +584,14 @@ jobs:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
 
-            - name: Upload recovered assets
+            - name: Upload and verify recovered immutable assets
               env:
                   BUCKET: ${{ matrix.region.bucket }}
                   FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
-                  UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
                   VERSION: ${{ inputs.target_version }}
               run: |
                   set -euo pipefail
-                  options=()
-                  if [ "$UPDATE_LATEST_ALIASES" != 'true' ]; then
-                      options+=(--immutable-only)
-                  fi
+                  options=(--immutable-only)
                   if [ "$FORCE_OVERWRITE" = 'true' ]; then
                       options+=(--force-overwrite)
                   fi
@@ -611,10 +607,98 @@ jobs:
                   VERSION: ${{ inputs.target_version }}
               run: |
                   {
-                      echo "### Recovered posthog-js@$VERSION in $REGION"
+                      echo "### Verified immutable posthog-js@$VERSION in $REGION"
                       echo
                       echo "- SDK source: \`$SOURCE_SHA\`"
                       echo "- Toolbar source: \`$TOOLBAR_SHA\`"
                       echo "- Latest CDN alias updates requested: \`$UPDATE_LATEST_ALIASES\`"
                       echo "- Existing immutable assets may be overwritten: \`$FORCE_OVERWRITE\`"
                   } >> "$GITHUB_STEP_SUMMARY"
+
+    # Validation restricts alias updates to region=all. Wait for every immutable upload.
+    promote-s3-aliases:
+        name: Promote recovered posthog-js S3 aliases (${{ matrix.region.name }})
+        needs: [upload-s3, validate, approve-recovery, build-s3-artifacts, build-toolbar]
+        if: >-
+            always() &&
+            inputs.update_latest_aliases &&
+            needs.upload-s3.result == 'success' &&
+            needs.validate.result == 'success' &&
+            needs.approve-recovery.result == 'success' &&
+            needs.build-s3-artifacts.result == 'success' &&
+            needs.build-toolbar.result == 'success'
+        runs-on: ubuntu-latest
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
+        steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+              with:
+                  egress-policy: audit
+
+            - name: Checkout current release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.sha }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+                  sparse-checkout-cone-mode: false
+                  fetch-depth: 1
+
+            - name: Setup Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+              with:
+                  cache: false
+                  run_install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download dist artifact
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: s3-recovery-posthog-js-dist
+                  path: packages/browser/dist
+
+            - name: Download toolbar artifact
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
+                  path: packages/browser/dist
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Verify recovered immutable assets and promote aliases
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  VERSION: ${{ inputs.target_version }}
+              run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION" --aliases-only
