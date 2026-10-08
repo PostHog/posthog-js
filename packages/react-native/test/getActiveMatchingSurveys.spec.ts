@@ -844,4 +844,57 @@ describe('getActiveMatchingSurveys', () => {
       expect(result[0].id).toBe('null-conditions')
     })
   })
+
+  describe('Wait period (seenSurveyWaitPeriodInDays)', () => {
+    it('should exclude survey when wait period is still active', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'wait-period-survey',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      // Last seen 2 days ago
+      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys, twoDaysAgo)
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('should include survey when wait period has elapsed', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'wait-period-survey',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      // Last seen 10 days ago
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys, tenDaysAgo)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('wait-period-survey')
+    })
+
+    it('should include survey when user has no lastSeenSurveyDate', () => {
+      const surveys = [
+        createMockSurvey({
+          id: 'wait-period-survey',
+          conditions: {
+            seenSurveyWaitPeriodInDays: 7,
+          },
+        }),
+      ]
+
+      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys, undefined)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('wait-period-survey')
+    })
+  })
 })

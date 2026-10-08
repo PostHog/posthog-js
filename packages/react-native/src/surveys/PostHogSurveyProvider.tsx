@@ -90,7 +90,7 @@ export type PostHogSurveyProviderProps = {
 export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.Element {
   const posthogFromHook = usePostHog()
   const posthog = props.client ?? posthogFromHook
-  const { seenSurveys, setSeenSurvey, setLastSeenSurveyDate } = useSurveyStorage()
+  const { seenSurveys, setSeenSurvey, lastSeenSurveyDate, setLastSeenSurveyDate } = useSurveyStorage()
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(undefined)
   const activatedSurveys = useActivatedSurveys(posthog, surveys)
@@ -117,18 +117,46 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       surveys,
       flags ?? {},
       seenSurveys,
-      activatedSurveys
-      // lastSeenSurveyDate
+      activatedSurveys,
+      lastSeenSurveyDate
     )
 
     const popoverSurveys = activeSurveys.filter((survey: Survey) => survey.type === SurveyType.Popover)
-    // TODO: sort by appearance delay, implement delay
-    // const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys)
+    const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys)
 
-    if (popoverSurveys.length > 0) {
-      setActiveSurvey(popoverSurveys[0])
+    if (popoverSurveyQueue.length === 0) {
+      return
     }
-  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys])
+
+    const nextSurvey = popoverSurveyQueue[0]
+    const delaySeconds = nextSurvey.appearance?.surveyPopupDelaySeconds ?? 0
+    // The default in PostHog is 0 seconds
+
+    if (delaySeconds <= 0) {
+      setActiveSurvey(nextSurvey)
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      const currentActiveSurveys = getActiveMatchingSurveys(
+        surveys,
+        flags ?? {},
+        seenSurveys,
+        activatedSurveys,
+        lastSeenSurveyDate
+      )
+
+      const currentActiveSurvey = currentActiveSurveys.some((s) => s.id === nextSurvey.id)
+
+      if (currentActiveSurvey) {
+        setActiveSurvey(nextSurvey)
+      }
+    }, delaySeconds * 1000)
+
+    return () => {
+      clearTimeout(timeoutId)
+    }
+  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys, lastSeenSurveyDate])
 
   const translatedActiveSurvey = useMemo(() => {
     return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog) : undefined
@@ -198,8 +226,8 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   )
 }
 
-// function sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
-//   return surveys.sort(
-//     (a, b) => (a.appearance?.surveyPopupDelaySeconds ?? 0) - (b.appearance?.surveyPopupDelaySeconds ?? 0)
-//   )
-// }
+export function sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
+  return [...surveys].sort(
+    (a, b) => (a.appearance?.surveyPopupDelaySeconds ?? 0) - (b.appearance?.surveyPopupDelaySeconds ?? 0)
+  )
+}
