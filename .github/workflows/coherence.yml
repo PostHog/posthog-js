@@ -5,9 +5,7 @@ name: Coherence
 on:
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 # A newer push to the same pull request replaces a run still going.
 concurrency:
@@ -24,6 +22,8 @@ jobs:
   coherence:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Audit runner egress
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -62,9 +62,36 @@ jobs:
           cat "$RUNNER_TEMP/coherence-report.md" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+      - name: Upload report
+        if: ${{ !cancelled() && steps.report.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coherence-report
+          path: ${{ runner.temp }}/coherence-report.md
+          retention-days: 1
+
+  comment:
+    needs: coherence
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Audit runner egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Download report
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coherence-report
+          path: ${{ runner.temp }}
+
       # One comment, found by its marker and updated in place. A pull request from a fork gets a read-only token: the report stays in the job summary, and a warning says so.
       - name: Comment
-        if: ${{ !cancelled() && steps.report.outcome != 'skipped' }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
