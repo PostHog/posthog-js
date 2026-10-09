@@ -211,6 +211,42 @@ describe('logs entrypoint', () => {
             )
         })
 
+        it('checks opt-out on every log for older hosts without is_capturing', () => {
+            delete (mockPostHog as Partial<PostHog>).is_capturing
+            const isOptedOut = vi.fn(() => false)
+            mockPostHog.has_opted_out_capturing = isOptedOut
+            const originalConsoleLog = assignableWindow.console.log as VitestMock
+            const stop = assignableWindow.__PosthogExtensions__.logs.initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+
+            isOptedOut.mockReturnValue(true)
+            assignableWindow.console.log('denied')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+
+            isOptedOut.mockReturnValue(false)
+            assignableWindow.console.log('resumed')
+            expect(mockEmit).toHaveBeenCalledTimes(2)
+            expect(isOptedOut).toHaveBeenCalledTimes(3)
+            expect(originalConsoleLog).toHaveBeenCalledWith('denied')
+            stop()
+        })
+
+        it('uses is_capturing when available instead of the older opt-out fallback', () => {
+            const isOptedOut = vi.fn(() => true)
+            mockPostHog.has_opted_out_capturing = isOptedOut
+            const stop = assignableWindow.__PosthogExtensions__.logs.initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('captured')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            ;(mockPostHog.is_capturing as VitestMock).mockReturnValue(false)
+            assignableWindow.console.log('denied')
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+            expect(isOptedOut).not.toHaveBeenCalled()
+            stop()
+        })
+
         it('should check capturing status on every log, not just at init', () => {
             const isCapturing = mockPostHog.is_capturing as VitestMock
 

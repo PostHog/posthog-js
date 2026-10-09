@@ -1,6 +1,5 @@
 import { assignableWindow } from '../utils/globals'
 import { LogsExtension } from '../extension-tokens'
-import { BrowserClientAdapter } from '../extensions/browser-client'
 import type { PostHog } from '../posthog-core'
 import type { CaptureLogOptions } from '../types'
 import type { Client } from '@posthog/browser-common'
@@ -69,12 +68,17 @@ const captureConsoleLogForHost = (
 }
 
 const consoleHost = (host: PostHog | Client): ConsoleLogsHost => {
-    const client = isClient(host) ? host : new BrowserClientAdapter(host)
     return {
         console: assignableWindow.console,
         hostname: assignableWindow.location.host,
         getCapturingLogs: () => {
-            const logs = client.canCapture ? client.getExtension(LogsExtension) : undefined
+            let logs: PostHog['logs']
+            if (isClient(host)) {
+                logs = host.canCapture ? host.getExtension(LogsExtension) : undefined
+            } else {
+                const canCapture = isFunction(host.is_capturing) ? host.is_capturing() : !host.has_opted_out_capturing()
+                logs = canCapture ? host.logs : undefined
+            }
             return logs
                 ? {
                       captureConsoleLog: (options) => captureConsoleLogForHost(host, logs, options),
