@@ -1,0 +1,22 @@
+{
+    "name": "@posthog-tooling/sdk-mock-server",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "check-types": "tsc -p tsconfig.json --noEmit",
+        "test:unit": "node --test tests/*.test.mjs",
+        "lint": "oxfmt --check src tests && oxlint -c ../../.oxlintrc.correctness.json src tests"
+    },
+    "devDependencies": {
+        "@types/node": "^22.19.1",
+        "typescript": "catalog:native"
+    }
+}

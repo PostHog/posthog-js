@@ -319,6 +319,9 @@ importers:
         specifier: npm:web-vitals@6.2.1
         version: web-vitals@6.2.1
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@babel/core':
         specifier: 'catalog:'
         version: 7.28.5
@@ -409,6 +412,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.10
       expect:
         specifier: ^29.7.0
         version: 29.7.0
@@ -516,6 +522,9 @@ importers:
         specifier: workspace:^
         version: link:../types
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@playwright/test':
         specifier: 1.52.0
         version: 1.52.0
@@ -1767,6 +1776,15 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
+
+  tooling/sdk-mock-server:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.1
+        version: 22.20.4
+      typescript:
+        specifier: catalog:native
+        version: 7.0.2
 
   tooling/tsconfig-base: {}
 
