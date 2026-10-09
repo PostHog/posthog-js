@@ -41,7 +41,7 @@ jobs:
     compliance:
         runs-on: ubuntu-24.04
         # Leave time for bounded startup/cleanup and artifact upload after a timeout.
-        timeout-minutes: 60
+        timeout-minutes: 85
         # Compliance is advisory; the report is reviewed by a human.
         continue-on-error: true
         permissions:
@@ -55,8 +55,8 @@ jobs:
                 shell: bash
         env:
             NODE_IMAGE: node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-            # Harness release 1.7.1; pin the published multi-platform image index.
-            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:7fc516703fb6f21cc9c56efb8527edb02ddb73c3e002619d9531537dfeed1d5a
+            # Harness release 1.10.0; pin the published multi-platform image index.
+            HARNESS_IMAGE: ghcr.io/posthog/sdk-test-harness-v2@sha256:0c7516bf9d53760b7333f17ebce5c459e69f46a5e878441226cc72abc513de45
             CAPTURE_MODE: ${{ matrix.mode }}
         steps:
             # Test the PR head or the triggering commit for push/manual runs.
@@ -83,6 +83,14 @@ jobs:
                   bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
                     "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/reports" \
                     2>&1 | tee "$RUNNER_TEMP/node-compliance/run.log"
+            - name: Run isolated acceptance profile
+              if: steps.prepare.outcome == 'success'
+              continue-on-error: true
+              timeout-minutes: 25
+              run: |
+                  bash compliance/node/v2/run-compliance.sh node-compliance:local "$HARNESS_IMAGE" \
+                    "$CAPTURE_MODE" "$RUNNER_TEMP/node-compliance/acceptance" acceptance \
+                    2>&1 | tee "$RUNNER_TEMP/node-compliance/acceptance-run.log"
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               if: always()
               continue-on-error: true
@@ -158,8 +166,13 @@ jobs:
                               ? '[redacted]' : item), 1200);
                       const lines = [marker, '# Node SDK compliance v2', '',
                           `Commit: ${sha}`, `[Workflow run and artifacts](${runUrl})`, ''];
-                      for (const [mode, profile] of [['v0', 'node-legacy'], ['v1', 'node-analytics-v1']]) {
-                          lines.push(`## Capture ${mode}`, '');
+                      for (const [mode, profile, suite, reports] of [
+                          ['v0', 'node-legacy', 'acceptance', 'acceptance'],
+                          ['v1', 'node-analytics-v1', 'acceptance', 'acceptance'],
+                          ['v0', 'node-legacy', 'migration', 'reports'],
+                          ['v1', 'node-analytics-v1', 'migration', 'reports'],
+                      ]) {
+                          lines.push(`## Capture ${mode} — ${suite}`, '');
                           try {
                               const root = path.join(process.env.REPORT_ROOT, `node-v2-${mode}`);
                               const read = file => {
@@ -168,7 +181,7 @@ jobs:
                                   return fs.readFileSync(filename, 'utf8');
                               };
                               if (read('source.txt').trim() !== sha) throw new Error('Artifact source does not match the tested commit');
-                              const report = JSON.parse(read('reports/report.json'));
+                              const report = JSON.parse(read(`${reports}/report.json`));
                               if (report.contract_version !== 'sdk-compliance-v2-draft2' ||
                                   !Array.isArray(report.results) || !Array.isArray(report.errors) ||
                                   !report.profiles?.some(p => p.id === profile) ||
@@ -177,7 +190,7 @@ jobs:
                               }
                               let diagnostics;
                               try {
-                                  const candidate = JSON.parse(read('reports/report.json.diagnostics.json'));
+                                  const candidate = JSON.parse(read(`${reports}/report.json.diagnostics.json`));
                                   const byId = new Map(report.results.map(r => [r.case_id, r]));
                                   const seen = new Set();
                                   if (byId.size !== report.results.length || typeof report.run_id !== 'string' || !report.run_id || candidate.run_id !== report.run_id ||
@@ -197,7 +210,7 @@ jobs:
                               const failures = results.filter(r => !passed.includes(r));
                               const notSelected = report.results.length - results.length;
                               lines.push(`**✅ ${passed.length} passed / ❌ ${failures.length} non-passing / ⚠️ ${notSelected} not selected**`, '',
-                                  `Drill-down: [run artifacts](${runUrl}#artifacts) → <code>node-v2-${mode}</code> → <code>reports/report.json.diagnostics.json</code> (match case_id below).`, '');
+                                  `Drill-down: [run artifacts](${runUrl}#artifacts) → <code>node-v2-${mode}</code> → <code>${reports}/report.json.diagnostics.json</code> (match case_id below).`, '');
                               let shown = 0;
                               let detailBudget = 24000;
                               for (const r of failures.slice(0, 20)) {
@@ -253,8 +266,8 @@ jobs:
                               if (failures.length > shown) lines.push(`⚠️ ${failures.length - shown} more non-passing cases; see the artifact.`);
                               for (const error of report.errors.slice(0, 10)) lines.push(`- Harness error: ${escape(JSON.stringify(error))}`);
                               if (report.errors.length > 10) lines.push(`- ${report.errors.length - 10} more harness errors; see the artifact.`);
-                              const exit = read('reports/cli-exit.txt').trim();
-                              const validation = read('reports/report-check-exit.txt').trim();
+                              const exit = read(`${reports}/cli-exit.txt`).trim();
+                              const validation = read(`${reports}/report-check-exit.txt`).trim();
                               lines.push('', `Harness exit: ${escape(exit)}; report validation exit: ${escape(validation)}.`, '');
                               if (results.length > 0 && !failures.length && !report.errors.length && exit === '0' && validation === '0') {
                                   lines.push('All selected cases passed and report validation succeeded.', '');

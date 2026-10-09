@@ -49,7 +49,15 @@ import {
   PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
+import {
+  getReactNativeVersion,
+  getRemoteConfigBool,
+  getRemoteConfigNumber,
+  isHermes,
+  isMacOS,
+  isValidSampleRate,
+  isWeb,
+} from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -372,13 +380,14 @@ export class PostHog extends PostHogCore {
    *
    * @public
    *
-   * @param apiKey - Your PostHog API key
+   * @param apiKey - Your PostHog project token, which starts with `phc_`. Find it in your project
+   *   settings: https://us.posthog.com/settings/project-details#variables
    * @param options - PostHog configuration options
    */
   constructor(apiKey: string, options?: PostHogOptions) {
     const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : ''
     if (!normalizedApiKey) {
-      console.error("You must pass your PostHog project's api key. The client will be disabled.")
+      console.error('You must pass your PostHog project token. The client will be disabled.')
     }
 
     super(normalizedApiKey, options)
@@ -3289,16 +3298,17 @@ export class PostHog extends PostHogCore {
         )
       }
       if (appBuild) {
+        const installProperties = { ...properties, ...maybeAdd('$react_native_version', getReactNativeVersion()) }
         if (!prevAppBuild) {
           // new app install
-          this.capture('Application Installed', properties)
+          this.capture('Application Installed', installProperties)
         } else if (prevAppBuild !== appBuild) {
           // $app_version and $app_build are already added in the common event properties
           // app updated
           this.capture('Application Updated', {
             ...maybeAdd('previous_version', prevAppVersion),
             ...maybeAdd('previous_build', prevAppBuild),
-            ...properties,
+            ...installProperties,
           })
         }
       }

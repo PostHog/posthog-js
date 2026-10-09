@@ -1,4 +1,13 @@
-import { resolveOptionalPlugin, type OptionalPluginLoaders } from '../src/optional/OptionalPlugin'
+import type { OptionalPluginLoaders } from '../src/optional/OptionalPlugin'
+
+let resolveOptionalPlugin: typeof import('../src/optional/OptionalPlugin').resolveOptionalPlugin
+let warnSpy: vi.SpyInstance
+
+beforeEach(async () => {
+  vi.resetModules()
+  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  ;({ resolveOptionalPlugin } = await import('../src/optional/OptionalPlugin'))
+})
 
 const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
@@ -75,5 +84,26 @@ describe('OptionalPlugin loader', () => {
 
   it('loads no native plugin on web', () => {
     expect(loadOptionalPlugin('web').plugin).toBeUndefined()
+  })
+
+  it('warns once that the legacy plugin is deprecated when it is loaded', () => {
+    loadOptionalPlugin('ios', { primaryInstalled: false })
+    loadOptionalPlugin('android', { primaryInstalled: false })
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy.mock.calls[0][0]).toContain('posthog-react-native-session-replay is deprecated')
+    expect(warnSpy.mock.calls[0][0]).toContain('@posthog/react-native-plugin')
+  })
+
+  it.each([
+    ['ios', {}],
+    ['android', {}],
+    ['ios', { primaryInstalled: false, legacyInstalled: false }],
+    ['macos', { primaryInstalled: false }],
+    ['web', { primaryInstalled: false }],
+  ])('does not warn about the legacy plugin on %s with %o', (os, options) => {
+    loadOptionalPlugin(os, options)
+
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 })

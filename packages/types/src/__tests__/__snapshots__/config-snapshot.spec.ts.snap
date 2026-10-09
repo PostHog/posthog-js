@@ -858,6 +858,23 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"Pick<AutocaptureConfig, \\\\\\"element_attribute_ignorelist\\\\\\">\\"
     ]
   ],
+  \\"capture_webmcp\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\",
+    {
+      \\"intent\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ],
+      \\"model\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\"
+      ]
+    }
+  ],
   \\"capture_exceptions\\": [
     \\"undefined\\",
     \\"false\\",
@@ -935,6 +952,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"addTracingHeaders\\": [
     \\"undefined\\",
     \\"string[]\\"
+  ],
+  \\"__preview_replay_sync_fetch\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
   ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",

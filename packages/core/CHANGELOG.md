@@ -1,5 +1,60 @@
 # @posthog/core
 
+## 1.57.4
+
+### Patch Changes
+
+- [#5258](https://github.com/PostHog/posthog-js/pull/5258) [`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0) Thanks [@hpouillot](https://github.com/hpouillot)! - Recognize native bundler debug IDs and build-time error tracking release IDs.
+  (2026-10-09)
+
+## 1.57.3
+
+### Patch Changes
+
+- [#5254](https://github.com/PostHog/posthog-js/pull/5254) [`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop keeping `$react_native_version` on minimal `$feature_flag_called` events
+  (2026-10-08)
+
+## 1.57.2
+
+### Patch Changes
+
+- [#5162](https://github.com/PostHog/posthog-js/pull/5162) [`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c) Thanks [@pauldambra](https://github.com/pauldambra)! - Sanitize each tool response once instead of twice, and replace image, audio and binary blocks before the scan, so tool calls with large results cost less CPU. Redact PostHog tokens that URL field decoding exposes.
+  (2026-10-07)
+
+## 1.57.1
+
+### Patch Changes
+
+- [#5209](https://github.com/PostHog/posthog-js/pull/5209) [`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `Unable to resolve module @posthog/core/surveys` when bundling posthog-react-native on React Native 0.71–0.78 without Metro package exports. posthog-react-native 4.47.0 and later also pick up the fix by updating `@posthog/core`.
+  (2026-10-07)
+
+## 1.57.0
+
+### Minor Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/types@1.415.0
+
+## 1.56.1
+
+### Patch Changes
+
+- [#5206](https://github.com/PostHog/posthog-js/pull/5206) [`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep `$react_native_version` on minimal `$feature_flag_called` events
+  (2026-10-05)
+
+## 1.56.0
+
+### Minor Changes
+
+- [#5083](https://github.com/PostHog/posthog-js/pull/5083) [`d576bec`](https://github.com/PostHog/posthog-js/commit/d576bec7660dd6dd7ec11089fc40c5974c12cebb) Thanks [@61465](https://github.com/61465)! - Opt-in WebView bot heuristic for #2921.
+  - `posthog-js/customizations` exports a new `isLikelyWebViewBot(ua)` helper that flags the UA pattern described in #2921 (a `Chrome/...` token without the usual `AppleWebKit/*` + `Safari/*` co-markers that real Chrome always sends). Wire it into `before_send` to tag or drop the matching events — see `isLikelyWebViewBot` JSDoc for a usage example. Default SDK behaviour is unchanged; the helper is tree-shaken out unless you import it.
+  - `@posthog/core` keeps `isBlockedUA` and `DEFAULT_BLOCKED_UA_STRS` byte-for-byte compatible, and gains session-level memoisation of `isBlockedUA` results keyed on `(ua, customBlockedUserAgents)`, so repeat calls within the same session are O(1). (2026-10-05)
+
 ## 1.55.3
 
 ### Patch Changes

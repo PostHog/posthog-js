@@ -1,5 +1,37 @@
 # @posthog/mcp
 
+## 0.22.3
+
+### Patch Changes
+
+- [#5224](https://github.com/PostHog/posthog-js/pull/5224) [`ec9080a`](https://github.com/PostHog/posthog-js/commit/ec9080aad4dc6cccfe2d77f0a00420f442a90e48) Thanks [@gesh](https://github.com/gesh)! - Set `$mcp_interface` to `mcp` on events from MCP servers.
+  (2026-10-09)
+
+## 0.22.2
+
+### Patch Changes
+
+- [#5162](https://github.com/PostHog/posthog-js/pull/5162) [`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c) Thanks [@pauldambra](https://github.com/pauldambra)! - Sanitize each tool response once instead of twice, and replace image, audio and binary blocks before the scan, so tool calls with large results cost less CPU. Redact PostHog tokens that URL field decoding exposes.
+  (2026-10-07)
+- Updated dependencies [[`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c)]:
+  - @posthog/core@1.57.2
+
+## 0.22.1
+
+### Patch Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/core@1.57.0
+
+## 0.22.0
+
+### Minor Changes
+
+- [#5165](https://github.com/PostHog/posthog-js/pull/5165) [`3394548`](https://github.com/PostHog/posthog-js/commit/339454849c6efa3a309f1d4905e1016abb5e4863) Thanks [@OrbitingBucket](https://github.com/OrbitingBucket)! - Strip SDK-owned analytics arguments on fresh low-level server instances through `resolveOriginalTool`.
+  (2026-10-05)
+
 ## 0.21.4
 
 ### Patch Changes

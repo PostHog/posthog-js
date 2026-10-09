@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { createAnalyticsDelivery } from '../src/analytics-delivery'
@@ -35,6 +36,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn(() => imported.promise)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -90,6 +92,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn(() => imported.promise)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -126,6 +129,7 @@ describe('@posthog/browser automatic analytics', () => {
             const imported = deferred<AnalyticsDeliveryFactory>()
             const posthog = await createWithAnalytics(
                 {
+                    remoteConfig: localRemoteConfig,
                     projectToken: 'ph_test',
                     capturePageview: false,
                     storage: false,
@@ -156,6 +160,7 @@ describe('@posthog/browser automatic analytics', () => {
         const requests: SentRequest[] = []
         const extension = analytics({ flushAt: 100, flushInterval: 0 })
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -181,6 +186,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('loads analytics after the first admitted event and flushes it', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -201,6 +207,7 @@ describe('@posthog/browser automatic analytics', () => {
         const requests: SentRequest[] = []
         const configuration = { flushAt: 1, flushInterval: 0 }
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -221,6 +228,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('supports eager loading through the same root configuration', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -245,6 +253,7 @@ describe('@posthog/browser automatic analytics', () => {
         try {
             const requests: SentRequest[] = []
             const posthog = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage: false,
                 navigator: false,
@@ -267,6 +276,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('retains analytics buffering without delivery when automatic loading is disabled', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -287,6 +297,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn(async () => createAnalyticsDelivery)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -361,6 +372,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn(() => extension.promise)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -398,6 +410,7 @@ describe('@posthog/browser automatic analytics', () => {
             .mockResolvedValueOnce(createAnalyticsDelivery)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -428,6 +441,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -466,6 +480,7 @@ describe('@posthog/browser automatic analytics', () => {
         const load = vi.fn(() => extension.promise)
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -499,6 +514,7 @@ describe('@posthog/browser automatic analytics', () => {
         const extension = deferred<AnalyticsDeliveryFactory>()
         const posthog = await createWithAnalytics(
             {
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,

@@ -70,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -3348,6 +3348,11 @@
           "name": "$os_version"
         },
         {
+          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
+          "type": "string | null | undefined",
+          "name": "$react_native_version"
+        },
+        {
           "description": "Timezone of the device like \"Europe/Berlin\"",
           "type": "string | null",
           "name": "$timezone"
@@ -4040,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },

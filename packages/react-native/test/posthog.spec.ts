@@ -202,7 +202,7 @@ describe('PostHog React Native', () => {
 
       expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "You must pass your PostHog project's api key. The client will be disabled."
+        'You must pass your PostHog project token. The client will be disabled.'
       )
     } finally {
       consoleErrorSpy.mockRestore()
