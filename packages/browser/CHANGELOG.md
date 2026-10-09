@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.438.6
+
+### Patch Changes
+
+- [#5218](https://github.com/PostHog/posthog-js/pull/5218) [`8bc2df6`](https://github.com/PostHog/posthog-js/commit/8bc2df61511bf21f3abaf9edf0b6d489ddc43a9f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Skip WebMCP intent and model injection for schemas with constraints that the extra fields could break.
+  (2026-10-09)
+
+- [#5217](https://github.com/PostHog/posthog-js/pull/5217) [`6af3aa8`](https://github.com/PostHog/posthog-js/commit/6af3aa8ebff7f1ebc178f0c5bc5bf2d094fc1e53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Export `WebMCPExtensions` from the slim `extension-bundles` entry point.
+  (2026-10-09)
+
 ## 1.438.5
 
 ### Patch Changes
