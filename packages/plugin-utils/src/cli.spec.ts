@@ -40,11 +40,12 @@ describe('buildSourcemapCliArgs', () => {
         expect(args).toContain('--delete-after')
     })
 
-    it('never passes --delete-after to `sourcemap upload`', () => {
+    it('keeps uploads non-mutating without mode flags', () => {
         const args = buildSourcemapCliArgs(config, { stdin: true }, 'upload')
 
         expect(args.slice(0, 3)).toEqual(['sourcemap', 'upload', '--stdin'])
         expect(args).not.toContain('--delete-after')
+        expect(args).not.toContain('--native-debug-ids')
     })
 
     it.each([
