@@ -2,7 +2,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isArray, isFunction, isNull, isString, type ErrorTracking } from '@posthog/core'
+import { isArray, isFunction, isNull, isObject, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
@@ -17,6 +17,15 @@ const safely = <T>(fn: () => T, fallback: T): T => {
         return fallback
     }
 }
+
+const isPreviouslyCapturedError = (input: unknown): boolean =>
+    safely(
+        () =>
+            isObject(input) &&
+            '__posthog_previously_captured_error' in input &&
+            input.__posthog_previously_captured_error === true,
+        false
+    )
 
 const safelyBuildAndCapture = (
     captureFn: (props: ErrorTracking.ErrorProperties) => void,
@@ -69,11 +78,16 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = safely(() => win.onerror, undefined)
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        safelyBuildAndCapture(captureFn, () =>
-            errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
-                mechanism: { handled: false },
-            })
-        )
+        safely(() => {
+            const input = resolveOnErrorInput(args)
+            if (!isPreviouslyCapturedError(input)) {
+                captureFn(
+                    errorPropertiesBuilder.buildFromUnknown(input, {
+                        mechanism: { handled: false },
+                    })
+                )
+            }
+        }, undefined)
         if (!isReachableFunction(originalOnError)) {
             return false
         }
@@ -96,11 +110,15 @@ const wrapUnhandledRejection = (
     const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        safelyBuildAndCapture(captureFn, () =>
-            errorPropertiesBuilder.buildFromUnknown(ev, {
-                mechanism: { handled: false },
-            })
-        )
+        safely(() => {
+            if (!isPreviouslyCapturedError(ev.reason)) {
+                captureFn(
+                    errorPropertiesBuilder.buildFromUnknown(ev, {
+                        mechanism: { handled: false },
+                    })
+                )
+            }
+        }, undefined)
         if (!isReachableFunction(originalOnUnhandledRejection)) {
             return defaultReturnValue
         }
