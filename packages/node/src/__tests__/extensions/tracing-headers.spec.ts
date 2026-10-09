@@ -1,4 +1,8 @@
-import { getPostHogTracingHeaderValues, sanitizeTracingHeaderValue } from '@/extensions/tracing-headers'
+import {
+  getPostHogCookieValues,
+  getPostHogTracingHeaderValues,
+  sanitizeTracingHeaderValue,
+} from '@/extensions/tracing-headers'
 
 describe('tracing headers', () => {
   describe('sanitizeTracingHeaderValue', () => {
@@ -58,6 +62,50 @@ describe('tracing headers', () => {
       ['returns empty object for missing headers', undefined, {}],
     ])('%s', (_name, headers, expected) => {
       expect(getPostHogTracingHeaderValues(headers)).toEqual(expected)
+    })
+
+    it('falls back to the posthog-js cookie per missing header', () => {
+      const now = Date.now()
+      const cookie = encodeURIComponent(
+        JSON.stringify({ distinct_id: 'anon-from-cookie', $sesid: [now, 'session-from-cookie', now] })
+      )
+      const headers = { 'x-posthog-distinct-id': 'user-from-header', cookie: `other=1; ph_token_posthog=${cookie}` }
+
+      expect(getPostHogTracingHeaderValues(headers, 'token')).toEqual({
+        sessionId: 'session-from-cookie',
+        distinctId: 'user-from-header',
+      })
+      expect(getPostHogTracingHeaderValues(headers)).toEqual({ distinctId: 'user-from-header' })
+    })
+  })
+
+  describe('getPostHogCookieValues', () => {
+    const now = 1_700_000_000_000
+    const minute = 60 * 1000
+    const cookieFor = (value: unknown, apiKey: string = 'token'): string =>
+      `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify(value))}`
+
+    it.each([
+      [
+        'live session',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session', now - minute] }),
+        { sessionId: 'session', distinctId: 'anon' },
+      ],
+      [
+        'drops a session past the idle timeout',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - 31 * minute, 'session', now - 31 * minute] }),
+        { distinctId: 'anon' },
+      ],
+      [
+        'drops a session past the length cap',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session', now - 25 * 60 * minute] }),
+        { distinctId: 'anon' },
+      ],
+      ['ignores a cookie for another project', cookieFor({ distinct_id: 'anon' }, 'other'), {}],
+      ['ignores a malformed cookie', 'ph_token_posthog=%7Bnot-json', {}],
+      ['returns empty object without a cookie header', undefined, {}],
+    ])('%s', (_name, cookieHeader, expected) => {
+      expect(getPostHogCookieValues(cookieHeader, 'token', now)).toEqual(expected)
     })
   })
 })

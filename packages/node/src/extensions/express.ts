@@ -34,7 +34,7 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers)
+  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers, posthog.apiKey)
   const properties: Record<string, any> = {}
   const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
 

@@ -75,7 +75,7 @@ export class PostHogInterceptor implements NestInterceptor {
     const response = httpHost.getResponse()
 
     const headers = (request?.headers ?? {}) as IncomingHttpHeaders
-    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers)
+    const { sessionId, distinctId } = getPostHogTracingHeaderValues(headers, this.posthog.apiKey)
 
     const properties: Record<string, any> = {}
     const disableCaptureUrlHashes = this.posthog.options.disable_capture_url_hashes === true
