@@ -44,6 +44,25 @@ const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrume
 const CONTEXT_PARAMETER_DESCRIPTION = `Explain why this tool is called and how it supports the user's goal. Describe the abstract purpose only. Do not include personal or identifying information. Generalize specific entities as roles such as "a customer".`
 const MODEL_PARAMETER_DESCRIPTION =
     'The exact model identifier you are running as, taken from your system prompt or environment. Pass "unknown" if you do not know it. Never guess.'
+const INJECTABLE_SCHEMA_KEYS = new Set([
+    '$comment',
+    '$defs',
+    '$id',
+    '$schema',
+    'additionalProperties',
+    'default',
+    'definitions',
+    'deprecated',
+    'description',
+    'examples',
+    'minProperties',
+    'properties',
+    'readOnly',
+    'required',
+    'title',
+    'type',
+    'writeOnly',
+])
 const MAX_INTENT_LENGTH = 2048
 const MAX_MODEL_LENGTH = 256
 const INTENT_SANITIZATION_OPTIONS = { maxStringLength: MAX_INTENT_LENGTH, truncationSuffix: '...' }
@@ -85,6 +104,21 @@ function copyTool(tool: WebMCPTool, inputSchema?: WebMCPInputSchema): WebMCPTool
     return copiedTool
 }
 
+function canInjectInto(schema: WebMCPInputSchema | undefined): boolean {
+    if (isUndefined(schema)) {
+        return true
+    }
+    return (
+        isObject(schema) &&
+        Object.keys(schema).every((key) => INJECTABLE_SCHEMA_KEYS.has(key) || key.startsWith('x-')) &&
+        schema.additionalProperties !== true &&
+        !isObject(schema.additionalProperties) &&
+        (!schema.type || schema.type === 'object') &&
+        (!schema.properties || isObject(schema.properties)) &&
+        (!schema.required || isArray(schema.required))
+    )
+}
+
 function injectMetadataParameters(
     tool: WebMCPTool,
     requested: WebMCPMetadataOptions
@@ -92,25 +126,15 @@ function injectMetadataParameters(
     const injected = { intent: false, model: false }
     const schema = tool.inputSchema
 
-    if (
-        (schema &&
-            (hasOwn(schema, '$ref') ||
-                hasOwn(schema, 'oneOf') ||
-                hasOwn(schema, 'anyOf') ||
-                hasOwn(schema, 'allOf') ||
-                schema.additionalProperties === true ||
-                isObject(schema.additionalProperties) ||
-                (schema.type && schema.type !== 'object') ||
-                (schema.properties && !isObject(schema.properties)) ||
-                (schema.required && !isArray(schema.required)))) ||
-        (!isUndefined(schema) && !isObject(schema))
-    ) {
+    if (!canInjectInto(schema)) {
         return { tool: copyTool(tool), injected }
     }
 
     const properties = schema?.properties || {}
-    injected.intent = requested.intent && !hasOwn(properties, 'context')
-    injected.model = requested.model && !hasOwn(properties, 'llm_model')
+    const declared = (name: string): boolean =>
+        hasOwn(properties, name) || (isArray(schema?.required) && schema.required.includes(name))
+    injected.intent = requested.intent && !declared('context')
+    injected.model = requested.model && !declared('llm_model')
 
     if (!injected.intent && !injected.model) {
         return { tool: copyTool(tool), injected }

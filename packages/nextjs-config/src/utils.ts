@@ -1,7 +1,8 @@
 import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 
-import { runSourcemapCli } from '@posthog/plugin-utils'
+import { resolveReleaseId as resolveReleaseIdWithCli, runSourcemapCli } from '@posthog/plugin-utils'
+import type { SourcemapCliCommand } from '@posthog/plugin-utils'
 import { ResolvedPluginConfig } from '@posthog/webpack-plugin'
 
 export function getNextJsVersion(): string {
@@ -13,8 +14,20 @@ export function hasCompilerHook(): boolean {
   return semver.gte(nextJsVersion, '15.4.1')
 }
 
-export async function processSourceMaps(posthogOptions: ResolvedPluginConfig, directory: string) {
-  await runSourcemapCli(posthogOptions, { directory })
+export async function processSourceMaps(
+  posthogOptions: ResolvedPluginConfig,
+  directory: string,
+  command: SourcemapCliCommand = 'process'
+) {
+  await runSourcemapCli(posthogOptions, { directory, command })
+}
+
+export async function resolveReleaseId(posthogOptions: ResolvedPluginConfig): Promise<string | undefined> {
+  return resolveReleaseIdWithCli(posthogOptions)
+}
+
+export function supportsTurbopackDebugIds(): boolean {
+  return semver.gte(getNextJsVersion(), '16.0.0')
 }
 
 // Helper to detect if Turbopack is enabled

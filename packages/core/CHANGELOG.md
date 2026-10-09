@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.57.4
+
+### Patch Changes
+
+- [#5258](https://github.com/PostHog/posthog-js/pull/5258) [`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0) Thanks [@hpouillot](https://github.com/hpouillot)! - Recognize native bundler debug IDs and build-time error tracking release IDs.
+  (2026-10-09)
+
+## 1.57.3
+
+### Patch Changes
+
+- [#5254](https://github.com/PostHog/posthog-js/pull/5254) [`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop keeping `$react_native_version` on minimal `$feature_flag_called` events
+  (2026-10-08)
+
 ## 1.57.2
 
 ### Patch Changes

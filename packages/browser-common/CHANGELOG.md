@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.9.3
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+
 ## 0.9.2
 
 ### Patch Changes

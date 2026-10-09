@@ -958,6 +958,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"string[]\\"
   ],
+  \\"__preview_replay_sync_fetch\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
     \\"string[]\\"

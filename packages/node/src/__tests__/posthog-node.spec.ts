@@ -2710,6 +2710,85 @@ describe('PostHog Node.js', () => {
       }
     })
 
+    it('evicts only the least recently used distinct ids when the dedupe cache is full', () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize: 3,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureFlagCalled = (distinctId: string): void =>
+        (posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId,
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-2')
+      captureFlagCalled('user-3')
+
+      // Touching user-1 again makes user-2 the least recently used entry.
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-4')
+
+      expect(Object.keys(posthog.distinctIdHasSentFlagCalls).sort()).toEqual(['user-1', 'user-3', 'user-4'])
+    })
+
+    it('keeps deduping retained distinct ids after an eviction', () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize: 2,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+      const captureFlagCalled = (distinctId: string): void =>
+        (posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId,
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+
+      captureFlagCalled('user-1')
+      captureFlagCalled('user-2')
+      captureFlagCalled('user-3') // evicts user-1
+      captureFlagCalled('user-3')
+      captureFlagCalled('user-2')
+
+      // user-1, user-2, user-3 each reported once; the repeats of user-2/user-3 were deduped.
+      expect(captureSpy).toHaveBeenCalledTimes(3)
+    })
+
+    it.each([-1, 0.5])('never evicts the current distinct id when maxCacheSize is %s', (maxCacheSize) => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxCacheSize,
+        fetchRetryCount: 0,
+        flushAt: 1,
+        disableCompression: true,
+      })
+
+      const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+
+      for (let i = 0; i < 3; i++) {
+        ;(posthog as any)._captureFlagCalledEventIfNeeded({
+          distinctId: 'user-1',
+          key: 'beta-feature',
+          response: true,
+          properties: {},
+        })
+      }
+
+      expect(captureSpy).toHaveBeenCalledTimes(1)
+    })
+
     it('$feature_flag_called is called appropriately when querying flags', async () => {
       mockedFetch.mockClear()
 

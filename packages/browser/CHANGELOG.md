@@ -1,5 +1,42 @@
 # posthog-js
 
+## 1.438.6
+
+### Patch Changes
+
+- [#5218](https://github.com/PostHog/posthog-js/pull/5218) [`8bc2df6`](https://github.com/PostHog/posthog-js/commit/8bc2df61511bf21f3abaf9edf0b6d489ddc43a9f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Skip WebMCP intent and model injection for schemas with constraints that the extra fields could break.
+  (2026-10-09)
+
+- [#5217](https://github.com/PostHog/posthog-js/pull/5217) [`6af3aa8`](https://github.com/PostHog/posthog-js/commit/6af3aa8ebff7f1ebc178f0c5bc5bf2d094fc1e53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Export `WebMCPExtensions` from the slim `extension-bundles` entry point.
+  (2026-10-09)
+
+## 1.438.5
+
+### Patch Changes
+
+- [#5258](https://github.com/PostHog/posthog-js/pull/5258) [`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0) Thanks [@hpouillot](https://github.com/hpouillot)! - Recognize native bundler debug IDs and build-time error tracking release IDs.
+  (2026-10-09)
+- Updated dependencies [[`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0)]:
+  - @posthog/core@1.57.4
+
+## 1.438.4
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+- Updated dependencies [[`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e)]:
+  - @posthog/browser-common@0.9.3
+
+## 1.438.3
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+- Updated dependencies [[`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8)]:
+  - @posthog/types@1.415.2
+
 ## 1.438.2
 
 ### Patch Changes

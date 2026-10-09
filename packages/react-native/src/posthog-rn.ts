@@ -104,10 +104,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * @default 'file'
    */
   persistence?: 'memory' | 'file'
-  /**
-   * Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated.
-   * An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).
-   */
+  /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
   customAppProperties?:
     | PostHogCustomAppProperties
     | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
@@ -426,18 +423,10 @@ export class PostHog extends PostHogCore {
     this._requestHeaders = options?.requestHeaders ?? {}
 
     // Either build the app properties from the existing ones
-    if (typeof options?.customAppProperties === 'function') {
-      this._appProperties = options.customAppProperties(getAppProperties())
-    } else if (options?.customAppProperties) {
-      // An object replaces the defaults but keeps $react_native_version unless it sets that key itself
-      const reactNativeVersion = getReactNativeVersion()
-      this._appProperties = {
-        ...(reactNativeVersion ? { $react_native_version: reactNativeVersion } : {}),
-        ...options.customAppProperties,
-      }
-    } else {
-      this._appProperties = getAppProperties()
-    }
+    this._appProperties =
+      typeof options?.customAppProperties === 'function'
+        ? options.customAppProperties(getAppProperties())
+        : options?.customAppProperties || getAppProperties()
 
     // Resolve storage and construct the logs module BEFORE registering the
     // AppState listener — the listener body references `this._logs` and
@@ -3309,16 +3298,17 @@ export class PostHog extends PostHogCore {
         )
       }
       if (appBuild) {
+        const installProperties = { ...properties, ...maybeAdd('$react_native_version', getReactNativeVersion()) }
         if (!prevAppBuild) {
           // new app install
-          this.capture('Application Installed', properties)
+          this.capture('Application Installed', installProperties)
         } else if (prevAppBuild !== appBuild) {
           // $app_version and $app_build are already added in the common event properties
           // app updated
           this.capture('Application Updated', {
             ...maybeAdd('previous_version', prevAppVersion),
             ...maybeAdd('previous_build', prevAppBuild),
-            ...properties,
+            ...installProperties,
           })
         }
       }

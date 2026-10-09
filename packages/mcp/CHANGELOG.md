@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.22.3
+
+### Patch Changes
+
+- [#5224](https://github.com/PostHog/posthog-js/pull/5224) [`ec9080a`](https://github.com/PostHog/posthog-js/commit/ec9080aad4dc6cccfe2d77f0a00420f442a90e48) Thanks [@gesh](https://github.com/gesh)! - Set `$mcp_interface` to `mcp` on events from MCP servers.
+  (2026-10-09)
+
 ## 0.22.2
 
 ### Patch Changes

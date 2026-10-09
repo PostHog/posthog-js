@@ -22,6 +22,7 @@ describe('WebMCP', () => {
 
     afterEach(() => {
         Reflect.deleteProperty(document, 'modelContext')
+        vi.useRealTimers()
         vi.restoreAllMocks()
     })
 
@@ -31,6 +32,15 @@ describe('WebMCP', () => {
     }
 
     const registeredTool = (index: number): Tool => registerTool.mock.calls[index][0] as Tool
+
+    const capturedProperties = (posthog: PostHog, index = 0): Record<string, unknown> =>
+        vi.mocked(posthog.capture).mock.calls[index][1] as Record<string, unknown>
+
+    const expectNoMetadata = (properties: Record<string, unknown>): void => {
+        for (const property of ['$mcp_intent', '$mcp_intent_source', '$mcp_llm_model', '$mcp_llm_model_source']) {
+            expect(properties).not.toHaveProperty(property)
+        }
+    }
 
     it('captures synchronous and asynchronous tool calls with the MCP Analytics contract', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
@@ -124,24 +134,30 @@ describe('WebMCP', () => {
     })
 
     it.each([
-        [{ intent: false }, 'context', 'llm_model', '$mcp_llm_model'],
-        [{ model: false }, 'llm_model', 'context', '$mcp_intent'],
-    ])('supports metadata opt-outs with %o', (config, omittedParameter, injectedParameter, capturedProperty) => {
+        {
+            config: { intent: false },
+            disabled: { parameter: 'context', property: '$mcp_intent', value: 'Investigate an issue.' },
+            enabled: { parameter: 'llm_model', property: '$mcp_llm_model', value: 'gpt-5' },
+        },
+        {
+            config: { model: false },
+            disabled: { parameter: 'llm_model', property: '$mcp_llm_model', value: 'gpt-5' },
+            enabled: { parameter: 'context', property: '$mcp_intent', value: 'Investigate an issue.' },
+        },
+    ])('supports metadata opt-outs with %o', ({ config, disabled, enabled }) => {
         const posthog = createMockPostHog({ config: { capture_webmcp: config } as any })
         const execute = vi.fn(() => ({ content: [] }))
 
         register(new WebMCP(posthog), { name: 'configured', inputSchema: { type: 'object' }, execute })
         const tool = registeredTool(0)
-        expect(tool.inputSchema).not.toHaveProperty(`properties.${omittedParameter}`)
-        expect(tool.inputSchema).toHaveProperty(`properties.${injectedParameter}`)
+        expect(tool.inputSchema).not.toHaveProperty(`properties.${disabled.parameter}`)
+        expect(tool.inputSchema).toHaveProperty(`properties.${enabled.parameter}`)
 
-        tool.execute({ [injectedParameter]: injectedParameter === 'context' ? 'Investigate an issue.' : 'gpt-5' })
-        expect(execute).toHaveBeenCalledWith({})
-        expect(posthog.capture).toHaveBeenCalledWith(
-            '$mcp_tool_call',
-            expect.objectContaining({ [capturedProperty]: expect.any(String) }),
-            expect.any(Object)
-        )
+        tool.execute({ [disabled.parameter]: disabled.value, [enabled.parameter]: enabled.value })
+
+        expect(execute).toHaveBeenCalledWith({ [disabled.parameter]: disabled.value })
+        expect(capturedProperties(posthog)).toHaveProperty(enabled.property, enabled.value)
+        expect(capturedProperties(posthog)).not.toHaveProperty(disabled.property)
     })
 
     it('preserves application-owned context and model fields', () => {
@@ -162,55 +178,71 @@ describe('WebMCP', () => {
 
         expect(registeredTool(0).inputSchema).toBe(inputSchema)
         expect(execute).toHaveBeenCalledWith(input)
-        expect(posthog.capture).toHaveBeenCalledWith(
-            '$mcp_tool_call',
-            expect.not.objectContaining({
-                $mcp_intent: expect.anything(),
-                $mcp_llm_model: expect.anything(),
-            }),
-            expect.any(Object)
-        )
+        expectNoMetadata(capturedProperties(posthog))
     })
 
-    it.each([true, { type: 'string' }])(
-        'preserves undeclared application inputs when additionalProperties is %o',
-        (additionalProperties) => {
-            const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
-            const execute = vi.fn(() => ({ content: [] }))
-            const inputSchema = { type: 'object', additionalProperties }
-            const input = { context: 'application-value', llm_model: 'application-model' }
-
-            register(new WebMCP(posthog), { name: 'permissive', inputSchema, execute })
-            registeredTool(0).execute(input)
-
-            expect(registeredTool(0).inputSchema).toBe(inputSchema)
-            expect(execute).toHaveBeenCalledWith(input)
-            expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
-                expect.not.objectContaining({
-                    $mcp_intent: expect.anything(),
-                    $mcp_llm_model: expect.anything(),
-                })
-            )
-        }
-    )
-
-    it('does not inject metadata into a complex schema', () => {
+    it.each([
+        ['additionalProperties omitted', { type: 'object' }],
+        ['additionalProperties false', { type: 'object', additionalProperties: false }],
+        ['annotations', { type: 'object', title: 'x', default: {}, examples: [{}], $comment: 'x', 'x-vendor': 1 }],
+        ['definitions', { type: 'object', $schema: 'https://json-schema.org/draft/2020-12/schema', $defs: {} }],
+        ['other required fields', { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }],
+    ])('injects metadata into a schema with %s', (_label, inputSchema) => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const execute = vi.fn(() => ({ content: [] }))
-        const inputSchema = { $ref: '#/$defs/input' }
+
+        register(new WebMCP(posthog), { name: 'open', inputSchema, execute })
+        registeredTool(0).execute({ context: 'Find documentation.', llm_model: 'gpt-5', query: 'flags' })
+
+        expect(registeredTool(0).inputSchema).toHaveProperty('properties.context')
+        expect(registeredTool(0).inputSchema).toHaveProperty('properties.llm_model')
+        expect(execute).toHaveBeenCalledWith({ query: 'flags' })
+        expect(capturedProperties(posthog)).toHaveProperty('$mcp_intent', 'Find documentation.')
+        expect(capturedProperties(posthog)).toHaveProperty('$mcp_llm_model', 'gpt-5')
+    })
+
+    it.each([
+        ['$ref', { $ref: '#/$defs/input' }],
+        ['oneOf', { oneOf: [{ type: 'object' }] }],
+        ['anyOf', { anyOf: [{ type: 'object' }] }],
+        ['allOf', { allOf: [{ type: 'object' }] }],
+        ['not', { type: 'object', not: { required: ['x'] } }],
+        ['if', { type: 'object', if: { required: ['x'] }, then: {} }],
+        ['propertyNames', { type: 'object', propertyNames: { pattern: '^[a-z]+$' } }],
+        ['maxProperties', { type: 'object', maxProperties: 1 }],
+        ['unevaluatedProperties', { type: 'object', unevaluatedProperties: false }],
+        ['patternProperties', { type: 'object', patternProperties: { '^x-': {} } }],
+        ['dependentSchemas', { type: 'object', dependentSchemas: { a: {} } }],
+        ['additionalProperties true', { type: 'object', additionalProperties: true }],
+        ['a schema for additionalProperties', { type: 'object', additionalProperties: { type: 'string' } }],
+        ['a non-object type', { type: 'array' }],
+        ['properties that is not an object', { type: 'object', properties: [] }],
+        ['required that is not an array', { type: 'object', required: 'query' }],
+    ])('does not inject metadata into a schema with %s', (_label, inputSchema) => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const execute = vi.fn(() => ({ content: [] }))
         const input = { context: 'application-value', llm_model: 'application-model' }
 
-        register(new WebMCP(posthog), { name: 'complex', inputSchema, execute })
+        register(new WebMCP(posthog), { name: 'constrained', inputSchema, execute })
         registeredTool(0).execute(input)
 
         expect(registeredTool(0).inputSchema).toBe(inputSchema)
         expect(execute).toHaveBeenCalledWith(input)
-        expect(vi.mocked(posthog.capture).mock.calls[0][1]).toEqual(
-            expect.not.objectContaining({
-                $mcp_intent: expect.anything(),
-                $mcp_llm_model: expect.anything(),
-            })
-        )
+        expectNoMetadata(capturedProperties(posthog))
+    })
+
+    it('treats a required context field as owned by the application', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: { model: false } } as any })
+        const execute = vi.fn(() => ({ content: [] }))
+        const inputSchema = { type: 'object', required: ['context'] }
+        const input = { context: 'application-value' }
+
+        register(new WebMCP(posthog), { name: 'required_context', inputSchema, execute })
+        registeredTool(0).execute(input)
+
+        expect(registeredTool(0).inputSchema).toBe(inputSchema)
+        expect(execute).toHaveBeenCalledWith(input)
+        expectNoMetadata(capturedProperties(posthog))
     })
 
     it('injects the union of named instance options and filters each event', () => {
@@ -235,21 +267,15 @@ describe('WebMCP', () => {
             expect.objectContaining({ $mcp_intent: 'Find documentation.' }),
             expect.any(Object)
         )
-        expect(intentInstance.capture).toHaveBeenCalledWith(
-            '$mcp_tool_call',
-            expect.not.objectContaining({ $mcp_llm_model: expect.anything() }),
-            expect.any(Object)
-        )
+        expect(capturedProperties(intentInstance)).not.toHaveProperty('$mcp_llm_model')
+        expect(capturedProperties(intentInstance)).not.toHaveProperty('$mcp_llm_model_source')
         expect(modelInstance.capture).toHaveBeenCalledWith(
             '$mcp_tool_call',
             expect.objectContaining({ $mcp_llm_model: 'claude-sonnet-4' }),
             expect.any(Object)
         )
-        expect(modelInstance.capture).toHaveBeenCalledWith(
-            '$mcp_tool_call',
-            expect.not.objectContaining({ $mcp_intent: expect.anything() }),
-            expect.any(Object)
-        )
+        expect(capturedProperties(modelInstance)).not.toHaveProperty('$mcp_intent')
+        expect(capturedProperties(modelInstance)).not.toHaveProperty('$mcp_intent_source')
     })
 
     it('limits metadata and omits blank intent and unknown models', () => {
@@ -266,12 +292,7 @@ describe('WebMCP', () => {
                 $mcp_llm_model: 'm'.repeat(256),
             })
         )
-        expect(vi.mocked(posthog.capture).mock.calls[1][1]).toEqual(
-            expect.not.objectContaining({
-                $mcp_intent: expect.anything(),
-                $mcp_llm_model: expect.anything(),
-            })
-        )
+        expectNoMetadata(capturedProperties(posthog, 1))
     })
 
     it('redacts structured identifiers from intent', () => {
@@ -349,23 +370,21 @@ describe('WebMCP', () => {
         }
     })
 
-    it('captures one event when an aborted call settles later', async () => {
+    it('captures the time the tool took to run', () => {
+        vi.useFakeTimers()
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
-        const webMCP = new WebMCP(posthog)
-        const controller = new AbortController()
-        let resolve: (value: unknown) => void = () => undefined
-        const pending = new Promise((done) => {
-            resolve = done
-        })
-        const tool = { name: 'slow', execute: () => pending }
+        const tool = {
+            name: 'slow',
+            execute: () => {
+                vi.advanceTimersByTime(25)
+                return { content: [] }
+            },
+        }
 
-        register(webMCP, tool, { signal: controller.signal })
-        const call = registeredTool(0).execute()
-        controller.abort()
-        resolve({ content: [] })
-        await call
+        register(new WebMCP(posthog), tool)
+        registeredTool(0).execute()
 
-        expect(posthog.capture).toHaveBeenCalledTimes(1)
+        expect(capturedProperties(posthog)).toHaveProperty('$mcp_duration_ms', 25)
     })
 
     it('does not patch or capture until enabled through set_config', () => {

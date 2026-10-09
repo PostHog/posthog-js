@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.16.2
-      version: 0.16.2
+      specifier: ~0.18.10
+      version: 0.18.10
     '@rslib/core':
       specifier: 0.23.2
       version: 0.23.2
@@ -319,6 +319,9 @@ importers:
         specifier: npm:web-vitals@6.2.1
         version: web-vitals@6.2.1
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@babel/core':
         specifier: 'catalog:'
         version: 7.28.5
@@ -409,6 +412,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.10
       expect:
         specifier: ^29.7.0
         version: 29.7.0
@@ -516,6 +522,9 @@ importers:
         specifier: workspace:^
         version: link:../types
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@playwright/test':
         specifier: 1.52.0
         version: 1.52.0
@@ -735,13 +744,16 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
       '@posthog/webpack-plugin':
         specifier: workspace:^
         version: link:../webpack-plugin
+      posthog-js:
+        specifier: '>=1.438.5'
+        version: link:../browser
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -815,7 +827,7 @@ importers:
         version: 4.1.3(magicast@0.5.3)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1145,7 +1157,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -1674,7 +1686,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1767,6 +1779,15 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
+
+  tooling/sdk-mock-server:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.1
+        version: 22.20.4
+      typescript:
+        specifier: catalog:native
+        version: 7.0.2
 
   tooling/tsconfig-base: {}
 
@@ -6530,8 +6551,8 @@ packages:
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
 
-  '@posthog/cli@0.16.2':
-    resolution: {integrity: sha512-h8bpf9ffBUH/Z9IoyGV+wiI+vS8rIPorKT3eKQXuzuwawO0G7Qvy+hDd7HQ9YJjHByYZ77yPPQvrSs4WsqTUCg==}
+  '@posthog/cli@0.18.10':
+    resolution: {integrity: sha512-WFucXcIqUL35NkH4hVlch3TBSGRRAhjqvmh2/2z8sj+HsR7e+NUiG3QT5dy9Qs1C3hVe7uWkdNU6DKyKvONAXw==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -25135,7 +25156,7 @@ snapshots:
 
   '@poppinss/exception@1.2.3': {}
 
-  '@posthog/cli@0.16.2':
+  '@posthog/cli@0.18.10':
     dependencies:
       detect-libc: 2.1.2
 

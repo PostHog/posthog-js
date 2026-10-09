@@ -10,7 +10,7 @@ const SOURCE_MAPPING_URL_COMMENT = /^[ \t]*\/\/# sourceMappingURL=([^\r\n]*)[ \t
 export async function stripDanglingSourceMapComments(distDir: string): Promise<void> {
   let jsFiles: string[]
   try {
-    jsFiles = await listJsFiles(path.join(distDir, 'static'))
+    jsFiles = await listFiles(path.join(distDir, 'static'), /\.[mc]?js$/)
   } catch {
     return
   }
@@ -24,13 +24,23 @@ export async function stripDanglingSourceMapComments(distDir: string): Promise<v
   }
 }
 
-async function listJsFiles(dir: string): Promise<string[]> {
+export async function deleteSourceMapFiles(distDir: string): Promise<void> {
+  let sourceMaps: string[]
+  try {
+    sourceMaps = await listFiles(distDir, /\.map$/)
+  } catch {
+    return
+  }
+  await Promise.all(sourceMaps.map((file) => fs.rm(file, { force: true })))
+}
+
+async function listFiles(dir: string, pattern: RegExp): Promise<string[]> {
   const files: string[] = []
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      files.push(...(await listJsFiles(fullPath)))
-    } else if (entry.isFile() && /\.[mc]?js$/.test(fullPath)) {
+      files.push(...(await listFiles(fullPath, pattern)))
+    } else if (entry.isFile() && pattern.test(fullPath)) {
       files.push(fullPath)
     }
   }

@@ -2511,6 +2511,15 @@ export interface PostHogConfig {
     // ------- PREVIEW CONFIGS -------
 
     /**
+     * Private preview: invoke recorded fetch requests synchronously to preserve application error stacks.
+     * Only explicit `true` enables this behavior; otherwise Replay retains its legacy fetch ordering.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default false
+     */
+    __preview_replay_sync_fetch?: boolean
+
+    /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.
      */
     __add_tracing_headers?: string[]
