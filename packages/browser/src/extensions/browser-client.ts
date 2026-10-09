@@ -199,7 +199,9 @@ export class BrowserClientAdapter implements Client {
     }
 
     async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
-        const endpoint = this.instance.requestRouter.endpointFor(init.target ?? 'api', path)
+        const target = init.target ?? 'api'
+        const endpoint = this.instance.requestRouter.endpointFor(target, path)
+        const isLogsRequest = target === 'api' && path === '/i/v1/logs'
         const requestOptions: QueuedRequestWithOptions = {
             method: init.method,
             url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
@@ -212,6 +214,10 @@ export class BrowserClientAdapter implements Client {
             compressionFallback:
                 init.target === 'flags' && init.compression === 'best-available' ? Compression.Base64 : undefined,
             timestampMode: init.sentAt,
+        }
+
+        if (isLogsRequest) {
+            requestOptions.batchKey = 'logs'
         }
 
         if (init.transport === 'sendBeacon') {
