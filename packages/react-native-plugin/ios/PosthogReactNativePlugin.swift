@@ -302,7 +302,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // Drop that report only when the JS layer saw the crash. Fatals that bypass the JS handler,
         // such as React render errors, have no marker and are reported natively instead.
         // An older JS layer sends no marker, so every fatal JS report is dropped as before.
-        let previousLaunchJsFatal = fatalExceptionMarker ? PreviousLaunchJsFatal() : nil
+        // Always read so a marker from a launch that sent no flag cannot outlive it.
+        let previousLaunchJsFatal = PreviousLaunchJsFatal()
         config.setBeforeSend { event in
             // The JS layer's own fatal capture is the event we want; only native re-reports
             // of a crash JS already captured are duplicates. Matching the event name as well
@@ -321,8 +322,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 return event
             }
             if isReactNativeFatalJsError(event) {
-                guard let marker = previousLaunchJsFatal else { return nil }
-                return marker.consume() ? nil : event
+                guard fatalExceptionMarker else { return nil }
+                return previousLaunchJsFatal.consume() ? nil : event
             }
             // Only the replayed tap. `setup()` also replays the previous launch's crash report,
             // and that `$exception` carries the distinct id recorded at crash time, which stands.
