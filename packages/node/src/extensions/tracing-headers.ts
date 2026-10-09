@@ -21,6 +21,7 @@ export const POSTHOG_TRACING_HEADERS = {
 export interface PostHogCookieReadOptions {
   apiKey: string
   sessionIdleTimeoutSeconds?: number
+  optOutCapturingByDefault?: boolean
 }
 
 /**
@@ -28,14 +29,18 @@ export interface PostHogCookieReadOptions {
  */
 export function getPostHogCookieReadOptions(posthog: {
   apiKey: string
-  options: { readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number } }
+  options: { readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean } }
 }): PostHogCookieReadOptions | undefined {
   const option = posthog.options.readPostHogCookie
   if (option === true) {
     return { apiKey: posthog.apiKey }
   }
   if (option && typeof option === 'object') {
-    return { apiKey: posthog.apiKey, sessionIdleTimeoutSeconds: option.sessionIdleTimeoutSeconds }
+    return {
+      apiKey: posthog.apiKey,
+      sessionIdleTimeoutSeconds: option.sessionIdleTimeoutSeconds,
+      optOutCapturingByDefault: option.optOutCapturingByDefault,
+    }
   }
   return undefined
 }
@@ -94,7 +99,8 @@ export function getPostHogCookieValues(
   cookieHeader: HeaderValue,
   apiKey: string,
   now: number = Date.now(),
-  sessionIdleTimeoutMs: number = COOKIE_SESSION_IDLE_TIMEOUT_MS
+  sessionIdleTimeoutMs: number = COOKIE_SESSION_IDLE_TIMEOUT_MS,
+  optOutCapturingByDefault: boolean = false
 ): PostHogTracingHeaderValues {
   try {
     if (typeof cookieHeader !== 'string') {
@@ -102,7 +108,7 @@ export function getPostHogCookieValues(
     }
     const cookies = cookieStoreFromHeader(cookieHeader)
     const raw = cookies.get(getPostHogCookieName(apiKey))?.value
-    if (!raw || isOptedOut(cookies, apiKey)) {
+    if (!raw || isOptedOut(cookies, apiKey, { opt_out_capturing_by_default: optOutCapturingByDefault })) {
       return {}
     }
     const data = JSON.parse(raw)
@@ -158,7 +164,13 @@ export function getPostHogTracingHeaderValues(
   const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
   const { sessionId, distinctId } =
     headerSessionId === undefined && headerDistinctId === undefined && cookie
-      ? getPostHogCookieValues(headers.cookie, cookie.apiKey, Date.now(), getSessionIdleTimeoutMs(cookie))
+      ? getPostHogCookieValues(
+          headers.cookie,
+          cookie.apiKey,
+          Date.now(),
+          getSessionIdleTimeoutMs(cookie),
+          cookie.optOutCapturingByDefault === true
+        )
       : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {

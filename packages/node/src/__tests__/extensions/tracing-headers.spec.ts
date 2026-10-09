@@ -167,6 +167,15 @@ describe('tracing headers', () => {
       expect(getPostHogCookieValues(cookieHeader, 'token', now)).toEqual(expected)
     })
 
+    it('treats a visitor with no consent cookie as opted out when opt-out is the default', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] })
+      expect(getPostHogCookieValues(cookie, 'token', now, 30 * minute, true)).toEqual({})
+      expect(getPostHogCookieValues(`${cookie}; __ph_opt_in_out_token=1`, 'token', now, 30 * minute, true)).toEqual({
+        sessionId: 'session',
+        distinctId: 'anon',
+      })
+    })
+
     it('keeps a session idle past 30 minutes when the idle timeout is longer', () => {
       const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now - 45 * minute, 'session', now - 45 * minute] })
       expect(getPostHogCookieValues(cookie, 'token', now, 60 * minute)).toEqual({

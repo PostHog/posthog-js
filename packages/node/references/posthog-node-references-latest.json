@@ -3706,6 +3706,11 @@
           "name": "maxQueueSize"
         },
         {
+          "description": "Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the\nposthog-js cookie when a request has neither tracing header.\n\nTurn it on only when posthog-js stores opt-out consent in a cookie, or when you do not use opt-out: the server\ncannot read an opt-out that posthog-js keeps in localStorage (its default).\n\nIt needs cookie-backed posthog-js persistence (the default `localStorage+cookie`, or `cookie`), the default cookie\nname (no `persistence_name`), and the default `__ph_opt_in_out_<token>` consent cookie name. Set\n`sessionIdleTimeoutSeconds` when posthog-js uses a custom `session_idle_timeout_seconds`, and set\n`optOutCapturingByDefault` when posthog-js uses `opt_out_capturing_by_default`, so a visitor with no consent cookie\ncounts as opted out. A request sent right\nafter `identify()` or `reset()` can still carry the previous identity, because posthog-js saves the cookie with a\nshort delay.",
+          "type": "boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean; }",
+          "name": "readPostHogCookie"
+        },
+        {
           "description": "Configuration for the `posthog.metrics` API (count, gauge, histogram).\nSet `serviceName` so series can be filtered per service in the Metrics UI.",
           "type": "MetricsConfig",
           "name": "metrics"

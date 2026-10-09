@@ -196,6 +196,36 @@ describe('Express extension', () => {
       expect(event.properties.$session_id).toBe(linked ? 'cookie-session' : undefined)
     })
 
+    it('should keep anonymous cookie visitors personless and let an explicit distinctId win', async () => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie: true })
+      const middleware = createRequestContextMiddleware(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'anon-from-cookie',
+          $user_state: 'anonymous',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const req = createMockRequest({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+
+      middleware(req, createMockResponse(), () => {
+        posthog.capture({ event: 'anonymous_event' })
+        posthog.capture({ event: 'explicit_event', distinctId: 'explicit-user' })
+      })
+      await waitForFlushTimer(posthog)
+
+      const events = getLastBatchEvents()!
+      const anonymous = events.find((e: any) => e.event === 'anonymous_event')
+      const explicit = events.find((e: any) => e.event === 'explicit_event')
+      expect(anonymous.distinct_id).not.toBe('anon-from-cookie')
+      expect(anonymous.properties.$process_person_profile).toBe(false)
+      expect(anonymous.properties.$session_id).toBe('cookie-session')
+      expect(explicit.distinct_id).toBe('explicit-user')
+      expect(explicit.properties.$process_person_profile).toBeUndefined()
+    })
+
     it('should sanitize tracing header values and preserve explicit capture properties', async () => {
       const middleware = createRequestContextMiddleware(posthog)
       const req = createMockRequest({
