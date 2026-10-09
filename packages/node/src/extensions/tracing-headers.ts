@@ -16,6 +16,28 @@ export const POSTHOG_TRACING_HEADERS = {
   distinctId: 'x-posthog-distinct-id',
 } as const
 
+export interface PostHogCookieReadOptions {
+  apiKey: string
+  sessionIdleTimeoutSeconds?: number
+}
+
+/**
+ * The cookie read settings from the client's `readPostHogCookie` option, or undefined when the option is off.
+ */
+export function getPostHogCookieReadOptions(posthog: {
+  apiKey: string
+  options: { readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number } }
+}): PostHogCookieReadOptions | undefined {
+  const option = posthog.options.readPostHogCookie
+  if (option === true) {
+    return { apiKey: posthog.apiKey }
+  }
+  if (option && typeof option === 'object') {
+    return { apiKey: posthog.apiKey, sessionIdleTimeoutSeconds: option.sessionIdleTimeoutSeconds }
+  }
+  return undefined
+}
+
 export interface PostHogTracingHeaderValues {
   sessionId?: string
   distinctId?: string
@@ -69,7 +91,8 @@ function isRecent(timestamp: unknown, now: number, maxAgeMs: number): boolean {
 export function getPostHogCookieValues(
   cookieHeader: HeaderValue,
   apiKey: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  sessionIdleTimeoutMs: number = COOKIE_SESSION_IDLE_TIMEOUT_MS
 ): PostHogTracingHeaderValues {
   try {
     if (typeof cookieHeader !== 'string') {
@@ -92,7 +115,7 @@ export function getPostHogCookieValues(
       // Older posthog-js versions stored [lastActivity, sessionId] and start the session at lastActivity.
       const [lastActivity, candidate, sessionStart = lastActivity] = session
       if (
-        isRecent(lastActivity, now, COOKIE_SESSION_IDLE_TIMEOUT_MS) &&
+        isRecent(lastActivity, now, sessionIdleTimeoutMs) &&
         isRecent(sessionStart, now, COOKIE_SESSION_MAX_LENGTH_MS)
       ) {
         sessionId = sanitizeTracingHeaderValue(candidate)
@@ -108,13 +131,20 @@ export function getPostHogCookieValues(
   }
 }
 
+function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
+  const seconds = cookie.sessionIdleTimeoutSeconds
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? seconds * 1000
+    : COOKIE_SESSION_IDLE_TIMEOUT_MS
+}
+
 /**
- * Reads the PostHog tracing headers. With an `apiKey`, a request with neither header falls back to the posthog-js
+ * Reads the PostHog tracing headers. With cookie read options, a request with neither header falls back to the posthog-js
  * cookie. A request with either header uses headers only, so one request never mixes two identities.
  */
 export function getPostHogTracingHeaderValues(
   headers?: IncomingHttpHeaders,
-  apiKey?: string
+  cookie?: PostHogCookieReadOptions
 ): PostHogTracingHeaderValues {
   if (!headers) {
     return {}
@@ -123,8 +153,8 @@ export function getPostHogTracingHeaderValues(
   const headerSessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId])
   const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
   const { sessionId, distinctId } =
-    headerSessionId === undefined && headerDistinctId === undefined && apiKey
-      ? getPostHogCookieValues(headers.cookie, apiKey)
+    headerSessionId === undefined && headerDistinctId === undefined && cookie
+      ? getPostHogCookieValues(headers.cookie, cookie.apiKey, Date.now(), getSessionIdleTimeoutMs(cookie))
       : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {

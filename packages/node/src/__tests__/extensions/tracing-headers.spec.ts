@@ -74,11 +74,13 @@ describe('tracing headers', () => {
         })
       )}`
 
-      expect(getPostHogTracingHeaderValues({ cookie }, 'token')).toEqual({
+      expect(getPostHogTracingHeaderValues({ cookie }, { apiKey: 'token' })).toEqual({
         sessionId: 'cookie-session',
         distinctId: 'user-from-cookie',
       })
-      expect(getPostHogTracingHeaderValues({ 'x-posthog-distinct-id': 'user-from-header', cookie }, 'token')).toEqual({
+      expect(
+        getPostHogTracingHeaderValues({ 'x-posthog-distinct-id': 'user-from-header', cookie }, { apiKey: 'token' })
+      ).toEqual({
         distinctId: 'user-from-header',
       })
       expect(getPostHogTracingHeaderValues({ cookie })).toEqual({})
@@ -132,6 +134,14 @@ describe('tracing headers', () => {
       ['returns empty object without a cookie header', undefined, {}],
     ])('%s', (_name, cookieHeader, expected) => {
       expect(getPostHogCookieValues(cookieHeader, 'token', now)).toEqual(expected)
+    })
+
+    it('keeps a session idle past 30 minutes when the idle timeout is longer', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now - 45 * minute, 'session', now - 45 * minute] })
+      expect(getPostHogCookieValues(cookie, 'token', now, 60 * minute)).toEqual({
+        sessionId: 'session',
+        distinctId: 'anon',
+      })
     })
 
     it('reads the cookie name posthog-js derives from a token with + / =', () => {
