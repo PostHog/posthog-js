@@ -317,7 +317,10 @@ describe('WebMCP', () => {
     })
 
     it('preserves error results, synchronous throws, and promise rejections', async () => {
-        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const posthog = createMockPostHog({
+            config: { capture_webmcp: true } as any,
+            captureException: vi.fn(),
+        })
         const webMCP = new WebMCP(posthog)
         const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
         class SyncFailure extends Error {}
@@ -353,6 +356,33 @@ describe('WebMCP', () => {
                 $mcp_error_message: 'result failure',
             }),
             expect.any(Object)
+        )
+        expect(posthog.captureException).toHaveBeenNthCalledWith(
+            1,
+            'result failure',
+            expect.objectContaining({
+                $exception_source: 'mcp.tool_call',
+                $mcp_interface: 'webmcp',
+                $mcp_tool_name: 'error_result',
+                $mcp_resource_name: 'error_result',
+                $mcp_server_name: 'localhost',
+            })
+        )
+        expect(posthog.captureException).toHaveBeenNthCalledWith(
+            2,
+            thrown,
+            expect.objectContaining({
+                $exception_source: 'mcp.tool_call',
+                $mcp_tool_name: 'throw',
+            })
+        )
+        expect(posthog.captureException).toHaveBeenNthCalledWith(
+            3,
+            rejected,
+            expect.objectContaining({
+                $exception_source: 'mcp.tool_call',
+                $mcp_tool_name: 'reject',
+            })
         )
         expect(posthog.capture).toHaveBeenNthCalledWith(
             2,
