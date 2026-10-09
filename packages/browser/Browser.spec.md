@@ -25,7 +25,7 @@ posthog-js, the main browser SDK: captures events, identifies people, evaluates 
 - no capture while capturing is off: The browser SDK sends no event while capturing is off: before the visitor consents when consent is required, or after an opt-out outside cookieless mode.
   over: capture calls made while consent is pending in cookieless on_reject mode, which pass the same is_capturing check as every other capture
   via: should not send any events before opt in, then send non-cookieless events
-  because: sending events before or against the visitor's consent breaks the customer's privacy promise and consent law such as GDPR
+  because: sending events before or against the visitor's consent breaks the customer's privacy promise and consent law such as GDPR; sdk-specs consent-gating, Scenario: Opted out consent blocks capture and persistence writes
   crossing: host-app -> egress
   entrances: public api
   kinds: output
@@ -37,7 +37,7 @@ posthog-js, the main browser SDK: captures events, identifies people, evaluates 
 - autocapture never sends password values: Autocapture never puts the value of a password input into an event.
   over: the properties autocapture reads from a password input that has a value attribute
   via: should strip password element value
-  because: a password typed by a visitor must never leave their browser; a leak would expose their account on the customer's site
+  because: a password typed by a visitor must never leave their browser; a leak would expose their account on the customer's site; sdk-specs autocapture, Requirement: Canonical autocapture behavior (password input scenario)
   crossing: visitor -> egress
   entrances: autocapture dom events
   kinds: output, credential

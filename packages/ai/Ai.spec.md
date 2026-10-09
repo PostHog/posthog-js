@@ -7,7 +7,7 @@
 - privacy mode sends no prompts or outputs: When privacy mode is on, an AI generation event carries no prompt input and no model output.
   over: the $ai_input and $ai_output_choices properties of a generation captured through captureAiGeneration with privacyMode set
   via: redacts input and output when privacyMode is true
-  because: customers turn on privacy mode so their users' prompts and the model's answers never reach PostHog; a leak would send personal or secret text
+  because: customers turn on privacy mode so their users' prompts and the model's answers never reach PostHog; a leak would send personal or secret text; sdk-specs capture-ai, Requirement: Canonical capture_ai behavior (privacy mode takes precedence)
   crossing: host-app -> egress
   entrances: none
   kinds: output
