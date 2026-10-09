@@ -25,12 +25,12 @@ export interface PostHogCookieReadOptions {
 }
 
 /**
- * The cookie read settings from the client's `readPostHogCookie` option, or undefined when the option is off.
+ * The cookie read settings from the client's `readPostHogCookie` option, or null when the option is off.
  */
 export function getPostHogCookieReadOptions(posthog: {
   apiKey: string
   options: { readPostHogCookie?: boolean | { sessionIdleTimeoutSeconds?: number; optOutCapturingByDefault?: boolean } }
-}): PostHogCookieReadOptions | undefined {
+}): PostHogCookieReadOptions | null {
   const option = posthog.options.readPostHogCookie
   if (option === true) {
     return { apiKey: posthog.apiKey }
@@ -42,7 +42,7 @@ export function getPostHogCookieReadOptions(posthog: {
       optOutCapturingByDefault: option.optOutCapturingByDefault,
     }
   }
-  return undefined
+  return null
 }
 
 export interface PostHogTracingHeaderValues {
@@ -141,7 +141,8 @@ export function getPostHogCookieValues(
 
 function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
   const seconds = cookie.sessionIdleTimeoutSeconds
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+  // Zero falls back to the default, like posthog-js's `session_idle_timeout_seconds || default`.
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds === 0) {
     return COOKIE_SESSION_IDLE_TIMEOUT_MS
   }
   // The same bounds posthog-js applies to session_idle_timeout_seconds.
@@ -154,7 +155,7 @@ function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
  */
 export function getPostHogTracingHeaderValues(
   headers?: IncomingHttpHeaders,
-  cookie?: PostHogCookieReadOptions
+  cookie?: PostHogCookieReadOptions | null
 ): PostHogTracingHeaderValues {
   if (!headers) {
     return {}

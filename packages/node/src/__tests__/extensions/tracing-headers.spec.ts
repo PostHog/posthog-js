@@ -90,8 +90,8 @@ describe('tracing headers', () => {
 
   describe('getPostHogCookieReadOptions', () => {
     it.each([
-      ['off by default', undefined, undefined],
-      ['off when false', false, undefined],
+      ['off by default', undefined, null],
+      ['off when false', false, null],
       ['on when true', true, { apiKey: 'token' }],
       [
         'on with a custom idle timeout',
@@ -104,6 +104,7 @@ describe('tracing headers', () => {
 
     it.each([
       ['uses the custom timeout', 3600, 45, 'session'],
+      ['treats a zero timeout as the 30 minute default', 0, 20, 'session'],
       ['clamps a timeout under 60 seconds to 60 seconds', 30, 0.75, 'session'],
       ['clamps a timeout over 10 hours to 10 hours', 86400, 11 * 60, undefined],
     ])('%s', (_name, sessionIdleTimeoutSeconds, idleMinutes, expectedSessionId) => {
