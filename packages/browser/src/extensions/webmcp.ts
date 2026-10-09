@@ -42,6 +42,11 @@ interface WebMCPFailure {
     type: string
 }
 
+interface WebMCPFailureInput {
+    error: unknown
+    errorResult: boolean
+}
+
 type WebMCPDocument = Document & { modelContext?: WebMCPModelContext }
 
 const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrumentation>()
@@ -342,14 +347,20 @@ export class WebMCP {
                 try {
                     result = execute.apply(this === wrappedTool ? tool : this, toolArgs)
                 } catch (error) {
-                    webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, getFailure(error, false), metadata)
+                    webMCP._captureToolCall(
+                        instrumentation,
+                        wrappedTool,
+                        startedAt,
+                        { error, errorResult: false },
+                        metadata
+                    )
                     throw error
                 }
 
                 if (isPromise(result)) {
                     return Promise.resolve(result).then(
                         (value) => {
-                            const failure = isErrorResult(value) ? getFailure(value, true) : undefined
+                            const failure = isErrorResult(value) ? { error: value, errorResult: true } : undefined
                             webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, failure, metadata)
                             return value
                         },
@@ -358,7 +369,7 @@ export class WebMCP {
                                 instrumentation,
                                 wrappedTool,
                                 startedAt,
-                                getFailure(error, false),
+                                { error, errorResult: false },
                                 metadata
                             )
                             throw error
@@ -366,7 +377,7 @@ export class WebMCP {
                     )
                 }
 
-                const failure = isErrorResult(result) ? getFailure(result, true) : undefined
+                const failure = isErrorResult(result) ? { error: result, errorResult: true } : undefined
                 webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, failure, metadata)
                 return result
             },
@@ -378,15 +389,20 @@ export class WebMCP {
         instrumentation: WebMCPInstrumentation,
         tool: WebMCPTool,
         timestamp: Date,
-        failure: WebMCPFailure | undefined,
+        failureInput: WebMCPFailureInput | undefined,
         metadata: WebMCPMetadata
     ): void {
         const duration = Date.now() - timestamp.getTime()
+        let failure: WebMCPFailure | undefined
 
         for (const instance of instrumentation.instances) {
             const options = getMetadataOptions(instance.config.capture_webmcp)
             if (!options) {
                 continue
+            }
+
+            if (failureInput && !failure) {
+                failure = getFailure(failureInput.error, failureInput.errorResult)
             }
 
             try {
@@ -400,7 +416,7 @@ export class WebMCP {
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
                         $mcp_duration_ms: duration,
-                        $mcp_is_error: !!failure,
+                        $mcp_is_error: !!failureInput,
                         ...(failure ? { $mcp_error_type: failure.type, $mcp_error_message: failure.message } : {}),
                         ...(options.intent && metadata.intent
                             ? { $mcp_intent: metadata.intent, $mcp_intent_source: 'context_parameter' }

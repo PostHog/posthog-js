@@ -394,6 +394,27 @@ describe('WebMCP', () => {
         expect(properties?.$mcp_error_message).toHaveLength(2048)
     })
 
+    it('does not extract failure details after capture is disabled', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const getContent = vi.fn(() => [{ type: 'text', text: 'failure' }])
+        const errorResult = {
+            isError: true,
+            get content(): { type: string; text: string }[] {
+                return getContent()
+            },
+        }
+
+        register(new WebMCP(posthog), {
+            name: 'disabled_error',
+            execute: () => errorResult,
+        })
+        posthog.config.capture_webmcp = false
+
+        expect(registeredTool(0).execute()).toBe(errorResult)
+        expect(getContent).not.toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
     it('captures one event when an aborted call settles later', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)
