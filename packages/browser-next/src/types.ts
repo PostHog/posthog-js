@@ -1,5 +1,6 @@
 import type { FlagsConfiguration } from './flags-options'
 import type { BrowserClient } from './browser-client'
+import type { LogsConfiguration } from './logs-options'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -82,12 +83,14 @@ export interface PostHogOptions {
     analytics?: AnalyticsConfiguration
     /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
     flags?: FlagsConfiguration
+    /** Automatically load logs. False disables automatic inclusion; explicit extensions take precedence. */
+    logs?: LogsConfiguration
     /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
     extensions?: readonly Extension[]
 }
 
 /** Options for the delivery-free `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags' | 'logs'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'

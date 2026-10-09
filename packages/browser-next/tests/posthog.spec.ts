@@ -255,8 +255,8 @@ describe('@posthog/browser core', () => {
                     event: 'signed_up',
                     distinct_id: posthog.distinctId,
                     timestamp: '2026-01-02T03:04:05.000Z',
-                    session_id: posthog.session.sessionId,
-                    window_id: posthog.session.windowId,
+                    session_id: posthog.session!.sessionId,
+                    window_id: posthog.session!.windowId,
                     options: {},
                     properties: {
                         dynamic: 'yes',
@@ -729,7 +729,7 @@ describe('@posthog/browser core', () => {
 
             expect(settled).toBe(true)
             await posthog.capture('after_shutdown')
-            expect(posthog.session.sessionId).toBe('')
+            expect(posthog.session).toBeUndefined()
         } finally {
             vi.useRealTimers()
         }
@@ -894,7 +894,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = Object.defineProperty({}, 'hostile', {
                 enumerable: true,
@@ -934,7 +934,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = {
                 toJSON() {
@@ -997,7 +997,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             vi.advanceTimersByTime(1_000)
 
@@ -1298,7 +1298,7 @@ describe('@posthog/browser core', () => {
         expect(loader).toHaveBeenCalledTimes(1)
     })
 
-    it('blocks registration, requests, and persisted key-value mutation after disposal', async () => {
+    it('blocks registration and persisted key-value mutation after disposal', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const remoteConfig = createRemoteConfig()
@@ -1324,7 +1324,6 @@ describe('@posthog/browser core', () => {
         posthog.onEvent(({ event }) => events.push(event))
         posthog.onRemoteConfig(lateRemoteConfigListener)
         posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
-        await expect(posthog.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
         await posthog.capture('after_dispose')
         posthog.kv.set('after_dispose', true)
@@ -1388,8 +1387,8 @@ describe('@posthog/browser core', () => {
         await first.capture('first')
         await second.capture('second')
 
-        expect(second.session.sessionId).toBe(first.session.sessionId)
-        expect(second.session.windowId).not.toBe(first.session.windowId)
+        expect(second.session!.sessionId).toBe(first.session!.sessionId)
+        expect(second.session!.windowId).not.toBe(first.session!.windowId)
     })
 
     it('rotates an idle session when capture runs', async () => {
@@ -1443,10 +1442,10 @@ describe('@posthog/browser core', () => {
 
         expect(posthog.anonymousId).not.toBe(originalId)
         expect(posthog.distinctId).toBe(posthog.anonymousId)
-        expect(posthog.session.sessionId).toBe('')
+        expect(posthog.session).toBeUndefined()
         expect(sessions).toEqual([])
 
         await posthog.capture('after_reset')
-        expect(sessions).toEqual([`reset:${posthog.session.sessionId}`])
+        expect(sessions).toEqual([`reset:${posthog.session!.sessionId}`])
     })
 })

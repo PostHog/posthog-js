@@ -75,7 +75,7 @@ describe('browser-next initial pageview', () => {
         expect(order).toEqual(['setup', '$pageview'])
         expect(pageviewProperties).not.toHaveProperty('title')
         expect(pageviewProperties).not.toHaveProperty('$current_url')
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         await posthog.capture('explicit')
         expect(order).toEqual(['setup', '$pageview', 'explicit'])
     })
@@ -95,7 +95,7 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(document).not.toHaveBeenCalled()
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('waits for a hidden document and captures once when it becomes visible', async () => {
@@ -126,7 +126,7 @@ describe('browser-next initial pageview', () => {
 
         expect(observed).toEqual(['$pageview'])
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
     })
 
     it.each([
@@ -150,7 +150,7 @@ describe('browser-next initial pageview', () => {
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
 
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
         expect(observed).toEqual([])
         posthog.optIn()
 
@@ -292,7 +292,7 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(observed).toEqual([])
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('contains missing and hostile document capabilities', async () => {
@@ -398,7 +398,7 @@ describe('browser-next initial pageview', () => {
         document.dispatchEvent(new Event('visibilitychange'))
 
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('retries a pageview after active delivery capacity becomes available', async () => {
@@ -458,7 +458,7 @@ describe('browser-next initial pageview', () => {
         })
         await Promise.resolve()
 
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         expect(fetch).toHaveBeenCalledTimes(1)
         finish?.(new Response('{}', { status: 200 }))
         await posthog.flush()
@@ -477,7 +477,7 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(loader).toHaveBeenCalledTimes(1)
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         await posthog.dispose()
     })
 

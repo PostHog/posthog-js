@@ -138,9 +138,10 @@ export class BrowserClientAdapter implements Client {
                 sessionId: current?.sessionId ?? '',
                 windowId: current?.windowId ?? '',
                 sessionStartTimestamp: current?.sessionStartTimestamp ?? 0,
+                lastActivityTimestamp: current?.lastActivityTimestamp ?? 0,
             }
         } catch {
-            return { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
+            return { sessionId: '', windowId: '', sessionStartTimestamp: 0, lastActivityTimestamp: 0 }
         }
     }
 

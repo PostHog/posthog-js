@@ -85,7 +85,7 @@ describe.each([
         })
         posthog.onRemoteConfig(second)
         posthog.capture('before config')
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         const pending = posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)
         finish(response())
