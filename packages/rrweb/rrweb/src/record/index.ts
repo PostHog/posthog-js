@@ -332,6 +332,9 @@ function record<T = eventWithTime>(
   // each open their own queue.
   const deferredStylesheetInlinings = new Set<DeferredStylesheetInlining>();
   const startDeferredStylesheetInlining = (links: HTMLLinkElement[]) => {
+    // the emit that precedes this hand-off can stop the recorder, whose stop
+    // has already flushed the set; a queue opened now would emit after it
+    if (stopped) return;
     const inlining = inlineDeferredStylesheets(
       links,
       stylesheetManager,
@@ -758,6 +761,7 @@ function record<T = eventWithTime>(
           inlineStylesheet,
           maskAllInputs: maskInputOptions,
           inlineStylesheetBudgetRules,
+          onDeferredStylesheetLinks: startDeferredStylesheetInlining,
           maskTextFn,
           maskInputFn,
           maskAllElementAttributes,

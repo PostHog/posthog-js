@@ -455,6 +455,8 @@ export default class MutationBuffer {
         skipChild: true,
         newlyAddedElement: true,
         inlineStylesheet: this.inlineStylesheet,
+        inlineStylesheetBudgetRules: this.inlineStylesheetBudgetRules,
+        onDeferredStylesheetLinks: this.onDeferredStylesheetLinks,
         maskInputOptions: this.maskInputOptions,
         maskTextFn: this.maskTextFn,
         maskInputFn: this.maskInputFn,
