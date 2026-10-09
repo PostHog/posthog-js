@@ -615,6 +615,14 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
       \\"undefined\\",
       \\"number\\"
     ],
+    \\"__mutationOversizedAddBytes\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
+    \\"__mutationOversizedAddBudget\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
     \\"strictMinimumDuration\\": [
       \\"undefined\\",
       \\"false\\",
