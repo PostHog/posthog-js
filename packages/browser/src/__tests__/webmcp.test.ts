@@ -1,4 +1,5 @@
 import { WebMCP } from '../extensions/webmcp'
+import { isExceptionCaptured } from '../extensions/exception-autocapture/captured-errors'
 import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -323,6 +324,7 @@ describe('WebMCP', () => {
             config: { capture_webmcp: true } as any,
             captureException,
         })
+        const otherPosthog = createMockPostHog()
         const webMCP = new WebMCP(posthog)
         const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
         class SyncFailure extends Error {}
@@ -406,12 +408,10 @@ describe('WebMCP', () => {
             }),
             expect.any(Object)
         )
-        expect(
-            (thrown as Error & { __posthog_previously_captured_error?: boolean }).__posthog_previously_captured_error
-        ).toBe(true)
-        expect(
-            (rejected as Error & { __posthog_previously_captured_error?: boolean }).__posthog_previously_captured_error
-        ).toBe(true)
+        expect(isExceptionCaptured(posthog, thrown)).toBe(true)
+        expect(isExceptionCaptured(posthog, rejected)).toBe(true)
+        expect(isExceptionCaptured(otherPosthog, thrown)).toBe(false)
+        expect(isExceptionCaptured(otherPosthog, rejected)).toBe(false)
     })
 
     it('captures handled errors when the synthetic stack points to the PostHog SDK', () => {

@@ -1,16 +1,8 @@
-import {
-    isArray,
-    isFunction,
-    isObject,
-    isPromise,
-    isString,
-    isUndefined,
-    sanitizeFreeText,
-    type ErrorTracking,
-} from '@posthog/core'
+import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
+import { markExceptionCaptured } from './exception-autocapture/captured-errors'
 import { patch } from './replay/rrweb-plugins/patch'
 
 type WebMCPExecute = (this: unknown, ...args: unknown[]) => unknown
@@ -286,14 +278,6 @@ function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     }
 }
 
-function markExceptionAsCaptured(error: unknown): void {
-    try {
-        if (isObject(error)) {
-            ;(error as ErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
-        }
-    } catch {}
-}
-
 export class WebMCP {
     private _isPatched = false
 
@@ -459,7 +443,7 @@ export class WebMCP {
                         $mcp_server_name: location?.hostname,
                     })
                     if (captured) {
-                        markExceptionAsCaptured(failure.error)
+                        markExceptionCaptured(instance, failure.error)
                     }
                 } catch {}
             }

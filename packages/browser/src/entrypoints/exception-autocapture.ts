@@ -2,7 +2,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isArray, isFunction, isNull, isObject, isString, type ErrorTracking } from '@posthog/core'
+import { isArray, isFunction, isNull, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
@@ -18,19 +18,13 @@ const safely = <T>(fn: () => T, fallback: T): T => {
     }
 }
 
-const isPreviouslyCapturedError = (input: unknown): boolean =>
-    safely(
-        () =>
-            isObject(input) &&
-            '__posthog_previously_captured_error' in input &&
-            input.__posthog_previously_captured_error === true,
-        false
-    )
+type CaptureException = (props: ErrorTracking.ErrorProperties, error?: unknown) => void
 
 const safelyBuildAndCapture = (
-    captureFn: (props: ErrorTracking.ErrorProperties) => void,
-    buildProperties: () => ErrorTracking.ErrorProperties
-): void => safely(() => captureFn(buildProperties()), undefined)
+    captureFn: CaptureException,
+    buildProperties: () => ErrorTracking.ErrorProperties,
+    error?: unknown
+): void => safely(() => captureFn(buildProperties(), error), undefined)
 
 // Firefox throws on every read, write and call that touches an object from another compartment or
 // from a destroyed document, such as a handler left behind by a removed or cross-origin iframe.
@@ -70,7 +64,7 @@ const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventAr
     return event
 }
 
-const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapOnError = (captureFn: CaptureException) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
@@ -80,13 +74,12 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     win.onerror = function (...args: ErrorEventArgs): boolean {
         safely(() => {
             const input = resolveOnErrorInput(args)
-            if (!isPreviouslyCapturedError(input)) {
-                captureFn(
-                    errorPropertiesBuilder.buildFromUnknown(input, {
-                        mechanism: { handled: false },
-                    })
-                )
-            }
+            captureFn(
+                errorPropertiesBuilder.buildFromUnknown(input, {
+                    mechanism: { handled: false },
+                }),
+                input
+            )
         }, undefined)
         if (!isReachableFunction(originalOnError)) {
             return false
@@ -98,10 +91,7 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     return () => restore(win, 'onerror', originalOnError)
 }
 
-const wrapUnhandledRejection = (
-    captureFn: (props: ErrorTracking.ErrorProperties) => void,
-    defaultReturnValue = false
-) => {
+const wrapUnhandledRejection = (captureFn: CaptureException, defaultReturnValue = false) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -111,13 +101,12 @@ const wrapUnhandledRejection = (
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
         safely(() => {
-            if (!isPreviouslyCapturedError(ev.reason)) {
-                captureFn(
-                    errorPropertiesBuilder.buildFromUnknown(ev, {
-                        mechanism: { handled: false },
-                    })
-                )
-            }
+            captureFn(
+                errorPropertiesBuilder.buildFromUnknown(ev, {
+                    mechanism: { handled: false },
+                }),
+                ev.reason
+            )
         }, undefined)
         if (!isReachableFunction(originalOnUnhandledRejection)) {
             return defaultReturnValue
@@ -129,7 +118,7 @@ const wrapUnhandledRejection = (
     return () => restore(win, 'onunhandledrejection', originalOnUnhandledRejection)
 }
 
-const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapConsoleError = (captureFn: CaptureException) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')

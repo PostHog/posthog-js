@@ -6,6 +6,7 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { CaptureResult, RemoteConfig } from '../../types'
 import { jsonStringify } from '@posthog/browser-common/utils/request-utils'
+import { markExceptionCaptured } from '../../extensions/exception-autocapture/captured-errors'
 
 describe('ExceptionObserver', () => {
     let instance: PostHog
@@ -56,6 +57,19 @@ describe('ExceptionObserver', () => {
                 expect(sendExceptionEvent).not.toHaveBeenCalled()
             }
         )
+
+        it('skips an error only when this instance captured it', () => {
+            const otherInstance = {} as PostHog
+            const error = new Error('tool failure')
+            const sendExceptionEvent = vi.spyOn(instance.exceptions, 'sendExceptionEvent')
+
+            markExceptionCaptured(otherInstance, error)
+            instance.exceptionObserver.captureException(errorProperties, error)
+            markExceptionCaptured(instance, error)
+            instance.exceptionObserver.captureException(errorProperties, error)
+
+            expect(sendExceptionEvent).toHaveBeenCalledTimes(1)
+        })
 
         it('captures an aggregate and its children in one event with their own stacks', () => {
             const child = new TypeError('alternative')
