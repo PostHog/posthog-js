@@ -319,8 +319,9 @@ describe('WebMCP', () => {
     it('preserves error results, synchronous throws, and promise rejections', async () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const webMCP = new WebMCP(posthog)
-        const errorResult = { isError: true, content: [] }
-        const thrown = new Error('sync failure')
+        const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
+        class SyncFailure extends Error {}
+        const thrown = new SyncFailure('sync failure')
         const rejected = new Error('async failure')
         const resultTool = { name: 'error_result', execute: () => errorResult }
         const throwTool = {
@@ -343,10 +344,54 @@ describe('WebMCP', () => {
         expect(() => registeredTool(1).execute()).toThrow(thrown)
         await expect(registeredTool(2).execute()).rejects.toBe(rejected)
 
-        expect(posthog.capture).toHaveBeenCalledTimes(3)
-        for (const call of vi.mocked(posthog.capture).mock.calls) {
-            expect(call[1]).toEqual(expect.objectContaining({ $mcp_is_error: true }))
-        }
+        expect(posthog.capture).toHaveBeenNthCalledWith(
+            1,
+            '$mcp_tool_call',
+            expect.objectContaining({
+                $mcp_is_error: true,
+                $mcp_error_type: 'Error',
+                $mcp_error_message: 'result failure',
+            }),
+            expect.any(Object)
+        )
+        expect(posthog.capture).toHaveBeenNthCalledWith(
+            2,
+            '$mcp_tool_call',
+            expect.objectContaining({
+                $mcp_is_error: true,
+                $mcp_error_type: 'SyncFailure',
+                $mcp_error_message: 'sync failure',
+            }),
+            expect.any(Object)
+        )
+        expect(posthog.capture).toHaveBeenNthCalledWith(
+            3,
+            '$mcp_tool_call',
+            expect.objectContaining({
+                $mcp_is_error: true,
+                $mcp_error_type: 'Error',
+                $mcp_error_message: 'async failure',
+            }),
+            expect.any(Object)
+        )
+    })
+
+    it('redacts and limits error messages', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const privateValue = 'alice@example.com'
+
+        register(new WebMCP(posthog), {
+            name: 'private_error',
+            execute: () => ({
+                isError: true,
+                content: [{ type: 'text', text: `${privateValue} ${'x'.repeat(2100)}` }],
+            }),
+        })
+        registeredTool(0).execute()
+
+        const properties = vi.mocked(posthog.capture).mock.calls[0][1]
+        expect(properties?.$mcp_error_message).not.toContain(privateValue)
+        expect(properties?.$mcp_error_message).toHaveLength(2048)
     })
 
     it('captures one event when an aborted call settles later', async () => {
