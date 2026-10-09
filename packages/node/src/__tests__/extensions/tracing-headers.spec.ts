@@ -64,18 +64,24 @@ describe('tracing headers', () => {
       expect(getPostHogTracingHeaderValues(headers)).toEqual(expected)
     })
 
-    it('falls back to the posthog-js cookie per missing header', () => {
+    it('uses the posthog-js cookie only when no tracing header is present', () => {
       const now = Date.now()
-      const cookie = encodeURIComponent(
-        JSON.stringify({ distinct_id: 'anon-from-cookie', $sesid: [now, 'session-from-cookie', now] })
-      )
-      const headers = { 'x-posthog-distinct-id': 'user-from-header', cookie: `other=1; ph_token_posthog=${cookie}` }
+      const cookie = `other=1; ph_token_posthog=${encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )}`
 
-      expect(getPostHogTracingHeaderValues(headers, 'token')).toEqual({
-        sessionId: 'session-from-cookie',
+      expect(getPostHogTracingHeaderValues({ cookie }, 'token')).toEqual({
+        sessionId: 'cookie-session',
+        distinctId: 'user-from-cookie',
+      })
+      expect(getPostHogTracingHeaderValues({ 'x-posthog-distinct-id': 'user-from-header', cookie }, 'token')).toEqual({
         distinctId: 'user-from-header',
       })
-      expect(getPostHogTracingHeaderValues(headers)).toEqual({ distinctId: 'user-from-header' })
+      expect(getPostHogTracingHeaderValues({ cookie })).toEqual({})
     })
   })
 
@@ -83,7 +89,7 @@ describe('tracing headers', () => {
     const now = 1_700_000_000_000
     const minute = 60 * 1000
     const cookieFor = (value: unknown, apiKey: string = 'token'): string =>
-      `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify(value))}`
+      `ph_${apiKey}_posthog=${encodeURIComponent(JSON.stringify({ $user_state: 'identified', ...(value as object) }))}`
 
     it.each([
       [
@@ -105,6 +111,16 @@ describe('tracing headers', () => {
         'drops a session with future timestamps',
         cookieFor({ distinct_id: 'anon', $sesid: [now + 40 * minute, 'session', now - minute] }),
         { distinctId: 'anon' },
+      ],
+      [
+        'returns only the session for an anonymous visitor',
+        cookieFor({ distinct_id: 'anon', $user_state: 'anonymous', $sesid: [now, 'session', now] }),
+        { sessionId: 'session' },
+      ],
+      [
+        'accepts the older two-item session',
+        cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session'] }),
+        { sessionId: 'session', distinctId: 'anon' },
       ],
       ['ignores a cookie for another project', cookieFor({ distinct_id: 'anon' }, 'other'), {}],
       [

@@ -169,6 +169,33 @@ describe('Express extension', () => {
       expect(event.properties.$request_path).toBe(expectedRequestPath)
     })
 
+    it.each([
+      { name: 'reads the posthog-js cookie when readPostHogCookie is on', readPostHogCookie: true, linked: true },
+      { name: 'ignores the posthog-js cookie by default', readPostHogCookie: undefined, linked: false },
+    ])('should $name', async ({ readPostHogCookie, linked }) => {
+      await posthog.shutdown()
+      posthog = createPostHog({ readPostHogCookie })
+      const middleware = createRequestContextMiddleware(posthog)
+      const now = Date.now()
+      const cookieValue = encodeURIComponent(
+        JSON.stringify({
+          distinct_id: 'user-from-cookie',
+          $user_state: 'identified',
+          $sesid: [now, 'cookie-session', now],
+        })
+      )
+      const req = createMockRequest({ headers: { cookie: `ph_TEST_API_KEY_posthog=${cookieValue}` } })
+
+      middleware(req, createMockResponse(), () => {
+        posthog.capture({ event: 'handler_event' })
+      })
+      await waitForFlushTimer(posthog)
+
+      const event = getLastBatchEvents()!.find((e: any) => e.event === 'handler_event')
+      expect(event.distinct_id === 'user-from-cookie').toBe(linked)
+      expect(event.properties.$session_id).toBe(linked ? 'cookie-session' : undefined)
+    })
+
     it('should sanitize tracing header values and preserve explicit capture properties', async () => {
       const middleware = createRequestContextMiddleware(posthog)
       const req = createMockRequest({

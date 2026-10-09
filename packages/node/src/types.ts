@@ -181,6 +181,14 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   maxQueueSize?: number
   /**
+   * Lets the Express and NestJS integrations read the session ID, and the distinct ID of an identified user, from the
+   * posthog-js cookie when a request has no tracing headers. Turn it on only when posthog-js stores opt-out consent in
+   * a cookie, or when you do not use opt-out: the server cannot read an opt-out that posthog-js keeps in localStorage.
+   *
+   * @default false
+   */
+  readPostHogCookie?: boolean
+  /**
    * Configuration for the `posthog.metrics` API (count, gauge, histogram).
    * Set `serviceName` so series can be filtered per service in the Metrics UI.
    *

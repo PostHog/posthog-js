@@ -60,10 +60,11 @@ function isRecent(timestamp: unknown, now: number, maxAgeMs: number): boolean {
 }
 
 /**
- * Reads the distinct ID and the live session ID from the cookie that posthog-js writes with its default persistence.
- * The browser sends it on every same-site request, so backend events link to the browser session without
- * `tracing_headers`. A session past the posthog-js idle timeout or length cap is not returned, because the browser
- * starts a new session on its next activity. Nothing is returned when the visitor's consent cookie opts out.
+ * Reads the live session ID, and the distinct ID of an identified user, from the cookie that posthog-js writes with its
+ * default persistence. The browser sends it on every same-site request, so backend events link to the browser session
+ * without `tracing_headers`. A session past the posthog-js idle timeout or length cap is not returned, because the
+ * browser starts a new session on its next activity. An anonymous distinct ID is not returned, so backend events for
+ * anonymous visitors stay personless. Nothing is returned when the visitor's consent cookie opts out.
  */
 export function getPostHogCookieValues(
   cookieHeader: HeaderValue,
@@ -84,11 +85,12 @@ export function getPostHogCookieValues(
       return {}
     }
 
-    const distinctId = sanitizeTracingHeaderValue(data.distinct_id)
+    const distinctId = data.$user_state === 'identified' ? sanitizeTracingHeaderValue(data.distinct_id) : undefined
     let sessionId: string | undefined
     const session = data.$sesid
-    if (Array.isArray(session) && session.length === 3) {
-      const [lastActivity, candidate, sessionStart] = session
+    if (Array.isArray(session) && (session.length === 2 || session.length === 3)) {
+      // Older posthog-js versions stored [lastActivity, sessionId] and start the session at lastActivity.
+      const [lastActivity, candidate, sessionStart = lastActivity] = session
       if (
         isRecent(lastActivity, now, COOKIE_SESSION_IDLE_TIMEOUT_MS) &&
         isRecent(sessionStart, now, COOKIE_SESSION_MAX_LENGTH_MS)
@@ -107,7 +109,8 @@ export function getPostHogCookieValues(
 }
 
 /**
- * Reads the PostHog tracing headers. With an `apiKey`, a missing header falls back to the posthog-js cookie.
+ * Reads the PostHog tracing headers. With an `apiKey`, a request with neither header falls back to the posthog-js
+ * cookie. A request with either header uses headers only, so one request never mixes two identities.
  */
 export function getPostHogTracingHeaderValues(
   headers?: IncomingHttpHeaders,
@@ -117,9 +120,12 @@ export function getPostHogTracingHeaderValues(
     return {}
   }
 
-  const cookie = apiKey ? getPostHogCookieValues(headers.cookie, apiKey) : {}
-  const sessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId]) ?? cookie.sessionId
-  const distinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId]) ?? cookie.distinctId
+  const headerSessionId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.sessionId])
+  const headerDistinctId = sanitizeTracingHeaderValue(headers[POSTHOG_TRACING_HEADERS.distinctId])
+  const { sessionId, distinctId } =
+    headerSessionId === undefined && headerDistinctId === undefined && apiKey
+      ? getPostHogCookieValues(headers.cookie, apiKey)
+      : { sessionId: headerSessionId, distinctId: headerDistinctId }
 
   return {
     ...(sessionId !== undefined ? { sessionId } : {}),
