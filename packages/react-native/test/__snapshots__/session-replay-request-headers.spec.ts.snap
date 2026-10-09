@@ -44,6 +44,7 @@ exports[`PostHog RN session replay request headers > snapshots the complete nati
         "enabled": true,
         "maxBytes": 32768,
       },
+      "fatalExceptionMarker": true,
       "nativeAutocapture": false,
     },
     "push": {

@@ -38,6 +38,38 @@ private var jsFatalCaptureProperties: [String: Any]? {
     Thread.current.threadDictionary[jsFatalCaptureKey] as? [String: Any]
 }
 
+/// Written by `markFatalExceptionHandled` when the JS fatal handler saw a crash. React Native
+/// turns that crash into a native one, which posthog-ios only reports on the next launch, so the
+/// marker is a file: it has to survive the crash that follows it.
+private let jsFatalMarkerURL: URL? = FileManager.default
+    .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+    .appendingPathComponent(Bundle.main.bundleIdentifier ?? "", isDirectory: true)
+    .appendingPathComponent("posthog-react-native-js-fatal-handled")
+
+/// Whether the previous launch's JS fatal handler saw a crash. Read once at setup, before
+/// posthog-ios replays that launch's crash report, and consumed by the first fatal JS report.
+private final class PreviousLaunchJsFatal {
+    private let lock = NSLock()
+    private var handled: Bool
+
+    init() {
+        guard let url = jsFatalMarkerURL else {
+            handled = false
+            return
+        }
+        handled = FileManager.default.fileExists(atPath: url.path)
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func consume() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let wasHandled = handled
+        handled = false
+        return wasHandled
+    }
+}
+
 /// The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly so
 /// an unparseable value is a caller error rather than a silent substitution of "now", which
 /// would attribute the crash to the wrong instant.
@@ -170,6 +202,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             sdkReplayConfig: sessionReplayConfig["sdkReplayConfig"] as? [String: Any] ?? [:],
             decideReplayConfig: sessionReplayConfig["decideReplayConfig"] as? [String: Any] ?? [:],
             nativeErrorTrackingAutocapture: errorTrackingConfig["nativeAutocapture"] as? Bool ?? false,
+            fatalExceptionMarker: errorTrackingConfig["fatalExceptionMarker"] as? Bool ?? false,
             exceptionStepsConfig: exceptionStepsConfig,
             pushConfig: pluginConfig["push"] as? [String: Any] ?? [:],
             rageClickConfig: pluginConfig["rageClick"] as? [String: Any] ?? [:],
@@ -191,6 +224,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             sdkReplayConfig: sdkReplayConfig,
             decideReplayConfig: decideReplayConfig,
             nativeErrorTrackingAutocapture: false,
+            fatalExceptionMarker: false,
             exceptionStepsConfig: [:],
             pushConfig: [:],
             rageClickConfig: [:],
@@ -206,6 +240,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         sdkReplayConfig: [String: Any],
         decideReplayConfig: [String: Any],
         nativeErrorTrackingAutocapture: Bool,
+        fatalExceptionMarker: Bool,
         exceptionStepsConfig: [String: Any],
         pushConfig: [String: Any],
         rageClickConfig: [String: Any],
@@ -264,7 +299,10 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         defer { setupWindow.settled() }
 
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
-        // The JS layer already captured them, so drop the native duplicate.
+        // Drop that report only when the JS layer saw the crash. Fatals that bypass the JS handler,
+        // such as React render errors, have no marker and are reported natively instead.
+        // An older JS layer sends no marker, so every fatal JS report is dropped as before.
+        let previousLaunchJsFatal = fatalExceptionMarker ? PreviousLaunchJsFatal() : nil
         config.setBeforeSend { event in
             // The JS layer's own fatal capture is the event we want; only native re-reports
             // of a crash JS already captured are duplicates. Matching the event name as well
@@ -283,7 +321,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 return event
             }
             if isReactNativeFatalJsError(event) {
-                return nil
+                guard let marker = previousLaunchJsFatal else { return nil }
+                return marker.consume() ? nil : event
             }
             // Only the replayed tap. `setup()` also replays the previous launch's crash report,
             // and that `$exception` carries the distinct id recorded at crash time, which stands.
@@ -599,6 +638,25 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             timestamp: date
         )
         resolve(nil)
+    }
+
+    /// Records that the JS fatal handler saw a crash, so the native report of that crash on the
+    /// next launch is dropped as a duplicate. Resolves only after the marker is on disk.
+    @objc(markFatalExceptionHandled:withRejecter:)
+    func markFatalExceptionHandled(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+        guard let url = jsFatalMarkerURL else {
+            reject(fatalCaptureErrorCode, "markFatalExceptionHandled: no application support directory", nil)
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try Data().write(to: url, options: .atomic)
+            resolve(nil)
+        } catch {
+            reject(fatalCaptureErrorCode, "markFatalExceptionHandled: \(error.localizedDescription)", error)
+        }
     }
 
     @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)

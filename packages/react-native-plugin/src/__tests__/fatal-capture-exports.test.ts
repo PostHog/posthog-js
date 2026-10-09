@@ -1,6 +1,7 @@
 /* oxlint-disable compat/compat */
 const nativeMock = vi.hoisted(() => ({
   captureFatalException: vi.fn(() => Promise.resolve()),
+  markFatalExceptionHandled: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('react-native', () => ({
@@ -32,6 +33,14 @@ describe('fatal capture exports', () => {
     nativeMock.captureFatalException.mockRejectedValueOnce(new Error('native unavailable'))
     await expect(Plugin.captureFatalException('user-1', '2026-09-22T10:00:00.000Z', {})).rejects.toThrow(
       'native unavailable'
+    )
+  })
+
+  it('exposes markFatalExceptionHandled and delegates to the native module', async () => {
+    await Plugin.markFatalExceptionHandled()
+    expect(nativeMock.markFatalExceptionHandled).toHaveBeenCalledTimes(1)
+    expect(typeof (Plugin.default as unknown as { markFatalExceptionHandled?: unknown }).markFatalExceptionHandled).toBe(
+      'function'
     )
   })
 })

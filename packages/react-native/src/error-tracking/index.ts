@@ -314,8 +314,9 @@ export class ErrorTracking {
 
   private autocaptureUncaughtErrors() {
     const onUncaughtException = (error: unknown, isFatal: boolean): void | Promise<void> => {
+      const marked = isFatal ? this.markFatalExceptionHandled() : undefined
       if (!this._autocaptureEnabled || isPostHogFetchNetworkError(error)) {
-        return
+        return marked
       }
       const hint: CoreErrorTracking.EventHint = {
         mechanism: { type: 'onuncaughtexception', handled: false },
@@ -324,12 +325,30 @@ export class ErrorTracking {
         this.instance.captureException(error, {}, hint)
         return
       }
-      return this.handleFatalException(error, hint, uuidv7(), new Date())
+      return Promise.all([marked, this.handleFatalException(error, hint, uuidv7(), new Date())]).then(() => {})
     }
     try {
       this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
     } catch (err) {
       this.logger.warn('Failed to track uncaught exceptions: ', err)
+    }
+  }
+
+  // React Native turns this fatal into a native crash once the handler chain finishes. The
+  // native plugin drops that crash report only when this marker says JS saw the error first,
+  // so fatals that bypass this handler (React render errors) still reach error tracking.
+  private markFatalExceptionHandled(): Promise<void> | undefined {
+    const bridge = OptionalReactNativePlugin?.markFatalExceptionHandled
+    if (!bridge) {
+      return undefined
+    }
+    try {
+      return Promise.resolve(bridge()).catch((e) => {
+        this.logger.warn(`Failed to mark fatal exception as handled: ${e}`)
+      })
+    } catch (e) {
+      this.logger.warn(`Failed to mark fatal exception as handled: ${e}`)
+      return undefined
     }
   }
 
