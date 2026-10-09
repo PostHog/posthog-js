@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.438.7
+
+### Patch Changes
+
+- [#4990](https://github.com/PostHog/posthog-js/pull/4990) [`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share browser logging across SDKs with consistent initialization and cleanup; `captureLog` and `logger` calls before logging setup are now dropped instead of buffered.
+  (2026-10-09)
+- Updated dependencies [[`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a)]:
+  - @posthog/browser-common@0.9.4
+
 ## 1.438.6
 
 ### Patch Changes
