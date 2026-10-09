@@ -67,7 +67,7 @@ class RequiresServerEvaluation extends Error {
 }
 
 type FeatureFlagsPollerOptions = {
-  personalApiKey: string
+  personalApiKey?: string
   projectApiKey: string
   host: string
   pollingInterval: number | null
@@ -116,7 +116,7 @@ type ComputeFlagAndPayloadOptions = {
 
 class FeatureFlagsPoller {
   pollingInterval: number | null
-  personalApiKey: string
+  personalApiKey?: string
   projectApiKey: string
   featureFlags: Array<PostHogFeatureFlag>
   featureFlagsByKey: Record<string, PostHogFeatureFlag>
@@ -1088,6 +1088,10 @@ class FeatureFlagsPoller {
   }
 
   async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+    if (!this.personalApiKey) {
+      throw new ClientError('A secretKey or personalApiKey is required to fetch feature flag definitions from PostHog.')
+    }
+
     const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)

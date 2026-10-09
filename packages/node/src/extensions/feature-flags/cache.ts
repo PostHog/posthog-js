@@ -49,6 +49,8 @@ export type FlagDefinitionCacheInput =
  *
  * This interface is designed for server-side environments where multiple workers
  * need to share flag definitions and coordinate fetching to reduce API calls.
+ * Consumers can evaluate cached definitions without a secretKey or personalApiKey;
+ * fetching new definitions from PostHog still requires one of these credentials.
  *
  * All methods may throw errors - the poller will catch and log them gracefully,
  * ensuring cache provider errors never break flag evaluation.
@@ -91,7 +93,8 @@ export interface FlagDefinitionCacheProvider<CacheData extends FlagDefinitionCac
    *
    * Called when the poller is refreshing in-memory flag definitions. If this returns undefined
    * (or throws an error), the poller will fetch fresh data from the PostHog API if no flag
-   * definitions are in memory. Otherwise, stale cache data is used until the next poll cycle.
+   * definitions are in memory and a secretKey or personalApiKey is configured. Otherwise,
+   * existing in-memory definitions are retained until the next refresh.
    *
    * @returns cached definitions if available, undefined if cache is empty
    * @throws if an error occurs while accessing the cache (error will be logged)
