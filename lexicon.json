@@ -32,6 +32,10 @@
         {
             "name": "group",
             "definition": "A company, team or other entity that events can be tied to, set with the group call, for group analytics."
+        },
+        {
+            "name": "scenario",
+            "definition": "A GIVEN/WHEN/THEN case under a requirement in a PostHog/sdk-specs capability spec; invariants cite the requirement or scenario they come from."
         }
     ]
 }
