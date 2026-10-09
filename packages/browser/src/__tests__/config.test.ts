@@ -1,11 +1,16 @@
 import type { SpyInstance as VitestSpyInstance } from 'vitest'
-import { PostHog } from '../posthog-core'
+import { defaultConfig, PostHog } from '../posthog-core'
 import { BrowserAutocapture } from '../browser-autocapture'
 import type { PostHogConfig } from '../types'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {
+    it('keeps synchronous replay fetch disabled by default', () => {
+        expect(defaultConfig().__preview_replay_sync_fetch).toBe(false)
+        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(false)
+    })
+
     describe('memory persistence without bootstrap.distinctID', () => {
         // The warning must reach customers running the default debug:false config, so it goes through
         // console.warn directly rather than logger.warn (which is silent unless debug is enabled). These
