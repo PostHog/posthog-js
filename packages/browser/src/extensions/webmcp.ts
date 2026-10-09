@@ -1,4 +1,13 @@
-import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
+import {
+    isArray,
+    isFunction,
+    isObject,
+    isPromise,
+    isString,
+    isUndefined,
+    sanitizeFreeText,
+    type ErrorTracking,
+} from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
@@ -277,6 +286,14 @@ function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     }
 }
 
+function markExceptionAsCaptured(error: unknown): void {
+    try {
+        if (isObject(error)) {
+            ;(error as ErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
+        }
+    } catch {}
+}
+
 export class WebMCP {
     private _isPatched = false
 
@@ -433,7 +450,7 @@ export class WebMCP {
 
             if (failure) {
                 try {
-                    instance.captureException(failure.error, {
+                    const captured = instance.captureException(failure.error, {
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
                         $mcp_tool_name: tool.name,
@@ -441,6 +458,9 @@ export class WebMCP {
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
                     })
+                    if (captured) {
+                        markExceptionAsCaptured(failure.error)
+                    }
                 } catch {}
             }
         }

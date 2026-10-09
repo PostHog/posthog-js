@@ -1,5 +1,6 @@
 import { WebMCP } from '../extensions/webmcp'
-import { PostHog } from '../posthog-core'
+import { defaultConfig, PostHog } from '../posthog-core'
+import { PostHogExceptions } from '../posthog-exceptions'
 import { createMockPostHog } from './helpers/posthog-instance'
 
 type Tool = {
@@ -317,9 +318,10 @@ describe('WebMCP', () => {
     })
 
     it('preserves error results, synchronous throws, and promise rejections', async () => {
+        const captureException = vi.fn(() => ({ uuid: 'exception-uuid', event: '$exception', properties: {} }) as any)
         const posthog = createMockPostHog({
             config: { capture_webmcp: true } as any,
-            captureException: vi.fn(),
+            captureException,
         })
         const webMCP = new WebMCP(posthog)
         const errorResult = { isError: true, content: [{ type: 'text', text: 'result failure' }] }
@@ -403,6 +405,50 @@ describe('WebMCP', () => {
                 $mcp_error_message: 'async failure',
             }),
             expect.any(Object)
+        )
+        expect(
+            (thrown as Error & { __posthog_previously_captured_error?: boolean }).__posthog_previously_captured_error
+        ).toBe(true)
+        expect(
+            (rejected as Error & { __posthog_previously_captured_error?: boolean }).__posthog_previously_captured_error
+        ).toBe(true)
+    })
+
+    it('captures handled errors when the synthetic stack points to the PostHog SDK', () => {
+        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
+        const posthog = createMockPostHog({
+            config: { ...defaultConfig(), capture_webmcp: true },
+            capture,
+            get_property: vi.fn(),
+        })
+        posthog.exceptions = new PostHogExceptions(posthog)
+        vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
+            $exception_list: [
+                {
+                    type: 'Error',
+                    value: 'result failure',
+                    stacktrace: {
+                        type: 'raw',
+                        frames: [{ filename: 'https://us-assets.i.posthog.com/static/array.js' }],
+                    },
+                },
+            ],
+        })
+        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+
+        register(new WebMCP(posthog), {
+            name: 'error_result',
+            execute: () => ({ isError: true, content: [{ type: 'text', text: 'result failure' }] }),
+        })
+        registeredTool(0).execute()
+
+        expect(capture).toHaveBeenCalledWith(
+            '$exception',
+            expect.objectContaining({
+                $exception_source: 'mcp.tool_call',
+                $mcp_tool_name: 'error_result',
+            }),
+            expect.objectContaining({ _originatedFromCaptureException: true })
         )
     })
 

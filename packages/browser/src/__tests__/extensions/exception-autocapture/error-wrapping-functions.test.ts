@@ -60,6 +60,17 @@ describe('error wrapping functions', () => {
             expect(captureFn).toHaveBeenCalled()
         })
 
+        it('does not capture an error that WebMCP captured', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const error = Object.assign(new Error('boom'), { __posthog_previously_captured_error: true })
+            win.onerror = original
+            unwrap = wrapOnError(captureFn)
+
+            expect(win.onerror('message', 'source', 1, 1, error)).toBe(true)
+            expect(original).toHaveBeenCalledWith('message', 'source', 1, 1, error)
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
         it('still chains to the original handler when building exception properties throws', () => {
             const original = vi.fn().mockReturnValue(true)
             const error = errorWithThrowingMessage()
@@ -177,6 +188,18 @@ describe('error wrapping functions', () => {
             expect(original).toHaveBeenCalledWith(ev)
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('does not capture a rejection that WebMCP captured', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const error = Object.assign(new Error('boom'), { __posthog_previously_captured_error: true })
+            const ev = { reason: error } as any
+            win.onunhandledrejection = original
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            expect(win.onunhandledrejection(ev)).toBe(true)
+            expect(original).toHaveBeenCalledWith(ev)
+            expect(captureFn).not.toHaveBeenCalled()
         })
 
         it('still chains to the original handler when building exception properties throws', () => {
