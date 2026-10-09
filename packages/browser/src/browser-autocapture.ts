@@ -26,6 +26,7 @@ class BrowserAutocaptureConfigSource implements AutocaptureConfigSource {
         target.css_selector_ignorelist = autocapture?.css_selector_ignorelist
         target.element_attribute_ignorelist = autocapture?.element_attribute_ignorelist
         target.capture_copied_text = autocapture?.capture_copied_text
+        target.capture_value_css_selector_allowlist = autocapture?.capture_value_css_selector_allowlist
     }
 }
 
