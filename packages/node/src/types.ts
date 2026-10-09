@@ -18,6 +18,37 @@ import { ContextData, ContextOptions } from './extensions/context/types'
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
+/**
+ * Which areas metrics autocapture measures. Every area defaults to on.
+ */
+export type MetricsAutocaptureConfig = {
+  /** `http.server.request.duration` and `http.client.request.duration` for `http`, `https` and `fetch`. */
+  http?: boolean
+  /** `db.client.operation.duration` and connection metrics for pg, mysql, mysql2, mongodb, redis, ioredis and more. */
+  db?: boolean
+  /** Event loop, heap and garbage collection metrics. */
+  runtime?: boolean
+}
+
+/**
+ * Options for the posthog.metrics API, plus Node-only autocapture.
+ */
+export type NodeMetricsConfig = MetricsConfig & {
+  /**
+   * Capture HTTP, database and runtime metrics with no instrumentation code, using
+   * the official OpenTelemetry instrumentations. Needs the OpenTelemetry peer
+   * packages (`npm install @opentelemetry/api @opentelemetry/sdk-metrics
+   * @opentelemetry/sdk-trace-base @opentelemetry/resources
+   * @opentelemetry/exporter-metrics-otlp-proto @opentelemetry/auto-instrumentations-node`).
+   *
+   * Libraries loaded before the client is built are not instrumented. To measure
+   * everything, start the app with `node --import posthog-node/metrics/register`.
+   *
+   * @default false
+   */
+  autocapture?: boolean | MetricsAutocaptureConfig
+}
+
 export type IdentifyMessage = {
   distinctId: string
   properties?: Record<string | number, any>
@@ -190,7 +221,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * client.metrics.count('invoices.processed')
    * ```
    */
-  metrics?: MetricsConfig
+  metrics?: NodeMetricsConfig
   /**
    * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
    * off until this is set; supplying it is all that's needed to turn it on.
