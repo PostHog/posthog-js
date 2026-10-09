@@ -38,6 +38,7 @@ interface WebMCPMetadata {
 }
 
 interface WebMCPFailure {
+    error: unknown
     message: string
     type: string
 }
@@ -294,6 +295,7 @@ function getErrorType(error: unknown, errorResult: boolean): string {
 function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     const message = getErrorMessage(error, errorResult)
     return {
+        error: errorResult ? message : error,
         message,
         type: getErrorType(error, errorResult),
     }
@@ -451,8 +453,19 @@ export class WebMCP {
                     },
                     { timestamp }
                 )
-            } catch {
-                continue
+            } catch {}
+
+            if (failure) {
+                try {
+                    instance.captureException(failure.error, {
+                        $exception_source: 'mcp.tool_call',
+                        $mcp_interface: 'webmcp',
+                        $mcp_tool_name: tool.name,
+                        $mcp_resource_name: tool.name,
+                        $mcp_tool_description: tool.description,
+                        $mcp_server_name: location?.hostname,
+                    })
+                } catch {}
             }
         }
     }
