@@ -475,12 +475,12 @@ packages:
     version: 1.55.3
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-0AzUxRd8NWNoXYvVmgCs2LpI55dEtOOKaIPYEmpIhMmeiTg2AhcbfwL2+Ol/3fMzBhd4W/1vyP5BuQX7SJ1fBQ==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    resolution: {integrity: sha512-JR+TjFw1Bzacb2QhneP7v4Y5k7r4JCV5DbTERvUII9oLrsRqgovgkYROeIYlWc4XnwbcFBdb6UrFYpgWGhK8tg==, tarball: file:../../target/posthog-nextjs-config.tgz}
     version: 1.11.1
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       next: '>12.1.0'
-      posthog-js: '>=1.435.10'
+      posthog-js: '>=1.438.5'
 
   '@posthog/plugin-utils@file:../../target/posthog-plugin-utils.tgz':
     resolution: {integrity: sha512-Hm2ET9aDwaQqtKVXNqwsXeXFdr9hYO/uaoZPBopZhUbA5509We9WXMlnIeCI4IxRKzWK70SjalTBNeT/C8N01g==, tarball: file:../../target/posthog-plugin-utils.tgz}

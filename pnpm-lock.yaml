@@ -743,7 +743,7 @@ importers:
         specifier: workspace:^
         version: link:../webpack-plugin
       posthog-js:
-        specifier: '>=1.435.10'
+        specifier: '>=1.438.5'
         version: link:../browser
       semver:
         specifier: ^7.8.5
