@@ -181,30 +181,63 @@ describe('WebMCP', () => {
         expectNoMetadata(capturedProperties(posthog))
     })
 
-    it.each([true, { type: 'string' }])(
-        'preserves undeclared application inputs when additionalProperties is %o',
-        (additionalProperties) => {
-            const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
-            const execute = vi.fn(() => ({ content: [] }))
-            const inputSchema = { type: 'object', additionalProperties }
-            const input = { context: 'application-value', llm_model: 'application-model' }
-
-            register(new WebMCP(posthog), { name: 'permissive', inputSchema, execute })
-            registeredTool(0).execute(input)
-
-            expect(registeredTool(0).inputSchema).toBe(inputSchema)
-            expect(execute).toHaveBeenCalledWith(input)
-            expectNoMetadata(capturedProperties(posthog))
-        }
-    )
-
-    it('does not inject metadata into a complex schema', () => {
+    it.each([
+        ['additionalProperties omitted', { type: 'object' }],
+        ['additionalProperties false', { type: 'object', additionalProperties: false }],
+        ['annotations', { type: 'object', title: 'x', default: {}, examples: [{}], $comment: 'x', 'x-vendor': 1 }],
+        ['definitions', { type: 'object', $schema: 'https://json-schema.org/draft/2020-12/schema', $defs: {} }],
+        ['other required fields', { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }],
+    ])('injects metadata into a schema with %s', (_label, inputSchema) => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const execute = vi.fn(() => ({ content: [] }))
-        const inputSchema = { $ref: '#/$defs/input' }
+
+        register(new WebMCP(posthog), { name: 'open', inputSchema, execute })
+        registeredTool(0).execute({ context: 'Find documentation.', llm_model: 'gpt-5', query: 'flags' })
+
+        expect(registeredTool(0).inputSchema).toHaveProperty('properties.context')
+        expect(registeredTool(0).inputSchema).toHaveProperty('properties.llm_model')
+        expect(execute).toHaveBeenCalledWith({ query: 'flags' })
+        expect(capturedProperties(posthog)).toHaveProperty('$mcp_intent', 'Find documentation.')
+        expect(capturedProperties(posthog)).toHaveProperty('$mcp_llm_model', 'gpt-5')
+    })
+
+    it.each([
+        ['$ref', { $ref: '#/$defs/input' }],
+        ['oneOf', { oneOf: [{ type: 'object' }] }],
+        ['anyOf', { anyOf: [{ type: 'object' }] }],
+        ['allOf', { allOf: [{ type: 'object' }] }],
+        ['not', { type: 'object', not: { required: ['x'] } }],
+        ['if', { type: 'object', if: { required: ['x'] }, then: {} }],
+        ['propertyNames', { type: 'object', propertyNames: { pattern: '^[a-z]+$' } }],
+        ['maxProperties', { type: 'object', maxProperties: 1 }],
+        ['unevaluatedProperties', { type: 'object', unevaluatedProperties: false }],
+        ['patternProperties', { type: 'object', patternProperties: { '^x-': {} } }],
+        ['dependentSchemas', { type: 'object', dependentSchemas: { a: {} } }],
+        ['additionalProperties true', { type: 'object', additionalProperties: true }],
+        ['a schema for additionalProperties', { type: 'object', additionalProperties: { type: 'string' } }],
+        ['a non-object type', { type: 'array' }],
+        ['properties that is not an object', { type: 'object', properties: [] }],
+        ['required that is not an array', { type: 'object', required: 'query' }],
+    ])('does not inject metadata into a schema with %s', (_label, inputSchema) => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
+        const execute = vi.fn(() => ({ content: [] }))
         const input = { context: 'application-value', llm_model: 'application-model' }
 
-        register(new WebMCP(posthog), { name: 'complex', inputSchema, execute })
+        register(new WebMCP(posthog), { name: 'constrained', inputSchema, execute })
+        registeredTool(0).execute(input)
+
+        expect(registeredTool(0).inputSchema).toBe(inputSchema)
+        expect(execute).toHaveBeenCalledWith(input)
+        expectNoMetadata(capturedProperties(posthog))
+    })
+
+    it('treats a required context field as owned by the application', () => {
+        const posthog = createMockPostHog({ config: { capture_webmcp: { model: false } } as any })
+        const execute = vi.fn(() => ({ content: [] }))
+        const inputSchema = { type: 'object', required: ['context'] }
+        const input = { context: 'application-value' }
+
+        register(new WebMCP(posthog), { name: 'required_context', inputSchema, execute })
         registeredTool(0).execute(input)
 
         expect(registeredTool(0).inputSchema).toBe(inputSchema)
