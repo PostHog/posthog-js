@@ -1,12 +1,17 @@
 /**
- * Read the release id injected into the bundle by posthog-cli.
+ * Read the release id embedded at build time or injected into a processed bundle.
  *
- * The CLI prepends a small IIFE to each chunk that sets `globalThis._posthogReleaseId` to the
- * release row's id (a string, first write wins so the first loaded chunk pins the release for the
- * runtime). The SDK emits it on `$exception` events so the server resolves the release with a plain
- * foreign-key lookup. Returns `undefined` when nothing was injected or the value is malformed.
+ * Framework integrations can compile `POSTHOG_RELEASE_ID` into browser code before asset hashes
+ * are finalized. The global remains as a fallback for bundles processed by posthog-cli.
  */
 export function getInjectedReleaseId(): string | undefined {
+  if (typeof process !== 'undefined') {
+    const fromEnvironment = process.env.POSTHOG_RELEASE_ID?.trim()
+    if (fromEnvironment) {
+      return fromEnvironment
+    }
+  }
+
   const injected = (globalThis as any)._posthogReleaseId
   return typeof injected === 'string' && injected.length > 0 ? injected : undefined
 }
