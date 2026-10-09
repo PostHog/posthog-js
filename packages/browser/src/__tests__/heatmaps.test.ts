@@ -25,6 +25,7 @@ describe('heatmaps', () => {
         }) as unknown as MouseEvent
 
     beforeEach(async () => {
+        window.history.replaceState(null, '', '/')
         beforeSendMock = beforeSendMock.mockClear()
 
         posthog = await createPosthogInstance(uuidv7(), {
@@ -59,6 +60,8 @@ describe('heatmaps', () => {
     })
 
     afterEach(() => {
+        window.history.replaceState(null, '', '/')
+        vi.clearAllTimers()
         vi.restoreAllMocks()
     })
 
@@ -225,19 +228,18 @@ describe('heatmaps', () => {
                 target: testElementToolbar,
             })
         )
-        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+        expect(posthog.heatmaps?.getAndClearBuffer()).toEqual(undefined)
 
         const testElementClosest = document.createElement('div')
-        testElementClosest.closest = () => {
-            return {}
-        }
+        testElementToolbar.className = 'toolbar-global-fade-container'
+        testElementToolbar.appendChild(testElementClosest)
 
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
                 target: testElementClosest,
             })
         )
-        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+        expect(posthog.heatmaps?.getAndClearBuffer()).toEqual(undefined)
 
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
@@ -315,8 +317,8 @@ describe('heatmaps', () => {
             [false, false],
         ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
-            posthog.config.enable_heatmaps = localConfig
-            posthog.config.capture_heatmaps = undefined
+            posthog.config.enable_heatmaps = undefined
+            posthog.config.capture_heatmaps = localConfig
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -367,10 +369,17 @@ describe('heatmaps', () => {
     it('starts dead clicks autocapture with the correct config', () => {
         const heatmapsDeadClicksInstance = posthog.heatmaps['_deadClicksCapture']
         expect(heatmapsDeadClicksInstance.isEnabled(heatmapsDeadClicksInstance)).toBe(true)
-        // this is a little nasty but the binding to this makes the function not directly comparable
-        expect(JSON.stringify(heatmapsDeadClicksInstance.onCapture)).toEqual(
-            JSON.stringify(posthog.heatmaps['_onDeadClick'].bind(posthog.heatmaps))
+        heatmapsDeadClicksInstance.onCapture(
+            {
+                originalEvent: createMockMouseEvent(),
+                node: document.body,
+                timestamp: Date.now(),
+            },
+            {}
         )
+        expect(posthog.heatmaps.getAndClearBuffer()).toEqual({
+            [window.location.href]: [{ x: 10, y: 20, target_fixed: false, type: 'deadclick' }],
+        })
     })
 
     describe.each([
@@ -393,12 +402,7 @@ describe('heatmaps', () => {
                     custom_personal_data_properties: customPersonalDataProperties,
                 })
 
-                Object.defineProperty(window, 'location', {
-                    value: {
-                        href: 'http://localhost/?gclid=12345&other=true',
-                    },
-                    writable: true,
-                })
+                window.history.replaceState(null, '', '/?gclid=12345&other=true')
 
                 posthogWithMasking.config.capture_heatmaps = true
                 posthogWithMasking.heatmaps!.startIfEnabled()
@@ -409,7 +413,7 @@ describe('heatmaps', () => {
 
             it('masks properties accordingly', async () => {
                 const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
-                expect(heatmapData).toMatchObject({ [maskedUrl]: {} })
+                expect(heatmapData).toEqual({ [maskedUrl]: [{ x: 10, y: 20, target_fixed: false, type: 'click' }] })
             })
         }
     )

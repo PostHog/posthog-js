@@ -1,3 +1,5 @@
+import type { Mock as VitestMock } from 'vitest'
+import { mockLogger } from './helpers/mock-logger'
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -5,7 +7,7 @@ import { COOKIELESS_SENTINEL_VALUE, USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
-    let beforeSendMock: vi.Mock
+    let beforeSendMock: VitestMock
 
     beforeEach(async () => {
         beforeSendMock = vi.fn().mockImplementation((e) => e)
@@ -287,7 +289,9 @@ describe('reset()', () => {
         it('logs an invalid bootstrap session ID but still resets', () => {
             const initialDistinctId = instance.get_distinct_id()
 
+            mockLogger.error.mockClear()
             expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).not.toThrow()
+            expect(mockLogger.error).toHaveBeenCalledWith('Invalid sessionID in bootstrap', expect.any(Error))
 
             expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
             expect(instance.config.bootstrap).toEqual({})
@@ -300,7 +304,9 @@ describe('reset()', () => {
                 8
             )}-7000-8000-000000000000`
 
+            mockLogger.error.mockClear()
             expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).not.toThrow()
+            expect(mockLogger.error).toHaveBeenCalledWith('Bootstrap sessionID cannot be in the future')
 
             expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
             expect(instance.config.bootstrap).toEqual({})

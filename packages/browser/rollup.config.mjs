@@ -254,6 +254,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               'onFeatureFlags',
                               'getSurveys',
                               'getActiveMatchingSurveys',
+                              'onActiveMatchingSurveysChanged',
                               'captureException',
                               'posthog',
                               'version',

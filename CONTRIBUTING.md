@@ -331,9 +331,10 @@ Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) 
 
 Public API is hard to change once it ships, so agree on it before writing the implementation. Our [SDK guidelines](https://posthog.com/handbook/engineering/sdks/guidelines) explain how we design it.
 
-This section is for external contributors. PostHog Client Libraries maintainers agree on API shape in the PR itself, so they don't need a separate issue.
+This section is for external contributors. PostHog maintainers (members of the PostHog GitHub org) agree on API shape in the PR itself, so they don't need a separate issue.
 
 - **Before you start:** if you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case. Wait for a maintainer to agree on the API shape there before you implement it. Context is more useful to us than code at this stage.
+- **Already specified?** If a published [sdk-spec](https://github.com/PostHog/sdk-specs) defines the API, that's the agreement, so you don't need an issue.
 - **Already have a PR open?** Don't stop or rewrite it. Call out the public API change at the top of the PR description, and link or open an issue so we can discuss the shape there.
 - Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
 - If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
@@ -397,7 +398,6 @@ The following credential-bearing jobs are not covered by this setup:
 | Jobs                                                                                                      | Reason and follow-up                                                                                                                                                                                                   |
 | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `integration.yml` / `browsers`                                                                            | Runs in a job container. Harden-Runner does not support this layout on standard GitHub-hosted runners. Move enforcement to a supported host or runner image.                                                           |
-| `library-ci.yml` / `compat`                                                                               | Uses Depot and a job container. Verify provider-level enforcement or a supported agent deployment separately.                                                                                                          |
 | Feature Flags project board, changeset hygiene, release approval notification, and SDK compliance callers | Their steps live in pinned reusable workflows in `PostHog/.github` or `PostHog/posthog-sdk-test-harness`. Add monitoring there, then update the caller pins. A caller cannot prepend steps to a reusable workflow job. |
 
 The local S3 recovery reusable workflow is covered inside its credential-bearing jobs. macOS native builds currently have no declared service secrets or write permissions and remain outside this rollout. Hosted macOS/Windows monitoring does not provide the same blocking support as hosted Linux. See the [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner#environment-compatibility-matrix) and [limitations](https://github.com/step-security/harden-runner/blob/main/docs/limitations.md) before expanding coverage.

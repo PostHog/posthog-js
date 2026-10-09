@@ -74,6 +74,125 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 4. **`beforeSend`** — each fully-built PostHog payload (`{ event, distinct_id, properties }`) is passed through `options.beforeSend(event)` (sync or async) right before dispatch — so it runs **once per emitted event**, including the `$exception` sibling. Returning the (possibly mutated) payload sends it; returning a nullish value drops it; a throw drops that event (and is logged). This is the seam for customer redaction or property tweaks.
 5. **Dispatch** — each surviving event is handed to the user's `posthog-node` client via `posthog.capture()`. Batching, retries, and flushing are owned by that client. The host calls `posthog.shutdown()` to drain — the SDK installs no process-signal handlers and owns no client lifecycle.
 
+### Tool input field names
+
+Automatic tool-call events include `$mcp_input_keys` on success and failure.
+The SDK reads the original arguments before validation can remove unknown fields.
+It records up to 20 top-level field names, sorted, without their values.
+By default, only names declared by the server's input schema remain visible.
+Unknown names and names longer than 64 characters are replaced by one `[redacted]` entry, the same marker the SDK uses for other hidden data.
+Declared names come first, so `[redacted]` appears only when the 20-name limit leaves space.
+
+The `shouldRecordInputKey(key, { declared })` option replaces the default rule, for automatic capture and as the helper's third argument.
+Return `true` to record a name; any other result, or a throw, records `[redacted]`.
+The 64-character limit, the 20-name limit, and declared-names-first ordering still apply.
+Use it when your server can accept that a caller-chosen name reaches analytics, for example to see misspelled parameter names:
+
+```ts
+instrument(server, posthog, {
+  shouldRecordInputKey: (key, { declared }) =>
+    declared || /^[A-Za-z0-9_.-]+$/.test(key),
+});
+```
+
+SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
+Non-object arguments do not produce this property.
+
+High-level servers use the registered tool's schema.
+Low-level servers use schemas from prior `tools/list` responses on the same server instance.
+Before a listing, or when a schema cannot be inspected, every name is hidden behind `[redacted]` by default.
+Alias names from `resolveInputAliases` remain visible because the server owns and declares them.
+The helper supports top-level JSON Schema properties, Zod raw shapes, and Zod object schemas, including objects wrapped by refinements, transforms, preprocessors, pipes, and optional, nullable, default, catch, or readonly wrappers.
+A pipe reports the names of its input schema.
+It does not resolve JSON Schema references or inspect fields inside unions.
+
+Servers with declared input aliases can provide them to automatic instrumentation.
+For example, this server accepts `city` or `place` instead of `location` for one tool.
+It also accepts `orderId` or `id` instead of `order_id` for another tool:
+
+```ts
+import { instrument, type InputAliasMap } from "@posthog/mcp";
+
+const inputAliasesByTool: Record<string, InputAliasMap> = {
+  "weather-current": {
+    location: ["city", "place"],
+  },
+  "order-get": {
+    order_id: ["orderId", "id"],
+  },
+};
+
+instrument(server, posthog, {
+  resolveInputAliases: (toolName) => inputAliasesByTool[toolName],
+});
+```
+
+The resolver returns canonical name to aliases in the order the server tries them.
+The server must already accept and normalize these aliases.
+The SDK uses the map only for telemetry and does not change the tool arguments.
+
+For this tool call:
+
+```json
+{
+  "name": "weather-current",
+  "arguments": {
+    "city": "Berlin"
+  }
+}
+```
+
+The SDK adds these properties to the `$mcp_tool_call` event:
+
+```json
+{
+  "$mcp_input_keys": ["city"],
+  "$mcp_input_aliases_used": ["city:location"]
+}
+```
+
+Custom dispatchers use the same helper through the existing `properties` argument:
+
+```ts
+import { getToolInputProperties, PostHogMCP } from "@posthog/mcp";
+
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN);
+await posthog.register({ $mcp_server_build: "example-build" });
+
+const properties = getToolInputProperties(
+  rawArguments,
+  originalTool.inputSchema,
+);
+posthog.captureToolCall({ toolName, isError: false, properties });
+```
+
+Compute these properties before argument normalization, and include them in both success and error events.
+Pass a schema owned by the server, never one supplied by the caller.
+Custom command formats must extract the actual tool arguments and schema before calling the helper.
+A server that accepts alternative field names passes its own alias map as `inputAliases`, canonical name to aliases in the order the server tries them:
+
+```ts
+const properties = getToolInputProperties(
+  rawArguments,
+  originalTool.inputSchema,
+  {
+    inputAliases: { id: ["experimentId", "experiment_id"] },
+  },
+);
+// { experimentId: 30 } → $mcp_input_keys: ['experimentId'], $mcp_input_aliases_used: ['experimentId:id']
+```
+
+Alias names count as declared, so they stay visible in `$mcp_input_keys`.
+`$mcp_input_aliases_used` records `alias:canonical` for each canonical name the call did not send, using the first of its aliases that the call did send.
+It is omitted when no alias was needed, and it holds at most 20 entries.
+Do not report alias use through server-specific `$mcp_*` properties.
+The SDK does not normalize arguments; the map only describes what the server's own normalizer does.
+
+The helper adds no request values to the event.
+Existing parameter and response capture remains unchanged.
+Use `beforeSend` to remove `$mcp_input_keys` when needed (`before_send` on the underlying PostHog client).
+No session store or additional network request is required.
+
 ## 4. Session & identity
 
 ### Shared event properties
@@ -82,7 +201,10 @@ Use the underlying PostHog client's `register()` method for values that apply to
 `PostHogMCP` inherits this method from `posthog-node`, and `instrument()` sends events through the supplied client.
 
 ```ts
-await posthog.register({ $mcp_server_build: 'example-build', environment: 'production' })
+await posthog.register({
+  $mcp_server_build: "example-build",
+  environment: "production",
+});
 ```
 
 Register these values during startup, before the server accepts requests.
@@ -110,6 +232,7 @@ Keep user and request data on individual events, because a shared client can ser
   - **JSON-mode constraint**: the auto-mint reaches the wire only with `enableJsonResponse: true` (headers are built after handlers run). SSE flushes headers first, so SSE servers set the header themselves with the exported `encodeSessionId`; the SDK still decodes it. Stateless mode also needs the SDK's usual fresh-transport-per-request pattern.
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
 - **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
+- **Custom dispatchers**: `PostHogMCP` uses the same conversation-first rule. `prepareToolCall` accepts an optional carried session, validates or mints the conversation handle, and derives the session id. `prepareToolResult` adds a newly minted handle to compatible results. If no result channel can deliver a new handle, capture keeps the derived session id but omits `$mcp_conversation_id`.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
 - **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:
@@ -128,7 +251,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | PostHog event             | When                                                                                        | Notable extras                                                                                                                                                                                                                                                                  |
 | ------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$mcp_tool_call`          | Every tool invocation                                                                       | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_tool_category`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`, `$mcp_llm_model` / `$mcp_llm_model_source`                                           |
-| `$mcp_tools_list`         | Client lists tools                                                                          | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?"                                                                                                                             |
+| `$mcp_tools_list`         | Client lists tools                                                                          | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?". With `instrument()`, `$mcp_response` keeps only the envelope (`nextCursor`, `ttlMs`, …), never the tool descriptors        |
 | `$mcp_initialize`         | Client/server handshake                                                                     | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`, `$mcp_protocol_version` (negotiated MCP spec version — for tracking spec-revision adoption)                                                                                               |
 | `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool                                               | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                                                                                                                     |
 | `$mcp_feedback`           | Agent calls the `send_feedback` virtual tool                                                | A feedback report, **not** a tool invocation. `$mcp_feedback_type` (`missing_capability` \| `issue` \| `praise` \| `other`), `$mcp_feedback_summary` and the other `$mcp_feedback_*` fields, declared extras as `$mcp_feedback_<key>`, and the summary/details as `$mcp_intent` |
@@ -356,20 +479,21 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
    ```ts
    intentFallback: (request) => {
-     const tool = request.params?.name
-     const args = request.params?.arguments ?? {}
-     if (tool === 'search_events') return `Searching events for "${args.query}"`
-     return tool ? `Invoking ${tool}` : null
-   }
+     const tool = request.params?.name;
+     const args = request.params?.arguments ?? {};
+     if (tool === "search_events")
+       return `Searching events for "${args.query}"`;
+     return tool ? `Invoking ${tool}` : null;
+   };
    ```
 
 2. **Transport metadata** (when `extra` carries user-agent or session info worth surfacing):
 
    ```ts
    intentFallback: (request, extra) => {
-     const ua = extra?.requestInfo?.headers?.['user-agent']
-     return `${ua ?? 'unknown client'} invoked ${request.params?.name}`
-   }
+     const ua = extra?.requestInfo?.headers?.["user-agent"];
+     return `${ua ?? "unknown client"} invoked ${request.params?.name}`;
+   };
    ```
 
 3. **LLM-derived** (async, expensive — push back unless the value is high). Sits on the hot path of every uncontextualized tool call.
@@ -377,7 +501,8 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 ### Known sharp edges
 
 - `reportMissing` and `collectFeedback` determine ownership from the server's raw `tools/list` handler without relying on a previous client request, so stateless calls can reach the virtual tools across instances. If a real tool already advertises the configured name, the SDK warns, does not inject a duplicate descriptor, and delegates calls to the real handler. If the raw listing is unavailable or fails, calls fail open to the server handler rather than risk intercepting a real tool.
-- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback.
+- A low-level `Server` learns reserved-argument ownership while serving `tools/list`, so an instance that never served one strips nothing (ADR-0011). `resolveOriginalTool` lets the host return the tool's input schema as its listing advertises it on `tools/call`; ownership follows the same rule as a served listing, a listing already served on the instance wins, and `$mcp_input_keys` follow the returned schema. A thrown error or `undefined` falls back to unresolved ownership.
+- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema on every path, including a Zod schema returned by `resolveOriginalTool`, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback. A low-level host that advertises the declared fields returns its listed JSON Schema from the resolver instead.
 - The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - The `send_feedback` virtual tool likewise emits its own `$mcp_feedback` event, **not** a `$mcp_tool_call`. All feedback types land in that one event; `$mcp_feedback_type = "missing_capability"` is a property filter, not a separate event, so dashboards reading `$mcp_missing_capability` see only `get_more_tools` reports (ADR-0012).
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.

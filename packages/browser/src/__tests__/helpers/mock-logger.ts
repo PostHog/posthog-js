@@ -1,7 +1,7 @@
-import type { Logger } from '@posthog/core'
+import type { PosthogJsLogger } from '@posthog/browser-common/utils/logger'
 
 vi.mock('@posthog/browser-common/utils/logger', () => {
-    const mockLogger: Logger = {
+    const mockLogger: PosthogJsLogger = {
         _log: vi.fn(),
         debug: vi.fn(),
         critical: vi.fn(),
@@ -9,9 +9,7 @@ vi.mock('@posthog/browser-common/utils/logger', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
-        createLogger: () => {
-            return mockLogger
-        },
+        createLogger: vi.fn(() => mockLogger),
     }
     return {
         logger: mockLogger,
@@ -19,15 +17,14 @@ vi.mock('@posthog/browser-common/utils/logger', () => {
     }
 })
 
-import { isFunction } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 
 export const clearLoggerMocks = () => {
-    Object.values(logger).forEach((mock: any) => {
-        if (isFunction(mock.mockClear)) {
+    Object.values(logger).forEach((mock) => {
+        if (vi.isMockFunction(mock)) {
             mock.mockClear()
         }
     })
 }
 
-export const mockLogger: vi.Mocked<Logger> = logger as any
+export const mockLogger = vi.mocked(logger)

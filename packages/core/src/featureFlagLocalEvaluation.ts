@@ -532,9 +532,52 @@ export async function hashSHA1(text: string): Promise<string> {
     .join('')
 }
 
-export async function getFeatureFlagHash(key: string, bucketingValue: string, salt: string = ''): Promise<number> {
-  const hashString = await hashSHA1(`${key}.${bucketingValue}${salt}`)
+export async function getFeatureFlagHash(
+  key: string,
+  bucketingValue: string,
+  salt: string = '',
+  separator: string = '.'
+): Promise<number> {
+  const hashString = await hashSHA1(`${key}${separator}${bucketingValue}${salt}`)
   return parseInt(hashString.slice(0, 15), 16) / LONG_SCALE
+}
+
+/**
+ * The `holdout-<id>` variant this bucketing value is held out into, or undefined.
+ *
+ * The separator is the whole point: the server hashes `holdout-<value>`, while flag rollout
+ * hashing joins with a dot. Taking the default separator here would still look uniform and
+ * deterministic while holding out a different set of people than the server does.
+ */
+export async function getHoldoutVariant(
+  holdout: { id: number; exclusion_percentage: number } | null | undefined,
+  bucketingValue: string
+): Promise<string | undefined> {
+  // Loose null checks on purpose: the payload can carry an explicit null for either field, and
+  // a null id would otherwise reach the template below and produce the variant `holdout-null`.
+  if (holdout == null || holdout.id == null || holdout.exclusion_percentage == null) {
+    return undefined
+  }
+
+  // A non-numeric percentage would clamp to NaN, and `hash > NaN` is false for every hash, which
+  // holds out everyone. The server deserializes this field as a float, so it rejects the value
+  // instead; treat it as no holdout rather than the most damaging reading.
+  const rawPercentage = Number(holdout.exclusion_percentage)
+  if (!Number.isFinite(rawPercentage)) {
+    return undefined
+  }
+
+  // Clamped because the server clamps rather than rejects. The 100 short-circuit mirrors the
+  // server's is_in_rollout and skips a digest that cannot change the answer.
+  const percentage = Math.min(Math.max(rawPercentage, 0), 100)
+  if (percentage !== 100) {
+    const hash = await getFeatureFlagHash('holdout', bucketingValue, '', '-')
+    if (hash > percentage / 100) {
+      return undefined
+    }
+  }
+
+  return `holdout-${holdout.id}`
 }
 
 export function getFeatureFlagVariantLookupTable(

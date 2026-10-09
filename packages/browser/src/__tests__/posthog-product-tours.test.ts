@@ -1,5 +1,6 @@
+import type { Mock as VitestMock } from 'vitest'
 vi.mock('@posthog/browser-common/utils/logger', () => {
-    const childLogger: Record<string, vi.Mock> = {
+    const childLogger: Record<string, VitestMock> = {
         debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),

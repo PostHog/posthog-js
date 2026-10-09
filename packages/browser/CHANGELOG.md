@@ -1,5 +1,226 @@
 # posthog-js
 
+## 1.438.4
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+- Updated dependencies [[`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e)]:
+  - @posthog/browser-common@0.9.3
+
+## 1.438.3
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+- Updated dependencies [[`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8)]:
+  - @posthog/types@1.415.2
+
+## 1.438.2
+
+### Patch Changes
+
+- [#4988](https://github.com/PostHog/posthog-js/pull/4988) [`22dfa4a`](https://github.com/PostHog/posthog-js/commit/22dfa4a4d8c678053c466c5e96f5b46f5743f35c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share feature flag functionality across browser SDKs while preserving existing behavior.
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
+## 1.438.1
+
+### Patch Changes
+
+- [#5004](https://github.com/PostHog/posthog-js/pull/5004) [`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e) Thanks [@posthog](https://github.com/apps/posthog)! - Stop carousel and pager arrow controls from capturing false `$rageclick` events. The rageclick content ignorelist, active from the `2025-11-30` config defaults, now also covers arrow glyphs (`→`, `←`, `›`, `‹`, `»`, `«`, `▶`, `◀`, `❯`, `❮`). The built-in word keywords match whole words wherever they appear, including inside a list you pass yourself, so "Preview" keeps capturing; other word keywords you add still match as substrings. Keywords now match against the clicked control (the nearest button, link, ARIA control or `cursor: pointer` wrapper), reading its label from the control's whole subtree instead of every ancestor up to the body, so a region labelled "Featured carousel" no longer suppresses the buttons inside it. A control's own text or `aria-label` wins over an icon's `aria-label` inside it, so clicking the icon and clicking the text agree. Set `rageclick: { content_ignorelist: false }` to keep capturing these events.
+  (2026-10-06)
+- Updated dependencies [[`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e)]:
+  - @posthog/browser-common@0.9.2
+  - @posthog/types@1.415.1
+
+## 1.438.0
+
+### Minor Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/types@1.415.0
+  - @posthog/core@1.57.0
+
+## 1.437.0
+
+### Minor Changes
+
+- [#5190](https://github.com/PostHog/posthog-js/pull/5190) [`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d) Thanks [@gesh](https://github.com/gesh)! - Add opt-in WebMCP tool call capture for MCP Analytics.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d)]:
+  - @posthog/types@1.414.0
+
+## 1.436.1
+
+### Patch Changes
+
+- [#5203](https://github.com/PostHog/posthog-js/pull/5203) [`633f5b2`](https://github.com/PostHog/posthog-js/commit/633f5b2249c7e1fe73b448912c937c9857dfd789) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore batching for events carrying pending Meta `$fbc` or `$fbp` identifiers to reduce races with preceding `identify()` calls.
+  (2026-10-05)
+
+## 1.436.0
+
+### Minor Changes
+
+- [#5083](https://github.com/PostHog/posthog-js/pull/5083) [`d576bec`](https://github.com/PostHog/posthog-js/commit/d576bec7660dd6dd7ec11089fc40c5974c12cebb) Thanks [@61465](https://github.com/61465)! - Opt-in WebView bot heuristic for #2921.
+  - `posthog-js/customizations` exports a new `isLikelyWebViewBot(ua)` helper that flags the UA pattern described in #2921 (a `Chrome/...` token without the usual `AppleWebKit/*` + `Safari/*` co-markers that real Chrome always sends). Wire it into `before_send` to tag or drop the matching events — see `isLikelyWebViewBot` JSDoc for a usage example. Default SDK behaviour is unchanged; the helper is tree-shaken out unless you import it.
+  - `@posthog/core` keeps `isBlockedUA` and `DEFAULT_BLOCKED_UA_STRS` byte-for-byte compatible, and gains session-level memoisation of `isBlockedUA` results keyed on `(ua, customBlockedUserAgents)`, so repeat calls within the same session are O(1). (2026-10-05)
+
+### Patch Changes
+
+- Updated dependencies [[`d576bec`](https://github.com/PostHog/posthog-js/commit/d576bec7660dd6dd7ec11089fc40c5974c12cebb)]:
+  - @posthog/core@1.56.0
+
+## 1.435.9
+
+### Patch Changes
+
+- [#5150](https://github.com/PostHog/posthog-js/pull/5150) [`abe2924`](https://github.com/PostHog/posthog-js/commit/abe2924c96a1ddb1d32362dc97bdd9ce121672ce) Thanks [@DeepanshuPal](https://github.com/DeepanshuPal)! - Stop a SecurityError escaping the recorder when an iframe becomes cross-origin while shadow DOM observation starts.
+  (2026-10-05)
+
+## 1.435.8
+
+### Patch Changes
+
+- [#5152](https://github.com/PostHog/posthog-js/pull/5152) [`2bdc8eb`](https://github.com/PostHog/posthog-js/commit/2bdc8eb28bdc2131dc8c7271d7628b247404143c) Thanks [@rafaeelaudibert](https://github.com/rafaeelaudibert)! - Use the new PostHog logo in the survey footer branding
+  (2026-10-02)
+
+## 1.435.7
+
+### Patch Changes
+
+- [#5188](https://github.com/PostHog/posthog-js/pull/5188) [`8a005ca`](https://github.com/PostHog/posthog-js/commit/8a005ca4938c28b3a015fb71083024023aaf4164) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve shared identity while consent is pending and clear it after shared rejection in cookieless mode.
+  (2026-10-02)
+
+## 1.435.6
+
+### Patch Changes
+
+- [#5046](https://github.com/PostHog/posthog-js/pull/5046) [`c360da1`](https://github.com/PostHog/posthog-js/commit/c360da1e93ba7fc04eea7cc4f96dd9782dd931a7) Thanks [@luke-belton](https://github.com/luke-belton)! - Capture the OpenAI Ads click identifier (`oppref`) as a campaign parameter, so it is set on events and as `$initial_oppref` like every other ad click ID.
+  (2026-10-01)
+
+- [#5175](https://github.com/PostHog/posthog-js/pull/5175) [`c21f14d`](https://github.com/PostHog/posthog-js/commit/c21f14da8332d0d23ed5620bbf5249927accab83) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix cross-subdomain identity continuity when opting in after cookie consent.
+  (2026-10-01)
+- Updated dependencies [[`c360da1`](https://github.com/PostHog/posthog-js/commit/c360da1e93ba7fc04eea7cc4f96dd9782dd931a7)]:
+  - @posthog/browser-common@0.9.1
+  - @posthog/core@1.55.3
+
+## 1.435.5
+
+### Patch Changes
+
+- [#5167](https://github.com/PostHog/posthog-js/pull/5167) [`59b93a3`](https://github.com/PostHog/posthog-js/commit/59b93a30a05f2cc181c0868b7158b4c153f1dc3f) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Preserve session attribution and registered properties across initialization and configuration updates when persistence writes are debounced.
+  (2026-09-30)
+
+## 1.435.4
+
+### Patch Changes
+
+- [#5158](https://github.com/PostHog/posthog-js/pull/5158) [`5c92e83`](https://github.com/PostHog/posthog-js/commit/5c92e83619a18c32ccf374125623599cbc04a517) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `DataCloneError` when session replay records network timing inside a cross-origin iframe.
+  (2026-09-30)
+
+## 1.435.3
+
+### Patch Changes
+
+- [#4976](https://github.com/PostHog/posthog-js/pull/4976) [`47db7ce`](https://github.com/PostHog/posthog-js/commit/47db7ce9005dc4d11647ab3aa217f0e38bb38f74) Thanks [@posthog](https://github.com/apps/posthog)! - Start session recording at `DOMContentLoaded`, so a page whose `load` event is late or never fires still records, and report `$sdk_debug_rrweb_attached` from rrweb's own recording state
+  (2026-09-30)
+
+## 1.435.2
+
+### Patch Changes
+
+- [#5144](https://github.com/PostHog/posthog-js/pull/5144) [`bd66cee`](https://github.com/PostHog/posthog-js/commit/bd66ceef9ed5308f63e64a3f3058ae6e2298dbdf) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce replay debug properties on captured events while preserving recording status and capture diagnostics. Report cumulative mutation-drop counts and dropped bytes on `$snapshot` events only when greater than zero.
+  (2026-09-30)
+
+## 1.435.1
+
+### Patch Changes
+
+- [#5120](https://github.com/PostHog/posthog-js/pull/5120) [`5929eab`](https://github.com/PostHog/posthog-js/commit/5929eab802d910c15edd1fa322fb7c29614151af) Thanks [@breken-ai](https://github.com/breken-ai)! - PostHogFeature without `match` shows the fallback when the flag evaluates to false.
+  (2026-09-29)
+
+## 1.435.0
+
+### Minor Changes
+
+- [#4794](https://github.com/PostHog/posthog-js/pull/4794) [`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Add `onActiveMatchingSurveysChanged` to subscribe to survey eligibility updates with safe unsubscribe and recoverable load-error reporting.
+  (2026-09-29)
+
+### Patch Changes
+
+- Updated dependencies [[`e89d224`](https://github.com/PostHog/posthog-js/commit/e89d224c07b296e6a16ff9bdb0d9bce5876fc202)]:
+  - @posthog/types@1.413.0
+
+## 1.434.18
+
+### Patch Changes
+
+- [#5125](https://github.com/PostHog/posthog-js/pull/5125) [`69a55c0`](https://github.com/PostHog/posthog-js/commit/69a55c06c85f83e7b6008446530a1b728812c427) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent analytics persistence writes during initialization when persistence is disabled or opted out.
+  (2026-09-29)
+
+- [#5133](https://github.com/PostHog/posthog-js/pull/5133) [`fbf3990`](https://github.com/PostHog/posthog-js/commit/fbf3990e2e0b4d072cab83477ec8bcca20cd8135) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate replay network masking callback errors so unrelated network records continue to be captured.
+  (2026-09-29)
+
+- [#5126](https://github.com/PostHog/posthog-js/pull/5126) [`5775575`](https://github.com/PostHog/posthog-js/commit/577557503c53f99ccd15e31ec6463069eaaa1cff) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve equals signs in survey URL prefill values and ignore malformed URL parameters without blocking surveys.
+  (2026-09-29)
+
+## 1.434.17
+
+### Patch Changes
+
+- [#5063](https://github.com/PostHog/posthog-js/pull/5063) [`799e84c`](https://github.com/PostHog/posthog-js/commit/799e84ccd9fc830db733033093d0382aec023025) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): keep a held recording epoch's buffered data when it hits the size cap
+  (2026-09-28)
+
+- [#5118](https://github.com/PostHog/posthog-js/pull/5118) [`3212630`](https://github.com/PostHog/posthog-js/commit/3212630d9fea54dad35c31b9eba8c66175f517ad) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): keep CSS-in-JS styles after a large DOM change in the page head
+  (2026-09-28)
+
+## 1.434.16
+
+### Patch Changes
+
+- [#5127](https://github.com/PostHog/posthog-js/pull/5127) [`d48c783`](https://github.com/PostHog/posthog-js/commit/d48c7838fde1fb5fc7d3c1b96b8c02c003c3db76) Thanks [@marandaneto](https://github.com/marandaneto)! - Honor the modern replay network masking callback when both modern and deprecated hooks are configured.
+  (2026-09-28)
+
+## 1.434.15
+
+### Patch Changes
+
+- [#5115](https://github.com/PostHog/posthog-js/pull/5115) [`8531e40`](https://github.com/PostHog/posthog-js/commit/8531e4029d04f4f1ddf2ca02b129534c3ddd9dae) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix SPA `$pageview` events from `pushState`/`replaceState` navigations carrying the previous page's `title`
+  (2026-09-26)
+
+## 1.434.14
+
+### Patch Changes
+
+- [#5097](https://github.com/PostHog/posthog-js/pull/5097) [`ae954ab`](https://github.com/PostHog/posthog-js/commit/ae954ab07cd3d1a872c2634c0fe104552eff1d09) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `useThumbSurvey` from `@posthog/react/surveys` and `posthog-js/react/surveys` ignoring the client passed to `PostHogProvider`, which left it capturing no survey events.
+  (2026-09-25)
+
+## 1.434.13
+
+### Patch Changes
+
+- [#5098](https://github.com/PostHog/posthog-js/pull/5098) [`a7250f0`](https://github.com/PostHog/posthog-js/commit/a7250f07f10fa0d52860f3c21351051e3c2a0b63) Thanks [@Piccirello](https://github.com/Piccirello)! - Replay loads a recorded font under the replay iframe's content security policy, not the embedding page's.
+  (2026-09-24)
+
+## 1.434.12
+
+### Patch Changes
+
+- [#5073](https://github.com/PostHog/posthog-js/pull/5073) [`60bd968`](https://github.com/PostHog/posthog-js/commit/60bd9685c199c0cd0b9134682053fffac41edb1f) Thanks [@ksvat](https://github.com/ksvat)! - The replayer no longer freezes the tab on a mutation that adds tens of thousands of nodes at once. It now applies a batch of 1,000 or more adds against a detached subtree, so the document updates style and layout once instead of per insert. A recorded batch of 25,746 style elements went from 92 seconds of blocked main thread to 1.5 seconds.
+  (2026-09-23)
+
 ## 1.434.11
 
 ### Patch Changes

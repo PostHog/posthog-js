@@ -1,5 +1,6 @@
+import type { Mock as VitestMock } from 'vitest'
 import { WebExperiments } from '../web-experiments'
-import { PostHog } from '../posthog-core'
+import { defaultConfig, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { WebExperiment } from '../web-experiments-types'
 import { RequestRouter } from '../utils/request-router'
@@ -105,10 +106,11 @@ describe('Web Experimentation', () => {
         },
     } as unknown as WebExperiment
 
-    const simulateFeatureFlags: vi.Mock = vi.fn()
+    const simulateFeatureFlags: VitestMock = vi.fn()
 
     beforeEach(() => {
         let cachedFlags = {}
+        experimentsResponse = { experiments: [] }
         persistence = createMockPersistence({ props: {}, register: vi.fn() })
         posthog = makePostHog({
             config: createMockConfig({
@@ -116,7 +118,6 @@ describe('Web Experimentation', () => {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
-                region: 'us-east-1',
             }),
             persistence: persistence,
             get_property: vi.fn(),
@@ -140,12 +141,17 @@ describe('Web Experimentation', () => {
         webExperiment = new WebExperiments(posthog)
     })
 
+    afterEach(() => {
+        vi.restoreAllMocks()
+        document.body.innerHTML = ''
+        window.history.replaceState({}, '', '/')
+    })
+
     function createTestDocument() {
         const elParent = document.createElement('span')
+        elParent.id = 'set-user-properties'
         elParent.innerHTML = 'original'
-        document.querySelectorAll = function () {
-            return [elParent] as unknown as NodeListOf<Element>
-        }
+        document.body.appendChild(elParent)
         return elParent
     }
 
@@ -156,9 +162,7 @@ describe('Web Experimentation', () => {
         const webExperiment = new WebExperiments(posthog)
         const elParent = createTestDocument()
 
-        WebExperiments.getWindowLocation = () => {
-            return new URL(testLocation) as unknown as Location
-        }
+        vi.spyOn(WebExperiments, 'getWindowLocation').mockReturnValue(new URL(testLocation) as unknown as Location)
 
         webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
         expect(posthog._send_request).toHaveBeenLastCalledWith(
@@ -169,7 +173,6 @@ describe('Web Experimentation', () => {
 
     function assertElementChanged(variant: string, expectedProperty: string, value: string) {
         const elParent = createTestDocument()
-        webExperiment = new WebExperiments(posthog)
 
         simulateFeatureFlags({
             'signup-button-test': variant,
@@ -188,10 +191,9 @@ describe('Web Experimentation', () => {
     describe('bot detection', () => {
         it('does not apply web experiment if viewer is a bot', () => {
             experimentsResponse = {
-                experiments: [buttonWebExperimentWithUrlConditions],
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-            const webExperiment = new WebExperiments(posthog)
-            webExperiment._is_bot = () => true
+            const isBot = vi.spyOn(webExperiment, '_is_bot').mockReturnValue(true)
             const elParent = createTestDocument()
 
             simulateFeatureFlags({
@@ -199,6 +201,11 @@ describe('Web Experimentation', () => {
             })
 
             expect(elParent.innerHTML).toEqual('original')
+            expect(posthog._send_request).not.toHaveBeenCalled()
+
+            isBot.mockReturnValue(false)
+            simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+            expect(elParent.innerHTML).toEqual('Sign me up')
         })
     })
 
@@ -225,12 +232,6 @@ describe('Web Experimentation', () => {
         })
 
         describe('get_current_url override', () => {
-            const originalGetWindowLocation = WebExperiments.getWindowLocation
-            afterEach(() => {
-                WebExperiments.getWindowLocation = originalGetWindowLocation
-                posthog.config.get_current_url = undefined
-            })
-
             it('matches against the overridden URL, not the raw browser URL', () => {
                 experimentsResponse = { experiments: [buttonWebExperimentWithUrlConditions] }
                 const webExperiment = new WebExperiments(posthog)
@@ -238,7 +239,9 @@ describe('Web Experimentation', () => {
 
                 // raw browser URL would not match the exact condition
 
-                WebExperiments.getWindowLocation = () => new URL('https://generated-host.skin/x') as unknown as Location
+                vi.spyOn(WebExperiments, 'getWindowLocation').mockReturnValue(
+                    new URL('https://generated-host.skin/x') as unknown as Location
+                )
                 posthog.config.get_current_url = () => 'https://example.com/Signup'
 
                 webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
@@ -250,7 +253,9 @@ describe('Web Experimentation', () => {
                 const webExperiment = new WebExperiments(posthog)
                 const elParent = createTestDocument()
 
-                WebExperiments.getWindowLocation = () => new URL('https://example.com/Signup') as unknown as Location
+                vi.spyOn(WebExperiments, 'getWindowLocation').mockReturnValue(
+                    new URL('https://example.com/Signup') as unknown as Location
+                )
                 posthog.config.get_current_url = () => 'https://generated-host.skin/x'
 
                 webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
@@ -260,48 +265,68 @@ describe('Web Experimentation', () => {
     })
 
     describe('utm match conditions', () => {
-        it('can disqualify on utm terms', () => {
-            const buttonWebExperimentWithUTMConditions = buttonWebExperimentWithUrlConditions
+        const utm = {
+            utm_source: 'newsletter',
+            utm_campaign: 'marketing',
+            utm_medium: 'desktop',
+            utm_term: 'signup',
+        }
 
-            // Attach UTM conditions to the 'variant-sign-up' variant
-            buttonWebExperimentWithUTMConditions.variants['variant-sign-up'].conditions = {
-                utm: {
-                    utm_campaign: 'marketing',
-                    utm_medium: 'desktop',
-                },
+        beforeEach(() => {
+            experimentsResponse = {
+                experiments: [
+                    {
+                        ...buttonWebExperimentWithUrlConditions,
+                        variants: {
+                            'variant-sign-up': {
+                                ...buttonWebExperimentWithUrlConditions.variants['variant-sign-up'],
+                                conditions: { utm },
+                            },
+                        },
+                    },
+                ],
             }
+        })
 
-            const testLocation = 'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile'
-            const expectedInnerHTML = 'original'
-            testUrlMatch(testLocation, expectedInnerHTML)
+        it.each(['utm_source', 'utm_campaign', 'utm_medium', 'utm_term'])(
+            'disqualifies when %s does not match',
+            (key) => {
+                const elParent = createTestDocument()
+                const params = new URLSearchParams({ ...utm, [key]: 'mismatch' })
+                window.history.replaceState({}, '', `/?${params}`)
+
+                webExperiment.getWebExperimentsAndEvaluateDisplayLogic()
+
+                expect(elParent.innerHTML).toEqual('original')
+            }
+        )
+
+        it('applies the variant when all UTM conditions match', () => {
+            const elParent = createTestDocument()
+            window.history.replaceState({}, '', `/?${new URLSearchParams(utm)}`)
+
+            webExperiment.getWebExperimentsAndEvaluateDisplayLogic()
+
+            expect(elParent.innerHTML).toEqual('Sign me up')
         })
     })
 
     describe('with feature flags', () => {
-        it('experiments are disabled by default', async () => {
-            const expResponse = {
+        it('experiments are disabled by default', () => {
+            experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-            const disabledPostHog = makePostHog({
-                config: createMockConfig({
-                    api_host: 'https://test.com',
-                    token: 'testtoken',
-                    autocapture: true,
-                    region: 'us-east-1',
-                    // no disable_web_experiments set to false here, so it's implicitly enabled
-                }),
-                persistence: persistence,
-                get_property: vi.fn(),
-                _send_request: vi
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
-                consent: { isOptedOut: () => true } as unknown as ConsentManager,
-                onFeatureFlags: vi.fn(),
-            })
+            posthog.config = defaultConfig()
+            const elParent = createTestDocument()
 
-            posthog.requestRouter = new RequestRouter(disabledPostHog)
-            webExperiment = new WebExperiments(disabledPostHog)
-            assertElementChanged('control', 'innerHTML', 'original')
+            simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+
+            expect(elParent.innerHTML).toEqual('original')
+            expect(posthog._send_request).not.toHaveBeenCalled()
+
+            posthog.config.disable_web_experiments = false
+            simulateFeatureFlags({ 'signup-button-test': 'variant-sign-up' })
+            expect(elParent.innerHTML).toEqual('Sign me up')
         })
 
         it('makes no modifications if control variant', () => {
@@ -320,18 +345,15 @@ describe('Web Experimentation', () => {
 
             const webExperiment = new WebExperiments(posthog)
             const elParent = createTestDocument()
-            const original = WebExperiments.getWindowLocation
-
-            WebExperiments.getWindowLocation = () => {
-                return new URL(
+            vi.spyOn(WebExperiments, 'getWindowLocation').mockReturnValue(
+                new URL(
                     'https://example.com/landing-page?__experiment_id=3&__experiment_variant=variant-sign-up'
                 ) as unknown as Location
-            }
+            )
 
             // This forces a preview of 'variant-sign-up', ignoring real flags.
             webExperiment.previewWebExperiment()
 
-            WebExperiments.getWindowLocation = original
             expect(elParent.innerHTML).toEqual('Sign me up')
             expect(posthog.capture).not.toHaveBeenCalled()
         })

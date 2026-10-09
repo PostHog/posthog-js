@@ -1,3 +1,5 @@
+import type { FlagsConfiguration } from './flags-options'
+import type { BrowserClient } from './browser-client'
 import type {
     AnalyticsConfiguration,
     AnalyticsOptions,
@@ -8,7 +10,6 @@ import type {
 import type {
     ApiResponse,
     CaptureOptions,
-    Client,
     Disposable,
     Extension,
     ExtensionToken,
@@ -48,8 +49,6 @@ export interface PostHogOptions {
     apiHost?: string
     /** Origin used for requests targeting feature flags. Defaults to `apiHost`. */
     flagsHost?: string
-    /** Origin used for requests targeting static assets. Defaults to `apiHost`. */
-    assetsHost?: string
     /** Storage implementation. Pass `false` to keep all state in memory. */
     storage?: StorageLike | false
     /** Override the storage key. */
@@ -74,21 +73,21 @@ export interface PostHogOptions {
     debug?: boolean
     /** Supply initial remote configuration without a request. */
     remoteConfig?: RemoteConfig
-    /** Load remote configuration when an extension first requests it. */
-    remoteConfigLoader?: () => Promise<RemoteConfig | undefined>
-    /** Stop waiting for remote configuration after this duration. */
+    /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
     /**
      * Automatic first-party analytics delivery. Defaults to lazy loading after the first admitted event.
      * Pass `false` to retain events without automatically loading delivery.
      */
     analytics?: AnalyticsConfiguration
+    /** Dynamically include flags by default. Explicit extensions take precedence over this option. */
+    flags?: FlagsConfiguration
     /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
     extensions?: readonly Extension[]
 }
 
 /** Options for the delivery-free `@posthog/browser/core` entrypoint. */
-export type CorePostHogOptions = Omit<PostHogOptions, 'analytics'>
+export type CorePostHogOptions = Omit<PostHogOptions, 'analytics' | 'flags'>
 
 /** Capture V1's terminal verdict for one reported event. */
 export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'
@@ -113,7 +112,7 @@ export interface CaptureSummary {
     readonly error?: Error
 }
 
-export interface PostHog extends Client, Disposable {
+export interface PostHog extends BrowserClient, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
     /** Sends one finalized event inline. Resolves with an outcome or `summary.error` instead of rejecting. */
     captureImmediate(

@@ -134,6 +134,22 @@ What matters is instance lifetime, not statelessness. A server that is stateless
 (`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
 first `tools/list` and keeps it, so none of the above applies to it.
 
+An extra key is not free for a tool that validates strictly (a `.strict()` Zod object, or
+`additionalProperties: false` enforced by the handler): it rejects the call. A low-level server that
+can look up its own tools can resolve ownership without a listing. Return the tool's input schema
+as registered, before PostHog preparation, and the SDK strips the arguments it owns on every
+instance. It never strips a parameter that the returned schema declares. Returning `undefined`
+keeps the behavior above.
+
+```ts
+instrument(server, posthog, {
+  resolveOriginalTool: (toolName) => {
+    const tool = myToolRegistry.get(toolName)
+    return tool ? { inputSchema: tool.inputSchema } : undefined
+  },
+})
+```
+
 The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
 cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,
 and it is capped at 2048 characters. Two ways out, both one line:
@@ -179,8 +195,25 @@ enforces it, so servers keep working; strict-schema clients see the new field. S
 `conversation_id` argument and returns a handle in eligible tool results. Clients must echo that
 handle to group later calls; calls without it mint new handles. Set `enableConversationId: false`
 to retain transport-based session grouping and unchanged response content. Custom `PostHogMCP`
-dispatchers enable model capture by default, but continue to supply their own session IDs.
+dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
+
+### Identifying the deployed server build
+
+MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable
+Git commit SHA, release ID, or container digest once during setup. The SDK adds it to every MCP event
+as `$mcp_server_build`.
+
+```ts
+instrument(server, posthog, { serverBuild: process.env.GIT_SHA })
+
+const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  serverBuild: process.env.GIT_SHA,
+})
+```
+
+Omit `serverBuild` when the deployment does not provide a reliable value.
+`PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
@@ -204,7 +237,12 @@ open where the SDK cannot tell who declared it, stripping it requires proof that
   that descriptor itself, so what it declares is known without a listing.
 - Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
   that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
-  answer, so it records `llm_model` as the self-reported model and strips nothing. A tool that
+  answer, so it records `llm_model` as the self-reported model and strips nothing, unless
+  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above). Return the schema as
+  your `tools/list` advertises it: ownership follows the same rule as a served listing, and a
+  listing served on the instance wins. A Zod schema is read the way the MCP SDK advertises it, so a
+  union, record or refined object lists as an empty object, gains the injected fields and has them
+  stripped; a host that lists its own JSON Schema (an `anyOf`, say) returns that schema. A tool that
   declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
   until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
   are the escapes. The SDK never replays your listing handler on the call path to find out.
@@ -213,29 +251,44 @@ As with `context`, what matters is instance lifetime rather than statelessness: 
 server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
 from the first `tools/list` and keeps it.
 
-For a custom dispatcher, `PostHogMCP` enables the same option by default. Its `prepareToolList()` helper
-injects the field and records ownership by tool name; `prepareToolCall()` returns `llmModel` and
-`llmModelSource` while removing the SDK-owned argument before dispatch. Pass both fields to
-`captureToolCall()`. Pass the original tool descriptor on each call so this also works when
-`tools/list` and `tools/call` reach different server replicas:
+For a custom dispatcher, `PostHogMCP` enables model capture and conversation correlation by default.
+`prepareToolList()` injects the analytics fields and records ownership by tool name.
+`prepareToolCall()` removes SDK-owned arguments and resolves the conversation and session.
+`prepareToolResult()` returns the result to send and the final values to capture. Pass the original
+tool descriptor on each call so this also works when `tools/list` and `tools/call` reach different
+server replicas:
 
 ```ts
 const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
 
 const tools = posthog.prepareToolList(serverTools)
 const originalTool = serverTools.find((tool) => tool.name === toolName)
-const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, {
+const preparedCall = posthog.prepareToolCall(toolName, rawArgs, {
   originalTool,
   requestMeta: request.params?._meta,
+  sessionId: transportSessionId,
 })
-const result = await dispatch(toolName, args)
+const toolResult = await dispatch(toolName, preparedCall.args)
+const preparedResult = posthog.prepareToolResult(toolResult, preparedCall)
 
-posthog.captureToolCall({ toolName, llmModel, llmModelSource, isError: false })
+posthog.captureToolCall({
+  toolName,
+  llmModel: preparedCall.llmModel,
+  llmModelSource: preparedCall.llmModelSource,
+  sessionId: preparedResult.sessionId,
+  conversationId: preparedResult.conversationId,
+  isError: false,
+})
+
+return preparedResult.result
 ```
 
 A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
 Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
-without changing the arguments sent to the tool.
+without changing the arguments sent to the tool. Pass an existing transport or request session as
+`sessionId`. A valid echoed conversation handle takes precedence. Otherwise, the existing session
+prevents a new handle from being minted. Set `enableConversationId: false` on `PostHogMCP` to keep
+the previous custom-dispatcher behavior.
 
 ### Collecting agent feedback (`send_feedback`)
 
@@ -288,11 +341,17 @@ return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
 
 // tools/call dispatcher
 const originalTool = myTools.find((tool) => tool.name === name)
-const prepared = posthog.prepareToolCall(name, rawArgs, { originalTool })
-if (prepared.isFeedback) {
-  posthog.captureFeedback({ report: prepared.feedbackReport!, ...identity })
-  await myFeedbackBackend.record(prepared.feedbackReport!)
-  return sendFeedbackResult() // or a custom text reply
+const preparedCall = posthog.prepareToolCall(name, rawArgs, { originalTool })
+if (preparedCall.isFeedback) {
+  await myFeedbackBackend.record(preparedCall.feedbackReport!)
+  const preparedResult = posthog.prepareToolResult(sendFeedbackResult(), preparedCall)
+  posthog.captureFeedback({
+    report: preparedCall.feedbackReport!,
+    sessionId: preparedResult.sessionId,
+    conversationId: preparedResult.conversationId,
+    ...identity,
+  })
+  return preparedResult.result
 }
 ```
 

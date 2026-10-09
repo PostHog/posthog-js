@@ -54,9 +54,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     private _pendingActivatedItems: string[] = []
     private _captureHookUnsubscribe?: () => void
     private _sessionIdUnsubscribe?: () => void
+    private readonly _onActivationChanged?: () => void
 
-    constructor(instance: PostHog) {
+    constructor(instance: PostHog, onActivationChanged?: () => void) {
         this._instance = instance
+        this._onActivationChanged = onActivationChanged
         this._eventToItems = new Map<string, string[]>()
         this._cancelEventToItems = new Map<string, string[]>()
         this._actionToItems = new Map<string, string[]>()
@@ -95,7 +97,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * user dismisses or answers them, so an event-triggered survey survives a reload within the
      * triggering session (but not a brand-new session) until it's actually interacted with.
      */
-    protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
+    protected abstract _activationOutcome(
+        event: string,
+        itemId: string,
+        eventPayload?: CaptureResult
+    ): ActivationOutcome
 
     /**
      * Whether an item armed by a trigger should be persisted immediately (session-scoped)
@@ -258,7 +264,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             this._mergeItemMaps(this._eventToItems, eventToItems)
             this._mergeItemMaps(this._cancelEventToItems, cancelEventToItems)
         }
-        if (eventBasedItems.length === 0 && itemsWithCancelEvents.length === 0) {
+        if (
+            eventBasedItems.length === 0 &&
+            itemsWithCancelEvents.length === 0 &&
+            !items.some((item) => item.conditions?.actions?.values?.length)
+        ) {
             return
         }
 
@@ -275,7 +285,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         // An item reacting to one of its own lifecycle events (shown / dismissed / sent).
         const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
         if (itemId && this.getActivatedIds().includes(itemId)) {
-            const outcome = this._activationOutcome(event, itemId)
+            const outcome = this._activationOutcome(event, itemId, eventPayload)
             if (outcome === 'consume') {
                 logger.info('event consumed activated item, removing it', { event, itemId })
                 this._deactivateItems([itemId])
@@ -358,6 +368,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             this._pendingActivatedItems = [...new Set([...this._pendingActivatedItems, ...armedInMemory])]
         }
         this._getLogger().info('updating activated items', { activatedItems: this.getActivatedIds() })
+        this._notifyActivationChanged()
     }
 
     /**
@@ -391,6 +402,17 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             }
         }
         this._clearActivationTimestamps(itemIds)
+        this._notifyActivationChanged()
+    }
+
+    private _notifyActivationChanged(): void {
+        // Matching eligibility can change even when a repeated trigger leaves the activated
+        // IDs unchanged. Subscribers deduplicate the evaluated result instead.
+        try {
+            this._onActivationChanged?.()
+        } catch (error) {
+            this._getLogger().error('Error while handling activated items change', error)
+        }
     }
 
     /** The raw persisted activation timestamps as stored, ignoring session scoping. */
@@ -528,6 +550,9 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             }
             this._clearActivationSession()
             this._clearAllActivationTimestamps()
+            if (activatedItemIds.length > 0) {
+                this._notifyActivationChanged()
+            }
         }
     }
 
@@ -559,6 +584,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         }
         this._clearActivationSession()
         this._clearAllActivationTimestamps()
+        this._notifyActivationChanged()
     }
 
     getEventToItemsMap(): Map<string, string[]> {

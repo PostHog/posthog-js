@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { PostHogLogs } from '../../posthog-logs'
@@ -13,7 +14,7 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     // Legacy PostHog capture routes through its historical console capture ABI.
-    let mockEmit: vi.Mock
+    let mockEmit: VitestMock
 
     beforeEach(() => {
         vi.resetModules()
@@ -152,6 +153,8 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+            expect(mockEmit.mock.calls[0][0].body).toHaveLength(10003)
+            expect(mockEmit.mock.calls[0][0].body.endsWith('...')).toBe(true)
         })
 
         it('should preserve bounded attributes when the log body is truncated', () => {
@@ -174,6 +177,8 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+            expect(mockEmit.mock.calls[0][0].body).toHaveLength(10003)
+            expect(mockEmit.mock.calls[0][0].body.endsWith('...')).toBe(true)
         })
 
         it('should not read object properties after the body size limit is reached', () => {
@@ -360,7 +365,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should omit unreadable properties when logging', () => {
-            const originalConsoleLog = assignableWindow.console.log as vi.Mock
+            const originalConsoleLog = assignableWindow.console.log as VitestMock
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -563,6 +568,8 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+            expect(mockEmit.mock.calls[0][0].body).toHaveLength(10003)
+            expect(mockEmit.mock.calls[0][0].body.endsWith('...')).toBe(true)
         })
 
         it('should handle Error objects properly in truncation', () => {
@@ -581,6 +588,8 @@ describe('logs entrypoint', () => {
                     }),
                 })
             )
+            expect(mockEmit.mock.calls[0][0].body).toHaveLength(10003)
+            expect(mockEmit.mock.calls[0][0].body.endsWith('...')).toBe(true)
         })
     })
 
@@ -588,7 +597,7 @@ describe('logs entrypoint', () => {
         beforeEach(loadLogsEntrypoint)
 
         it('still calls the original console method when capture throws', () => {
-            const originalConsoleLog = assignableWindow.console.log as vi.Mock
+            const originalConsoleLog = assignableWindow.console.log as VitestMock
             mockEmit.mockImplementation(() => {
                 throw new Error('capture blew up')
             })
@@ -671,8 +680,8 @@ describe('logs entrypoint', () => {
         beforeEach(loadLogsEntrypoint)
 
         it('should not emit logs when capturing is opted out', () => {
-            const originalConsoleLog = assignableWindow.console.log as vi.Mock
-            ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
+            const originalConsoleLog = assignableWindow.console.log as VitestMock
+            ;(mockPostHog.is_capturing as VitestMock).mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -685,7 +694,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should resume emitting once capturing is opted back in', () => {
-            const isCapturing = mockPostHog.is_capturing as vi.Mock
+            const isCapturing = mockPostHog.is_capturing as VitestMock
             isCapturing.mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -706,7 +715,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should check capturing status on every log, not just at init', () => {
-            const isCapturing = mockPostHog.is_capturing as vi.Mock
+            const isCapturing = mockPostHog.is_capturing as VitestMock
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -742,6 +751,8 @@ describe('logs entrypoint', () => {
             const wrappedTime = (performance.now() - wrappedStart) / iterations
 
             expect(wrappedTime).toBeLessThanOrEqual(50)
+            expect(mockEmit).toHaveBeenCalledTimes(iterations + 1)
+            expect(mockEmit.mock.calls[0][0].body.startsWith('{"data":"')).toBe(true)
 
             console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
         })
@@ -771,6 +782,8 @@ describe('logs entrypoint', () => {
             const wrappedTime = (performance.now() - wrappedStart) / iterations
 
             expect(wrappedTime).toBeLessThanOrEqual(100)
+            expect(mockEmit).toHaveBeenCalledTimes(iterations + 1)
+            expect(mockEmit.mock.calls[0][0].body.startsWith('{"key00000000":"value00000000"')).toBe(true)
 
             console.log(`Performance test (big body): wrapped=${wrappedTime.toFixed(2)}ms`)
         })
@@ -788,9 +801,10 @@ describe('logs entrypoint', () => {
             for (let i = 0; i < iterations; i++) {
                 assignableWindow.console.log(smallObject)
             }
-            const wrappedTime = (performance.now() - wrappedStart) / iterations / 1000
-
+            const wrappedTime = (performance.now() - wrappedStart) / iterations
             expect(wrappedTime).toBeLessThanOrEqual(0.1)
+            expect(mockEmit).toHaveBeenCalledTimes(iterations)
+            expect(mockEmit.mock.calls[0][0].body).toBe('{"key":"value"}')
 
             console.log(`Performance test (small object): wrapped=${wrappedTime.toFixed(2)}ms`)
         })
@@ -808,9 +822,10 @@ describe('logs entrypoint', () => {
             for (let i = 0; i < iterations; i++) {
                 assignableWindow.console.log(mediumObject)
             }
-            const wrappedTime = (performance.now() - wrappedStart) / iterations / 1000
-
+            const wrappedTime = (performance.now() - wrappedStart) / iterations
             expect(wrappedTime).toBeLessThanOrEqual(0.1)
+            expect(mockEmit).toHaveBeenCalledTimes(iterations)
+            expect(mockEmit.mock.calls[0][0].body.startsWith('{"body":"')).toBe(true)
 
             console.log(`Performance test (small object): wrapped=${wrappedTime.toFixed(2)}ms`)
         })
@@ -838,7 +853,7 @@ describe('logs entrypoint', () => {
         beforeEach(loadLogsEntrypoint)
 
         it('splices itself out when a later wrapper sits on top', () => {
-            const realLog = assignableWindow.console.log as vi.Mock
+            const realLog = assignableWindow.console.log as VitestMock
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             const dispose = initializeLogs(mockPostHog)
             const ourWrapper = assignableWindow.console.log
@@ -875,13 +890,13 @@ describe('logs entrypoint', () => {
                 getExtension: () => (mockPostHog as any).logs,
             }) as unknown as Client
         let logs: PostHogLogs
-        let realConsoleLog: vi.Mock
-        let capturedBuffered: vi.Mock
+        let realConsoleLog: VitestMock
+        let capturedBuffered: VitestMock
 
         beforeEach(async () => {
             await loadLogsEntrypoint()
 
-            realConsoleLog = assignableWindow.console.log as vi.Mock
+            realConsoleLog = assignableWindow.console.log as VitestMock
             capturedBuffered = vi.fn()
             ;(mockPostHog as any).config = { logs: {} }
             ;(mockPostHog as any).persistence = {
@@ -1005,7 +1020,7 @@ describe('logs entrypoint', () => {
             expect(entry.context).toEqual(expect.objectContaining({ distinctId: 'user-123', sessionId: 'session-123' }))
 
             // A later identify must not re-stamp the buffered entry.
-            ;(mockPostHog.get_distinct_id as vi.Mock).mockReturnValue('identified-456')
+            ;(mockPostHog.get_distinct_id as VitestMock).mockReturnValue('identified-456')
 
             logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
 

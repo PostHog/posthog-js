@@ -34,6 +34,79 @@ const posthog = await createPostHog({
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
 
+## Feature flags
+
+Flags dynamically load during `createPostHog()` by default. Initialization waits for the module and extension setup, not the network response. Use `flags: false` to omit automatic flags, or configure the extension through `flags`:
+
+```ts
+import { createPostHog, FeatureFlagsExtension } from '@posthog/browser'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    flags: { evaluationContexts: ['web'], requestTimeoutMs: 3_000 },
+})
+const featureFlags = posthog.getExtension(FeatureFlagsExtension)
+const subscription = featureFlags?.onFeatureFlags((results, errorsLoading) => {
+    if (!errorsLoading) console.log(results)
+})
+const result = featureFlags?.getFeatureFlag('new-onboarding')
+if (result?.enabled) console.log(result.variant, result.payload)
+subscription?.dispose()
+```
+
+`FeatureFlagsExtension` is a lightweight typed lookup token, exported from the root, core, and flags entrypoints. `getExtension(FeatureFlagsExtension)` returns undefined when flags is disabled or failed to install. The extension's `getFeatureFlag()` returns undefined until a value is available. A disabled flag returns an object with `enabled: false`. Reads emit deduplicated flag-called analytics through ordinary capture; subscriptions do not. `updateFlags(values, payloads?, { merge })` injects flag values.
+
+Use `reloadFeatureFlags()` to request a remote evaluation and await its outcome before reading again:
+
+```ts
+if (featureFlags) {
+    const outcome = await featureFlags.reloadFeatureFlags()
+    if (outcome.status === 'loaded') {
+        console.log(featureFlags.getFeatureFlag('new-onboarding'))
+    }
+}
+```
+
+The promise resolves with `loaded`, `error`, `skipped` (evaluation is disabled or unavailable), or `cancelled` (reset or disposal). It does not reject on request failures. Calls made before a request starts share that evaluation; calls during an active request wait for a follow-up evaluation. Cached values and `updateFlags()` do not complete a reload. `onFeatureFlags` remains a subscription to value changes, separate from reload completion.
+
+For static inclusion, import the factory explicitly and pass the same configuration:
+
+```ts
+import { flags } from '@posthog/browser/flags'
+
+const posthog = await createPostHog({
+    projectToken: '<project-token>',
+    extensions: [flags({ featureFlagEvaluation: false, bootstrap: { featureFlags: { preview: true } } })],
+})
+```
+
+An explicit extension takes precedence over the top-level option, including `flags: false`. `featureFlagEvaluation: false` keeps local/bootstrap values without requesting remote evaluation; remote configuration remains available. Other options are `bootstrap.featureFlagPayloads`, `flagKeys`, `cacheTtlMs`, `refreshIntervalMs`, `deduplicateCallsPerSession`, and `onlyEvaluateSurveyFeatureFlags`. Refresh defaults to five minutes with idle backoff; `refreshIntervalMs: 0` disables automatic refresh. The manual `@posthog/browser/core` entrypoint supports explicit flags without referencing the automatic loader.
+
+Flags uses the client's key-value store and configured persistence. With `storage: false`, values remain in memory. Reset clears flag state along with the client's other persisted state.
+
+## Extension lifecycle notifications
+
+Browser-next supplies a `BrowserClient` to extension setup. It extends the shared client with `onIdentify`, `onGroup`, and `onReset` listeners. These fire synchronously after local state updates, independently of capture consent, and do not replay earlier operations. Listener errors are logged without stopping other listeners. Dispose subscriptions when the extension is disposed.
+
+```ts
+import type { BrowserClient, Disposable } from '@posthog/browser'
+
+let subscription: Disposable | undefined
+const extension = {
+    name: 'identity-observer',
+    setup(client: BrowserClient) {
+        subscription = client.onIdentify(({ distinctId, previousDistinctId }) => {
+            console.log(previousDistinctId, distinctId)
+        })
+    },
+    dispose() {
+        subscription?.dispose()
+    },
+}
+```
+
+## Capture and delivery
+
 `capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.
@@ -54,6 +127,8 @@ Immediate capture finalizes the event through the same consent, identity, sessio
 The default entrypoint loads delivery on the first admitted immediate call. The core entrypoint supports immediate capture only when `analytics()` was explicitly installed through `extensions`; otherwise it resolves with an unavailable-delivery error without adding a delivery import to the core graph.
 
 The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
+
+Both factories start one JSON remote-config request during initialization, without waiting for it before capture or factory completion. `remoteConfig` supplies an inline result instead of making a request. The default loader uses Fetch and `GET /array/{projectToken}/config`. Recognized PostHog US/EU hosts resolve to the corresponding assets host; custom hosts retain their configured base, including path prefixes. Loading is independent of capture consent. `fetch: false` disables built-in loading. Failure or the default 10-second `remoteConfigTimeoutMs` publishes `{ ok: false }` once, with no automatic retry; shutdown cancels the wait and suppresses late publication.
 
 When remote configuration advertises gzip, eligible normal batches use native `CompressionStream`; delivery remains uncompressed while configuration is unresolved or compression is unavailable, invalid, stalled, or larger than the JSON body. While offline, finalized events remain admitted and avoid network attempts until an `online` notification. On `pagehide`, or `unload` where `pagehide` is unavailable, queued analytics receive one synchronous uncompressed handoff through headered keepalive Fetch under one conservative aggregate body budget. Beacon remains disabled until Capture V1 supports the required metadata without request headers.
 

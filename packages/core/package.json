@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.55.1",
+  "version": "1.57.3",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -34,6 +34,7 @@
   },
   "files": [
     "dist",
+    "surveys",
     "src",
     "!src/__tests__"
   ],

@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import '../helpers/mock-logger'
 
 import { createPosthogInstance } from '../helpers/posthog-instance'
@@ -25,7 +26,7 @@ vi.useFakeTimers()
 // was in package.json#browserslist. `vi.hoisted()` would be the modern
 // fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
 // oxlint-disable-next-line no-var
-var mockLocation: vi.Mock
+var mockLocation: VitestMock
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     const original = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
@@ -46,10 +47,6 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 
     return {
         ...original,
-        assignableWindow: {
-            ...original.assignableWindow,
-            __PosthogExtensions__: {},
-        },
         get location() {
             return mockLocation()
         },
@@ -58,6 +55,25 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 })
 
 describe('web vitals', () => {
+    const resetLocation = () =>
+        mockLocation.mockReturnValue({
+            protocol: 'http:',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: 'http://localhost/',
+        })
+    beforeEach(() => {
+        resetLocation()
+        assignableWindow.__PosthogExtensions__ = {}
+        onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
+    })
+    afterEach(() => {
+        resetLocation()
+        vi.clearAllTimers()
+    })
+
     let posthog: PostHog
     let beforeSendMock = vi.fn().mockImplementation((e) => e)
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
@@ -205,8 +221,10 @@ describe('web vitals', () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
-
-                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(4999)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(0)
+                vi.advanceTimersByTime(1)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
@@ -225,8 +243,10 @@ describe('web vitals', () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(beforeSendMock).toBeCalledTimes(0)
-
-                vi.advanceTimersByTime(1000 + 1)
+                vi.advanceTimersByTime(999)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(0)
+                vi.advanceTimersByTime(1)
+                expect(beforeSendMock.mock.calls.filter(([event]) => event.event === '$web_vitals')).toHaveLength(1)
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {

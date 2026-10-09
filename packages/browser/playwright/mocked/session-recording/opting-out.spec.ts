@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { trackRecordingRequests } from '../utils/recording-requests'
 import { BrowserContext, Page } from '@playwright/test'
 import { PostHogConfig } from '@/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
@@ -31,26 +32,23 @@ async function startWith(config: Partial<PostHogConfig>, page: Page, context: Br
 
 test.describe('Session Recording - opting out', () => {
     test('does not capture events when config opts out by default', async ({ page, context }) => {
-        // but no recorder or snapshot call, because we're opting out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        const recordingRequests = trackRecordingRequests(page)
         await startWith({ opt_out_capturing_by_default: true }, page, context)
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
         await page.expectCapturedEventsToBe([])
+        expect(recordingRequests).toEqual([])
     })
 
     test('does not capture recordings when config disables session recording', async ({ page, context }) => {
-        // but no recorder or snapshot call, because we're opting out
-        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
-
+        const recordingRequests = trackRecordingRequests(page)
         await startWith({ disable_session_recording: true }, page, context)
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
         await page.expectCapturedEventsToBe(['$pageview'])
+        expect(recordingRequests).toEqual([])
     })
 
     test('can start recording after starting opted out', async ({ page, context }) => {
@@ -96,31 +94,21 @@ test.describe('Session Recording - opting out', () => {
     })
 
     test('does not capture session recordings when flags is disabled', async ({ page, context }) => {
+        const recordingRequests = trackRecordingRequests(page)
         await start(
             { options: { advanced_disable_flags: true, autocapture: false }, waitForFlags: false },
             page,
             context
         )
 
+        await pollUntilEventCaptured(page, '$pageview')
         await page.locator('[data-cy-custom-event-button]').click()
-
-        const callsToSessionRecording = page.waitForResponse('**/ses/').catch(() => {
-            // when the test ends, waitForResponse will throw an error
-            // we're happy not to get a response here so we can swallow it
-            return null
-        })
-
         await page.locator('[data-cy-input]').type('hello posthog!')
-
-        void callsToSessionRecording.then((response) => {
-            if (response) {
-                throw new Error('Session recording call was made and should not have been')
-            }
-        })
         await page.waitForTimeout(200)
 
         const capturedEvents = await page.capturedEvents()
         // no snapshot events sent
         expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', 'custom-event'])
+        expect(recordingRequests).toEqual([])
     })
 })

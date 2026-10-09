@@ -164,6 +164,7 @@ describe('getSurveySeen', () => {
             const eventRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         repeatedActivation: true,
                         values: [{ name: 'test-event' }],
@@ -179,6 +180,7 @@ describe('getSurveySeen', () => {
             const nonRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         repeatedActivation: false,
                         values: [{ name: 'test-event' }],
@@ -194,6 +196,7 @@ describe('getSurveySeen', () => {
             const nonRepeatableSurvey: Survey = {
                 ...baseSurvey,
                 conditions: {
+                    cancelEvents: null,
                     events: {
                         values: [{ name: 'test-event' }],
                     },
@@ -348,6 +351,11 @@ describe('getFontFamily', () => {
 })
 
 describe('doesSurveyUrlMatch', () => {
+    let originalLocationDescriptor: PropertyDescriptor
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
+    })
     const mockWindowLocation = (href: string | undefined) => {
         Object.defineProperty(window, 'location', {
             value: { href },
@@ -355,20 +363,21 @@ describe('doesSurveyUrlMatch', () => {
         })
     }
     beforeEach(() => {
+        originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
         // Reset window.location before each test
         mockWindowLocation(undefined)
     })
 
     it('should return true when no URL conditions are set', () => {
-        const survey = { conditions: { events: null, actions: null } }
+        const survey = { conditions: { cancelEvents: null, events: null, actions: null } }
         expect(doesSurveyUrlMatch(survey)).toBe(true)
 
-        const surveyWithNullConditions = { conditions: { url: null, events: null, actions: null } }
+        const surveyWithNullConditions = { conditions: { cancelEvents: null, url: null, events: null, actions: null } }
         expect(doesSurveyUrlMatch(surveyWithNullConditions)).toBe(true)
     })
 
     it('should return false when window.location.href is not available', () => {
-        const survey = { conditions: { url: 'example.com', events: null, actions: null } }
+        const survey = { conditions: { cancelEvents: null, url: 'example.com', events: null, actions: null } }
         expect(doesSurveyUrlMatch(survey)).toBe(false)
     })
 
@@ -378,16 +387,19 @@ describe('doesSurveyUrlMatch', () => {
         })
 
         it('should match using icontains (default) match type', () => {
-            const survey = { conditions: { url: 'example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'example.com', events: null, actions: null } }
             expect(doesSurveyUrlMatch(survey)).toBe(true)
 
-            const nonMatchingSurvey = { conditions: { url: 'nonexistent.com', events: null, actions: null } }
+            const nonMatchingSurvey = {
+                conditions: { cancelEvents: null, url: 'nonexistent.com', events: null, actions: null },
+            }
             expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
         })
 
         it('should match using explicit icontains match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'example.com',
                     urlMatchType: 'icontains' as const,
                     events: null,
@@ -398,6 +410,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const caseInsensitiveSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'EXAMPLE.COM',
                     urlMatchType: 'icontains' as const,
                     events: null,
@@ -410,6 +423,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using not_icontains match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'nonexistent.com',
                     urlMatchType: 'not_icontains' as const,
                     events: null,
@@ -420,6 +434,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'example.com',
                     urlMatchType: 'not_icontains' as const,
                     events: null,
@@ -432,6 +447,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using regex match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.com/.*$',
                     urlMatchType: 'regex' as const,
                     events: null,
@@ -442,6 +458,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.org/.*$',
                     urlMatchType: 'regex' as const,
                     events: null,
@@ -454,6 +471,7 @@ describe('doesSurveyUrlMatch', () => {
         it('should match using not_regex match type', () => {
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.org/.*$',
                     urlMatchType: 'not_regex' as const,
                     events: null,
@@ -464,6 +482,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: '^https://.*\\.com/.*$',
                     urlMatchType: 'not_regex' as const,
                     events: null,
@@ -478,6 +497,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com',
                     urlMatchType: 'exact' as const,
                     events: null,
@@ -488,6 +508,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com/path',
                     urlMatchType: 'exact' as const,
                     events: null,
@@ -502,6 +523,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const survey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://other.com',
                     urlMatchType: 'is_not' as const,
                     events: null,
@@ -512,6 +534,7 @@ describe('doesSurveyUrlMatch', () => {
 
             const nonMatchingSurvey = {
                 conditions: {
+                    cancelEvents: null,
                     url: 'https://example.com',
                     urlMatchType: 'is_not' as const,
                     events: null,
@@ -529,7 +552,7 @@ describe('doesSurveyUrlMatch', () => {
         it('matches against the overridden URL instead of window.location.href', () => {
             // raw browser URL would not match the survey condition
             mockWindowLocation('https://generated-host.skin/game')
-            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'app.example.com', events: null, actions: null } }
 
             expect(
                 doesSurveyUrlMatch(
@@ -541,7 +564,7 @@ describe('doesSurveyUrlMatch', () => {
 
         it('falls back to window.location.href when no override is configured', () => {
             mockWindowLocation('https://app.example.com/settings')
-            const survey = { conditions: { url: 'app.example.com', events: null, actions: null } }
+            const survey = { conditions: { cancelEvents: null, url: 'app.example.com', events: null, actions: null } }
 
             expect(doesSurveyUrlMatch(survey, posthogWith())).toBe(true)
         })
@@ -741,6 +764,13 @@ describe('sendSurveyEvent', () => {
             has_opted_out_capturing: () => false,
         } as unknown as PostHog
 
+        setInProgressSurveyState(baseSurvey, {
+            surveySubmissionId: 'submission-123',
+            responses: { $survey_response_q1: 'Great!' },
+            lastQuestionIndex: 0,
+        })
+        expect(getInProgressSurveyState(baseSurvey)).not.toBeNull()
+
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
             survey: baseSurvey,
@@ -750,6 +780,12 @@ describe('sendSurveyEvent', () => {
         })
 
         expect(critical).not.toHaveBeenCalled()
+        expect(mockPostHog.capture).toHaveBeenCalledTimes(1)
+        expect(mockPostHog.capture).toHaveBeenCalledWith(
+            'survey sent',
+            expect.objectContaining({ $survey_response_q1: 'Great!', $survey_completed: true })
+        )
+        expect(getInProgressSurveyState(baseSurvey)).toBeNull()
         critical.mockRestore()
     })
 

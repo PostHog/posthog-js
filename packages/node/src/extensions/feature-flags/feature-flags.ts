@@ -1,8 +1,16 @@
-import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
+import {
+  FeatureFlagCondition,
+  FeatureFlagEvaluationRuntime,
+  FlagProperty,
+  FlagPropertyValue,
+  PostHogFeatureFlag,
+  PropertyGroup,
+} from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import {
   getFeatureFlagHash,
   getFeatureFlagVariant,
+  getHoldoutVariant,
   getFeatureFlagVariantLookupTable,
   InconclusiveMatchError,
   matchFeatureFlagProperty,
@@ -12,9 +20,20 @@ import {
   resolveFeatureFlagPayload,
   safeSetTimeout,
 } from '@posthog/core'
-import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
+import { FlagDefinitionCacheProvider, FlagDefinitionCacheData, FlagDefinitionCacheInput } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
+
+// A definition with no runtime, or one from a server that does not know the field, reports the
+// default PostHog applies rather than a third "unknown" state callers would have to handle.
+function normalizeEvaluationRuntime(value: unknown): FeatureFlagEvaluationRuntime {
+  return value === 'client' || value === 'server' ? value : 'all'
+}
+
+// `all` matches every runtime, so the check is symmetric.
+function evaluationRuntimesMatch(a: FeatureFlagEvaluationRuntime, b: FeatureFlagEvaluationRuntime): boolean {
+  return a === b || a === 'all' || b === 'all'
+}
 
 // Outcome of evaluating a single condition group. `out_of_rollout_bound` means the group's property
 // filters matched (or there were none) but the rollout percentage excluded the user — the only case
@@ -51,7 +70,7 @@ type FeatureFlagsPollerOptions = {
   personalApiKey: string
   projectApiKey: string
   host: string
-  pollingInterval: number
+  pollingInterval: number | null
   timeout?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
@@ -64,7 +83,7 @@ type FeatureFlagsPollerOptions = {
    */
   onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
-  cacheProvider?: FlagDefinitionCacheProvider
+  cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   strictLocalEvaluation?: boolean
   /**
    * When set, the poller keeps only flags whose evaluation contexts are empty or share at
@@ -96,7 +115,7 @@ type ComputeFlagAndPayloadOptions = {
 }
 
 class FeatureFlagsPoller {
-  pollingInterval: number
+  pollingInterval: number | null
   personalApiKey: string
   projectApiKey: string
   featureFlags: Array<PostHogFeatureFlag>
@@ -115,7 +134,7 @@ class FeatureFlagsPoller {
   shouldBeginExponentialBackoff: boolean = false
   backOffCount: number = 0
   onLoad?: (count: number) => void
-  private cacheProvider?: FlagDefinitionCacheProvider
+  private cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
@@ -521,6 +540,14 @@ class FeatureFlagsPoller {
   ): Promise<FeatureFlagValue> {
     evaluationContext = this.withEvaluationSnapshot(evaluationContext)
     const flagFilters = flag.filters || {}
+
+    // Holdouts are resolved before the release conditions, so a held-out value is excluded
+    // from the flag's targeting rather than being bucketed into a variant.
+    const holdoutVariant = await getHoldoutVariant(flagFilters.holdout, bucketingValue)
+    if (holdoutVariant !== undefined) {
+      return holdoutVariant
+    }
+
     const flagConditions = flagFilters.groups || []
     const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
@@ -708,7 +735,18 @@ class FeatureFlagsPoller {
     })
   }
 
-  private updateFlagState(flagData: FlagDefinitionCacheData): void {
+  getEvaluationRuntimeForFlag(key: string): FeatureFlagEvaluationRuntime | undefined {
+    const flag = this.featureFlagsByKey[key]
+    return flag ? normalizeEvaluationRuntime(flag.evaluation_runtime) : undefined
+  }
+
+  getFlagKeysByEvaluationRuntime(runtime: FeatureFlagEvaluationRuntime): string[] {
+    return this.featureFlags
+      .filter((flag) => evaluationRuntimesMatch(normalizeEvaluationRuntime(flag.evaluation_runtime), runtime))
+      .map((flag) => flag.key)
+  }
+
+  private updateFlagState(flagData: FlagDefinitionCacheInput): void {
     const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
     this.featureFlags = flags
     this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
@@ -719,12 +757,12 @@ class FeatureFlagsPoller {
     // treat them as false (mirroring the remote path) rather than as genuinely missing.
     const keptKeys = new Set(flags.map((flag) => flag.key))
     this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
-    this.groupTypeMapping = flagData.groupTypeMapping
+    this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
-    this.propertyMatchingVersion = flagData.propertyMatchingVersion
+    this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
-    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
+    this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
   }
 
   /**
@@ -825,11 +863,13 @@ class FeatureFlagsPoller {
    * @returns The polling interval to use for the next request.
    */
   private getPollingInterval(): number {
+    // Keep on-demand error backoff even when automatic polling is disabled.
+    const interval = this.pollingInterval ?? 30_000
     if (!this.shouldBeginExponentialBackoff) {
-      return this.pollingInterval
+      return interval
     }
 
-    return Math.min(SIXTY_SECONDS, this.pollingInterval * 2 ** this.backOffCount)
+    return Math.min(SIXTY_SECONDS, interval * 2 ** this.backOffCount)
   }
 
   /**
@@ -973,13 +1013,19 @@ class FeatureFlagsPoller {
           // Clear it if server stops sending one
           this.flagsEtag = res.headers?.get('ETag') ?? undefined
 
+          const groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
+          // Absence of the field always flips the gate off — fail safe to full events.
+          const minimalFlagCalledEvents = responseJson.minimal_flag_called_events === true
           const flagData: FlagDefinitionCacheData = {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
-            groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
+            group_type_mapping: groupTypeMapping,
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
-            // Absence of the field always flips the gate off — fail safe to full events.
-            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
+            minimal_flag_called_events: minimalFlagCalledEvents,
+            property_matching_version: responseJson.property_matching_version,
             propertyMatchingVersion: responseJson.property_matching_version,
+            // Keep existing providers and older Node SDKs compatible with newly written entries.
+            groupTypeMapping,
+            minimalFlagCalledEvents,
           }
 
           this.updateFlagState(flagData)
@@ -1015,7 +1061,7 @@ class FeatureFlagsPoller {
         this.onError?.(err)
       }
     } finally {
-      if (!this.pollerStopped) {
+      if (!this.pollerStopped && this.pollingInterval !== null) {
         this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
       }
     }

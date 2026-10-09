@@ -1,3 +1,4 @@
+import { createRemoteConfigFetch } from './helpers'
 import type { Client, RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
 import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 
@@ -19,13 +20,15 @@ runClientConformanceSuite('browser-next', async () => {
         projectToken: 'ph_test',
         storage: false,
         navigator: false,
-        fetch: createFetch(requests),
+        fetch: createRemoteConfigFetch(
+            () =>
+                new Promise<RemoteConfig | undefined>((resolve) => {
+                    publishRemoteConfig = (result) => resolve(result.ok ? result.config : undefined)
+                }),
+            createFetch(requests)
+        ),
         initialPersonProperties: { initial: true },
         extensions: [extension],
-        remoteConfigLoader: () =>
-            new Promise<RemoteConfig | undefined>((resolve) => {
-                publishRemoteConfig = (result) => resolve(result.ok ? result.config : undefined)
-            }),
     })
     if (!client) {
         throw new Error('The conformance extension did not receive a client')
