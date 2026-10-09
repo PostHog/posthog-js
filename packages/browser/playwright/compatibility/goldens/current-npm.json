@@ -22373,29 +22373,6 @@
                                                     {
                                                         "attributes": [
                                                             {
-                                                                "key": "url.full",
-                                                                "value": {
-                                                                    "stringValue": "<fixture-origin>/"
-                                                                }
-                                                            },
-                                                            {
-                                                                "key": "phase",
-                                                                "value": {
-                                                                    "stringValue": "before-init"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "body": {
-                                                            "stringValue": "compat-log-before-init"
-                                                        },
-                                                        "observedTimeUnixNano": "<clock>",
-                                                        "severityNumber": 9,
-                                                        "severityText": "INFO",
-                                                        "timeUnixNano": "<clock>"
-                                                    },
-                                                    {
-                                                        "attributes": [
-                                                            {
                                                                 "key": "posthogDistinctId",
                                                                 "value": {
                                                                     "stringValue": "generated-id-1"
@@ -23247,29 +23224,6 @@
                                             "scopeLogs": [
                                                 {
                                                     "logRecords": [
-                                                        {
-                                                            "attributes": [
-                                                                {
-                                                                    "key": "url.full",
-                                                                    "value": {
-                                                                        "stringValue": "<fixture-origin>/"
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "key": "phase",
-                                                                    "value": {
-                                                                        "stringValue": "before-init"
-                                                                    }
-                                                                }
-                                                            ],
-                                                            "body": {
-                                                                "stringValue": "compat-log-before-init"
-                                                            },
-                                                            "observedTimeUnixNano": "<clock>",
-                                                            "severityNumber": 9,
-                                                            "severityText": "INFO",
-                                                            "timeUnixNano": "<clock>"
-                                                        },
                                                         {
                                                             "attributes": [
                                                                 {
@@ -59387,29 +59341,6 @@
                                                     {
                                                         "attributes": [
                                                             {
-                                                                "key": "url.full",
-                                                                "value": {
-                                                                    "stringValue": "<fixture-origin>/"
-                                                                }
-                                                            },
-                                                            {
-                                                                "key": "phase",
-                                                                "value": {
-                                                                    "stringValue": "before-init"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "body": {
-                                                            "stringValue": "compat-log-before-init"
-                                                        },
-                                                        "observedTimeUnixNano": "<clock>",
-                                                        "severityNumber": 9,
-                                                        "severityText": "INFO",
-                                                        "timeUnixNano": "<clock>"
-                                                    },
-                                                    {
-                                                        "attributes": [
-                                                            {
                                                                 "key": "posthogDistinctId",
                                                                 "value": {
                                                                     "stringValue": "generated-id-1"
@@ -60261,29 +60192,6 @@
                                             "scopeLogs": [
                                                 {
                                                     "logRecords": [
-                                                        {
-                                                            "attributes": [
-                                                                {
-                                                                    "key": "url.full",
-                                                                    "value": {
-                                                                        "stringValue": "<fixture-origin>/"
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "key": "phase",
-                                                                    "value": {
-                                                                        "stringValue": "before-init"
-                                                                    }
-                                                                }
-                                                            ],
-                                                            "body": {
-                                                                "stringValue": "compat-log-before-init"
-                                                            },
-                                                            "observedTimeUnixNano": "<clock>",
-                                                            "severityNumber": 9,
-                                                            "severityText": "INFO",
-                                                            "timeUnixNano": "<clock>"
-                                                        },
                                                         {
                                                             "attributes": [
                                                                 {
@@ -96401,29 +96309,6 @@
                                                     {
                                                         "attributes": [
                                                             {
-                                                                "key": "url.full",
-                                                                "value": {
-                                                                    "stringValue": "<fixture-origin>/"
-                                                                }
-                                                            },
-                                                            {
-                                                                "key": "phase",
-                                                                "value": {
-                                                                    "stringValue": "before-init"
-                                                                }
-                                                            }
-                                                        ],
-                                                        "body": {
-                                                            "stringValue": "compat-log-before-init"
-                                                        },
-                                                        "observedTimeUnixNano": "<clock>",
-                                                        "severityNumber": 9,
-                                                        "severityText": "INFO",
-                                                        "timeUnixNano": "<clock>"
-                                                    },
-                                                    {
-                                                        "attributes": [
-                                                            {
                                                                 "key": "posthogDistinctId",
                                                                 "value": {
                                                                     "stringValue": "generated-id-1"
@@ -97275,29 +97160,6 @@
                                             "scopeLogs": [
                                                 {
                                                     "logRecords": [
-                                                        {
-                                                            "attributes": [
-                                                                {
-                                                                    "key": "url.full",
-                                                                    "value": {
-                                                                        "stringValue": "<fixture-origin>/"
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "key": "phase",
-                                                                    "value": {
-                                                                        "stringValue": "before-init"
-                                                                    }
-                                                                }
-                                                            ],
-                                                            "body": {
-                                                                "stringValue": "compat-log-before-init"
-                                                            },
-                                                            "observedTimeUnixNano": "<clock>",
-                                                            "severityNumber": 9,
-                                                            "severityText": "INFO",
-                                                            "timeUnixNano": "<clock>"
-                                                        },
                                                         {
                                                             "attributes": [
                                                                 {
