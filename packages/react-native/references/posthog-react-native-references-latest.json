@@ -70,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -3348,7 +3348,7 @@
           "name": "$os_version"
         },
         {
-          "description": "React Native version like \"0.79.6\"",
+          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
           "type": "string | null | undefined",
           "name": "$react_native_version"
         },
@@ -3830,7 +3830,7 @@
           "name": "capturePushNotificationSubscriptions"
         },
         {
-          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated. An object replaces the default App properties except `$react_native_version`, which is kept unless the object sets it (set it to `undefined` to remove it).",
+          "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
         },
@@ -4045,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },

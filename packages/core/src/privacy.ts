@@ -209,7 +209,12 @@ function sanitizeUrlFields(
   const sanitized = new URLSearchParams()
   let changed = false
   let lastFieldSensitive = false
-  for (const [key, value] of new URLSearchParams(fields)) {
+  // Parsing decodes each field, which can turn an encoded PostHog token
+  // (`%70hx_...`) into a plain one, so tokens are redacted again after decoding.
+  for (const [decodedKey, decodedValue] of new URLSearchParams(fields)) {
+    const key = redactCredentials(decodedKey)
+    const value = redactCredentials(decodedValue)
+    changed ||= key !== decodedKey || value !== decodedValue
     const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
     // `changed` is compared, not inferred from the key: the PostHog-token pass
     // runs first, so a value can already read `[redacted]`, and calling that a
@@ -479,7 +484,8 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
   // with it; losing a comma from the surrounding prose is the accepted cost of
   // not shipping `!!!`.
   const trailingFields = hasFragment ? (sanitizedTail ?? sanitizedHead) : sanitizedQuery
-  return (changed ? url.toString() : address) + (trailingFields.lastFieldSensitive ? '' : suffix)
+  // Serializing writes the host decoded, which can expose an encoded PostHog token.
+  return (changed ? redactCredentials(url.toString()) : address) + (trailingFields.lastFieldSensitive ? '' : suffix)
 }
 
 /**

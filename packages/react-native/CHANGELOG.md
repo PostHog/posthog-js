@@ -1,5 +1,39 @@
 # posthog-react-native
 
+## 4.80.0
+
+### Minor Changes
+
+- [#5254](https://github.com/PostHog/posthog-js/pull/5254) [`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Send `$react_native_version` only on `Application Installed` and `Application Updated` instead of every event
+  (2026-10-08)
+
+### Patch Changes
+
+- Updated dependencies [[`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604)]:
+  - @posthog/core@1.57.3
+
+## 4.79.2
+
+### Patch Changes
+
+- [#5221](https://github.com/PostHog/posthog-js/pull/5221) [`a52361c`](https://github.com/PostHog/posthog-js/commit/a52361c8de863ac8f291a0d3e30489a9848183cc) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Document `apiKey` as your PostHog project token (`phc_...`) and say "project token" in the missing-token error
+  (2026-10-07)
+
+## 4.79.1
+
+### Patch Changes
+
+- [#5209](https://github.com/PostHog/posthog-js/pull/5209) [`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `Unable to resolve module @posthog/core/surveys` when bundling posthog-react-native on React Native 0.71–0.78 without Metro package exports. posthog-react-native 4.47.0 and later also pick up the fix by updating `@posthog/core`.
+  (2026-10-07)
+
+- [#5215](https://github.com/PostHog/posthog-js/pull/5215) [`772e599`](https://github.com/PostHog/posthog-js/commit/772e5995c698c1c630f6ea63a64dfa422edeed33) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep `$react_native_version` on events when `customAppProperties` is an object. Set `$react_native_version: undefined` in the object to leave it out.
+  (2026-10-07)
+
+- [#5213](https://github.com/PostHog/posthog-js/pull/5213) [`7bb5636`](https://github.com/PostHog/posthog-js/commit/7bb56366bc4a6f2ede865eff1e17328efa648134) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix posthog-xcode.sh aborting the iOS build when the project has no git repo, no origin remote, or no commits
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
 ## 4.79.0
 
 ### Minor Changes
