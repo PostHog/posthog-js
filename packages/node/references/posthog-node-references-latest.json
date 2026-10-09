@@ -1259,7 +1259,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Reload feature flag definitions from the server for local evaluation.",
+          "description": "Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.",
           "details": null,
           "id": "reloadFeatureFlags",
           "showDocs": true,
@@ -3716,7 +3716,7 @@
           "name": "traces"
         },
         {
-          "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
+          "description": "Credential for fetching local feature flag definitions and decrypting remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nLocal evaluation can also use definitions from `flagDefinitionCacheProvider` without\nthis credential. Remote config payload decryption via `getRemoteConfigPayload`\nstill requires it. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
         },
@@ -3752,7 +3752,7 @@
           "name": "enableLocalEvaluation"
         },
         {
-          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
+          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nCached definitions can be used for local evaluation without a secretKey or personalApiKey.\nA credential is required only when this instance needs to fetch definitions from PostHog.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
           "type": "FlagDefinitionCacheProvider<FlagDefinitionCacheInput>",
           "name": "flagDefinitionCacheProvider"
         },
