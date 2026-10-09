@@ -232,6 +232,10 @@ function getErrorResultMessage(value: unknown): string | undefined {
     }
 }
 
+function sanitizeErrorMessage(message: string | undefined): string {
+    return sanitizeFreeText(message || 'Unknown error', ERROR_SANITIZATION_OPTIONS).slice(0, MAX_ERROR_MESSAGE_LENGTH)
+}
+
 function getErrorMessage(error: unknown, errorResult: boolean): string {
     try {
         const message = errorResult
@@ -241,12 +245,24 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
               : isString(error)
                 ? error
                 : String(error)
-        return sanitizeFreeText(message || 'Unknown error', ERROR_SANITIZATION_OPTIONS).slice(
-            0,
-            MAX_ERROR_MESSAGE_LENGTH
-        )
+        return sanitizeErrorMessage(message)
     } catch {
         return 'Unknown error'
+    }
+}
+
+function getSanitizedExceptionList(instance: PostHog, error: unknown) {
+    try {
+        const properties = instance.exceptions?.buildProperties(error, {
+            handled: true,
+            syntheticException: new Error('PostHog syntheticException'),
+        })
+        return properties?.$exception_list.map((exception) => ({
+            ...exception,
+            value: sanitizeErrorMessage(exception.value),
+        }))
+    } catch {
+        return undefined
     }
 }
 
@@ -434,6 +450,7 @@ export class WebMCP {
 
             if (failure) {
                 try {
+                    const exceptionList = getSanitizedExceptionList(instance, failure.error)
                     const captured = instance.captureException(failure.error, {
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
@@ -441,6 +458,7 @@ export class WebMCP {
                         $mcp_resource_name: tool.name,
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
+                        ...(exceptionList ? { $exception_list: exceptionList } : {}),
                     })
                     if (captured) {
                         markExceptionCaptured(instance, failure.error)

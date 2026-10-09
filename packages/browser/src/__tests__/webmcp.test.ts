@@ -470,6 +470,42 @@ describe('WebMCP', () => {
         expect(properties?.$mcp_error_message).toHaveLength(2048)
     })
 
+    it('redacts all exception values without changing the errors or their stacks', () => {
+        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
+        const posthog = createMockPostHog({
+            config: { ...defaultConfig(), capture_webmcp: true },
+            capture,
+            get_property: vi.fn(),
+        })
+        posthog.exceptions = new PostHogExceptions(posthog)
+        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        const privateValue = 'alice@example.com'
+        const cause = new Error(`cause ${privateValue}`)
+        const member = new Error(`member ${privateValue}`)
+        const thrown = new AggregateError([member], `root ${privateValue}`, { cause })
+        const originalMessages = [thrown.message, cause.message, member.message]
+        const originalStacks = [thrown.stack, cause.stack, member.stack]
+
+        register(new WebMCP(posthog), {
+            name: 'private_error',
+            execute: () => {
+                throw thrown
+            },
+        })
+
+        expect(() => registeredTool(0).execute()).toThrow(thrown)
+
+        const exceptionProperties = capture.mock.calls.find(([event]) => event === '$exception')?.[1]
+        const exceptionValues = exceptionProperties?.$exception_list.map(({ value }: { value: string }) => value)
+        expect(exceptionValues).toHaveLength(3)
+        expect(exceptionValues).not.toEqual(expect.arrayContaining([expect.stringContaining(privateValue)]))
+        expect([thrown.message, cause.message, member.message]).toEqual(originalMessages)
+        expect([thrown.stack, cause.stack, member.stack]).toEqual(originalStacks)
+        expect(
+            exceptionProperties?.$exception_list.every(({ stacktrace }: { stacktrace?: unknown }) => stacktrace)
+        ).toBe(true)
+    })
+
     it('does not extract failure details after capture is disabled', () => {
         const posthog = createMockPostHog({ config: { capture_webmcp: true } as any })
         const getContent = vi.fn(() => [{ type: 'text', text: 'failure' }])
