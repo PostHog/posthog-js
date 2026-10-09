@@ -97,6 +97,7 @@ packageExtensions:
 
 minimumReleaseAgeExclude:
   - '@posthog/cli'
+  - '@posthog/coherence@1.7.0'
   - posthog-react-native-session-replay
   - web-vitals@6.2.1
 

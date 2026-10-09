@@ -273,19 +273,19 @@ describe('Autocapture system', () => {
             div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
 
             input = document.createElement('input')
-            input.value = 'test val'
+            input.setAttribute('value', 'test val')
 
             sensitiveInput = document.createElement('input')
-            sensitiveInput.value = 'test val'
+            sensitiveInput.setAttribute('value', 'test val')
             sensitiveInput.className = 'ph-sensitive'
 
             hidden = document.createElement('input')
             hidden.setAttribute('type', 'hidden')
-            hidden.value = 'hidden val'
+            hidden.setAttribute('value', 'hidden val')
 
             password = document.createElement('input')
             password.setAttribute('type', 'password')
-            password.value = 'password val'
+            password.setAttribute('value', 'password val')
 
             const divSibling = document.createElement('div')
             const divSibling2 = document.createElement('span')
@@ -313,28 +313,15 @@ describe('Autocapture system', () => {
             expect(props['classes']).toEqual(['class1', 'class2', 'class3'])
         })
 
-        it('should not collect input value', () => {
-            const props = getPropertiesFromElement(input, false, false, undefined)
+        it.each([
+            ['an input', () => input],
+            ['an input with class "ph-sensitive"', () => sensitiveInput],
+            ['a hidden input', () => hidden],
+            ['a password input', () => password],
+        ])('should not collect the value of %s', (_, element) => {
+            const props = getPropertiesFromElement(element(), false, false, undefined)
 
-            expect(props['value']).toBeUndefined()
-        })
-
-        it('should strip element value with class "ph-sensitive"', () => {
-            const props = getPropertiesFromElement(sensitiveInput, false, false, undefined)
-
-            expect(props['value']).toBeUndefined()
-        })
-
-        it('should strip hidden element value', () => {
-            const props = getPropertiesFromElement(hidden, false, false, undefined)
-
-            expect(props['value']).toBeUndefined()
-        })
-
-        it('should strip password element value', () => {
-            const props = getPropertiesFromElement(password, false, false, undefined)
-
-            expect(props['value']).toBeUndefined()
+            expect(props['attr__value']).toBeUndefined()
         })
 
         it('should contain nth-of-type', () => {

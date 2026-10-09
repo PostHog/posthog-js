@@ -1,0 +1,37 @@
+{
+    "version": 1,
+    "concepts": [
+        {
+            "name": "capture",
+            "definition": "Recording one analytics event in an SDK: the SDK builds the event with its properties, runs it past the before-send hooks, and queues it to be sent to PostHog."
+        },
+        {
+            "name": "session",
+            "definition": "A run of one visitor's activity in a client SDK, named by a session id. The browser SDK starts a new one after the idle timeout (30 minutes by default) or after 24 hours."
+        },
+        {
+            "name": "session replay",
+            "definition": "The product that records what happened on a page (the DOM, with rrweb) during a session so it can be played back. A single played-back session is a recording."
+        },
+        {
+            "name": "extension",
+            "definition": "An opt-in browser SDK feature (autocapture, surveys, session replay, web vitals and more) that implements the Extension interface from @posthog/browser-common, and in posthog-js is often lazy-loaded from the CDN."
+        },
+        {
+            "name": "survey",
+            "definition": "A PostHog product: questions shown to visitors in the app, rendered by the surveys extension, whose answers are captured as events."
+        },
+        {
+            "name": "identify",
+            "definition": "Linking the current anonymous distinct id to a known user's id, so later events belong to that person."
+        },
+        {
+            "name": "autocapture",
+            "definition": "Capturing clicks, changes and form submits in the browser without the app calling capture for each one."
+        },
+        {
+            "name": "group",
+            "definition": "A company, team or other entity that events can be tied to, set with the group call, for group analytics."
+        }
+    ]
+}

@@ -1,0 +1,68 @@
+{
+    "name": "posthog-js",
+    "language": "typescript",
+    "wellKnown": [
+        "PostHog",
+        "Playwright",
+        "Turbo",
+        "Rolldown",
+        "Zod",
+        "Convex",
+        "Oxc",
+        "React Native",
+        "rrweb",
+        "Next.js",
+        "Nuxt",
+        "Vitest",
+        "pnpm"
+    ],
+    "ignore": [
+        "packages/rrweb",
+        "examples",
+        "playground",
+        "compliance",
+        "patches",
+        "packages/convex/src/component/_generated",
+        ".changeset",
+        "CHANGELOG.md",
+        "packages/ai/CHANGELOG.md",
+        "packages/browser-common/CHANGELOG.md",
+        "packages/browser-next/CHANGELOG.md",
+        "packages/browser/CHANGELOG.md",
+        "packages/convex/CHANGELOG.md",
+        "packages/core/CHANGELOG.md",
+        "packages/mcp/CHANGELOG.md",
+        "packages/next/CHANGELOG.md",
+        "packages/nextjs-config/CHANGELOG.md",
+        "packages/node/CHANGELOG.md",
+        "packages/nuxt/CHANGELOG.md",
+        "packages/openfeature-node-provider/CHANGELOG.md",
+        "packages/openfeature-web-provider/CHANGELOG.md",
+        "packages/plugin-utils/CHANGELOG.md",
+        "packages/react-native-plugin/CHANGELOG.md",
+        "packages/react-native/CHANGELOG.md",
+        "packages/react/CHANGELOG.md",
+        "packages/rollup-plugin/CHANGELOG.md",
+        "packages/types/CHANGELOG.md",
+        "packages/web/CHANGELOG.md",
+        "packages/webpack-plugin/CHANGELOG.md",
+        "tooling/rollup-utils/CHANGELOG.md",
+        "tooling/tsconfig-base/CHANGELOG.md"
+    ],
+    "tests": [
+        {
+            "files": ["packages/browser/src/**/*.test.ts", "packages/browser/src/**/*.test.tsx"],
+            "cwd": "packages/browser",
+            "test": "npx vitest run src -t {filter}",
+            "testJson": "npx vitest run src -t {filter} --reporter=json --outputFile={out}",
+            "testMatch": "Tests\\b.*[^0-9][1-9][0-9]* passed"
+        },
+        {
+            "files": ["packages/ai/tests/**/*.test.ts"],
+            "cwd": "packages/ai",
+            "test": "npx vitest run -t {filter}",
+            "testJson": "npx vitest run -t {filter} --reporter=json --outputFile={out}",
+            "testMatch": "Tests\\b.*[^0-9][1-9][0-9]* passed"
+        }
+    ]
+}

@@ -182,6 +182,12 @@
             }
         },
         {
+            "files": ["packages/*/rslib.config.ts"],
+            "rules": {
+                "compat/compat": "off"
+            }
+        },
+        {
             "files": ["packages/react-native/src/**", "packages/react-native-plugin/src/**"],
             "rules": {
                 "typescript/no-require-imports": "off"

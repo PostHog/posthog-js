@@ -8,6 +8,82 @@
                         "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/setup-code-signing.sh"
                     }
                 ]
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook SessionStart",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "SubagentStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook SubagentStart",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook UserPromptSubmit",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook PostToolUse",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook Stop",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "SubagentStop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook SubagentStop",
+                        "timeout": 60
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; while [ \"$root\" != / ] && [ ! -f \"$root/.claude/settings.json\" ] && [ ! -f \"$root/.codex/hooks.json\" ]; do root=$(dirname \"$root\"); done; coherence=; for c in \"${COHERENCE_HOME:+$COHERENCE_HOME/src/cli.ts}\" \"$root/node_modules/@posthog/coherence/dist/cli.js\" \"$root/node_modules/.bin/coherence\"; do if [ -n \"$c\" ] && [ -f \"$c\" ]; then coherence=$c; break; fi; done; coherence() { if [ -z \"$coherence\" ]; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence is configured for this project but not installed, so its hooks do nothing this session; the agent has been told how to install it.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Coherence is configured for this project (its hooks are in the agent host settings) but is not installed, so they do nothing this session: no vocabulary, specs, journal or checks. If package.json already lists @posthog/coherence, the project install has not run here: run it with the package manager this project uses (npm ci, pnpm install, yarn install). Otherwise add it as a dev dependency (npm install -D @posthog/coherence, pnpm add -D @posthog/coherence, or yarn add -D @posthog/coherence), which changes package.json and the lockfile. Changing the project dependencies is for the user to decide: unless the user asked for Coherence in this session, tell them it is missing and ask before installing it. Once it is installed, npx --no -- coherence spec --check confirms it, and the hooks answer from their next event.\"}}'; fi; exit 0; fi; if ! command -v node >/dev/null 2>&1; then if [ \"$2\" = SessionStart ]; then printf '%s\\n' '{\"systemMessage\":\"Coherence was found but node is not on the PATH its hooks run with, so they do nothing this session. Install Node 22.18 or newer.\"}'; fi; exit 0; fi; exec node \"$coherence\" \"$@\"; }; coherence hook PreToolUse",
+                        "timeout": 60
+                    }
+                ]
             }
         ]
     }
