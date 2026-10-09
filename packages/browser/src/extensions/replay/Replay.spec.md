@@ -10,7 +10,7 @@ Session replay in the browser SDK: decides when to record, runs the rrweb record
 
 ## invariants
 
-- an idle rotation sends no recording before interaction: When the session rotates after inactivity, replay sends none of the new session's recording until the visitor interacts, a trigger fires or the host app asks to record. If none of those happens, the held recording is thrown away.
+- an idle rotation sends no recording before interaction: When the session rotates after inactivity, replay holds the new session's recording. The flush timer does not send it while the visitor has not interacted.
   over: replay data buffered in a recording epoch that began with an idle-timeout rotation
   via: does not flush a rotation-born session on the timer without interaction
   because: an idle tab left open must not ship recordings nobody watched; sdk-specs session-replay-ingestion-controls, Requirement: Interaction hold for unconfirmed-activity recording epochs
@@ -23,7 +23,7 @@ Session replay in the browser SDK: decides when to record, runs the rrweb record
   checklist: circuit-breaker-policy dismissed: the hold depends on visitor activity, not on send failures
   checklist: declared-target-coverage dismissed: recordings go to one destination; there is no fan-out
 - replay redacts network bodies that may hold a password by default: With no custom network masking callback, replay replaces any request or response body that may contain a password with a redaction notice.
-  over: network request and response bodies replay records when the host app sets no maskRequestFn
+  over: network request and response bodies replay records when the host app sets no maskCapturedNetworkRequestFn
   via: should redact password when no masking config is set
   because: a visitor's password must never reach a recording; sdk-specs session-replay-privacy, Scenario: Default body scrubbing runs without a custom callback
   crossing: visitor -> egress
