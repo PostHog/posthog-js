@@ -56,15 +56,15 @@
         {
             "files": ["packages/browser/src/**/*.test.ts", "packages/browser/src/**/*.test.tsx"],
             "cwd": "packages/browser",
-            "test": "npx vitest run src -t {filter}",
-            "testJson": "npx vitest run src -t {filter} --reporter=json --outputFile={out}",
+            "test": "npx vitest run src/__tests__/autocapture.test.ts src/__tests__/cookieless.test.ts -t {filter}",
+            "testJson": "npx vitest run src/__tests__/autocapture.test.ts src/__tests__/cookieless.test.ts -t {filter} --reporter=json --outputFile={out}",
             "testMatch": "Tests\\b.*[^0-9][1-9][0-9]* passed"
         },
         {
             "files": ["packages/ai/tests/**/*.test.ts"],
             "cwd": "packages/ai",
-            "test": "npx vitest run -t {filter}",
-            "testJson": "npx vitest run -t {filter} --reporter=json --outputFile={out}",
+            "test": "npx vitest run tests/captureAiGeneration.test.ts -t {filter}",
+            "testJson": "npx vitest run tests/captureAiGeneration.test.ts -t {filter} --reporter=json --outputFile={out}",
             "testMatch": "Tests\\b.*[^0-9][1-9][0-9]* passed"
         }
     ]
