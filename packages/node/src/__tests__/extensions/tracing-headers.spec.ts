@@ -101,11 +101,26 @@ describe('tracing headers', () => {
         cookieFor({ distinct_id: 'anon', $sesid: [now - minute, 'session', now - 25 * 60 * minute] }),
         { distinctId: 'anon' },
       ],
+      [
+        'drops a session with future timestamps',
+        cookieFor({ distinct_id: 'anon', $sesid: [now + 40 * minute, 'session', now - minute] }),
+        { distinctId: 'anon' },
+      ],
       ['ignores a cookie for another project', cookieFor({ distinct_id: 'anon' }, 'other'), {}],
+      [
+        'ignores the cookie when the visitor opted out',
+        `${cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] })}; __ph_opt_in_out_token=0`,
+        {},
+      ],
       ['ignores a malformed cookie', 'ph_token_posthog=%7Bnot-json', {}],
       ['returns empty object without a cookie header', undefined, {}],
     ])('%s', (_name, cookieHeader, expected) => {
       expect(getPostHogCookieValues(cookieHeader, 'token', now)).toEqual(expected)
+    })
+
+    it('reads the cookie name posthog-js derives from a token with + / =', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] }, 'aPLbSLcEQ')
+      expect(getPostHogCookieValues(cookie, 'a+b/c=', now)).toEqual({ sessionId: 'session', distinctId: 'anon' })
     })
   })
 })

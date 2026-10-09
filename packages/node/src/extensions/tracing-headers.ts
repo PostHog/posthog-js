@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http'
+import { cookieStoreFromHeader, getPostHogCookieName, isOptedOut } from '@posthog/core'
 
 const TRACING_HEADER_MAX_LENGTH = 1000
 // posthog-js defaults. The browser starts a new session after this much inactivity or session length.
@@ -53,21 +54,16 @@ export function sanitizeTracingHeaderValue(value: HeaderValue): string | undefin
   return sanitized.length > TRACING_HEADER_MAX_LENGTH ? sanitized.slice(0, TRACING_HEADER_MAX_LENGTH) : sanitized
 }
 
-function getCookieValue(cookieHeader: string, name: string): string | undefined {
-  for (const part of cookieHeader.split(';')) {
-    const separator = part.indexOf('=')
-    if (separator !== -1 && part.slice(0, separator).trim() === name) {
-      return part.slice(separator + 1).trim()
-    }
-  }
-  return undefined
+function isRecent(timestamp: unknown, now: number, maxAgeMs: number): boolean {
+  // Math.abs, like posthog-js, so a browser clock that runs ahead cannot keep a session alive.
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) && Math.abs(now - timestamp) <= maxAgeMs
 }
 
 /**
  * Reads the distinct ID and the live session ID from the cookie that posthog-js writes with its default persistence.
  * The browser sends it on every same-site request, so backend events link to the browser session without
  * `tracing_headers`. A session past the posthog-js idle timeout or length cap is not returned, because the browser
- * starts a new session on its next activity.
+ * starts a new session on its next activity. Nothing is returned when the visitor's consent cookie opts out.
  */
 export function getPostHogCookieValues(
   cookieHeader: HeaderValue,
@@ -75,11 +71,15 @@ export function getPostHogCookieValues(
   now: number = Date.now()
 ): PostHogTracingHeaderValues {
   try {
-    const raw = typeof cookieHeader === 'string' ? getCookieValue(cookieHeader, `ph_${apiKey}_posthog`) : undefined
-    if (!raw) {
+    if (typeof cookieHeader !== 'string') {
       return {}
     }
-    const data = JSON.parse(decodeURIComponent(raw))
+    const cookies = cookieStoreFromHeader(cookieHeader)
+    const raw = cookies.get(getPostHogCookieName(apiKey))?.value
+    if (!raw || isOptedOut(cookies, apiKey)) {
+      return {}
+    }
+    const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') {
       return {}
     }
@@ -90,10 +90,8 @@ export function getPostHogCookieValues(
     if (Array.isArray(session) && session.length === 3) {
       const [lastActivity, candidate, sessionStart] = session
       if (
-        typeof lastActivity === 'number' &&
-        typeof sessionStart === 'number' &&
-        now - lastActivity <= COOKIE_SESSION_IDLE_TIMEOUT_MS &&
-        now - sessionStart <= COOKIE_SESSION_MAX_LENGTH_MS
+        isRecent(lastActivity, now, COOKIE_SESSION_IDLE_TIMEOUT_MS) &&
+        isRecent(sessionStart, now, COOKIE_SESSION_MAX_LENGTH_MS)
       ) {
         sessionId = sanitizeTracingHeaderValue(candidate)
       }
