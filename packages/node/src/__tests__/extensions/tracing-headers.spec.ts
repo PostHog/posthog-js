@@ -1,4 +1,5 @@
 import {
+  getPostHogCookieReadOptions,
   getPostHogCookieValues,
   getPostHogTracingHeaderValues,
   sanitizeTracingHeaderValue,
@@ -84,6 +85,36 @@ describe('tracing headers', () => {
         distinctId: 'user-from-header',
       })
       expect(getPostHogTracingHeaderValues({ cookie })).toEqual({})
+    })
+  })
+
+  describe('getPostHogCookieReadOptions', () => {
+    it.each([
+      ['off by default', undefined, undefined],
+      ['off when false', false, undefined],
+      ['on when true', true, { apiKey: 'token' }],
+      [
+        'on with a custom idle timeout',
+        { sessionIdleTimeoutSeconds: 3600 },
+        { apiKey: 'token', sessionIdleTimeoutSeconds: 3600 },
+      ],
+    ])('%s', (_name, readPostHogCookie, expected) => {
+      expect(getPostHogCookieReadOptions({ apiKey: 'token', options: { readPostHogCookie } })).toEqual(expected)
+    })
+
+    it.each([
+      ['uses the custom timeout', 3600, 45, 'session'],
+      ['clamps a timeout under 60 seconds to 60 seconds', 30, 0.75, 'session'],
+      ['clamps a timeout over 10 hours to 10 hours', 86400, 11 * 60, undefined],
+    ])('%s', (_name, sessionIdleTimeoutSeconds, idleMinutes, expectedSessionId) => {
+      const now = Date.now()
+      const lastActivity = now - idleMinutes * 60 * 1000
+      const cookie = `ph_token_posthog=${encodeURIComponent(
+        JSON.stringify({ distinct_id: 'anon', $sesid: [lastActivity, 'session', lastActivity] })
+      )}`
+      expect(getPostHogTracingHeaderValues({ cookie }, { apiKey: 'token', sessionIdleTimeoutSeconds }).sessionId).toBe(
+        expectedSessionId
+      )
     })
   })
 

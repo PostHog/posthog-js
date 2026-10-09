@@ -5,6 +5,8 @@ const TRACING_HEADER_MAX_LENGTH = 1000
 // posthog-js defaults. The browser starts a new session after this much inactivity or session length.
 const COOKIE_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const COOKIE_SESSION_MAX_LENGTH_MS = 24 * 60 * 60 * 1000
+const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60
+const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60
 // Remove C0 controls, DEL, and C1 controls from PostHog tracing IDs only.
 // oxlint-disable-next-line no-control-regex
 const TRACING_HEADER_CONTROL_CHARS_REGEX = /[\x00-\x1f\x7f-\x9f]/g
@@ -133,9 +135,11 @@ export function getPostHogCookieValues(
 
 function getSessionIdleTimeoutMs(cookie: PostHogCookieReadOptions): number {
   const seconds = cookie.sessionIdleTimeoutSeconds
-  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
-    ? seconds * 1000
-    : COOKIE_SESSION_IDLE_TIMEOUT_MS
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+    return COOKIE_SESSION_IDLE_TIMEOUT_MS
+  }
+  // The same bounds posthog-js applies to session_idle_timeout_seconds.
+  return Math.min(Math.max(seconds, MIN_SESSION_IDLE_TIMEOUT_SECONDS), MAX_SESSION_IDLE_TIMEOUT_SECONDS) * 1000
 }
 
 /**
