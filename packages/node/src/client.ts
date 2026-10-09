@@ -36,6 +36,7 @@ import {
   EventMessage,
   FeatureFlagError,
   FeatureFlagErrorType,
+  FeatureFlagEvaluationRuntime,
   FeatureFlagOverrideOptions,
   FeatureFlagResult,
   FlagEvaluationOptions,
@@ -168,7 +169,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   // flag-definition loads) — both derive from the same per-team server config and converge.
   private _minimalFlagCalledEvents: boolean = false
 
-  distinctIdHasSentFlagCalls: Record<string, Set<string>>
+  // Insertion-ordered LRU of the `$feature_flag_called` keys already reported per distinct id.
+  // Map iteration order is insertion order, so the first entry is always the least recently used.
+  private _distinctIdHasSentFlagCalls: Map<string, Set<string>>
+
+  /**
+   * Snapshot of the `$feature_flag_called` dedupe state, keyed by distinct id.
+   * Adding or deleting keys on the returned object does not affect deduplication;
+   * assigning a whole object replaces the tracker.
+   * @internal
+   * @deprecated Not part of the public API; kept for backwards compatibility.
+   */
+  get distinctIdHasSentFlagCalls(): Record<string, Set<string>> {
+    return Object.fromEntries(this._distinctIdHasSentFlagCalls)
+  }
+
+  set distinctIdHasSentFlagCalls(value: Record<string, Set<string>>) {
+    this._distinctIdHasSentFlagCalls = new Map(Object.entries(value ?? {}))
+  }
 
   // waitUntil debounce state (per-instance)
   private _waitUntilCycle?: {
@@ -230,7 +248,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.options.featureFlagsPollingInterval =
       typeof normalizedOptions.featureFlagsPollingInterval === 'number'
         ? Math.max(normalizedOptions.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
-        : THIRTY_SECONDS
+        : normalizedOptions.featureFlagsPollingInterval === null
+          ? null
+          : THIRTY_SECONDS
 
     if (typeof normalizedOptions.waitUntilDebounceMs === 'number') {
       this.options.waitUntilDebounceMs = Math.max(normalizedOptions.waitUntilDebounceMs, 0)
@@ -275,7 +295,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
-    this.distinctIdHasSentFlagCalls = {}
+    this._distinctIdHasSentFlagCalls = new Map()
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
@@ -1327,6 +1347,53 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Get where a locally loaded feature flag is meant to be evaluated.
+   *
+   * @remarks
+   * Read from the definitions local evaluation already holds, so no request is made. A
+   * definition that carries no runtime reports `all`, the default PostHog applies.
+   *
+   * @example
+   * ```ts
+   * const runtime = client.getFeatureFlagEvaluationRuntime('my-flag')
+   * // Returns: 'client'
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param key - The feature flag key
+   * @returns The flag's evaluation runtime, or undefined when local evaluation has not loaded a
+   * definition for this key
+   */
+  getFeatureFlagEvaluationRuntime(key: string): FeatureFlagEvaluationRuntime | undefined {
+    return this.featureFlagsPoller?.getEvaluationRuntimeForFlag(key)
+  }
+
+  /**
+   * Get the keys of locally loaded flags that a runtime can evaluate.
+   *
+   * @remarks
+   * A flag set to `all` suits either runtime, so it is returned for `client` and for `server`,
+   * and asking for `all` returns every loaded flag. Use this to decide which flags to hand to a
+   * browser when a backend serves flags to its own frontend.
+   *
+   * @example
+   * ```ts
+   * const clientKeys = client.getFeatureFlagKeysByEvaluationRuntime('client')
+   * // Returns: ['web-banner', 'shared-copy']
+   * ```
+   *
+   * {@label Feature flags}
+   *
+   * @param evaluationRuntime - The runtime to match
+   * @returns The matching flag keys, in the order local evaluation loaded them. Empty when no
+   * definitions are loaded
+   */
+  getFeatureFlagKeysByEvaluationRuntime(evaluationRuntime: FeatureFlagEvaluationRuntime): string[] {
+    return this.featureFlagsPoller?.getFlagKeysByEvaluationRuntime(evaluationRuntime) ?? []
+  }
+
+  /**
    * Wait for local evaluation of feature flags to be ready.
    *
    * @example
@@ -1458,7 +1525,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
     let featureFlagError: FeatureFlagErrorType | undefined = undefined
-    // Track metadata for event tracking (not exposed in FeatureFlagResult)
+    // Track metadata for feature-flag-called events.
     let flagId: number | undefined = undefined
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
@@ -1486,6 +1553,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
               enabled: value !== false,
               variant: typeof value === 'string' ? value : undefined,
               payload: localResult.payload ?? undefined,
+              reason: flagReason,
+              reasonCode: flag.active === false ? 'flag_disabled' : undefined,
             }
           }
         } catch (e) {
@@ -1555,6 +1624,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             // The flags API serializes missing variants as null
             variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
+            reason: flagReason,
+            reasonCode: flagDetail.reason?.code,
           }
         }
 
@@ -2440,20 +2511,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         : ''
     const featureFlagReportedKey = `${key}_${response}${groupSuffix}`
 
-    if (
-      distinctId in this.distinctIdHasSentFlagCalls &&
-      this.distinctIdHasSentFlagCalls[distinctId].has(featureFlagReportedKey)
-    ) {
+    const reported = this._distinctIdHasSentFlagCalls.get(distinctId) ?? new Set<string>()
+
+    // Re-insert so the distinct id moves to the most-recently-used end of the map.
+    this._distinctIdHasSentFlagCalls.delete(distinctId)
+    this._distinctIdHasSentFlagCalls.set(distinctId, reported)
+
+    if (reported.has(featureFlagReportedKey)) {
       return
     }
 
-    if (Object.keys(this.distinctIdHasSentFlagCalls).length >= this.maxCacheSize) {
-      this.distinctIdHasSentFlagCalls = {}
-    }
-    if (this.distinctIdHasSentFlagCalls[distinctId] instanceof Set) {
-      this.distinctIdHasSentFlagCalls[distinctId].add(featureFlagReportedKey)
-    } else {
-      this.distinctIdHasSentFlagCalls[distinctId] = new Set([featureFlagReportedKey])
+    reported.add(featureFlagReportedKey)
+
+    // Evict only the least recently used distinct ids. Clearing the whole tracker under capacity
+    // pressure would re-send `$feature_flag_called` for every active user at once. The current id
+    // is always kept, even when maxCacheSize is below 1.
+    while (this._distinctIdHasSentFlagCalls.size > Math.max(this.maxCacheSize, 1)) {
+      const lruDistinctId = this._distinctIdHasSentFlagCalls.keys().next().value
+      if (lruDistinctId === undefined) {
+        break
+      }
+      this._distinctIdHasSentFlagCalls.delete(lruDistinctId)
     }
 
     this.capture({
@@ -2843,7 +2921,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     try {
       return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
-      this.distinctIdHasSentFlagCalls = {}
+      this._distinctIdHasSentFlagCalls.clear()
       resolve?.()
     }
   }

@@ -58,7 +58,7 @@ export function buildSourcemapCliArgs(
     // the .js files (stripping sourcemap references), and callers pick `upload`
     // precisely because the written files must not change — e.g. Subresource
     // Integrity hashes were already computed from them.
-    if (config.sourcemaps.deleteAfterUpload && command === 'process') {
+    if (command === 'process' && config.sourcemaps.deleteAfterUpload) {
         args.push('--delete-after')
     }
 

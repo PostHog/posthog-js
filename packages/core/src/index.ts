@@ -11,6 +11,7 @@ export {
   getFeatureFlagHash,
   getFeatureFlagVariant,
   getFeatureFlagVariantLookupTable,
+  getHoldoutVariant,
   hashSHA1,
   InconclusiveMatchError,
   matchFeatureFlagProperty,
@@ -109,6 +110,7 @@ export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'
 export * from './posthog-core-stateless'
+export * from './privacy'
 export * from './tracing-headers'
 export * from './types'
 export { getValidationError, getLengthFromRules, getRequirementsHint } from './surveys/validation'

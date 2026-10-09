@@ -35,8 +35,8 @@ posthog-js, the main browser SDK: captures events, identifies people, evaluates 
   checklist: circuit-breaker-policy dismissed: nothing here suppresses sends based on failures
   checklist: declared-target-coverage dismissed: events go to one destination; there is no fan-out
 - autocapture never sends password values: Autocapture never puts the value of a password input into an event.
-  over: the attributes autocapture copies from a password input, including its value attribute
-  via: should not collect the value of a password input
+  over: the properties autocapture reads from a password input that has a value attribute
+  via: should strip password element value
   because: a password typed by a visitor must never leave their browser; a leak would expose their account on the customer's site
   crossing: visitor -> egress
   entrances: autocapture dom events

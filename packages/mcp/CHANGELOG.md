@@ -1,5 +1,105 @@
 # @posthog/mcp
 
+## 0.22.3
+
+### Patch Changes
+
+- [#5224](https://github.com/PostHog/posthog-js/pull/5224) [`ec9080a`](https://github.com/PostHog/posthog-js/commit/ec9080aad4dc6cccfe2d77f0a00420f442a90e48) Thanks [@gesh](https://github.com/gesh)! - Set `$mcp_interface` to `mcp` on events from MCP servers.
+  (2026-10-09)
+
+## 0.22.2
+
+### Patch Changes
+
+- [#5162](https://github.com/PostHog/posthog-js/pull/5162) [`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c) Thanks [@pauldambra](https://github.com/pauldambra)! - Sanitize each tool response once instead of twice, and replace image, audio and binary blocks before the scan, so tool calls with large results cost less CPU. Redact PostHog tokens that URL field decoding exposes.
+  (2026-10-07)
+- Updated dependencies [[`3132998`](https://github.com/PostHog/posthog-js/commit/31329989b12896eed051af91f7269c0db28f775c)]:
+  - @posthog/core@1.57.2
+
+## 0.22.1
+
+### Patch Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/core@1.57.0
+
+## 0.22.0
+
+### Minor Changes
+
+- [#5165](https://github.com/PostHog/posthog-js/pull/5165) [`3394548`](https://github.com/PostHog/posthog-js/commit/339454849c6efa3a309f1d4905e1016abb5e4863) Thanks [@OrbitingBucket](https://github.com/OrbitingBucket)! - Strip SDK-owned analytics arguments on fresh low-level server instances through `resolveOriginalTool`.
+  (2026-10-05)
+
+## 0.21.4
+
+### Patch Changes
+
+- [#5161](https://github.com/PostHog/posthog-js/pull/5161) [`9e42cc2`](https://github.com/PostHog/posthog-js/commit/9e42cc202c3d7c68641dd77b3131f2076b40e004) Thanks [@pauldambra](https://github.com/pauldambra)! - Make oversized events cheaper to truncate. The depth reduction now starts at the first depth that removes anything, so shallow payloads such as rows of data no longer normalize and measure the whole event again for each depth that changes nothing.
+  (2026-10-02)
+
+## 0.21.3
+
+### Patch Changes
+
+- [#5186](https://github.com/PostHog/posthog-js/pull/5186) [`80b9e5f`](https://github.com/PostHog/posthog-js/commit/80b9e5f6520f5261c706176039da8879da50fc58) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Sanitize only the part of a long string that the captured event can keep, so a tool call returning megabytes of HTML or text no longer blocks the event loop while it is scanned. A 10 MB HTML response now costs about 5 ms to capture instead of 2.7 s. The captured event does not change.
+  (2026-10-02)
+
+## 0.21.2
+
+### Patch Changes
+
+- [#5160](https://github.com/PostHog/posthog-js/pull/5160) [`1ed05cf`](https://github.com/PostHog/posthog-js/commit/1ed05cf253612aa8c45bc17723f364ff778c405c) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop copying the full tool list into `$mcp_response` on `$mcp_tools_list` events, so instrumented servers answer `tools/list` faster.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 0.21.1
+
+### Patch Changes
+
+- [#5157](https://github.com/PostHog/posthog-js/pull/5157) [`e2a3e3d`](https://github.com/PostHog/posthog-js/commit/e2a3e3d90c4d50e5333c1d0b9ea0f15745e6b247) Thanks [@gesh](https://github.com/gesh)! - Add the configured server build to custom events captured through `PostHogMCP`.
+  (2026-09-30)
+
+## 0.21.0
+
+### Minor Changes
+
+- [#5136](https://github.com/PostHog/posthog-js/pull/5136) [`be66818`](https://github.com/PostHog/posthog-js/commit/be66818539cc1bd16cbd969f3b3e8072026206ed) Thanks [@gesh](https://github.com/gesh)! - Add optional MCP server build metadata
+  (2026-09-28)
+
+## 0.20.0
+
+### Minor Changes
+
+- [#5130](https://github.com/PostHog/posthog-js/pull/5130) [`4d58499`](https://github.com/PostHog/posthog-js/commit/4d584990e5d9e331193e07c4ccda1592d414abb1) Thanks [@gesh](https://github.com/gesh)! - Record declared input aliases in automatic MCP instrumentation.
+  (2026-09-28)
+
+## 0.19.0
+
+### Minor Changes
+
+- [#5117](https://github.com/PostHog/posthog-js/pull/5117) [`51699b4`](https://github.com/PostHog/posthog-js/commit/51699b4b575505a1378fc6766767b9ef636063c2) Thanks [@pauldambra](https://github.com/pauldambra)! - Record which declared parameter aliases a tool call relied on as `$mcp_input_aliases_used`, from a server-owned `inputAliases` map.
+  (2026-09-28)
+
+- [#5048](https://github.com/PostHog/posthog-js/pull/5048) [`466da07`](https://github.com/PostHog/posthog-js/commit/466da07b12730515be7f933d3f7367a29e422898) Thanks [@pauldambra](https://github.com/pauldambra)! - Record safe tool input field names for automatic and custom MCP servers. Unknown names are `[redacted]` by default; `shouldRecordInputKey` replaces that rule.
+  (2026-09-28)
+
+## 0.18.1
+
+### Patch Changes
+
+- [#5112](https://github.com/PostHog/posthog-js/pull/5112) [`74295fd`](https://github.com/PostHog/posthog-js/commit/74295fd632aa3eeab67f243938b7a1633e6ecd68) Thanks [@gesh](https://github.com/gesh)! - Keep MCP conversation sessions consistent across user messages.
+  (2026-09-25)
+
+## 0.18.0
+
+### Minor Changes
+
+- [#5074](https://github.com/PostHog/posthog-js/pull/5074) [`7133bdb`](https://github.com/PostHog/posthog-js/commit/7133bdb7e5eb4a15f834f6f4d634cfab2de64ee2) Thanks [@gesh](https://github.com/gesh)! - Add conversation and session correlation helpers for custom MCP dispatchers.
+  (2026-09-23)
+
 ## 0.17.0
 
 ### Minor Changes

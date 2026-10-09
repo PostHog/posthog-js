@@ -1,5 +1,14 @@
 # @posthog/nextjs-config
 
+## 1.11.2
+
+### Patch Changes
+
+- [#5202](https://github.com/PostHog/posthog-js/pull/5202) [`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28) Thanks [@hpouillot](https://github.com/hpouillot)! - Support immutable Next.js 16 Turbopack sourcemaps without rewriting build assets, and require a compatible posthog-js runtime for native debug and release IDs.
+  (2026-10-09)
+- Updated dependencies [[`7199f24`](https://github.com/PostHog/posthog-js/commit/7199f24296f458af1094fdf8a432ad108685fa28)]:
+  - @posthog/plugin-utils@2.0.1
+
 ## 1.11.1
 
 ### Patch Changes

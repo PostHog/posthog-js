@@ -30,12 +30,13 @@ type TestPlugin = {
     config: () => { build: { sourcemap: 'hidden' | true } } | undefined
     buildStart: () => void
     outputOptions: {
-        handler: (options: OutputOptions) => OutputOptions
+        handler: (this: unknown, options: OutputOptions) => OutputOptions
     }
     renderChunk: {
         order: 'post'
-        handler: (code: string, chunk: { fileName: string }) => RenderChunkResult
+        handler: (code: string, chunk: { fileName: string }, outputOptions?: object) => RenderChunkResult
     }
+    augmentChunkHash: (chunk: { fileName: string }) => string | undefined
     generateBundle: {
         order: 'pre'
         handler: (options: OutputOptions, bundle: Record<string, unknown>) => void
@@ -274,6 +275,207 @@ describe('posthogRollupPlugin', () => {
             plugin.generateBundle.handler({} as OutputOptions, bundle)
 
             expect(determineChunkIdFromSource(bundle[fileName].code)).toBeUndefined()
+        })
+    })
+
+    describe('under rolldown', () => {
+        const rolldownContext = { meta: { rolldownVersion: '1.1.5' } }
+        const code = 'console.log("app");'
+        const preliminaryFileName = 'assets/index-!~{000}~.js'
+        const fileName = 'assets/index-abc123.js'
+        const placeholder = '/*posthog-chunk-id-snippet*/'
+
+        type RolldownOutputOptions = OutputOptions & { postBanner: (chunk: { fileName: string }) => Promise<string> }
+
+        // Runs one chunk through the hooks in rolldown's order. Rolldown evaluates postBanner before
+        // renderChunk, then minifies, then puts the banner on a line of its own above the code.
+        async function renderUnderRolldown(plugin: TestPlugin, userOptions: object = {}, chunkCode = code) {
+            const outputOptions = plugin.outputOptions.handler.call(
+                rolldownContext,
+                userOptions as OutputOptions
+            ) as RolldownOutputOptions
+            const renderedChunk = { fileName: preliminaryFileName }
+            const banner = await outputOptions.postBanner(renderedChunk)
+            const rendered = await plugin.renderChunk.handler(chunkCode, renderedChunk, outputOptions)
+            const hash = plugin.augmentChunkHash(renderedChunk)
+            const bundle = {
+                [fileName]: {
+                    type: 'chunk',
+                    fileName,
+                    preliminaryFileName,
+                    code: `${banner}\n${rendered?.code ?? chunkCode}`,
+                },
+            }
+            plugin.generateBundle.handler(outputOptions, bundle)
+            return { banner, rendered, hash, code: bundle[fileName].code }
+        }
+
+        it('swaps the snippet in after minification, byte for byte, and hashes it into the file name', async () => {
+            const { banner, rendered, hash, code: final } = await renderUnderRolldown(testPlugin(options))
+            const chunkId = determineChunkIdFromSource(final)!
+            const snippet = createChunkIdSnippet(chunkId, 'release-id-1')
+
+            expect(banner).toBe(placeholder)
+            expect(rendered).toBeNull()
+            expect(final).toBe(`${snippet}\n${code}${createChunkIdComment(chunkId)}`)
+            expect(hash).toBe(snippet)
+        })
+
+        it('swaps in a chunk-id-only snippet in symbol-set mode', async () => {
+            const { code: final } = await renderUnderRolldown(testPlugin(symbolSetOptions))
+            const chunkId = determineChunkIdFromSource(final)!
+
+            expect(final).toBe(`${createChunkIdSnippet(chunkId)}\n${code}${createChunkIdComment(chunkId)}`)
+        })
+
+        it('keeps the user postBanner first', async () => {
+            const fromFunction = await renderUnderRolldown(testPlugin(options), {
+                postBanner: async () => '"use client";',
+            })
+            const fromString = await renderUnderRolldown(testPlugin(options), { postBanner: '/*! license */' })
+
+            expect(fromFunction.banner).toBe(`"use client";\n${placeholder}`)
+            expect(fromFunction.code.startsWith('"use client";\n!function(){try{')).toBe(true)
+            expect(fromString.banner).toBe(`/*! license */\n${placeholder}`)
+        })
+
+        it('gives a chunk under rolldown its own chunk id, since its layout differs', async () => {
+            const inCode = await testPlugin(options).renderChunk.handler(code, { fileName: 'index.js' })
+            const { code: final } = await renderUnderRolldown(testPlugin(options))
+
+            expect(determineChunkIdFromSource(final)).not.toBe(determineChunkIdFromSource(inCode!.code))
+        })
+
+        it('copies directives ahead of the snippet, so they still lead the chunk', async () => {
+            const directiveCode = '"use client";console.log("app");'
+            const { rendered, hash, code: final } = await renderUnderRolldown(testPlugin(options), {}, directiveCode)
+            const chunkId = determineChunkIdFromSource(final)!
+            const line = `"use client";${createChunkIdSnippet(chunkId, 'release-id-1')}`
+
+            expect(rendered).toBeNull()
+            expect(hash).toBe(line)
+            expect(final).toBe(`${line}\n${directiveCode}${createChunkIdComment(chunkId)}`)
+            expect(() => new Function(final)).not.toThrow()
+        })
+
+        it('copies only the directives out of a prologue with a hashbang and comments', async () => {
+            const prologue =
+                '#!/usr/bin/env node\n// a "quoted" comment\n/* \'another\' */"use client"\n\'use strict\';\n'
+            const { code: final } = await renderUnderRolldown(testPlugin(options), {}, `${prologue}console.log("app");`)
+            const chunkId = determineChunkIdFromSource(final)!
+
+            expect(
+                final.startsWith(`"use client";'use strict';${createChunkIdSnippet(chunkId, 'release-id-1')}\n`)
+            ).toBe(true)
+        })
+
+        it('scans a long run of comments in linear time', async () => {
+            // The fastest of up to five renders keeps scheduler and GC noise out of the timing. A slow
+            // scan stops early, so a regression fails in seconds rather than hanging the suite.
+            async function fastestRender(segments: number) {
+                const code = `/*${'*//*'.repeat(segments)}*/console.log("app");`
+                let fastest = Infinity
+                const deadline = performance.now() + 500
+                for (let run = 0; run < 5 && performance.now() < deadline; run++) {
+                    const start = performance.now()
+                    const { code: final } = await renderUnderRolldown(testPlugin(options), {}, code)
+                    fastest = Math.min(fastest, performance.now() - start)
+                    expect(final.startsWith('!function(){try{')).toBe(true)
+                }
+                return fastest
+            }
+
+            // A scaling criterion rather than an absolute duration, which would depend on the CI
+            // machine: four times the comments takes about four times as long in a linear scan, and
+            // about sixteen times as long in a quadratic one. The first render only warms up the JIT.
+            await fastestRender(10_000)
+            const small = await fastestRender(10_000)
+            const large = await fastestRender(40_000)
+            expect(large / small).toBeLessThan(10)
+        })
+
+        describe('when two outputs render the same file name', () => {
+            // One output's hooks, driven by hand so the test decides how two outputs interleave.
+            function startOutput(plugin: TestPlugin) {
+                const outputOptions = plugin.outputOptions.handler.call(
+                    rolldownContext,
+                    {} as OutputOptions
+                ) as RolldownOutputOptions
+                const renderedChunk = { fileName: preliminaryFileName }
+                return {
+                    render: (chunkCode: string) => plugin.renderChunk.handler(chunkCode, renderedChunk, outputOptions),
+                    hash: () => plugin.augmentChunkHash(renderedChunk),
+                    generate: () => {
+                        const bundle = {
+                            [fileName]: {
+                                type: 'chunk',
+                                fileName,
+                                preliminaryFileName,
+                                code: `${placeholder}\n${code}`,
+                            },
+                        }
+                        plugin.generateBundle.handler(outputOptions, bundle)
+                        return bundle[fileName].code
+                    },
+                }
+            }
+
+            it('hashes only its own line when the outputs run one after another', async () => {
+                const plugin = testPlugin(options)
+                const es = startOutput(plugin)
+                await es.render(code)
+                const esHash = es.hash()
+                es.generate()
+
+                const cjs = startOutput(plugin)
+                await cjs.render(`${code}more();`)
+
+                const cjsHash = cjs.hash()!
+                expect(cjsHash).not.toContain(esHash)
+                expect(cjs.generate().startsWith(`${cjsHash}\n`)).toBe(true)
+            })
+
+            it('always hashes its own line when the outputs render concurrently', async () => {
+                const plugin = testPlugin(options)
+                const es = startOutput(plugin)
+                const cjs = startOutput(plugin)
+                await es.render(code)
+                await cjs.render(`${code}more();`)
+
+                const esHash = es.hash()!
+                const esCode = es.generate()
+                const cjsCode = cjs.generate()
+
+                expect(esHash).toContain(esCode.split('\n')[0])
+                expect(esHash).toContain(cjsCode.split('\n')[0])
+            })
+
+            it('keeps a line both outputs share until the second output is done with it', async () => {
+                const plugin = testPlugin(options)
+                const first = startOutput(plugin)
+                const second = startOutput(plugin)
+                await first.render(code)
+                await second.render(code)
+                first.hash()
+                const line = first.generate().split('\n')[0]
+
+                expect(second.hash()).toBe(line)
+            })
+        })
+
+        it('injects in code when another plugin replaced the postBanner', async () => {
+            const plugin = testPlugin(options)
+            plugin.outputOptions.handler.call(rolldownContext, {} as OutputOptions)
+
+            const result = await plugin.renderChunk.handler(
+                code,
+                { fileName: preliminaryFileName },
+                {
+                    postBanner: async () => '',
+                }
+            )
+
+            expect(result!.code.startsWith('!function(){try{')).toBe(true)
         })
     })
 

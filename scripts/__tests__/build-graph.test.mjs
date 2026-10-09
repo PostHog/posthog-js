@@ -1,5 +1,6 @@
+// oxlint-disable compat/compat -- Node-only build regression tests
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -50,6 +51,71 @@ function prerequisites(tasks, taskId) {
 }
 
 const executable = (tasks) => tasks.filter((task) => task.command !== '<NONEXISTENT>')
+
+test('browser fixture test commands build their shared mock before importing it', () => {
+    const scripts = readJson('packages/browser-next/package.json').scripts
+    for (const [script, runner] of [
+        ['test:browser', 'playwright test --config playwright.config.ts'],
+        ['test:fixture-server', 'node --test scripts/serve-browser-tests.test.mjs'],
+    ]) {
+        assert.deepEqual(scripts[script].split(' && '), [
+            'pnpm --filter @posthog-tooling/sdk-mock-server build',
+            runner,
+        ])
+    }
+})
+
+test('concurrent version generation never exposes an empty module to builds', async () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-version-race-'))
+    const targets = []
+    const writers = []
+    let running = true
+    let incompleteReads = 0
+    try {
+        symlinkSync(resolve(root, 'tooling'), resolve(fixture, 'tooling'), 'dir')
+        for (const name of ['node', 'mcp', 'convex', 'web', 'react-native']) {
+            const pkg = readJson(`packages/${name}/package.json`)
+            const cwd = resolve(fixture, 'packages', name)
+            const target = resolve(cwd, name === 'convex' ? 'src/component/version.ts' : 'src/version.ts')
+            mkdirSync(resolve(target, '..'), { recursive: true })
+            writeFileSync(resolve(cwd, 'package.json'), JSON.stringify({ version: '1.2.3' }))
+            writeFileSync(target, "export const version = '1.2.3'\n")
+            targets.push(target)
+            const command = pkg.scripts['generate-version'] ?? pkg.scripts.prebuild
+            for (let i = 0; i < 3; i++) {
+                writers.push(
+                    new Promise((resolve) => {
+                        const child = spawn(command, { cwd, shell: true, stdio: 'ignore' })
+                        child.on('error', () => resolve(-1))
+                        child.on('exit', resolve)
+                    })
+                )
+            }
+        }
+        const finished = Promise.all(writers).finally(() => {
+            running = false
+        })
+        while (running) {
+            for (const target of targets) {
+                if (!/^export const version = ['"]1\.2\.3['"]\n$/.test(readFileSync(target, 'utf8'))) {
+                    incompleteReads++
+                }
+            }
+            await new Promise(setImmediate)
+        }
+        assert.deepEqual(
+            await finished,
+            writers.map(() => 0)
+        )
+        assert.equal(incompleteReads, 0, 'compilers must only see complete version modules')
+        for (const target of targets) {
+            assert.match(readFileSync(target, 'utf8'), /^export const version = ['"]1\.2\.3['"]\n$/)
+        }
+    } finally {
+        await Promise.all(writers)
+        rmSync(fixture, { recursive: true, force: true })
+    }
+})
 
 test('rrweb has one local build command per package, with no parallel prepublish graph', () => {
     assert.equal(turbo.tasks.prepublish, undefined)
@@ -234,8 +300,10 @@ test('rrweb dev bootstraps dependency builds before starting its single watcher'
 test('every SDK and rrweb package participates in the root semantic check contract', () => {
     const sdkPackages = globSync('packages/*/package.json', { cwd: root }).map(readJson)
     const tasks = rootScriptGraph('check-types')
-    const checks = executable(tasks).filter((task) => task.task === 'check-types')
     const packages = [...sdkPackages, ...rrwebPackages]
+    const checks = executable(tasks).filter(
+        (task) => task.task === 'check-types' && packages.some((pkg) => task.package === pkg.name)
+    )
     assert.equal(checks.length, packages.length)
     for (const pkg of packages) {
         const id = `${pkg.name}#check-types`

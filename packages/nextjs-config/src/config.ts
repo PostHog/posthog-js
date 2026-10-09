@@ -1,11 +1,12 @@
 import type { NextConfig } from 'next'
 import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
-import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
-import { stripDanglingSourceMapComments } from './strip-sourcemap-comments'
+import * as utils from './utils'
+import { deleteSourceMapFiles, stripDanglingSourceMapComments } from './strip-sourcemap-comments'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
+type TurbopackConfigWithDebugIds = NonNullable<NextConfig['turbopack']> & { debugIds: boolean }
 
 // How long after `withPostHogConfig` returns we wait before deciding that
 // Next.js (or an outer wrapper) never invoked our config function. See the
@@ -15,8 +16,8 @@ const INVOCATION_TIMEOUT_MS = 5000
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PluginConfig): NextConfig {
   const resolvedConfig = resolveConfig(posthogConfig)
   const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
-  const isCompilerHookSupported = hasCompilerHook()
-  const turbopackEnabled = isTurbopackEnabled()
+  const isCompilerHookSupported = utils.hasCompilerHook()
+  const turbopackEnabled = utils.isTurbopackEnabled()
   if (turbopackEnabled && !isCompilerHookSupported) {
     console.warn('[@posthog/nextjs-config] Turbopack support is only available with next version >= 15.4.1')
   }
@@ -37,19 +38,42 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   // alternative (an opt-out flag) adds API surface for an edge case.
   // See https://github.com/PostHog/posthog-js/issues/3572
   let invoked = false
+  let releaseIdPromise: Promise<string | undefined> | undefined
   const nextConfigFn = async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
     invoked = true
     const {
       webpack: userWebPackConfig,
       compiler: userCompilerConfig,
+      turbopack: userTurbopackConfig,
+      env: userEnv,
       distDir,
       ...userConfig
     } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
-    const nextConfig = {
+    const nativeDebugIdsEnabled =
+      turbopackEnabled &&
+      sourceMapEnabled &&
+      resolvedConfig.sourcemaps.releaseMode === 'event' &&
+      utils.supportsTurbopackDebugIds()
+    let releaseId =
+      normalizeReleaseId(userEnv?.POSTHOG_RELEASE_ID) ?? normalizeReleaseId(process.env.POSTHOG_RELEASE_ID)
+    if (!releaseId && nativeDebugIdsEnabled && phase === 'phase-production-build') {
+      releaseIdPromise ??= utils.resolveReleaseId(resolvedConfig)
+      releaseId = await releaseIdPromise
+    }
+    const nextConfig: NextConfig = {
       ...userConfig,
+      ...(userTurbopackConfig ? { turbopack: userTurbopackConfig } : {}),
+      ...(userEnv ? { env: userEnv } : {}),
       distDir,
       webpack: withWebpackConfig(userWebPackConfig, resolvedConfig),
-      compiler: withCompilerConfig(userCompilerConfig, resolvedConfig),
+      compiler: withCompilerConfig(userCompilerConfig, resolvedConfig, nativeDebugIdsEnabled),
+    }
+    if (nativeDebugIdsEnabled) {
+      const turbopackConfig: TurbopackConfigWithDebugIds = { ...userTurbopackConfig, debugIds: true }
+      nextConfig.turbopack = turbopackConfig
+      if (releaseId) {
+        nextConfig.env = { ...userEnv, POSTHOG_RELEASE_ID: releaseId }
+      }
     }
     if (turbopackEnabled && sourceMapEnabled) {
       nextConfig.productionBrowserSourceMaps = true
@@ -83,6 +107,11 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   return nextConfigFn
 }
 
+function normalizeReleaseId(value: string | undefined): string | undefined {
+  const normalized = value?.trim()
+  return normalized || undefined
+}
+
 function resolveUserConfig(
   userNextConfig: UserProvidedConfig,
   phase: string,
@@ -105,7 +134,7 @@ function resolveUserConfig(
 function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConfig: ResolvedPluginConfig) {
   const defaultWebpackConfig = userWebpackConfig || ((config: any) => config)
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
-  const turbopackEnabled = isTurbopackEnabled()
+  const turbopackEnabled = utils.isTurbopackEnabled()
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
     if (sourceMapEnabled) {
@@ -120,19 +149,24 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
 
 function withCompilerConfig(
   userCompilerConfig: NextConfig['compiler'],
-  posthogConfig: ResolvedPluginConfig
+  posthogConfig: ResolvedPluginConfig,
+  nativeDebugIdsEnabled: boolean
 ): NextConfig['compiler'] {
   const sourceMapEnabled = posthogConfig.sourcemaps.enabled
-  const turbopackEnabled = isTurbopackEnabled()
-  if (sourceMapEnabled && turbopackEnabled && hasCompilerHook()) {
+  const turbopackEnabled = utils.isTurbopackEnabled()
+  if (sourceMapEnabled && turbopackEnabled && utils.hasCompilerHook()) {
     const newConfig = userCompilerConfig || {}
     const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
     newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
       console.debug('Processing source maps from compilation hook...')
-      await processSourceMaps(posthogConfig, config.distDir)
+      await utils.processSourceMaps(posthogConfig, config.distDir, nativeDebugIdsEnabled ? 'upload' : 'process')
       if (posthogConfig.sourcemaps.deleteAfterUpload) {
-        await stripDanglingSourceMapComments(config.distDir)
+        if (nativeDebugIdsEnabled) {
+          await deleteSourceMapFiles(config.distDir)
+        } else {
+          await stripDanglingSourceMapComments(config.distDir)
+        }
       }
     }
     return newConfig

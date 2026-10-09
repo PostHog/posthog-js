@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.434.11",
+    "version": "1.438.5",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -52,7 +52,11 @@
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
         "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build",
-        "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
+        "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js",
+        "compatibility:test": "node playwright/compatibility/cli.mjs check",
+        "compatibility:update": "node playwright/compatibility/cli.mjs update",
+        "compatibility:self-test": "node --test playwright/compatibility/*.test.mjs",
+        "compatibility:controls": "node playwright/compatibility/negative-control.mjs"
     },
     "main": "dist/main.js",
     "module": "dist/module.mjs",
@@ -108,6 +112,7 @@
         "@jridgewell/sourcemap-codec": "^1.5.5",
         "@playwright/test": "1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
+        "@posthog-tooling/sdk-mock-server": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb-record": "workspace:*",
@@ -128,6 +133,7 @@
         "compare-versions": "^6.1.1",
         "date-fns": "^3.6.0",
         "dotenv": "^17.4.2",
+        "esbuild": "^0.25.0",
         "expect": "^29.7.0",
         "fast-check": "^2.17.0",
         "http-server": "14.1.1",

@@ -27,9 +27,27 @@ interface AutocaptureOptions {
   console?: boolean | LogLevel[]
   /**
    * Enables native iOS/Android/macOS crash autocapture through the optional native plugin.
+   * On Android this covers Java/Kotlin crashes; native C/C++ (NDK) crashes are enabled with
+   * `androidNdkCrashes`. On Apple platforms it covers signal crashes too.
    * Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS).
    */
   nativeCrashes?: boolean
+  /**
+   * Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native
+   * plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the
+   * project's error tracking settings.
+   *
+   * An NDK crash kills the process immediately, so it is captured on the next app launch from
+   * the records the OS kept, which means properties such as `$app_version` and the identity
+   * describe that launch rather than the crash. The first launch after enabling this also
+   * captures the native crashes the OS still holds from before.
+   *
+   * For readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols`
+   * on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication
+   *
+   * Ignored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer.
+   */
+  androidNdkCrashes?: boolean
 }
 
 /**

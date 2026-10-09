@@ -1,5 +1,114 @@
 # posthog-react-native
 
+## 4.80.0
+
+### Minor Changes
+
+- [#5254](https://github.com/PostHog/posthog-js/pull/5254) [`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Send `$react_native_version` only on `Application Installed` and `Application Updated` instead of every event
+  (2026-10-08)
+
+### Patch Changes
+
+- Updated dependencies [[`2dd9878`](https://github.com/PostHog/posthog-js/commit/2dd9878a72657d3e5dc3f723798a4cbced339604)]:
+  - @posthog/core@1.57.3
+
+## 4.79.2
+
+### Patch Changes
+
+- [#5221](https://github.com/PostHog/posthog-js/pull/5221) [`a52361c`](https://github.com/PostHog/posthog-js/commit/a52361c8de863ac8f291a0d3e30489a9848183cc) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Document `apiKey` as your PostHog project token (`phc_...`) and say "project token" in the missing-token error
+  (2026-10-07)
+
+## 4.79.1
+
+### Patch Changes
+
+- [#5209](https://github.com/PostHog/posthog-js/pull/5209) [`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `Unable to resolve module @posthog/core/surveys` when bundling posthog-react-native on React Native 0.71–0.78 without Metro package exports. posthog-react-native 4.47.0 and later also pick up the fix by updating `@posthog/core`.
+  (2026-10-07)
+
+- [#5215](https://github.com/PostHog/posthog-js/pull/5215) [`772e599`](https://github.com/PostHog/posthog-js/commit/772e5995c698c1c630f6ea63a64dfa422edeed33) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep `$react_native_version` on events when `customAppProperties` is an object. Set `$react_native_version: undefined` in the object to leave it out.
+  (2026-10-07)
+
+- [#5213](https://github.com/PostHog/posthog-js/pull/5213) [`7bb5636`](https://github.com/PostHog/posthog-js/commit/7bb56366bc4a6f2ede865eff1e17328efa648134) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix posthog-xcode.sh aborting the iOS build when the project has no git repo, no origin remote, or no commits
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
+## 4.79.0
+
+### Minor Changes
+
+- [#5206](https://github.com/PostHog/posthog-js/pull/5206) [`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `$react_native_version` (for example `0.79.6`) to events captured from JavaScript
+  (2026-10-05)
+
+### Patch Changes
+
+- Updated dependencies [[`432329b`](https://github.com/PostHog/posthog-js/commit/432329b9a3b25e327d053c94d0a1961e5dec29f4), [`f047084`](https://github.com/PostHog/posthog-js/commit/f047084f816817a1b2a5646886d56bbe4c02b5e5)]:
+  - @posthog/core@1.56.1
+  - @posthog/react-native-plugin@2.12.5
+
+## 4.78.5
+
+### Patch Changes
+
+- [#5196](https://github.com/PostHog/posthog-js/pull/5196) [`16ee222`](https://github.com/PostHog/posthog-js/commit/16ee2227b66fa548d84b97c387a429bab862b451) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Warn when the deprecated `posthog-react-native-session-replay` package is in use; switch to `@posthog/react-native-plugin`
+  (2026-10-05)
+
+## 4.78.4
+
+### Patch Changes
+
+- [#5183](https://github.com/PostHog/posthog-js/pull/5183) [`cfd635a`](https://github.com/PostHog/posthog-js/commit/cfd635a71afd30bf00d88fa9c942c35ca4aa4b1e) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Expose open-ended survey choices as named, reachable text inputs and focus the input when its choice is selected.
+  (2026-10-02)
+
+- [#5181](https://github.com/PostHog/posthog-js/pull/5181) [`1087687`](https://github.com/PostHog/posthog-js/commit/108768731bbb68440e963e5ee0f0adb7607363b4) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Keep survey rating endpoint labels within the survey at large text sizes.
+  (2026-10-02)
+
+## 4.78.3
+
+### Patch Changes
+
+- [#5182](https://github.com/PostHog/posthog-js/pull/5182) [`e13bd2c`](https://github.com/PostHog/posthog-js/commit/e13bd2c876390d782fcf05efb7a5e8a267ac1611) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Give numeric survey ratings accessible question labels and selection state.
+  (2026-10-01)
+
+## 4.78.2
+
+### Patch Changes
+
+- [#5141](https://github.com/PostHog/posthog-js/pull/5141) [`7faa1db`](https://github.com/PostHog/posthog-js/commit/7faa1dbae2cb63fd1b6f3d9032b82cb2a3216aad) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$screen_width` and `$screen_height` on iOS to report the app's window size on foldables, Stage Manager, and split view
+  (2026-09-29)
+- Updated dependencies [[`b4d4375`](https://github.com/PostHog/posthog-js/commit/b4d43752b866c1b52ce644ebe381a81053431197)]:
+  - @posthog/react-native-plugin@2.12.2
+
+## 4.78.1
+
+### Patch Changes
+
+- [#5145](https://github.com/PostHog/posthog-js/pull/5145) [`890ba01`](https://github.com/PostHog/posthog-js/commit/890ba016d5ec0acd3464f63ff1c3022e31b6e74f) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Add an accessible name and button role to the survey close control.
+  (2026-09-29)
+
+## 4.78.0
+
+### Minor Changes
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Add `errorTracking.autocapture.androidNdkCrashes` to capture native C/C++ (NDK) crashes on Android 12+ (requires `@posthog/react-native-plugin` 2.12.0). Update `posthog-android` to 3.71.1 so these crashes are stamped at the right time when the device clock disagrees with network time.
+  (2026-09-25)
+
+- [#5062](https://github.com/PostHog/posthog-js/pull/5062) [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0) Thanks [@github-actions](https://github.com/apps/github-actions)! - Upload Android native (`.so`) debug symbols, and their C/C++ sources with `includeSource`, when the Expo plugin's `uploadNativeSymbols` is enabled
+  (2026-09-25)
+
+### Patch Changes
+
+- Updated dependencies [[`f8d7db4`](https://github.com/PostHog/posthog-js/commit/f8d7db4f4bf990e24ef46aeb33fcd0871c9aabab), [`63b38ad`](https://github.com/PostHog/posthog-js/commit/63b38ad01c1cd2a89e56c924242013b594138af0)]:
+  - @posthog/react-native-plugin@2.12.0
+
+## 4.77.1
+
+### Patch Changes
+
+- [#5108](https://github.com/PostHog/posthog-js/pull/5108) [`de59de0`](https://github.com/PostHog/posthog-js/commit/de59de08edcf9695d00666362411d247c27a78bc) Thanks [@kristian240](https://github.com/kristian240)! - fix(react-native): record the tapped option for shuffled choice questions
+  (2026-09-25)
+
 ## 4.77.0
 
 ### Minor Changes

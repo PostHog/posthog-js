@@ -70,7 +70,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Your PostHog API key",
+              "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
               "isOptional": false,
               "type": "string",
               "name": "apiKey"
@@ -2221,11 +2221,16 @@
       "name": "AutocaptureOptions",
       "properties": [
         {
+          "description": "Enables autocapture of native C/C++ (NDK) crashes on Android, through the optional native plugin. Requires Android 12 (API 31) or later and exception autocapture enabled in the project's error tracking settings.\nAn NDK crash kills the process immediately, so it is captured on the next app launch from the records the OS kept, which means properties such as `$app_version` and the identity describe that launch rather than the crash. The first launch after enabling this also captures the native crashes the OS still holds from before.\nFor readable stack traces, upload the app's `.so` debug symbols. With Expo, set `uploadNativeSymbols` on the `posthog-react-native/expo` config plugin: https://posthog.com/docs/error-tracking/upload-source-maps/react-native#native-crash-symbolication\nIgnored on other platforms. Disabled by default. Requires `@posthog/react-native-plugin` 2.12.0 or newer.",
+          "type": "boolean",
+          "name": "androidNdkCrashes"
+        },
+        {
           "type": "boolean | LogLevel[]",
           "name": "console"
         },
         {
-          "description": "Enables native iOS/Android/macOS crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS).",
+          "description": "Enables native iOS/Android/macOS crash autocapture through the optional native plugin. On Android this covers Java/Kotlin crashes; native C/C++ (NDK) crashes are enabled with `androidNdkCrashes`. On Apple platforms it covers signal crashes too. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS).",
           "type": "boolean",
           "name": "nativeCrashes"
         },
@@ -3343,6 +3348,11 @@
           "name": "$os_version"
         },
         {
+          "description": "React Native version like \"0.79.6\". Not set by default: the SDK sends it only on `Application Installed` and `Application Updated`",
+          "type": "string | null | undefined",
+          "name": "$react_native_version"
+        },
+        {
           "description": "Timezone of the device like \"Europe/Berlin\"",
           "type": "string | null",
           "name": "$timezone"
@@ -4035,7 +4045,7 @@
       "name": "PostHogProviderProps",
       "properties": [
         {
-          "description": "Your PostHog API key",
+          "description": "Your PostHog project token, which starts with `phc_`. Find it in your project settings: https://us.posthog.com/settings/project-details#variables",
           "type": "string",
           "name": "apiKey"
         },
@@ -4154,6 +4164,10 @@
         {
           "type": "((distinctId: string, timestamp: string, properties: PostHogReactNativePluginMap) => Promise<void>) & ((distinctId: string, timestamp: string, properties: { [key: string]: any; }) => Promise<void>)",
           "name": "captureFatalException"
+        },
+        {
+          "type": "() => Promise<PostHogReactNativePluginMap>",
+          "name": "getSessionReplayDebugProperties"
         },
         {
           "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",

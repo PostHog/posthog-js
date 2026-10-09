@@ -249,6 +249,7 @@ export function getSessionInfo(
     ipAddress: undefined,
     sdkLanguage: 'TypeScript',
     sdkVersion: version,
+    serverBuild: data?.options.serverBuild,
     serverName: server._serverInfo?.name,
     serverVersion: server._serverInfo?.version,
     clientName: clientInfo?.name,

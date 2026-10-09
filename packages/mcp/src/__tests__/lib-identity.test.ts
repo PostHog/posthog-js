@@ -79,4 +79,35 @@ describe('lib identity', () => {
       await posthog.shutdown()
     }
   })
+
+  it('keeps the instrumented server build when the client has a different default', async () => {
+    const beforeSend = vi.fn(() => null)
+    const posthog = new PostHogMCP('phc_test', {
+      ...options,
+      before_send: beforeSend,
+      serverBuild: 'client-build',
+    })
+    const { server, client, cleanup } = await setupTestServerAndClient()
+    try {
+      instrument(server, posthog, { enableConversationId: false, serverBuild: 'instrumented-build' })
+      await client
+        .request(
+          { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'missing' } } },
+          CallToolResultSchema
+        )
+        .catch(() => undefined)
+
+      await vi.waitFor(() => {
+        expect(beforeSend).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: '$mcp_tool_call',
+            properties: expect.objectContaining({ $mcp_server_build: 'instrumented-build' }),
+          })
+        )
+      })
+    } finally {
+      await cleanup()
+      await posthog.shutdown()
+    }
+  })
 })

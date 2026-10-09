@@ -10,7 +10,7 @@ import {
   initAdoptedStyleSheetObserver,
   mutationBuffers,
 } from './observer';
-import { inDom } from '../utils';
+import { callSafely, inDom } from '../utils';
 import type { Mirror } from '@posthog/rrweb-snapshot';
 import { isNativeShadowDom } from '@posthog/rrweb-snapshot';
 import dom, { patch } from '@posthog/rrweb-utils';
@@ -121,16 +121,14 @@ export class ShadowDomManager {
    * Monkey patch 'attachShadow' of an IFrameElement to observe newly added shadow doms.
    */
   public observeAttachShadow(iframeElement: HTMLIFrameElement): void {
-    if (!iframeElement.contentWindow || !iframeElement.contentDocument) return;
+    callSafely(() => {
+      const iframeWindow = iframeElement.contentWindow as
+        (Window & { Element: { prototype: Element } }) | null;
+      const iframeDocument = iframeElement.contentDocument;
+      if (!iframeWindow || !iframeDocument) return;
 
-    this.patchAttachShadow(
-      (
-        iframeElement.contentWindow as Window & {
-          Element: { prototype: Element };
-        }
-      ).Element,
-      iframeElement.contentDocument,
-    );
+      this.patchAttachShadow(iframeWindow.Element, iframeDocument);
+    });
   }
 
   /**

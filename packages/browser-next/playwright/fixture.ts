@@ -1,7 +1,12 @@
+import { flags } from '../src/flags'
 import { analytics } from '../src/analytics'
-import { createPostHog, type CaptureSummary, type SessionContext } from '../src/core'
+import { createPostHog, FeatureFlagsExtension, type CaptureSummary, type SessionContext } from '../src/core'
 
 interface ConsentHarness {
+    updateFlags(values: Record<string, boolean | string>): Promise<void>
+    flagValue(key: string): Promise<boolean | string | undefined>
+    flagChanges(): number
+
     anonymousId(): Promise<string>
     capture(event: string): Promise<void>
     captureImmediate(event: string): Promise<CaptureSummary>
@@ -19,6 +24,7 @@ interface ConsentHarness {
     optOut(): Promise<void>
     prepareTeardown(events: string[], projectToken: string): Promise<void>
     requests(): number
+    remoteConfig(): Promise<{ config: unknown; canCapture: boolean }>
     reset(): Promise<void>
     session(): Promise<SessionContext>
     sessionChanges(): readonly string[]
@@ -30,6 +36,7 @@ declare global {
     }
 }
 
+let flagChanges = 0
 let requests = 0
 let denialEvents = 0
 let lastDelivery: { body: string; compressedBytes: number; encoding: string | null } | undefined
@@ -68,7 +75,10 @@ const client = createPostHog({
             headers: { 'Content-Type': 'application/json' },
         })
     },
-    extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+    extensions: [
+        analytics({ flushAt: 100, flushInterval: 0 }),
+        flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
+    ],
     remoteConfig: {
         supportedCompression: ['gzip-js'],
         toolbarParams: {},
@@ -79,7 +89,21 @@ const client = createPostHog({
 })
 void client.then((posthog) => posthog.onNewSession(({ reason }) => sessionChanges.push(reason)))
 
+void client.then((posthog) =>
+    posthog.getExtension(FeatureFlagsExtension)!.onFeatureFlags(() => {
+        flagChanges++
+    })
+)
+
 window.consentHarness = {
+    async updateFlags(values) {
+        ;(await client).getExtension(FeatureFlagsExtension)!.updateFlags(values)
+    },
+    async flagValue(key) {
+        const value = (await client).getExtension(FeatureFlagsExtension)!.getFeatureFlag(key)
+        return value?.variant ?? value?.enabled
+    },
+    flagChanges: () => flagChanges,
     async anonymousId() {
         return (await client).anonymousId
     },
@@ -126,7 +150,10 @@ window.consentHarness = {
             capturePageview: false,
             storage: false,
             navigator: false,
-            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+            extensions: [
+                analytics({ flushAt: 100, flushInterval: 0 }),
+                flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
+            ],
         })
         for (const event of events) {
             await posthog.capture(event)
@@ -134,6 +161,20 @@ window.consentHarness = {
     },
     requests() {
         return requests
+    },
+    async remoteConfig() {
+        const posthog = await createPostHog({
+            projectToken: 'ph_remote_config',
+            apiHost: window.location.origin,
+            storage: false,
+            navigator: false,
+            capturePageview: false,
+            optOutByDefault: true,
+        })
+        const config = await posthog.getRemoteConfig()
+        const canCapture = posthog.canCapture
+        await posthog.dispose()
+        return { config, canCapture }
     },
     async reset() {
         ;(await client).reset()

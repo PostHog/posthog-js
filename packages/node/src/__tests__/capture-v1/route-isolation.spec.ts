@@ -54,12 +54,18 @@ describe('capture v1 route isolation (Node SDK)', () => {
     expect(analyticsQueueEvents(posthog)).toEqual([])
 
     // Recover the legacy leg and flush again.
+    const callsBeforeRecovery = harness.fetch.mock.calls.length
     harness.useDefaultRouting()
     await posthog.flush()
 
+    const recoveryCalls = harness.fetch.mock.calls.slice(callsBeforeRecovery)
+    expect(recoveryCalls).toHaveLength(1)
+    expect(recoveryCalls[0][0]).toBe('http://example.com/batch/')
+    expect(JSON.parse(recoveryCalls[0][1].body).batch.map((event: any) => event.event)).toEqual(['$ai_generation'])
+    expect((await harness.fetch.mock.results[callsBeforeRecovery].value).status).toBe(200)
+
     // The V1 event was never re-sent (still a single delivery); the AI event now reaches /batch/.
     expect(harness.eventsIn('/i/v1/analytics/events')).toEqual(['custom'])
-    expect(harness.eventsIn('/batch/')).toContain('$ai_generation')
     expect(aiQueueEvents(posthog)).toEqual([])
   })
 

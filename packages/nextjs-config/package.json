@@ -1,10 +1,10 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
-  "description": "NextJS configuration helper for Posthog \ud83e\udd94",
+  "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js.git",
@@ -66,7 +66,8 @@
     "typescript": "catalog:native"
   },
   "peerDependencies": {
-    "next": ">12.1.0"
+    "next": ">12.1.0",
+    "posthog-js": ">=1.438.5"
   },
   "files": [
     "dist/"

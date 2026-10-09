@@ -2,6 +2,8 @@ name: ES5 support check
 
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main

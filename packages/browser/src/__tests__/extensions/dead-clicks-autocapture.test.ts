@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { PostHog } from '../../posthog-core'
 import { assignableWindow } from '../../utils/globals'
 import { createPosthogInstance } from '../helpers/posthog-instance'
@@ -7,7 +8,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 
 describe('DeadClicksAutocapture', () => {
-    let mockStart: vi.Mock
+    let mockStart: VitestMock
 
     beforeEach(() => {
         mockStart = vi.fn()
@@ -48,7 +49,7 @@ describe('DeadClicksAutocapture', () => {
     it('should call loadExternalDependency if script is not already loaded', async () => {
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = undefined
 
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as vi.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as VitestMock
         mockLoader.mockClear()
 
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
@@ -59,7 +60,7 @@ describe('DeadClicksAutocapture', () => {
 
     it('should not call loadExternalDependency if script is already loaded', async () => {
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as vi.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as VitestMock
         mockLoader.mockClear()
 
         instance.deadClicksAutocapture.startIfEnabledOrStop()
@@ -111,7 +112,7 @@ describe('DeadClicksAutocapture', () => {
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeDefined()
         expect(mockStart).toHaveBeenCalled()
 
-        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as vi.Mock
+        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as VitestMock
 
         dca.onRemoteConfig({ ok: true, config: { captureDeadClicks: false } as any })
 
@@ -139,8 +140,8 @@ describe('DeadClicksAutocapture', () => {
             ['uses client side setting (disabled) if server side setting is not set', undefined, false, false],
             ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
             ['is disabled when nothing is set', undefined, undefined, false],
-            ['uses server side setting (disabled) if client side setting is not set', undefined, false, false],
-            ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
+            ['uses server side setting (disabled) if client side setting is not set', false, undefined, false],
+            ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
         ])(
             '%s',
             (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {

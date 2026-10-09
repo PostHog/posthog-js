@@ -629,6 +629,66 @@ describe('PostHogAnthropic', () => {
         },
       ])
     })
+
+    it('should capture tool call arguments that follow a thinking block', async () => {
+      mockStreamChunks = [
+        {
+          type: 'message_start',
+          message: { id: 'msg_test_123', type: 'message', role: 'assistant', usage: { input_tokens: 20 } as any },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } as any },
+        { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Use the tool.' } as any },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } as any },
+        { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Checking.' } },
+        { type: 'content_block_stop', index: 1 },
+        {
+          type: 'content_block_start',
+          index: 2,
+          content_block: { type: 'tool_use', id: 'tool_123', name: 'get_weather' } as any,
+        },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '{"location":' } },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '"Paris"}' } },
+        { type: 'content_block_stop', index: 2 },
+        {
+          type: 'message_delta',
+          delta: { type: 'stop_reason', stop_reason: 'tool_use' },
+          usage: { output_tokens: 10 },
+        },
+        { type: 'message_stop' },
+      ]
+
+      const stream = await client.messages.create({
+        model: 'claude-sonnet-4-5',
+        messages: [{ role: 'user', content: 'What is the weather?' }],
+        max_tokens: 2048,
+        thinking: { type: 'enabled', budget_tokens: 1024 },
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch sees every block.
+      }
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as vi.Mock
+      const [captureArgs] = captureMock.mock.calls
+
+      expect(captureArgs[0].properties['$ai_output_choices']).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Checking.' },
+            {
+              type: 'function',
+              id: 'tool_123',
+              function: { name: 'get_weather', arguments: { location: 'Paris' } },
+            },
+          ],
+        },
+      ])
+    })
   })
 
   describe('Tool Usage', () => {
