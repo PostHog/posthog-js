@@ -315,6 +315,7 @@ export class PostHogFeatureFlags implements Extension {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer: ReturnType<typeof setTimeout> | undefined
+    private _firingFeatureFlagsCallbacks: boolean = false
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
@@ -922,6 +923,13 @@ export class PostHogFeatureFlags implements Extension {
 
         if (this._hasStatusZeroCircuitBreakerTripped()) {
             return
+        }
+
+        if (this._firingFeatureFlagsCallbacks) {
+            this._logger.warn(
+                'reloadFeatureFlags() was called inside an onFeatureFlags callback. ' +
+                    'This callback also runs when flags change in other tabs, so this can cause a request loop.'
+            )
         }
 
         if (this._requestInFlight) {
@@ -1858,6 +1866,8 @@ export class PostHogFeatureFlags implements Extension {
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        const wasFiring = this._firingFeatureFlagsCallbacks
+        this._firingFeatureFlagsCallbacks = true
         this.featureFlagEventHandlers.forEach((handler) => {
             // Isolate each handler: a user-provided onFeatureFlags callback that throws must not
             // break the callback chain (preventing later handlers from firing) or surface as a
@@ -1870,6 +1880,7 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.error('Error while running feature flags callback', error)
             }
         })
+        this._firingFeatureFlagsCallbacks = wasFiring
     }
 
     /**
