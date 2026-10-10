@@ -108,7 +108,7 @@ export type PostHogSurveyProviderProps = {
 export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.Element {
   const posthogFromHook = usePostHog()
   const posthog = props.client ?? posthogFromHook
-  const { seenSurveys, setSeenSurvey, setLastSeenSurveyDate, isReady } = useSurveyStorage(posthog)
+  const { seenSurveys, setSeenSurvey, lastSeenSurveyDate, setLastSeenSurveyDate, isReady } = useSurveyStorage(posthog)
   const progressStore = useMemo(() => new SurveyProgressStore(posthog), [posthog])
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(undefined)
@@ -187,8 +187,8 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       flags ?? {},
       seenSurveys,
       activatedSurveys,
-      new Set(surveys.filter((survey) => progressStore.load(survey)).map(getSurveyIterationKey))
-      // lastSeenSurveyDate
+      new Set(surveys.filter((survey) => progressStore.load(survey)).map(getSurveyIterationKey)),
+      lastSeenSurveyDate
     )
 
     const popoverSurveys = activeSurveys
@@ -202,7 +202,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     }
 
     setActiveSurvey(popoverSurveys.length > 0 ? popoverSurveys[0] : undefined)
-  }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys, isReady, posthog, progressStore])
+  }, [activeSurvey, flags, surveys, seenSurveys, lastSeenSurveyDate, activatedSurveys, isReady, posthog, progressStore])
 
   const translatedActiveSurvey = useMemo(() => {
     return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog, userLanguage) : undefined
