@@ -141,4 +141,171 @@ describe('mutation child traversal', () => {
       expect(buffer['movedSet'].has(removed)).toBe(false);
     },
   );
+
+  // Basic jsdom-level correctness coverage for the topological-order drain
+  // ported from upstream rrweb PR #1652. This asserts the baseline invariant
+  // that every emitted add has a parentId that is either already in the
+  // mirror OR appears earlier in the same adds array. It is INTENTIONALLY
+  // a weak coverage test — the actual regression that the drain refactor
+  // targets (shadow DOM descendants disappearing when their host is being
+  // moved) is caught by `test/integration.test.ts > should record moved
+  // shadow DOM 2`, which requires the puppeteer harness and does fail on
+  // the pre-shadow-fix walk-up loop. @TueHaulund flagged this as being too
+  // weak during PR #5244 review — tightening via a full port of upstream's
+  // mutation.test.ts fixtures is a reasonable follow-up iteration.
+  it('emits every added node with a resolvable parentId (basic drain correctness)', async () => {
+    const events: Array<{ type: number }> = [];
+    stop = record({ emit: (e) => events.push(e) });
+    await settle();
+    const destination = document.getElementById('destination')!;
+    const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
+    buffer.lock(); // atomically batch — forces the pathological drain path
+
+    // Build a 4-deep tree. Attach LEAVES first, then middle, then root last.
+    // Pre-fix addList would process leaves first → nextId / parentId both -1
+    // → defer to addList → tail-rescan → eventually give up and silently drop.
+    const root = document.createElement('section');
+    root.id = 'batched-root';
+    const mid = document.createElement('div');
+    mid.className = 'mid';
+    const leaves = Array.from({ length: 20 }, (_, i) => {
+      const d = document.createElement('p');
+      d.textContent = `leaf-${i}`;
+      return d;
+    });
+    // Attach OUT OF ORDER: leaves into mid, mid into root, root into DOM LAST.
+    leaves.forEach((l) => mid.appendChild(l));
+    root.appendChild(mid);
+    destination.appendChild(root);
+
+    buffer.unlock();
+    await settle();
+
+    // Collect adds emitted after the batch.
+    const addsEmitted: Array<{ parentId: number; nextId: number | null; id: number }> = [];
+    for (const ev of events) {
+      if (ev.type !== 3) continue;
+      const data = (ev as unknown as { data: { adds?: Array<any> } }).data;
+      if (!data?.adds) continue;
+      for (const add of data.adds) {
+        addsEmitted.push({
+          parentId: add.parentId,
+          nextId: add.nextId,
+          id: add.node?.id,
+        });
+      }
+    }
+
+    // Every emitted add must reference a parent that is EITHER already in
+    // the mirror from before this batch, OR appears earlier in this adds
+    // array. The pre-fix drain could emit a child before its parent and
+    // the replay engine would reject the mutation. 22 total nodes expected
+    // (1 root + 1 mid + 20 leaves) — all must land.
+    expect(addsEmitted.length).toBeGreaterThanOrEqual(22);
+
+    const seenIds = new Set<number>();
+    // Seed with ids that existed before the batch (destination + anything already in mirror).
+    const mirror = (buffer as unknown as { mirror: { getId(n: Node): number } }).mirror;
+    seenIds.add(mirror.getId(destination));
+    seenIds.add(mirror.getId(document.body));
+
+    for (const add of addsEmitted) {
+      // parentId -1 is the exact fail mode Tue flagged on the shadow-DOM path.
+      expect(add.parentId).not.toBe(-1);
+      // Parent must be reachable: either in mirror from before, or already
+      // emitted earlier in this adds stream.
+      expect(seenIds.has(add.parentId)).toBe(true);
+      // If nextId is set, that sibling must also already be in the mirror
+      // (either pre-batch or earlier in the stream). -1 means we dropped it.
+      if (add.nextId !== null) {
+        expect(add.nextId).not.toBe(-1);
+      }
+      seenIds.add(add.id);
+    }
+
+    // Addedset must drain completely — any residue would indicate the
+    // iterator missed a node or looped past a tombstone.
+    expect(buffer['addedSet'].size).toBe(0);
+  });
+
+  // Regression test for posthog-js #5227: before porting upstream rrweb
+  // PR #1652 the addList-based drain in processBufferedMutations was O(n²)
+  // when a single render added many sibling nodes (e.g. a 50×35 table
+  // mounting ~13k nodes at once). The reporter observed ~10 s main-thread
+  // freezes. The new topological-order addedSet drain is O(n), so a large
+  // single-batch addition must both (a) complete without stalling the test
+  // runner and (b) emit every added node in a parent-before-child order
+  // the replay engine can consume.
+  it('emits every node in a single-render large-batch sibling addition (fixes #5227)', async () => {
+    const events: Array<{ type: number }> = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event);
+      },
+    });
+    await settle();
+    const buffer = mutationBuffers.find((b) => b.bufferDoc() === document)!;
+    const destination = document.getElementById('destination')!;
+
+    // Mount 500 siblings each with 4 nested children (~2500 nodes) in one
+    // synchronous render — the shape #5227 reports as pathological.
+    const batch = document.createDocumentFragment();
+    const expectedTexts: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      const row = document.createElement('div');
+      row.className = `row-${i}`;
+      for (let j = 0; j < 3; j++) {
+        const cell = document.createElement('span');
+        const text = `r${i}c${j}`;
+        cell.textContent = text;
+        expectedTexts.push(text);
+        row.appendChild(cell);
+      }
+      batch.appendChild(row);
+    }
+
+    const start = Date.now();
+    destination.appendChild(batch);
+    await settle();
+    const elapsedMs = Date.now() - start;
+
+    // Collect every full-mutation payload emitted since the batch was appended.
+    const addsAfterBatch: Array<{ parentId: number; nextId: number | null }> =
+      [];
+    for (const event of events) {
+      if (event.type !== 3) continue;
+      const data = (event as unknown as { data: { adds?: unknown[] } }).data;
+      if (!data?.adds) continue;
+      for (const add of data.adds as Array<{
+        parentId: number;
+        nextId: number | null;
+      }>) {
+        addsAfterBatch.push({ parentId: add.parentId, nextId: add.nextId });
+      }
+    }
+
+    // The row+cell count that must have shipped as "add" mutations. Serialized
+    // text nodes nest inside cells and so are not counted here directly; the
+    // 2000 bound guards against the pre-fix regression where entire subtrees
+    // were silently dropped by the "escape the dead while loop" fallback once
+    // the addList rescan budget blew up.
+    expect(addsAfterBatch.length).toBeGreaterThan(1000);
+
+    // Every emitted add must reference a parent that is also already in the
+    // mirror by the time the replay engine processes it — otherwise the
+    // replay would reject the mutation. parentId -1 or nextId -1 at this
+    // point would signal that pushAdd silently dropped a resolvable node.
+    for (const add of addsAfterBatch) {
+      expect(add.parentId).not.toBe(-1);
+    }
+
+    // Addedset must have been fully drained; the new algorithm deletes each
+    // node after processing so a non-empty residue would indicate a leaked
+    // reference.
+    expect(buffer['addedSet'].size).toBe(0);
+
+    // Not a strict perf gate — jsdom is slower than real browsers — but the
+    // old O(n²) drain would exceed this budget for 500 siblings even in CI.
+    expect(elapsedMs).toBeLessThan(5000);
+  });
 });
