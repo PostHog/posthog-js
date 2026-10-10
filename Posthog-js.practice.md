@@ -5,7 +5,8 @@
   step: pin the exception to an exact version, and record why with decide
   leaves: the decision's id
   pitfall: the cooldown held @posthog/coherence at 1.1.1, which lacked the command adoption needed, until an exact-version exception was added (d-d96167a7)
-  learned: d-d96167a7, 292af505b
+  pitfall: turning the cooldown off for a pnpm update re-resolved unrelated packages (core-js 3.49.0 to 3.50.0); when the manifest is unchanged, edit the lockfile entry's version and integrity and verify with a frozen install under the policy (d-433ad097)
+  learned: d-d96167a7, 292af505b, d-433ad097
   because: minimumReleaseAge protects against freshly published compromised packages; an exception that reaches consumers spreads that risk to every SDK user
 - add an invariant: An invariant is taken from a PostHog/sdk-specs requirement and backed by a test that already exists.
   when: edit **/*.spec.md adding via: | explicit
