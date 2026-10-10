@@ -59,6 +59,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
         \\"undefined\\",
         \\"false\\",
         \\"true\\"
+      ],
+      \\"capture_value_css_selector_allowlist\\": [
+        \\"undefined\\",
+        \\"string[]\\",
+        \\"(element: Element) => boolean\\"
       ]
     }
   ],

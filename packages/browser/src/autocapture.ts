@@ -26,7 +26,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 import { AutocaptureExtension } from './extension-tokens'
 
-import { isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
+import { isArray, isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
@@ -34,6 +34,36 @@ import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser
 import { includes } from '@posthog/core'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+const DEFAULT_INPUT_TEXT_ALLOWLIST = ['[data-ph-capture-value]']
+const EXCLUDED_INPUT_TYPES = ['password', 'hidden', 'file', 'checkbox', 'button', 'submit', 'reset', 'image']
+
+function isValueInputElement(element: Element): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+    if (isTag(element, 'input')) {
+        return !includes(EXCLUDED_INPUT_TYPES, (element as HTMLInputElement).type)
+    }
+    return isTag(element, 'textarea') || (isTag(element, 'select') && !(element as HTMLSelectElement).multiple)
+}
+
+// Value privacy checks must cross shadow hosts and fail closed on incomplete ancestry.
+function isInputValueEligible(target: Element): boolean {
+    if (!shouldCaptureElement(target)) return false
+    const seen = new Set<Element>()
+    let element: Element | null = target
+    while (element) {
+        const classes = getClassNames(element)
+        if (
+            seen.size >= MAX_DOM_ANCESTOR_DEPTH ||
+            seen.has(element) ||
+            includes(classes, 'ph-sensitive') ||
+            includes(classes, 'ph-no-capture')
+        )
+            return false
+        seen.add(element)
+        const parent: ParentNode | null = element.assignedSlot || element.parentNode
+        element = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+    }
+    return true
+}
 
 const logger = createLogger('[AutoCapture]')
 
@@ -731,6 +761,23 @@ export class Autocapture implements Extension {
                     props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
                 props['$copy_type'] = clipType
+            }
+
+            if (
+                eventName === '$autocapture' &&
+                e.type === 'change' &&
+                isValueInputElement(target) &&
+                isInputValueEligible(target) &&
+                !config.maskAllText &&
+                !target.querySelector('.ph-no-capture, .ph-sensitive')
+            ) {
+                const allowlist = config.capture_value_css_selector_allowlist ?? DEFAULT_INPUT_TEXT_ALLOWLIST
+                const captureValue = isFunction(allowlist)
+                    ? allowlist(target)
+                    : isArray(allowlist) && allowlist.some((selector) => elementMatchesCSSSelector(target, selector))
+                if (captureValue) {
+                    props['$input_value'] = target.value
+                }
             }
 
             this._client?.capture(eventName, props)
