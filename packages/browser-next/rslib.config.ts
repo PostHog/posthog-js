@@ -15,7 +15,7 @@ export default defineConfig({
             __POSTHOG_BROWSER_VERSION__: JSON.stringify(packageVersion),
         },
         entry: {
-            index: ['src/**/*', '!src/**/*.spec.ts'],
+            index: ['src/**/*', '!src/**/*.spec.ts', '!src/**/*.md'],
         },
         tsconfigPath: './tsconfig.build.json',
     },

@@ -36,7 +36,8 @@
     "dist",
     "surveys",
     "src",
-    "!src/__tests__"
+    "!src/__tests__",
+    "!src/**/*.spec.md"
   ],
   "scripts": {
     "check-types": "tsc --noEmit --project tsconfig.build.json",

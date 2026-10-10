@@ -30,7 +30,8 @@
   "files": [
     "src",
     "dist",
-    "!src/__tests__"
+    "!src/__tests__",
+    "!src/**/*.spec.md"
   ],
   "license": "MIT",
   "author": {
