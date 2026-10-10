@@ -2957,6 +2957,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
                 bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
                 bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
+                oversizedAddBytes: this._instance.config.session_recording.__mutationOversizedAddBytes,
+                oversizedAddBudget: this._instance.config.session_recording.__mutationOversizedAddBudget,
                 resyncIntervalMs: this._fullSnapshotIntervalMillis,
                 onDroppedOversizedMutation: (bytes) => {
                     if (this._oversizedMutationsDropped === 0) {

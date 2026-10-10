@@ -1279,3 +1279,211 @@ describe('record() suspension boundary wiring', () => {
     expect(getDiscardedDurationSamples()).toBe(1);
   });
 });
+
+describe('record() stylesheet budget on added subtrees', () => {
+  let scheduled: Map<number, IdleCallback>;
+  let nextHandle: number;
+  let cleanupNodes: Element[];
+  let events: eventWithTime[];
+  let stop: (() => void) | undefined;
+
+  const drainIdle = () => {
+    let callbacks = 0;
+    while (scheduled.size > 0 && callbacks < 500) {
+      const next = scheduled.entries().next().value as [number, IdleCallback];
+      scheduled.delete(next[0]);
+      next[1]({ didTimeout: false, timeRemaining: () => 50 });
+      callbacks += 1;
+    }
+    expect(scheduled.size).toBe(0);
+  };
+
+  // A detached <link rel=stylesheet> holding a readable sheet, ready to be
+  // appended as part of a subtree the recorder has to serialize from scratch.
+  const makeDetachedLink = (
+    ruleCount: number,
+    marker: string,
+  ): HTMLLinkElement => {
+    const rules: string[] = [];
+    for (let i = 0; i < ruleCount; i++) {
+      rules.push(`.${marker}-${i} { color: red; }`);
+    }
+    const styleEl = document.createElement('style');
+    styleEl.textContent = rules.join('\n');
+    document.head.appendChild(styleEl);
+    const sheet = styleEl.sheet;
+    styleEl.remove();
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', `/${marker}.css`);
+    Object.defineProperty(linkEl, 'sheet', { value: sheet });
+    return linkEl;
+  };
+
+  const addedLinks = (): Array<{ id: number; node: serializedNodeWithId }> => {
+    const found: Array<{ id: number; node: serializedNodeWithId }> = [];
+    const visit = (node: serializedNodeWithId) => {
+      if (node.type === NodeType.Element && node.tagName === 'link') {
+        found.push({ id: node.id, node });
+      }
+      if ('childNodes' in node) {
+        node.childNodes.forEach(visit);
+      }
+    };
+    for (const event of events) {
+      if (
+        event.type !== EventType.IncrementalSnapshot ||
+        event.data.source !== IncrementalSource.Mutation
+      ) {
+        continue;
+      }
+      (event.data.adds ?? []).forEach((add) => visit(add.node));
+    }
+    return found;
+  };
+
+  const cssTextMutations = (): Array<{ id: number; cssText: string }> => {
+    const mutations: Array<{ id: number; cssText: string }> = [];
+    for (const event of events) {
+      if (
+        event.type !== EventType.IncrementalSnapshot ||
+        event.data.source !== IncrementalSource.Mutation
+      ) {
+        continue;
+      }
+      for (const attribute of event.data.attributes ?? []) {
+        const cssText = (attribute.attributes as Record<string, unknown>)
+          ._cssText;
+        if (typeof cssText === 'string') {
+          mutations.push({ id: attribute.id, cssText });
+        }
+      }
+    }
+    return mutations;
+  };
+
+  // MutationObserver callbacks are microtasks in jsdom
+  const flushMutations = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  beforeEach(() => {
+    resetSnapshotCostState();
+    scheduled = new Map();
+    nextHandle = 1;
+    cleanupNodes = [];
+    events = [];
+    (
+      window as unknown as { requestIdleCallback: unknown }
+    ).requestIdleCallback = (cb: IdleCallback) => {
+      const handle = nextHandle++;
+      scheduled.set(handle, cb);
+      return handle;
+    };
+    (window as unknown as { cancelIdleCallback: unknown }).cancelIdleCallback =
+      (handle: number) => {
+        scheduled.delete(handle);
+      };
+  });
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    cleanupNodes.forEach((node) => node.remove());
+    record.mirror.reset();
+    delete (window as unknown as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+    delete (window as unknown as { cancelIdleCallback?: unknown })
+      .cancelIdleCallback;
+  });
+
+  it('defers over-budget sheets inside an added subtree, then inlines them from idle time', async () => {
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      inlineStylesheetBudgetRules: 100,
+    });
+
+    // the freeze the customer sees: a whole subtree re-created at once, every
+    // sheet in it re-stringified inside the mutation callback
+    const container = document.createElement('div');
+    container.appendChild(makeDetachedLink(60, 'added-a'));
+    container.appendChild(makeDetachedLink(600, 'added-b'));
+    container.appendChild(makeDetachedLink(600, 'added-c'));
+    document.body.appendChild(container);
+    cleanupNodes.push(container);
+
+    await flushMutations();
+
+    const links = addedLinks();
+    expect(links).toHaveLength(3);
+    const inlined = links.filter(
+      (link) =>
+        '_cssText' in (link.node as serializedElementNodeWithId).attributes,
+    );
+    const deferred = links.filter((link) => !inlined.includes(link));
+    // only the sheet that fits the budget was stringified in the callback
+    expect(inlined).toHaveLength(1);
+    // the deferred links keep rel/href, so replay can still load them remotely
+    for (const link of deferred) {
+      const { attributes } = link.node as serializedElementNodeWithId;
+      expect(attributes.rel).toBe('stylesheet');
+      expect(attributes._cssText).toBeUndefined();
+    }
+
+    drainIdle();
+
+    const mutations = cssTextMutations();
+    expect(mutations).toHaveLength(2);
+    expect(new Set(mutations.map((m) => m.id))).toEqual(
+      new Set(deferred.map((link) => link.id)),
+    );
+  });
+
+  it('inlines every sheet in an added subtree when no budget is configured', async () => {
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+    });
+
+    const container = document.createElement('div');
+    container.appendChild(makeDetachedLink(600, 'unbounded-a'));
+    container.appendChild(makeDetachedLink(600, 'unbounded-b'));
+    document.body.appendChild(container);
+    cleanupNodes.push(container);
+
+    await flushMutations();
+
+    const links = addedLinks();
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const { attributes } = link.node as serializedElementNodeWithId;
+      expect(String(attributes._cssText)).toContain('-599');
+    }
+    expect(scheduled.size).toBe(0);
+  });
+
+  it('leaves the slowest-full-snapshot gauge to full snapshots', async () => {
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      inlineStylesheetBudgetRules: 100,
+    });
+
+    const snapshotCost = getLastSnapshotCost();
+    expect(snapshotCost).not.toBeNull();
+
+    const container = document.createElement('div');
+    container.appendChild(makeDetachedLink(600, 'gauge'));
+    document.body.appendChild(container);
+    cleanupNodes.push(container);
+
+    await flushMutations();
+
+    // the mutation window opened a tracking scope for the budget alone; its
+    // cost must not overwrite what the full snapshot measured
+    expect(getLastSnapshotCost()).toBe(snapshotCost);
+    expect(getMutationCost().slowestBatchMs).toBeGreaterThanOrEqual(0);
+  });
+});
