@@ -32,8 +32,8 @@ export function getActiveMatchingSurveys(
   flags: Record<string, FeatureFlagValue>,
   seenSurveys: string[],
   activatedSurveys: ReadonlySet<string>,
+  lastSeenSurveyDate: Date | undefined,
   inProgressSurveys: ReadonlySet<string> = new Set()
-  // lastSeenSurveyDate: Date | undefined
 ): Survey[] {
   return surveys.filter((survey: Survey) => {
     const hasProgress = inProgressSurveys.has(getSurveyIterationKey(survey))
@@ -51,15 +51,19 @@ export function getActiveMatchingSurveys(
       return false
     }
 
-    // const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-    // if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-    //   const today = new Date()
-    //   const diff = Math.abs(today.getTime() - lastSeenSurveyDate.getTime())
-    //   const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-    //   if (diffDaysFromToday < surveyWaitPeriodInDays) {
-    //     return false
-    //   }
-    // }
+    const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
+
+    if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
+      const today = new Date()
+      const diff = Math.abs(today.getTime() - lastSeenSurveyDate.getTime())
+      const daysSinceSurveySeen = Math.ceil(diff / (1000 * 3600 * 24))
+
+      const waitPeriodActive = daysSinceSurveySeen < surveyWaitPeriodInDays
+
+      if (waitPeriodActive) {
+        return false
+      }
+    }
 
     // Skip surveys with URL or CSS selector conditions (not supported in React Native)
     if (
