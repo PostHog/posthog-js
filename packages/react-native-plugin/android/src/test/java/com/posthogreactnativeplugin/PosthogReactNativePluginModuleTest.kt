@@ -225,4 +225,36 @@ class PosthogReactNativePluginModuleTest {
       assertEquals(false, event.properties!!["\$is_identified"])
     }
   }
+
+  private fun javascriptCrashEvent() =
+    PostHogEvent(
+      "\$exception",
+      "distinct-id",
+      properties =
+        mutableMapOf(
+          "\$exception_list" to
+            listOf(mapOf("type" to "JavascriptException", "module" to "com.facebook.react.common")),
+        ),
+    )
+
+  @Test
+  fun `native JavascriptException is kept when the JS layer did not see the crash`() {
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `native JavascriptException is dropped once after the JS layer saw the crash`() {
+    markJsFatalHandled()
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
+  fun `the JS crash marker is not consumed by other exceptions`() {
+    markJsFatalHandled()
+
+    assertNotNull(dropJsHandledFatalCrash(nativeExceptionEvent()))
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
 }

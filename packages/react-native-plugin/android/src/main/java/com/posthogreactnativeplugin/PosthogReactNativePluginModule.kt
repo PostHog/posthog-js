@@ -33,6 +33,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
@@ -79,6 +80,7 @@ class PosthogReactNativePluginModule(
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
       androidNdkCrashes = getBoolean(errorTrackingConfig, "androidNdkCrashes", false),
+      fatalExceptionMarker = getBoolean(errorTrackingConfig, "fatalExceptionMarker", false),
       exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       pushConfig = getMap(pluginConfig, "push"),
       promise = promise,
@@ -102,6 +104,7 @@ class PosthogReactNativePluginModule(
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
       androidNdkCrashes = false,
+      fatalExceptionMarker = false,
       exceptionStepsConfig = null,
       pushConfig = null,
       promise = promise,
@@ -117,6 +120,7 @@ class PosthogReactNativePluginModule(
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
     androidNdkCrashes: Boolean,
+    fatalExceptionMarker: Boolean,
     exceptionStepsConfig: ReadableMap?,
     pushConfig: ReadableMap?,
     promise: Promise,
@@ -170,8 +174,14 @@ class PosthogReactNativePluginModule(
                 getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
-              // The JS layer already captured them, so drop the native duplicate.
-              errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
+              // Drop it only when the JS layer saw the crash. Fatals that bypass the JS handler,
+              // such as React render errors, have no marker and are reported natively instead.
+              // An older JS layer sends no marker, so every JavascriptException is dropped as before.
+              if (fatalExceptionMarker) {
+                addBeforeSend { dropJsHandledFatalCrash(it) }
+              } else {
+                errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
+              }
               addBeforeSend { restoreJsFatalCaptureProperties(it) }
 
               // Always apply the session replay configuration so that recording started later
@@ -473,6 +483,16 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  /**
+   * Records that the JS fatal handler saw a crash, so the JavascriptException React Native
+   * throws for it next is dropped as a duplicate.
+   */
+  @ReactMethod
+  fun markFatalExceptionHandled(promise: Promise) {
+    markJsFatalHandled()
+    promise.resolve(null)
+  }
+
   private fun getMap(
     map: ReadableMap?,
     key: String,
@@ -767,6 +787,33 @@ internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent 
     }
   }
   return event
+}
+
+// Set when the JS fatal handler saw a crash. The JavascriptException React Native throws for
+// that crash is captured in this process, so memory is enough; the first one consumes it.
+private val jsFatalHandled = AtomicBoolean(false)
+
+internal fun markJsFatalHandled() {
+  jsFatalHandled.set(true)
+}
+
+internal fun dropJsHandledFatalCrash(event: PostHogEvent): PostHogEvent? {
+  if (event.event != "\$exception" || !hasJavascriptException(event.properties)) {
+    return event
+  }
+  return if (jsFatalHandled.getAndSet(false)) null else event
+}
+
+private fun hasJavascriptException(properties: Map<String, Any>?): Boolean {
+  val exceptionList = properties?.get("\$exception_list") as? List<*> ?: return false
+  return exceptionList.any { entry ->
+    val exception = entry as? Map<*, *> ?: return@any false
+    val type = exception["type"] as? String ?: return@any false
+    val module = exception["module"] as? String
+    // posthog-android splits the class name into module and type.
+    val className = if (module.isNullOrEmpty()) type else "$module.$type"
+    className == JavascriptException::class.java.name
+  }
 }
 
 // The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly

@@ -19,12 +19,14 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
     addExceptionStep: vi.fn(() => Promise.resolve()),
     setOptOut: vi.fn(() => Promise.resolve()),
     captureFatalException: vi.fn(() => Promise.resolve()),
+    markFatalExceptionHandled: vi.fn(() => Promise.resolve()),
   },
 }))
 
 const mockPlugin = OptionalReactNativePlugin as unknown as {
   setup: vi.Mock
   captureFatalException: vi.Mock
+  markFatalExceptionHandled: vi.Mock
 }
 
 const TEST_API_KEY = 'test-token'
@@ -45,6 +47,7 @@ const observeEnqueuedExceptions = (client: PostHog): any[] => {
 
 const resetMockPlugin = (): void => {
   mockPlugin.captureFatalException = vi.fn(() => Promise.resolve())
+  mockPlugin.markFatalExceptionHandled = vi.fn(() => Promise.resolve())
 }
 
 describe('fatal JavaScript exceptions captured through the native SDK', () => {
@@ -370,5 +373,65 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     await vi.advanceTimersByTimeAsync(100)
 
     expect(mockPlugin.setup).not.toHaveBeenCalled()
+  })
+
+  it('tells native it marks handled fatals, so native keeps fatals that bypass the JS handler', async () => {
+    posthog = await readyClient()
+
+    expect(mockPlugin.setup.mock.calls[0][2].errorTracking.fatalExceptionMarker).toBe(true)
+  })
+
+  it('marks the fatal as handled in native before forwarding the handler', async () => {
+    posthog = await readyClient()
+
+    let resolveMark!: () => void
+    mockPlugin.markFatalExceptionHandled.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveMark = () => resolve()
+        })
+    )
+
+    handler(new Error('mark-me'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledTimes(1)
+    expect(previous).not.toHaveBeenCalled()
+
+    resolveMark()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the fatal as handled even when remote config disabled exception capture', async () => {
+    posthog = await readyClient()
+    ;(posthog as any)._errorTracking.onRemoteConfig({ autocaptureExceptions: false })
+
+    handler(new Error('remote-disabled'), true)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledTimes(1)
+    expect(mockPlugin.captureFatalException).not.toHaveBeenCalled()
+    expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not mark non-fatal exceptions as handled', async () => {
+    posthog = await readyClient()
+
+    handler(new Error('not-fatal'), false)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mockPlugin.markFatalExceptionHandled).not.toHaveBeenCalled()
+  })
+
+  it('still forwards the handler when the plugin cannot mark the fatal', async () => {
+    mockPlugin.markFatalExceptionHandled = undefined as any
+    posthog = await readyClient()
+
+    handler(new Error('old-plugin-mark'), true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.captureFatalException).toHaveBeenCalledTimes(1)
+    expect(previous).toHaveBeenCalledTimes(1)
   })
 })
