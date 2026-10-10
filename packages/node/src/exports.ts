@@ -12,7 +12,7 @@ export type {
 // Re-export FeatureFlagError from core for backwards compatibility.
 // These were originally defined in posthog-node and moved to core for reuse across SDKs.
 export { FeatureFlagError } from '@posthog/core'
-export type { FeatureFlagErrorType } from '@posthog/core'
+export type { FeatureFlagErrorType, UnresolvedFlagReason } from '@posthog/core'
 
 // Metrics types re-exported so consumers can name the `metrics` client option
 // and API surface without a direct @posthog/core dependency.

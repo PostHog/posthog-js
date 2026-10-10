@@ -8007,7 +8007,7 @@ describe('experience continuity warning', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 flag(s)'))
   })
 
-  it('does not emit warning when strictLocalEvaluation is enabled', async () => {
+  it('emits warning when strictLocalEvaluation is enabled', async () => {
     const flags = {
       flags: [
         {
@@ -8033,7 +8033,74 @@ describe('experience continuity warning', () => {
 
     await vi.runOnlyPendingTimersAsync()
 
-    // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
+    // The flag is never resolved in local-only mode either, so the warning still applies.
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('left unresolved'))
+  })
+
+  it('warns once per flag until its definition changes', async () => {
+    const continuityFlag = {
+      id: 1,
+      name: 'Exp Cont Flag',
+      key: 'exp-cont-flag',
+      active: true,
+      ensure_experience_continuity: true,
+      filters: {
+        groups: [{ properties: [], rollout_percentage: 100 }],
+      },
+    }
+    let flags: any = { flags: [continuityFlag] }
+    mockedFetch.mockImplementation((url) => apiImplementation({ localFlags: flags })(url))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+    await posthog.reloadFeatureFlags()
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience_continuity'))
+
+    flags = {
+      flags: [{ ...continuityFlag, filters: { groups: [{ properties: [], rollout_percentage: 50 }] } }],
+    }
+    await posthog.reloadFeatureFlags()
+
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not warn about inactive experience continuity flags', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Exp Cont Flag',
+          key: 'exp-cont-flag',
+          active: false,
+          ensure_experience_continuity: true,
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    await vi.runOnlyPendingTimersAsync()
+
     expect(warnSpy).not.toHaveBeenCalled()
   })
 

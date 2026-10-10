@@ -6,7 +6,13 @@ import {
   PostHogFeatureFlag,
   PropertyGroup,
 } from '../../types'
-import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
+import type {
+  FeatureFlagValue,
+  JsonType,
+  PostHogFetchOptions,
+  PostHogFetchResponse,
+  UnresolvedFlagReason,
+} from '@posthog/core'
 import {
   getFeatureFlagHash,
   getFeatureFlagVariant,
@@ -60,8 +66,11 @@ function setCustomErrorPrototype(error: Error, constructor: new (message: string
 }
 
 class RequiresServerEvaluation extends Error {
-  constructor(message: string) {
+  readonly reason: UnresolvedFlagReason
+
+  constructor(message: string, reason: UnresolvedFlagReason = 'unsupported_definition') {
     super(message)
+    this.reason = reason
     setCustomErrorPrototype(this, RequiresServerEvaluation)
   }
 }
@@ -147,6 +156,8 @@ class FeatureFlagsPoller {
   // flag may still depend on one of these; the remote evaluator pre-seeds such flags as false,
   // so dependency evaluation mirrors that instead of throwing "Missing flag dependency".
   private filteredOutFlagKeys: Set<string> = new Set()
+  // Definition fingerprint per flag key already warned about as never locally resolvable.
+  private warnedUnresolvableFlags: Map<string, string> = new Map()
 
   constructor({
     pollingInterval,
@@ -264,12 +275,14 @@ class FeatureFlagsPoller {
   ): Promise<{
     response: Record<string, FeatureFlagValue>
     payloads: Record<string, JsonType>
+    unresolved: Record<string, UnresolvedFlagReason>
     fallbackToFlags: boolean
   }> {
     await this.loadFeatureFlags()
 
     const response: Record<string, FeatureFlagValue> = {}
     const payloads: Record<string, JsonType> = {}
+    const unresolved: Record<string, UnresolvedFlagReason> = {}
     let fallbackToFlags = this.featureFlags.length == 0
 
     const flagsToEvaluate = flagKeysToExplicitlyEvaluate
@@ -296,6 +309,7 @@ class FeatureFlagsPoller {
         } catch (e) {
           if (e instanceof RequiresServerEvaluation || e instanceof InconclusiveMatchError) {
             this.logMsgIfDebug(() => console.debug(`${e.name} when computing flag locally: ${flag.key}: ${e.message}`))
+            unresolved[flag.key] = e.reason
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
@@ -304,7 +318,7 @@ class FeatureFlagsPoller {
       })
     )
 
-    return { response, payloads, fallbackToFlags }
+    return { response, payloads, unresolved, fallbackToFlags }
   }
 
   async computeFlagAndPayloadLocally(
@@ -360,7 +374,7 @@ class FeatureFlagsPoller {
     }
 
     if (flag.ensure_experience_continuity) {
-      throw new InconclusiveMatchError('Flag has experience continuity enabled')
+      throw new InconclusiveMatchError('Flag has experience continuity enabled', 'experience_continuity')
     }
 
     const flagFilters = flag.filters || {}
@@ -406,7 +420,10 @@ class FeatureFlagsPoller {
             `[FEATURE FLAGS] Can't compute feature flag: ${flag.key} without $device_id, falling back to server evaluation`
           )
         )
-        throw new InconclusiveMatchError(`Can't compute feature flag: ${flag.key} without $device_id`)
+        throw new InconclusiveMatchError(
+          `Can't compute feature flag: ${flag.key} without $device_id`,
+          'missing_context'
+        )
       }
       return await this.matchFeatureFlagProperties(flag, bucketingValue, personProperties, evaluationContext)
     }
@@ -495,7 +512,8 @@ class FeatureFlagsPoller {
             evaluationCache[depFlagKey] = depResult
           } catch (error) {
             throw new InconclusiveMatchError(
-              `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`
+              `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`,
+              'unresolved_dependency'
             )
           }
         }
@@ -504,7 +522,7 @@ class FeatureFlagsPoller {
       // Check if dependency evaluation was inconclusive
       const cachedResult = evaluationCache[depFlagKey]
       if (cachedResult === null || cachedResult === undefined) {
-        throw new InconclusiveMatchError(`Dependency '${depFlagKey}' could not be evaluated`)
+        throw new InconclusiveMatchError(`Dependency '${depFlagKey}' could not be evaluated`, 'unresolved_dependency')
       }
     }
 
@@ -552,7 +570,7 @@ class FeatureFlagsPoller {
     const flagAggregation = flagFilters.aggregation_group_type_index
     const earlyExitEnabled = flagFilters.early_exit ?? false
     const { groups, groupProperties } = evaluationContext
-    let isInconclusive = false
+    let inconclusiveReason: UnresolvedFlagReason | undefined = undefined
     let result = undefined
 
     for (const condition of flagConditions) {
@@ -582,7 +600,7 @@ class FeatureFlagsPoller {
               continue
             }
             if (!(groupName in groupProperties)) {
-              isInconclusive = true
+              inconclusiveReason ??= 'missing_context'
               continue
             }
             effectiveProperties = groupProperties[groupName]
@@ -610,19 +628,20 @@ class FeatureFlagsPoller {
           // The condition's property filters (if any) matched and only the rollout check failed,
           // so re-evaluating later groups can't change the outcome. If an earlier condition was
           // inconclusive, stop here but preserve that result so the caller can fall back remotely.
-          if (isInconclusive) {
+          if (inconclusiveReason) {
             break
           }
           return false
         }
       } catch (e) {
         if (e instanceof RequiresServerEvaluation) {
-          // Static cohort or other missing server-side data - must fallback to API
-          throw e
+          // Static cohort or other missing server-side data - must fallback to API.
+          // An earlier inconclusive condition is still the first cause found.
+          throw inconclusiveReason ? new RequiresServerEvaluation(e.message, inconclusiveReason) : e
         } else if (e instanceof InconclusiveMatchError) {
           // Evaluation error (bad regex, invalid date, missing property, etc.)
           // Track that we had an inconclusive match, but try other conditions
-          isInconclusive = true
+          inconclusiveReason ??= e.reason
         } else {
           throw e
         }
@@ -631,9 +650,12 @@ class FeatureFlagsPoller {
 
     if (result !== undefined) {
       return result
-    } else if (isInconclusive) {
+    } else if (inconclusiveReason) {
       // Had evaluation errors and no successful match - can't determine locally
-      throw new InconclusiveMatchError("Can't determine if feature flag is enabled or not with given properties")
+      throw new InconclusiveMatchError(
+        "Can't determine if feature flag is enabled or not with given properties",
+        inconclusiveReason
+      )
     }
 
     // We can only return False when all conditions are False
@@ -766,28 +788,40 @@ class FeatureFlagsPoller {
   }
 
   /**
-   * Warn about flags that cannot be evaluated locally.
-   * Called after loading flag definitions when local evaluation is enabled.
-   * Only warns if strictLocalEvaluation is NOT enabled (when it's enabled, server fallback is already prevented).
+   * Warn about flags that local evaluation can never resolve.
+   * Called after loading flag definitions when local evaluation is enabled. Each flag is
+   * warned about once until its definition changes.
    */
   private warnAboutExperienceContinuityFlags(flags: PostHogFeatureFlag[]): void {
-    // Don't warn if strictLocalEvaluation is enabled - server fallback is already prevented
-    if (this.strictLocalEvaluation) {
+    const experienceContinuityFlags = flags.filter((f) => {
+      if (!f.active || !f.ensure_experience_continuity) {
+        return false
+      }
+      const fingerprint = JSON.stringify(f)
+      if (this.warnedUnresolvableFlags.get(f.key) === fingerprint) {
+        return false
+      }
+      this.warnedUnresolvableFlags.set(f.key, fingerprint)
+      return true
+    })
+    if (experienceContinuityFlags.length === 0) {
       return
     }
 
-    const experienceContinuityFlags = flags.filter((f) => f.ensure_experience_continuity)
-    if (experienceContinuityFlags.length > 0) {
-      console.warn(
-        `[PostHog] You are using local evaluation but ${experienceContinuityFlags.length} flag(s) have experience ` +
-          `continuity enabled: ${experienceContinuityFlags.map((f) => f.key).join(', ')}. ` +
-          `Experience continuity is incompatible with local evaluation and will cause a server request on every ` +
-          `flag evaluation, negating local evaluation cost savings. ` +
-          `To avoid server requests and unexpected costs, either disable experience continuity on these flags ` +
-          `in PostHog, use strictLocalEvaluation: true in client init, or pass onlyEvaluateLocally: true ` +
-          `per flag call (flags that cannot be evaluated locally will return undefined).`
-      )
-    }
+    const consequence = this.strictLocalEvaluation
+      ? `With strictLocalEvaluation enabled these flags are left unresolved. ` +
+        `To evaluate them locally, disable experience continuity on these flags in PostHog.`
+      : `Experience continuity is incompatible with local evaluation and will cause a server request on every ` +
+        `flag evaluation, negating local evaluation cost savings. ` +
+        `To avoid server requests and unexpected costs, either disable experience continuity on these flags ` +
+        `in PostHog, use strictLocalEvaluation: true in client init, or pass onlyEvaluateLocally: true ` +
+        `per flag call (flags that cannot be evaluated locally will return undefined).`
+    console.warn(
+      `[PostHog] You are using local evaluation but ${experienceContinuityFlags.length} flag(s) have experience ` +
+        `continuity enabled and cannot be resolved locally (reason: experience_continuity): ` +
+        `${experienceContinuityFlags.map((f) => f.key).join(', ')}. ` +
+        consequence
+    )
   }
 
   /**
@@ -1229,7 +1263,7 @@ async function matchPropertyGroup(
     return true
   }
 
-  let errorMatchingLocally = false
+  let errorMatchingLocally: UnresolvedFlagReason | undefined = undefined
 
   if ('values' in properties[0]) {
     // a nested property group
@@ -1256,12 +1290,12 @@ async function matchPropertyGroup(
       } catch (err) {
         if (err instanceof RequiresServerEvaluation) {
           // Immediately propagate - this condition requires server-side data
-          throw err
+          throw errorMatchingLocally ? new RequiresServerEvaluation(err.message, errorMatchingLocally) : err
         } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally = true
+          errorMatchingLocally ??= err.reason
         } else {
           throw err
         }
@@ -1269,7 +1303,7 @@ async function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
-      throw new InconclusiveMatchError("Can't match cohort without a given cohort property value")
+      throw new InconclusiveMatchError("Can't match cohort without a given cohort property value", errorMatchingLocally)
     }
     // if we get here, all matched in AND case, or none matched in OR case
     return propertyGroupType === 'AND'
@@ -1319,12 +1353,12 @@ async function matchPropertyGroup(
       } catch (err) {
         if (err instanceof RequiresServerEvaluation) {
           // Immediately propagate - this condition requires server-side data
-          throw err
+          throw errorMatchingLocally ? new RequiresServerEvaluation(err.message, errorMatchingLocally) : err
         } else if (err instanceof InconclusiveMatchError) {
           if (debugMode) {
             console.debug(`Failed to compute property ${prop} locally: ${err}`)
           }
-          errorMatchingLocally = true
+          errorMatchingLocally ??= err.reason
         } else {
           throw err
         }
@@ -1332,7 +1366,7 @@ async function matchPropertyGroup(
     }
 
     if (errorMatchingLocally) {
-      throw new InconclusiveMatchError("can't match cohort without a given cohort property value")
+      throw new InconclusiveMatchError("can't match cohort without a given cohort property value", errorMatchingLocally)
     }
 
     // if we get here, all matched in AND case, or none matched in OR case
