@@ -59,7 +59,7 @@ function isInputValueEligible(target: Element): boolean {
         )
             return false
         seen.add(element)
-        const parent: ParentNode | null = element.parentNode
+        const parent: ParentNode | null = element.assignedSlot || element.parentNode
         element = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
     }
     return true
