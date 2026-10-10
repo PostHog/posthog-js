@@ -223,6 +223,17 @@ test('type checks use dependency builds without scheduling a second compilation 
     assert.match(readJson('packages/browser-common/package.json').scripts['check-types'], /tsc --noEmit/)
 })
 
+test('the browser type check hashes the sibling sources that its test typecheck compiles', () => {
+    const task = dryRun(['run', 'check-types']).find((task) => task.taskId === 'posthog-js#check-types')
+    const inputs = Object.keys(task.inputs)
+    for (const file of ['browser-next/src/lane.ts', 'browser-common/tests/helpers/client-conformance.ts']) {
+        assert.ok(
+            inputs.some((input) => input.endsWith(file)),
+            `${file} must invalidate the check-types cache`
+        )
+    }
+})
+
 test('root tests schedule leaf suites once, including every existing rrweb suite', () => {
     const tasks = rootScriptGraph('test')
     assert.ok(!tasks.some((task) => task.task === 'test'), 'package test wrappers must not rerun leaf suites')

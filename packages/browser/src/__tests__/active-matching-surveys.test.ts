@@ -337,7 +337,7 @@ describe('active matching survey subscriptions', () => {
     it('gives late subscribers unavailable state after script failure without replaying the error', () => {
         fixture([])
         assignableWindow.__PosthogExtensions__ = {
-            loadExternalDependency: (_instance, _kind, callback) => callback(new Error('unavailable')),
+            loadExternalDependency: (_instance, _kind, callback) => callback('unavailable'),
         }
         start()
         const callback = vi.fn()
