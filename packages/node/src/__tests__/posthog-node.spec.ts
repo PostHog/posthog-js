@@ -3,6 +3,7 @@ import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
+import { setTimeout as waitWithRealTimers } from 'node:timers/promises'
 import { UUID_REGEX } from '@posthog/core'
 
 vi.mock('../version', () => ({ version: '1.2.3' }))
@@ -1834,6 +1835,15 @@ describe('PostHog Node.js', () => {
             },
           })
         )
+        // a slow CI runner answers the definitions request after the tests' fixed waits; delaying it
+        // here makes a test that does not wait for local evaluation fail every time, not now and then
+        const apiImplementationWithoutDelay = mockedFetch.getMockImplementation()!
+        mockedFetch.mockImplementation(async (url: any, opts: any) => {
+          if (String(url).includes('flags/definitions')) {
+            await waitWithRealTimers(50)
+          }
+          return apiImplementationWithoutDelay(url, opts)
+        })
       })
 
       it('should fallback to remote evaluation when no local evaluation is available and onlyEvaluateLocally is not specified', async () => {
@@ -1898,8 +1908,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -1952,8 +1961,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2003,8 +2011,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2049,8 +2056,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2093,8 +2099,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         posthog.capture({
           distinctId: 'user123',
@@ -2143,8 +2148,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
         await posthog.captureImmediate({
           distinctId: 'user123',
@@ -2205,8 +2209,7 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(false)
 
         posthog.capture({
           distinctId: 'user123',
