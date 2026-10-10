@@ -62,6 +62,12 @@ import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 import { getExceptionContext } from './error-tracking/exception-context'
+import {
+  SessionReplayTriggerGroupsEvaluator,
+  parseSessionRecordingTriggerGroups,
+  type SessionReplayTriggerGroup,
+  type SessionReplayTriggerGroupsDecision,
+} from './session-replay/triggerGroups'
 
 export { PostHogPersistedProperty }
 
@@ -324,6 +330,10 @@ export class PostHog extends PostHogCore {
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
+  // Non-null while v2 is in effect; this JS layer owns the event and screen legs.
+  private _sessionReplayTriggerGroups: SessionReplayTriggerGroup[] | null = null
+  private _triggerGroupsEvaluator = new SessionReplayTriggerGroupsEvaluator()
+  private _triggerGroupsDebugRegistered = false
   private _eventsStoragePreloadSucceeded = true
   private _fatalCaptureObservation?: {
     eventUuid: string
@@ -1671,7 +1681,7 @@ export class PostHog extends PostHogCore {
 
       // Event triggers are armed per session: the previous activation no longer matches the new
       // session id, so re-evaluate to stop recording until a fresh matching event fires.
-      if (this._sessionReplayEventTriggers.length > 0) {
+      if (this._sessionReplayEventTriggers.length > 0 || this._sessionReplayTriggerGroups !== null) {
         void this._evaluateAndStartSessionReplay()
       }
     } else {
@@ -2810,7 +2820,12 @@ export class PostHog extends PostHogCore {
       'network_timing',
       true
     )
-    const remoteSampleRateRaw = getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
+    // Under v2, per-group sampling replaces the remote rate; forwarding it would gate recording twice.
+    const remoteSampleRateRaw = parseSessionRecordingTriggerGroups(
+      this.getPersistedProperty(PostHogPersistedProperty.SessionReplay)
+    )
+      ? undefined
+      : getRemoteConfigNumber(cachedRemoteConfig?.sessionRecording, 'sampleRate')
 
     const captureLog = localCaptureLog && remoteConsoleLogEnabled
     const captureNetworkTelemetry = localCaptureNetworkTelemetry && remoteNetworkTimingEnabled
@@ -3079,6 +3094,8 @@ export class PostHog extends PostHogCore {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
+      this._sessionReplayTriggerGroups = null
+      this._unregisterTriggerGroupsDebugProperties()
       if (enableNativeErrorTracking || enablePush || enableFatalJsCapture) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
@@ -3097,55 +3114,81 @@ export class PostHog extends PostHogCore {
 
     this._logger.info('Session replay feature flags from flags cached config:', JSON.stringify(cachedFeatureFlags))
 
-    let recordingActive = true
-    const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
-      | string
-      | { [key: string]: JsonType }
-      | null
-      | undefined
+    let recordingActive: boolean
+    const triggerGroups = parseSessionRecordingTriggerGroups(cachedSessionReplayConfig)
 
-    if (typeof linkedFlag === 'string') {
-      const value = cachedFeatureFlags[linkedFlag]
-      if (typeof value === 'boolean') {
-        recordingActive = value
-      } else if (typeof value === 'string') {
-        // if its a multi-variant flag linked to "any"
-        recordingActive = true
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        recordingActive = false
-      }
+    if (triggerGroups) {
+      this._sessionReplayEventTriggers = []
+      this._sessionReplayTriggerGroups = triggerGroups
+      this._triggerGroupsEvaluator.onConfig(triggerGroups)
 
-      this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
-    } else if (linkedFlag && typeof linkedFlag === 'object') {
-      const flag = linkedFlag['flag'] as string | undefined
-      const variant = linkedFlag['variant'] as string | undefined
-      if (flag && variant) {
-        const value = cachedFeatureFlags[flag]
-        recordingActive = value === variant
-        this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
-      } else {
-        // disable recording if the flag does not exist/quota limited
-        this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
-        recordingActive = false
-      }
+      const decision = this._triggerGroupsEvaluator.evaluate(
+        super.getSessionId(),
+        this.getKnownFeatureFlags(),
+        this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+      )
+      this._registerTriggerGroupsDebugProperties(decision)
+      this._logger.info(
+        `Session replay trigger groups v2 (${decision.groupsCount} groups): ` +
+          `record=${decision.shouldRecord}, pending=${decision.hasPendingGroups}, ` +
+          `minDurationMs=${decision.minDurationMs ?? 'none'}, matched=${JSON.stringify(decision.matchedGroups)}.`
+      )
+      recordingActive = decision.shouldRecord
     } else {
-      this._logger.info(`Session replay has no cached linkedFlag.`)
-    }
+      this._sessionReplayTriggerGroups = null
+      this._unregisterTriggerGroupsDebugProperties()
+      recordingActive = true
+      const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
+        | string
+        | { [key: string]: JsonType }
+        | null
+        | undefined
 
-    // Event triggers: replay records only once the client captures an event whose name matches a
-    // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
-    // memory for the capture hot path (processBeforeEnqueue), then AND the activation into the gate —
-    // an unfired trigger blocks recording exactly like an unsatisfied linked flag (restrictive AND).
-    const eventTriggers = this._parseEventTriggers(cachedSessionReplayConfig['eventTriggers'])
-    this._sessionReplayEventTriggers = eventTriggers
+      if (typeof linkedFlag === 'string') {
+        const value = cachedFeatureFlags[linkedFlag]
+        if (typeof value === 'boolean') {
+          recordingActive = value
+        } else if (typeof value === 'string') {
+          // if its a multi-variant flag linked to "any"
+          recordingActive = true
+        } else {
+          // disable recording if the flag does not exist/quota limited
+          recordingActive = false
+        }
 
-    if (eventTriggers.length > 0) {
-      const activated = this._isEventTriggerActivatedForSession(super.getSessionId())
-      if (!activated) {
-        recordingActive = false
+        this._logger.info(`Session replay '${linkedFlag}' linked flag value: '${value}'`)
+      } else if (linkedFlag && typeof linkedFlag === 'object') {
+        const flag = linkedFlag['flag'] as string | undefined
+        const variant = linkedFlag['variant'] as string | undefined
+        if (flag && variant) {
+          const value = cachedFeatureFlags[flag]
+          recordingActive = value === variant
+          this._logger.info(`Session replay '${flag}' linked flag variant '${variant}' and value '${value}'`)
+        } else {
+          // disable recording if the flag does not exist/quota limited
+          this._logger.info(`Session replay '${flag}' linked flag variant: '${variant}' does not exist/quota limited.`)
+          recordingActive = false
+        }
+      } else {
+        this._logger.info(`Session replay has no cached linkedFlag.`)
       }
-      this._logger.info(`Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`)
+
+      // Event triggers: replay records only once the client captures an event whose name matches a
+      // configured trigger, and stays active for the rest of that session. Cache the armed triggers in
+      // memory for the capture hot path (processBeforeEnqueue), then AND the activation into the gate —
+      // an unfired trigger blocks recording exactly like an unsatisfied linked flag (restrictive AND).
+      const eventTriggers = this._parseEventTriggers(cachedSessionReplayConfig['eventTriggers'])
+      this._sessionReplayEventTriggers = eventTriggers
+
+      if (eventTriggers.length > 0) {
+        const activated = this._isEventTriggerActivatedForSession(super.getSessionId())
+        if (!activated) {
+          recordingActive = false
+        }
+        this._logger.info(
+          `Session replay event triggers configured (${eventTriggers.length}); activated: ${activated}.`
+        )
+      }
     }
 
     if (recordingActive) {
@@ -3207,6 +3250,11 @@ export class PostHog extends PostHogCore {
       this._maybeActivateEventTrigger(processed?.['event'])
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
+    }
+    try {
+      this._maybeActivateTriggerGroups(processed?.['event'], processed?.['properties'])
+    } catch (e) {
+      this._logger.error(`Session replay trigger group check failed: ${e}.`)
     }
     return suppress ? null : processed
   }
@@ -3270,6 +3318,50 @@ export class PostHog extends PostHogCore {
       return []
     }
     return value.filter((entry): entry is string => typeof entry === 'string')
+  }
+
+  private _maybeActivateTriggerGroups(eventName: unknown, eventProperties: unknown): void {
+    if (this._sessionReplayTriggerGroups === null || typeof eventName !== 'string') {
+      return
+    }
+    // super.getSessionId() for the same reason as _maybeActivateEventTrigger: the capture path
+    // already ran rotation handling, and re-entering it from inside capture is not safe.
+    const sessionId = super.getSessionId()
+    if (!sessionId) {
+      return
+    }
+    const result = this._triggerGroupsEvaluator.onEvent(
+      sessionId,
+      eventName,
+      isObject(eventProperties) ? eventProperties : undefined,
+      this.getPersistedProperty(PostHogPersistedProperty.PersonProperties)
+    )
+    if (!result.anyMatched) {
+      return
+    }
+    if (!result.newlyActivated && this._sessionReplayRecordingActive === true) {
+      return
+    }
+    void this._evaluateAndStartSessionReplay()
+  }
+
+  private _registerTriggerGroupsDebugProperties(decision: SessionReplayTriggerGroupsDecision): void {
+    this.registerForSession({
+      $sdk_debug_replay_remote_trigger_matching_config: 'v2_trigger_groups',
+      $sdk_debug_replay_trigger_groups_count: decision.groupsCount,
+      $sdk_debug_replay_matched_recording_trigger_groups: decision.matchedGroups,
+    })
+    this._triggerGroupsDebugRegistered = true
+  }
+
+  private _unregisterTriggerGroupsDebugProperties(): void {
+    if (!this._triggerGroupsDebugRegistered) {
+      return
+    }
+    this.unregisterForSession('$sdk_debug_replay_remote_trigger_matching_config')
+    this.unregisterForSession('$sdk_debug_replay_trigger_groups_count')
+    this.unregisterForSession('$sdk_debug_replay_matched_recording_trigger_groups')
+    this._triggerGroupsDebugRegistered = false
   }
 
   private _isEventTriggerActivatedForSession(sessionId: string): boolean {
