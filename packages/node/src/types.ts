@@ -250,8 +250,10 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * Allows custom caching strategies (Redis, database, etc.) for flag definitions
    * in multi-worker environments. If not provided, defaults to in-memory cache.
    *
-   * Cached definitions can be used for local evaluation without a secretKey or personalApiKey.
-   * A credential is required only when this instance needs to fetch definitions from PostHog.
+   * Without a secretKey or personalApiKey, this instance only reads cached definitions on
+   * each refresh; it does not call shouldFetchFlagDefinitions or publish definitions.
+   * With a credential, it uses the provider's fetch decision to coordinate fetching
+   * fresh definitions from PostHog and publishing them to the cache.
    *
    * This enables distributed coordination where only one worker fetches flags while
    * others use cached data, reducing API calls and improving performance.

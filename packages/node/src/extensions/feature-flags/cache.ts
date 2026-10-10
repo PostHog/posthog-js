@@ -49,8 +49,9 @@ export type FlagDefinitionCacheInput =
  *
  * This interface is designed for server-side environments where multiple workers
  * need to share flag definitions and coordinate fetching to reduce API calls.
- * Consumers can evaluate cached definitions without a secretKey or personalApiKey;
- * fetching new definitions from PostHog still requires one of these credentials.
+ * Without a secretKey or personalApiKey, instances are cache-only readers: each refresh
+ * reads cached definitions without calling shouldFetchFlagDefinitions or publishing data.
+ * Instances with a credential coordinate fetching and publish fresh definitions.
  *
  * All methods may throw errors - the poller will catch and log them gracefully,
  * ensuring cache provider errors never break flag evaluation.
@@ -104,8 +105,10 @@ export interface FlagDefinitionCacheProvider<CacheData extends FlagDefinitionCac
   /**
    * Determines whether this instance should fetch new flag definitions.
    *
+   * Called only when a secretKey or personalApiKey is configured. Cache-only readers
+   * skip this method and read cached definitions directly on each refresh.
    * Use this to implement distributed coordination (e.g., via distributed locks)
-   * to ensure only one instance fetches at a time in a multi-worker setup.
+   * to ensure only one credentialed instance fetches at a time in a multi-worker setup.
    *
    * When multiple workers share a cache, typically only one should fetch while
    * others use cached data. Implementations can use Redis locks, database locks,

@@ -109,13 +109,107 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       expect(flags.getFlag('test-flag')).toBe(true)
       expect(posthog.isLocalEvaluationReady()).toBe(true)
       expect(onLoad).toHaveBeenCalledWith(1)
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
-      expect(mockCacheProvider.shouldFetchFlagDefinitions.mock.invocationCallOrder[0]).toBeLessThan(
-        mockCacheProvider.getFlagDefinitions.mock.invocationCallOrder[0]
-      )
       expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
       expect(mockedFetch).not.toHaveBeenCalled()
+    })
+
+    it.each(['true', 'throw', 'hang'])(
+      'reads the cache without invoking a decision that would %s',
+      async (decision) => {
+        mockCacheProvider.shouldFetchFlagDefinitions.mockImplementation(() => {
+          if (decision === 'throw') {
+            throw new Error('Coordination failed')
+          }
+          return decision === 'hang' ? new Promise<boolean>(() => {}) : true
+        })
+        mockCacheProvider.getFlagDefinitions.mockReturnValue(cachedDefinitions)
+        createConsumer({ featureFlagsPollingInterval: 1000 })
+
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
+        await vi.advanceTimersByTimeAsync(1000)
+        await posthog.reloadFeatureFlags()
+
+        expect((await posthog.evaluateFlags('user')).getFlag('test-flag')).toBe(true)
+        expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(3)
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
+        expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
+        expect(mockedFetch).not.toHaveBeenCalled()
+        expect(onErrorMock).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each([{ secretKey: '  ' }, { personalApiKey: '  ' }, { secretKey: '', personalApiKey: 'TEST_KEY' }])(
+      'reads only the cache when the selected credential normalizes to absent: %j',
+      async (options) => {
+        mockCacheProvider.shouldFetchFlagDefinitions.mockReturnValue(true)
+        mockCacheProvider.getFlagDefinitions.mockReturnValue(cachedDefinitions)
+        createConsumer(options)
+
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
+        expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
+        expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
+        expect(mockedFetch).not.toHaveBeenCalled()
+      }
+    )
+
+    it('cannot claim shared fetch leadership or block a credentialed publisher from refreshing', async () => {
+      let leaseHeld = false
+      let sharedDefinitions = cachedDefinitions
+      mockCacheProvider.shouldFetchFlagDefinitions.mockImplementation(() => {
+        if (leaseHeld) {
+          return false
+        }
+        leaseHeld = true
+        return true
+      })
+      mockCacheProvider.getFlagDefinitions.mockImplementation(() => sharedDefinitions)
+      mockCacheProvider.onFlagDefinitionsReceived.mockImplementation((data) => {
+        sharedDefinitions = data
+        leaseHeld = false
+      })
+      createConsumer()
+      await posthog.reloadFeatureFlags()
+      expect(leaseHeld).toBe(false)
+      expect(posthog.isLocalEvaluationReady()).toBe(true)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: cachedDefinitions }))
+      const publisher = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        secretKey: 'TEST_SECRET_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        featureFlagsPollingInterval: 1000,
+        fetchRetryCount: 0,
+        before_send: () => null,
+      })
+      try {
+        expect(await publisher.waitForLocalEvaluationReady()).toBe(true)
+        expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledTimes(1)
+        await posthog.reloadFeatureFlags()
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+        expect(leaseHeld).toBe(false)
+
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: { ...cachedDefinitions, flags: [{ ...cachedDefinitions.flags[0], active: false }] },
+          })
+        )
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+        expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledTimes(2)
+        expect(mockedFetch).toHaveBeenCalledTimes(2)
+
+        await posthog.reloadFeatureFlags()
+        expect((await posthog.evaluateFlags('user')).getFlag('test-flag')).toBe(false)
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+        expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledTimes(2)
+        expect(mockedFetch).toHaveBeenCalledTimes(2)
+      } finally {
+        await publisher.shutdown()
+      }
     })
 
     it('refreshes from the provider on manual reload without automatic polling', async () => {
@@ -136,8 +230,9 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       const flags = await posthog.evaluateFlags('user')
       expect(flags.getFlag('test-flag')).toBe(false)
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
       expect(mockedFetch).not.toHaveBeenCalled()
       expect(vi.getTimerCount()).toBe(0)
     })
@@ -156,18 +251,20 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       const flags = await posthog.evaluateFlags('user')
       expect(flags.getFlag('test-flag')).toBe(false)
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
       expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
       expect(mockedFetch).not.toHaveBeenCalled()
 
       await posthog.shutdown()
       expect(mockCacheProvider.shutdown).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(5000)
-      expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(2)
+      expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
     })
 
     describe.each([false, true])('fetch boundary with prior definitions: %s', (alreadyLoaded) => {
-      it.each(['empty cache', 'read failure', 'fetch requested', 'fetch decision failure'])(
+      it.each(['empty cache', 'read failure', 'malformed cache'])(
         'does not make a direct request for %s',
         async (scenario) => {
           mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
@@ -181,27 +278,16 @@ describe('FlagDefinitionCacheProvider Integration', () => {
           mockCacheProvider.getFlagDefinitions.mockReturnValue(undefined)
           if (scenario === 'read failure') {
             mockCacheProvider.getFlagDefinitions.mockRejectedValue(new Error('Cache read failed'))
-          } else if (scenario === 'fetch requested') {
-            mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(true)
-            mockCacheProvider.getFlagDefinitions.mockReturnValue(cachedDefinitions)
-          } else if (scenario === 'fetch decision failure') {
-            mockCacheProvider.shouldFetchFlagDefinitions.mockRejectedValue(new Error('Coordination failed'))
+          } else if (scenario === 'malformed cache') {
+            mockCacheProvider.getFlagDefinitions.mockReturnValue({ ...cachedDefinitions, flags: null } as any)
           }
 
           await expect(posthog.reloadFeatureFlags()).resolves.toBeUndefined()
 
           expect(posthog.isLocalEvaluationReady()).toBe(alreadyLoaded)
-          expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
-          const attemptsDirectFetch = scenario === 'fetch requested' || scenario === 'fetch decision failure'
-          expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(attemptsDirectFetch ? 0 : 1)
-          if (!alreadyLoaded || attemptsDirectFetch) {
-            expect(onErrorMock).toHaveBeenCalledWith(
-              expect.objectContaining({
-                message: 'A secretKey or personalApiKey is required to fetch feature flag definitions from PostHog.',
-              })
-            )
-          }
-          if (scenario === 'read failure' || scenario === 'fetch decision failure') {
+          expect(mockCacheProvider.shouldFetchFlagDefinitions).not.toHaveBeenCalled()
+          expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+          if (scenario === 'read failure') {
             expect(onErrorMock).toHaveBeenCalledWith(
               expect.objectContaining({ message: expect.stringContaining('failed') })
             )

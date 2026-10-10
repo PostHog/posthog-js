@@ -3752,7 +3752,7 @@
           "name": "enableLocalEvaluation"
         },
         {
-          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nCached definitions can be used for local evaluation without a secretKey or personalApiKey.\nA credential is required only when this instance needs to fetch definitions from PostHog.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
+          "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nWithout a secretKey or personalApiKey, this instance only reads cached definitions on\neach refresh; it does not call shouldFetchFlagDefinitions or publish definitions.\nWith a credential, it uses the provider's fetch decision to coordinate fetching\nfresh definitions from PostHog and publishing them to the cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
           "type": "FlagDefinitionCacheProvider<FlagDefinitionCacheInput>",
           "name": "flagDefinitionCacheProvider"
         },
