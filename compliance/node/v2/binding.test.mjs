@@ -19,6 +19,7 @@ async function spies(run, captureMode = 'v0') {
         identify: undefined,
         alias: undefined,
         groupIdentify: undefined,
+        captureException: undefined,
         flush: undefined,
         getFeatureFlag: undefined,
         reloadFeatureFlags: undefined,
@@ -225,6 +226,77 @@ test('identify and alias preserve exact public arguments, omission, native void 
             assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
         }, mode)
     }
+})
+
+test('captureException constructs a native fixture and preserves positional arguments and outcomes', async () => {
+    for (const mode of ['v0', 'v1']) {
+        await spies(async (binding, calls, results) => {
+            assert.equal((await binding.invoke('/capture_exception', {})).failure.code, 'before-setup')
+            await setup(binding)
+            const error = { type: 'TypeError', message: 'boom' }
+            const properties = { active: false, score: 0, context: { codes: [1, 2] }, note: null }
+            for (const [args, expected] of [
+                [{ error }, []],
+                [{ error, distinct_id: 'user' }, ['user']],
+                [{ error, distinct_id: 'user', properties }, ['user', properties]],
+                [{ error, properties }, [undefined, properties]],
+                [{ error, distinct_id: null, properties: null }, [null, null]],
+            ]) {
+                const before = structuredClone(args)
+                assert.deepEqual(await binding.invoke('/capture_exception', args), {
+                    kind: 'sdk',
+                    outcome: { kind: 'void' },
+                })
+                const [name, parameters] = calls.at(-1)
+                assert.equal(name, 'captureException')
+                assert.ok(parameters[0] instanceof TypeError)
+                assert.equal(parameters[0].message, 'boom')
+                assert.ok(parameters[0].stack.includes('TypeError: boom'))
+                assert.deepEqual(parameters.slice(1), expected)
+                assert.deepEqual(args, before)
+            }
+            for (const value of [false, 0, null]) {
+                results.captureException = value
+                assert.deepEqual(await binding.invoke('/capture_exception', { error }), {
+                    kind: 'sdk',
+                    outcome: { kind: 'value', value },
+                })
+            }
+            results.captureException = new Error('native capture failure')
+            const thrown = await binding.invoke('/capture_exception', { error })
+            assert.equal(thrown.kind, 'sdk')
+            assert.equal(thrown.outcome.kind, 'thrown')
+            assert.deepEqual(await binding.invoke('/capture_exception', { error }), thrown)
+            assert.equal(calls.filter(([name]) => ['capture', 'captureAi', 'flush'].includes(name)).length, 0)
+        }, mode)
+    }
+})
+
+test('captureException reports unsupported or unrepresentable fixture arguments without invoking the SDK', async () => {
+    await spies(async (binding, calls) => {
+        await setup(binding)
+        for (const error of [
+            undefined,
+            null,
+            false,
+            {},
+            { type: 'Error', message: 'boom' },
+            { type: 'TypeError', message: 0 },
+        ]) {
+            const completion = await binding.invoke('/capture_exception', { error })
+            assert.equal(completion.kind, 'harness')
+            assert.equal(completion.failure.kind, 'blocked_fixture')
+            assert.equal(completion.failure.code, 'exception-fixture')
+        }
+        for (const args of [
+            { error: { type: 'TypeError', message: 'boom', stack: 'invented' } },
+            { error: { type: 'TypeError', message: 'boom' }, uuid: 'unsupported' },
+        ]) {
+            const completion = await binding.invoke('/capture_exception', args)
+            assert.equal(completion.failure.kind, 'unsupported_binding')
+        }
+        assert.equal(calls.length, 1)
+    })
 })
 
 test('groupIdentify preserves public arguments, omission and native outcomes', async () => {
