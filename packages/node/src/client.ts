@@ -7,9 +7,11 @@ import {
   isBlockedUA,
   isPlainObject,
   isPostHogFetchContentTooLargeError,
+  isPostHogFetchNetworkError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
+  PostHogApiResponse,
   PostHogCoreStateless,
   PostHogEventProperties,
   PostHogFetchOptions,
@@ -69,6 +71,7 @@ import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routi
 import { V1CaptureSender } from './capture-v1/sender'
 import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
+import { type Messaging, PostHogMessaging } from './messaging'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -113,6 +116,10 @@ function normalizeHost(value?: unknown): string {
   return normalizedValue || DEFAULT_NODE_HOST
 }
 
+function isTimeout(error: unknown): boolean {
+  return isPostHogFetchNetworkError(error) && error.error instanceof Error && error.error.name === 'AbortError'
+}
+
 function normalizeUnsetPersonProperties(value: string | string[]): string[] {
   const propertyNames = Array.isArray(value) ? value : [value]
   return propertyNames.filter(
@@ -151,6 +158,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _messaging?: Messaging
   private _traces?: PostHogTraces
   private _spanContext?: SpanContextManager
 
@@ -658,6 +666,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * The `posthog.messaging` API: set the email preferences of your recipients from your server.
+   * Needs the `secretKey` client option.
+   *
+   * @example
+   * ```ts
+   * await client.messaging.setPreferences('jane@example.com', {
+   *   categories: { newsletter: false, 'product-updates': true },
+   * })
+   * ```
+   *
+   * {@label Messaging}
+   */
+  public get messaging(): Messaging {
+    if (!this._messaging) {
+      this._messaging = new PostHogMessaging({
+        isDisabled: () => this.disabled,
+        hasSecretKey: () => this.options.personalApiKey !== undefined,
+        warn: (message) => this._logger.warn(message),
+        track: (work) => this.addPendingPromise(work),
+        post: (path, body) => this._postWithSecretKey(path, body),
+      })
+    }
+    return this._messaging
   }
 
   /**
@@ -2960,6 +2994,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (abortTimeout) {
         clearTimeout(abortTimeout)
       }
+    }
+  }
+
+  private async _postWithSecretKey(path: string, body: Record<string, string>): Promise<PostHogApiResponse> {
+    try {
+      return await this.requestJson(`${this.host}${path}`, {
+        method: 'POST',
+        headers: {
+          ...this.getCustomHeaders(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${this.options.personalApiKey}`,
+        },
+        body: new URLSearchParams({ ...body, token: this.apiKey }).toString(),
+      })
+    } catch (error) {
+      this._events.emit('error', error)
+      throw new Error(isTimeout(error) ? `Request timed out after ${this.requestTimeout}ms` : 'Request failed')
     }
   }
 

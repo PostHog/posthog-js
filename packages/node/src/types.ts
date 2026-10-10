@@ -16,6 +16,7 @@ import type {
 import { ContextData, ContextOptions } from './extensions/context/types'
 
 import type { FeatureFlagEvaluations } from './feature-flag-evaluations'
+import type { Messaging } from './messaging'
 import type { FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from './extensions/feature-flags/cache'
 
 export type IdentifyMessage = {
@@ -891,6 +892,12 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description The `posthog.messaging` API: set the email preferences of your recipients from
+   * your server. Needs the `secretKey` client option.
+   */
+  readonly messaging: Messaging
 
   /**
    * @description Starts a span without making it active, for work that can't wrap a callback.

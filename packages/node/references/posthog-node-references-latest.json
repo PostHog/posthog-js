@@ -2668,6 +2668,11 @@
       "name": "IPostHog",
       "properties": [
         {
+          "description": "The `posthog.messaging` API: set the email preferences of your recipients from your server. Needs the `secretKey` client option.",
+          "type": "Messaging",
+          "name": "messaging"
+        },
+        {
           "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
           "type": "Metrics",
           "name": "metrics"
@@ -2804,6 +2809,44 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "Messaging",
+      "name": "Messaging",
+      "properties": [],
+      "path": "src/messaging.ts"
+    },
+    {
+      "id": "MessagingPreferenceFailure",
+      "name": "MessagingPreferenceFailure",
+      "properties": [
+        {
+          "type": "string",
+          "name": "message"
+        },
+        {
+          "type": "number",
+          "name": "status"
+        }
+      ],
+      "path": "src/messaging.ts"
+    },
+    {
+      "id": "MessagingPreferences",
+      "name": "MessagingPreferences",
+      "properties": [
+        {
+          "description": "`false` opts the recipient out of every marketing message. `true` lifts that opt-out but keeps any category they opted out of, so pass those categories as `true` to resubscribe them fully.",
+          "type": "boolean",
+          "name": "allMarketing"
+        },
+        {
+          "description": "Message category keys, as listed under Workflows opt-outs, mapped to whether the recipient wants that category. `true` for one category while the recipient is opted out of all marketing resubscribes them to that category only, and opts them out of every other marketing category.",
+          "type": "Record<string, boolean>",
+          "name": "categories"
+        }
+      ],
+      "path": "src/messaging.ts"
     },
     {
       "id": "MiddlewareError",
@@ -2982,6 +3025,21 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
+    },
+    {
+      "id": "PostHogApiResponse",
+      "name": "PostHogApiResponse",
+      "properties": [
+        {
+          "type": "number",
+          "name": "status"
+        },
+        {
+          "type": "unknown",
+          "name": "body"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "PostHogCaptureOptions",

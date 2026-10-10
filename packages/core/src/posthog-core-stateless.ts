@@ -17,6 +17,7 @@ import {
   PostHogFeatureFlagDetails,
   FeatureFlagDetail,
   SurveyResponse,
+  PostHogApiResponse,
   PostHogFetchResponse,
   PostHogFetchBodyBytes,
   PostHogFetchOptions,
@@ -154,6 +155,10 @@ type RequiredResponseHandling<T> = {
 
 type SuccessfulWriteResponseHandling = {
   type: 'successful-write'
+}
+
+async function readApiResponse(response: PostHogFetchResponse): Promise<PostHogApiResponse> {
+  return { status: response.status, body: await response.json().catch(() => undefined) }
 }
 
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
@@ -1872,6 +1877,17 @@ export abstract class PostHogCoreStateless {
    */
   async _sendTracesBatch(payload: OtlpTracesPayload): Promise<SendTracesBatchOutcome> {
     return this._sendOtlpBatch({ path: 'traces', auth: 'bearer', payload })
+  }
+
+  protected async requestJson(url: string, options: PostHogFetchOptions): Promise<PostHogApiResponse> {
+    try {
+      return await this.fetchWithRetry(url, options, { type: 'required', consume: readApiResponse })
+    } catch (error) {
+      if (error instanceof PostHogFetchHttpError) {
+        return { status: error.status, body: await error.json.catch(() => undefined) }
+      }
+      throw error
+    }
   }
 
   private fetchWithRetry<T>(

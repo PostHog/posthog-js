@@ -336,6 +336,11 @@ export type PostHogFetchResponse = {
   body?: ReadableStream<Uint8Array> | null
 }
 
+export type PostHogApiResponse = {
+  status: number
+  body: unknown
+}
+
 export type PostHogQueueItem = {
   message?: PostHogEventProperties
   callback?: (err: unknown) => void
