@@ -22,6 +22,9 @@ const MAX_PROMPT_LIST_PAGES = 100
 // The server's tightest prompt limit is per-minute, so a minute lets the bucket refill.
 const DEFAULT_REFETCH_COOLDOWN_SECONDS = 60
 const MAX_REFETCH_COOLDOWN_SECONDS = 3600
+// Matches the posthog-python prompts client. Without it a hung connection holds the caller
+// until the runtime's own limit, which for Node's fetch is five minutes.
+const FETCH_TIMEOUT_MS = 10_000
 // Keyed by version number, label string, or undefined for the latest version.
 // Version and label keys can't collide: one is always a number, the other a string.
 type PromptVersionCache = Map<number | string | undefined, CachedPrompt>
@@ -61,7 +64,7 @@ function parseRetryAfterSeconds(value: string | null | undefined): number | unde
 }
 
 /** Carries the server's own cooldown so a rate-limited client waits as long as it was told to. */
-class PromptFetchError extends Error {
+export class PromptFetchError extends Error {
   readonly retryAfterSeconds?: number
 
   constructor(message: string, retryAfterSeconds?: number) {
@@ -82,6 +85,44 @@ function isPromptApiResponse(data: unknown): data is PromptApiResponse {
     typeof record.version === 'number' &&
     (record.label === undefined || typeof record.label === 'string')
   )
+}
+
+/**
+ * GET with the client's timeout. The timer is cleared only after the body is
+ * read, so a response whose headers arrive but whose body stalls still times out.
+ */
+async function fetchJsonWithTimeout(
+  url: string,
+  personalApiKey: string,
+  timeoutReference: string
+): Promise<{ response: Response; data: unknown }> {
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new PromptFetchError(`[PostHog Prompts] Timed out fetching ${timeoutReference} after ${FETCH_TIMEOUT_MS}ms`)
+      ),
+    FETCH_TIMEOUT_MS
+  )
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${personalApiKey}`,
+      },
+      signal: controller.signal,
+    })
+    const data: unknown = response.ok ? await response.json() : undefined
+    return { response, data }
+  } catch (error) {
+    // Node's fetch rejects with the abort reason, but other runtimes reject with their own AbortError.
+    if (controller.signal.aborted) {
+      throw controller.signal.reason
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function isSameOrigin(url: string, host: string): boolean {
@@ -184,6 +225,10 @@ export class Prompts {
   private host: string
   private defaultCacheTtlSeconds: number
   private cache: Map<string, PromptVersionCache> = new Map()
+  // One request per cache key at a time. Callers that arrive while it is in flight await
+  // the same promise, so a worker with many concurrent activities does not turn every
+  // cache miss or expiry into one request per activity.
+  private inFlight: Map<string, Promise<Omit<PromptRemoteResult, 'source'>>> = new Map()
 
   constructor(options: PromptsOptions) {
     this.defaultCacheTtlSeconds = options.defaultCacheTtlSeconds ?? DEFAULT_CACHE_TTL_SECONDS
@@ -395,7 +440,7 @@ export class Prompts {
 
     // Try to fetch from API
     try {
-      const fetched = await this.fetchPromptFromApi(name, version, label)
+      const fetched = await this.fetchPromptOnce(name, version, label)
 
       // An older PostHog server ignores the label param and returns the latest
       // version with no label field — surface that instead of failing silently.
@@ -423,6 +468,20 @@ export class Prompts {
 
       throw error
     }
+  }
+
+  private fetchPromptOnce(name: string, version?: number, label?: string): Promise<Omit<PromptRemoteResult, 'source'>> {
+    const inFlightKey = JSON.stringify([name, version ?? null, label ?? null])
+    const pending = this.inFlight.get(inFlightKey)
+    if (pending !== undefined) {
+      return pending
+    }
+
+    const request = this.fetchPromptFromApi(name, version, label).finally(() => {
+      this.inFlight.delete(inFlightKey)
+    })
+    this.inFlight.set(inFlightKey, request)
+    return request
   }
 
   private readCacheEntry(cached: CachedPrompt): Omit<PromptRemoteResult, 'source'> {
@@ -523,12 +582,7 @@ export class Prompts {
         )
       }
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.personalApiKey}`,
-        },
-      })
+      const { response, data } = await fetchJsonWithTimeout(url, this.personalApiKey, reference)
 
       if (!response.ok) {
         if (response.status === 403) {
@@ -543,7 +597,6 @@ export class Prompts {
         )
       }
 
-      const data: unknown = await response.json()
       if (typeof data !== 'object' || data === null || !Array.isArray((data as Record<string, unknown>).results)) {
         throw new Error(`[PostHog Prompts] Invalid response format for ${reference}`)
       }
@@ -582,12 +635,7 @@ export class Prompts {
     const promptReference = this.getPromptReference(name, version, label)
     const url = `${this.host}/api/environments/@current/llm_prompts/name/${encodedPromptName}/?token=${encodedProjectApiKey}${versionQuery}${labelQuery}`
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.personalApiKey}`,
-      },
-    })
+    const { response, data } = await fetchJsonWithTimeout(url, this.personalApiKey, `prompt ${promptReference}`)
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -606,8 +654,6 @@ export class Prompts {
         response.status === 429 ? parseRetryAfterSeconds(response.headers?.get('Retry-After')) : undefined
       )
     }
-
-    const data: unknown = await response.json()
 
     if (!isPromptApiResponse(data)) {
       throw new Error(`[PostHog Prompts] Invalid response format for prompt ${promptReference}`)
