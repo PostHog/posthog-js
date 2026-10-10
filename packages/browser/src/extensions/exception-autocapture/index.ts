@@ -8,6 +8,7 @@ import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
+import { isExceptionCaptured } from './captured-errors'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -160,8 +161,12 @@ export class ExceptionObserver {
         this._config = this._requiredConfig()
     }
 
-    captureException(errorProperties: ErrorTracking.ErrorProperties) {
+    captureException(errorProperties: ErrorTracking.ErrorProperties, error?: unknown) {
         try {
+            if (isExceptionCaptured(this._instance, error)) {
+                return
+            }
+
             const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
             const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 

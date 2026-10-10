@@ -4,7 +4,7 @@ import { ErrorTracking } from '@posthog/core'
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
 describe('error wrapping functions', () => {
-    const captureFn = vi.fn<[ErrorTracking.ErrorProperties], void>()
+    const captureFn = vi.fn<[ErrorTracking.ErrorProperties, unknown?], void>()
     const win = window as any
     const errorWithThrowingMessage = () => {
         const error = new Error('boom')
@@ -58,6 +58,17 @@ describe('error wrapping functions', () => {
             expect(original).toHaveBeenCalledWith('message', 'source', 1, 1, expect.any(Error))
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('passes the original error to the capture callback', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const error = new Error('boom')
+            win.onerror = original
+            unwrap = wrapOnError(captureFn)
+
+            expect(win.onerror('message', 'source', 1, 1, error)).toBe(true)
+            expect(original).toHaveBeenCalledWith('message', 'source', 1, 1, error)
+            expect(captureFn).toHaveBeenCalledWith(expect.any(Object), error)
         })
 
         it('still chains to the original handler when building exception properties throws', () => {
@@ -177,6 +188,18 @@ describe('error wrapping functions', () => {
             expect(original).toHaveBeenCalledWith(ev)
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('passes the rejection reason to the capture callback', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const error = new Error('boom')
+            const ev = { reason: error } as any
+            win.onunhandledrejection = original
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            expect(win.onunhandledrejection(ev)).toBe(true)
+            expect(original).toHaveBeenCalledWith(ev)
+            expect(captureFn).toHaveBeenCalledWith(expect.any(Object), error)
         })
 
         it('still chains to the original handler when building exception properties throws', () => {
