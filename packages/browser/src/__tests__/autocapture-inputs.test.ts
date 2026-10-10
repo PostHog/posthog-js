@@ -197,6 +197,25 @@ describe('autocapture input values', () => {
         }
     })
 
+    describe.each(['', 'field'])('slotted input values (slot name: "%s")', (slotName) => {
+        it.each(['none', 'ph-sensitive', 'ph-no-capture'])('checks slot wrapper privacy: %s', (className) => {
+            document.body.innerHTML = `<div id="host"><input slot="${slotName}" data-ph-capture-value /></div>`
+            const host = document.querySelector('#host')!
+            const root = host.attachShadow({ mode: 'open' })
+            root.innerHTML = `<div class="${className === 'none' ? '' : className}"><slot name="${slotName}"></slot></div>`
+            const input = document.querySelector('input')!
+            expect(input.assignedSlot).toBe(root.querySelector('slot'))
+            input.value = 'private value'
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+            expect(capture).toHaveBeenCalledTimes(1)
+            if (className === 'none') {
+                expect(capture.mock.calls[0][1]).toHaveProperty('$input_value', 'private value')
+            } else {
+                expect(capture.mock.calls[0][1]).not.toHaveProperty('$input_value')
+            }
+        })
+    })
+
     it('respects sensitive descendants in a select', () => {
         commit(
             field('<select data-ph-capture-value><option class="ph-sensitive" value="private">label</option></select>'),
