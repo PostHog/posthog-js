@@ -1898,47 +1898,74 @@ describe('PostHog Node.js', () => {
           disableCompression: true,
         })
 
-        vi.runOnlyPendingTimers()
-        await waitForPromises()
+        expect(await posthog.waitForLocalEvaluationReady()).toBe(true)
 
-        posthog.capture({
-          distinctId: 'user123',
-          event: 'test event',
-          sendFeatureFlags: {
-            onlyEvaluateLocally: true,
-            personProperties: {
-              plan: 'premium',
-            },
-            groupProperties: {
-              organization: { size: 'large' },
-            },
-          },
-          groups: { organization: 'org123' },
+        // Local rollout evaluation awaits native WebCrypto work, which fake timers do not drain.
+        const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+        let releaseDigest!: () => void
+        const digestGate = new Promise<void>((resolve) => {
+          releaseDigest = resolve
+        })
+        let markDigestStarted!: () => void
+        const digestStarted = new Promise<void>((resolve) => {
+          markDigestStarted = resolve
+        })
+        const digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (...args) => {
+          markDigestStarted()
+          await digestGate
+          return digest(...args)
         })
 
-        await waitForFlushTimer()
-
-        // Should make local evaluation call during initialization
-        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-
-        // Should not make remote flags call
-        expect(mockedFetch).not.toHaveBeenCalledWith(
-          'http://example.com/flags/?v=2',
-          expect.objectContaining({ method: 'POST' })
-        )
-
-        const batchEvents = getLastBatchEvents()
-        expect(batchEvents?.[0]).toEqual(
-          expect.objectContaining({
-            distinct_id: 'user123',
+        try {
+          posthog.capture({
+            distinctId: 'user123',
             event: 'test event',
-            properties: expect.objectContaining({
-              // Should include locally evaluated flags that matched based on property overrides
-              '$feature/basic-flag': true,
-              '$feature/person-property-flag': true, // Should be true because plan=premium override
-            }),
+            sendFeatureFlags: {
+              onlyEvaluateLocally: true,
+              personProperties: {
+                plan: 'premium',
+              },
+              groupProperties: {
+                organization: { size: 'large' },
+              },
+            },
+            groups: { organization: 'org123' },
           })
-        )
+
+          const flushPromise = posthog.flush()
+          await digestStarted
+          expect(mockedFetch).not.toHaveBeenCalledWith(
+            'http://example.com/batch/',
+            expect.objectContaining({ method: 'POST' })
+          )
+          releaseDigest()
+          await flushPromise
+
+          // Should make local evaluation call during initialization
+          expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+
+          // Should not make remote flags call
+          expect(mockedFetch).not.toHaveBeenCalledWith(
+            'http://example.com/flags/?v=2',
+            expect.objectContaining({ method: 'POST' })
+          )
+
+          const batchEvents = getLastBatchEvents()
+          expect(batchEvents?.[0]).toEqual(
+            expect.objectContaining({
+              distinct_id: 'user123',
+              event: 'test event',
+              properties: expect.objectContaining({
+                // Should include locally evaluated flags that matched based on property overrides
+                '$feature/basic-flag': true,
+                '$feature/person-property-flag': true, // Should be true because plan=premium override
+              }),
+            })
+          )
+        } finally {
+          releaseDigest()
+          digestSpy.mockRestore()
+        }
       })
 
       it('should work with explicit person properties and preserve event properties', async () => {
