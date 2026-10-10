@@ -259,8 +259,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this.options.waitUntilMaxWaitMs = Math.max(normalizedOptions.waitUntilMaxWaitMs, 0)
     }
 
-    if (!this.disabled && normalizedOptions.personalApiKey) {
-      if (normalizedOptions.personalApiKey.includes('phc_')) {
+    if (!this.disabled && (normalizedOptions.personalApiKey || normalizedOptions.flagDefinitionCacheProvider)) {
+      if (normalizedOptions.personalApiKey?.includes('phc_')) {
         throw new Error(
           'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
         )
@@ -2661,7 +2661,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Reload feature flag definitions from the server for local evaluation.
+   * Reload feature flag definitions from the configured cache provider or PostHog for local evaluation.
    *
    * @example
    * ```ts

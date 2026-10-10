@@ -80,17 +80,22 @@ describe('Flag definition cache formats', () => {
     await client?.shutdown()
   })
 
-  describe.each(['sync', 'async'] as const)('%s cache reads', (mode) => {
+  describe.each([
+    { mode: 'sync', personalApiKey: undefined },
+    { mode: 'async', personalApiKey: undefined },
+    { mode: 'sync', personalApiKey: 'TEST_PERSONAL_API_KEY' },
+    { mode: 'async', personalApiKey: 'TEST_PERSONAL_API_KEY' },
+  ])('$mode cache reads (credential: $personalApiKey)', ({ mode, personalApiKey }) => {
     it.each(readCases)('evaluates groups and applies the event gate for $name', async ({ data, minimal }) => {
       const provider: FlagDefinitionCacheProvider<FlagDefinitionCacheInput> = {
         getFlagDefinitions: () => (mode === 'async' ? Promise.resolve(data) : data),
-        shouldFetchFlagDefinitions: () => false,
+        shouldFetchFlagDefinitions: vi.fn(() => false),
         onFlagDefinitionsReceived: vi.fn(),
         shutdown: vi.fn(),
       }
       client = new PostHog('TEST_API_KEY', {
         host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        personalApiKey,
         flagDefinitionCacheProvider: provider,
         fetchRetryCount: 0,
         flushAt: 100,
@@ -114,50 +119,131 @@ describe('Flag definition cache formats', () => {
       expect(event.properties.locally_evaluated).toBe(true)
       expect(event.properties.super_prop).toBe(minimal ? undefined : 'retained-on-full-events')
       expect(fetchMock).not.toHaveBeenCalled()
+      expect(provider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(personalApiKey ? 1 : 0)
       expect(provider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
     })
   })
 
-  it('applies property matching versions from either format on cache reloads', async () => {
-    const versionedFlag: PostHogFeatureFlag = {
-      ...flag,
-      filters: {
-        ...flag.filters,
-        groups: [{ properties: [{ key: 'value', value: false, operator: 'exact', type: 'group' }] }],
-      },
+  it.each([undefined, 'TEST_PERSONAL_API_KEY'])(
+    'applies property matching versions from either format on cache reloads (credential: %s)',
+    async (personalApiKey) => {
+      const versionedFlag: PostHogFeatureFlag = {
+        ...flag,
+        filters: {
+          ...flag.filters,
+          groups: [{ properties: [{ key: 'value', value: false, operator: 'exact', type: 'group' }] }],
+        },
+      }
+      let data: FlagDefinitionCacheInput | undefined = {
+        flags: [versionedFlag],
+        cohorts: {},
+        group_type_mapping: groupMapping,
+      }
+      const getFlagDefinitions = vi.fn(() => data)
+      const evaluationOptions = {
+        groups: { company: 'acme' },
+        groupProperties: { company: { value: 'banana' } },
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      }
+      client = new PostHog('TEST_API_KEY', {
+        personalApiKey,
+        flagDefinitionCacheProvider: {
+          getFlagDefinitions,
+          shouldFetchFlagDefinitions: () => false,
+          onFlagDefinitionsReceived: vi.fn(),
+          shutdown: vi.fn(),
+        },
+      })
+      await client.reloadFeatureFlags()
+      expect(await client.waitForLocalEvaluationReady()).toBe(true)
+      const cases = [
+        { metadata: { property_matching_version: 2 }, expected: false },
+        { metadata: { propertyMatchingVersion: 1 }, expected: true },
+        { metadata: { propertyMatchingVersion: 2 }, expected: false },
+        { metadata: { property_matching_version: 1, propertyMatchingVersion: 2 }, expected: true },
+        { metadata: { property_matching_version: 2, propertyMatchingVersion: 1 }, expected: false },
+        { metadata: {}, expected: true },
+        { metadata: { property_matching_version: 2 }, expected: false },
+      ]
+      for (const { metadata, expected } of cases) {
+        data = { flags: [versionedFlag], cohorts: {}, group_type_mapping: groupMapping, ...metadata }
+        await client.reloadFeatureFlags()
+        expect(await client.getFeatureFlag('group-flag', 'person', evaluationOptions)).toBe(expected)
+      }
+      data = undefined
+      await client.reloadFeatureFlags()
+      expect(await client.getFeatureFlag('group-flag', 'person', evaluationOptions)).toBe(false)
+
+      getFlagDefinitions.mockRejectedValueOnce(new Error('Cache unavailable'))
+      await client.reloadFeatureFlags()
+      expect(await client.getFeatureFlag('group-flag', 'person', evaluationOptions)).toBe(false)
+      expect(fetchMock).not.toHaveBeenCalled()
     }
-    let data: FlagDefinitionCacheInput = { flags: [versionedFlag], cohorts: {}, group_type_mapping: groupMapping }
-    client = new PostHog('TEST_API_KEY', {
-      personalApiKey: 'TEST_PERSONAL_API_KEY',
-      flagDefinitionCacheProvider: {
-        getFlagDefinitions: () => data,
-        shouldFetchFlagDefinitions: () => false,
+  )
+
+  it.each([undefined, 'TEST_PERSONAL_API_KEY'])(
+    'preserves the complete snapshot after malformed cache hydration (credential: %s)',
+    async (personalApiKey) => {
+      const data: FlagDefinitionCacheInput = {
+        flags: [
+          {
+            ...flag,
+            filters: {
+              ...flag.filters,
+              groups: [{ properties: [{ key: 'id', value: 7, type: 'cohort' }] }],
+            },
+          },
+        ],
+        group_type_mapping: groupMapping,
+        cohorts: {
+          '7': { type: 'AND', values: [{ key: 'value', value: false, operator: 'exact', type: 'group' }] },
+        },
+        property_matching_version: 2,
+        minimal_flag_called_events: true,
+      }
+      const provider: FlagDefinitionCacheProvider<FlagDefinitionCacheInput> = {
+        getFlagDefinitions: vi.fn(() => data),
+        shouldFetchFlagDefinitions: vi.fn(() => false),
         onFlagDefinitionsReceived: vi.fn(),
         shutdown: vi.fn(),
-      },
-    })
-    const cases = [
-      { metadata: { property_matching_version: 2 }, expected: false },
-      { metadata: { propertyMatchingVersion: 1 }, expected: true },
-      { metadata: { propertyMatchingVersion: 2 }, expected: false },
-      { metadata: { property_matching_version: 1, propertyMatchingVersion: 2 }, expected: true },
-      { metadata: { property_matching_version: 2, propertyMatchingVersion: 1 }, expected: false },
-      { metadata: {}, expected: true },
-    ]
-    for (const { metadata, expected } of cases) {
-      data = { flags: [versionedFlag], cohorts: {}, group_type_mapping: groupMapping, ...metadata }
+      }
+      client = new PostHog('TEST_API_KEY', {
+        personalApiKey,
+        flagDefinitionCacheProvider: provider,
+        featureFlagsPollingInterval: null,
+        flushAt: 100,
+        flushInterval: 0,
+      })
+      client.register({ super_prop: 'retained-on-full-events' })
+      const captured: any[] = []
+      client.on('capture', (message) => captured.push(message))
       await client.reloadFeatureFlags()
-      expect(
-        await client.getFeatureFlag('group-flag', 'person', {
-          groups: { company: 'acme' },
-          groupProperties: { company: { value: 'banana' } },
-          onlyEvaluateLocally: true,
-          sendFeatureFlagEvents: false,
-        })
-      ).toBe(expected)
+      expect(await client.waitForLocalEvaluationReady()).toBe(true)
+
+      vi.mocked(provider.getFlagDefinitions).mockReturnValue({ ...data, flags: null } as any)
+      await client.reloadFeatureFlags()
+      expect(client.isLocalEvaluationReady()).toBe(true)
+      for (const [value, expected] of [
+        ['banana', false],
+        [false, true],
+      ] as const) {
+        expect(
+          await client.getFeatureFlag('group-flag', `person-${value}`, {
+            groups: { company: 'acme' },
+            groupProperties: { company: { value } },
+            onlyEvaluateLocally: true,
+          })
+        ).toBe(expected)
+      }
+      await waitForPromises()
+      expect(captured.filter((message) => message.event === '$feature_flag_called')).toHaveLength(2)
+      expect(captured.every((message) => message.properties.super_prop === undefined)).toBe(true)
+      expect(provider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(personalApiKey ? 2 : 0)
+      expect(provider.onFlagDefinitionsReceived).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
     }
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
+  )
 
   it('prefers an empty snake_case group mapping over a populated legacy mapping', async () => {
     client = new PostHog('TEST_API_KEY', {
