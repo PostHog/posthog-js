@@ -15,14 +15,19 @@ export class BinaryContentRedactor {
     return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
 
+  /** Redact one leaf while a caller owns bounded, type-preserving traversal. @internal */
+  redactLeaf(value: string | Uint8Array, context: MediaTypeContext): string {
+    return typeof value === 'string' ? this.redactString(value, context) : this.placeholderFor(context.inferMediaType())
+  }
+
   private walk(value: unknown, ctx: MediaTypeContext): unknown {
     if (value === null || value === undefined) return value
-    if (typeof value === 'string') return this.redactString(value, ctx)
+    if (typeof value === 'string') return this.redactLeaf(value, ctx)
     if (typeof value !== 'object') return value
 
     // Buffer extends Uint8Array, so this branch catches both.
     if (typeof Uint8Array !== 'undefined' && value instanceof Uint8Array) {
-      return this.placeholderFor(ctx.inferMediaType())
+      return this.redactLeaf(value, ctx)
     }
 
     if (this.visited.has(value)) return null
@@ -35,7 +40,12 @@ export class BinaryContentRedactor {
     const obj = value as Record<string, unknown>
     const out: Record<string, unknown> = {}
     for (const k of Object.keys(obj)) {
-      out[k] = this.walk(obj[k], new MediaTypeContext(obj, k))
+      Object.defineProperty(out, k, {
+        value: this.walk(obj[k], new MediaTypeContext(obj, k)),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
     }
     return out
   }

@@ -1,18 +1,9 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import type { PostHog } from 'posthog-node'
-import { toJsonSafeValue } from '@posthog/core'
-import { isFullAiCaptureEnabled } from '../captureAiEvent'
-import { sanitizeAnthropic } from '../sanitization'
-import { MAX_OUTPUT_SIZE, toContentString, truncate } from '../utils'
+import { MAX_OUTPUT_SIZE, toContentString, withPrivacyMode } from '../utils'
+import { formatToolResult } from '../toolResult'
 import type { FormattedContent, FormattedContentItem } from '../types'
-
-/**
- * Tool results in an agent run carry whole files and command output, and the
- * same result is replayed as input on every later turn, so each string is
- * capped before it reaches the event.
- */
-const TOOL_RESULT_MAX_STRING_LENGTH = 5000
 
 /** Thinking blocks, recorded with the `reasoning` shape the other adapters use. */
 interface FormattedReasoningContent {
@@ -22,23 +13,8 @@ interface FormattedReasoningContent {
 
 export type ClaudeAgentContentItem = FormattedContentItem | FormattedReasoningContent
 
-function capStrings(value: unknown, max: number): unknown {
-  if (typeof value === 'string') {
-    return truncate(value, undefined, max)
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => capStrings(item, max))
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, capStrings(item, max)]))
-  }
-  return value
-}
-
 export function formatContent(content: unknown, client: PostHog, maxBytes = MAX_OUTPUT_SIZE): unknown {
-  // boffin: Bound JSON traversal before the binary redactor walks it.
-  const redacted = sanitizeAnthropic(toJsonSafeValue(content), client)
-  return isFullAiCaptureEnabled(client) ? redacted : capStrings(redacted, maxBytes)
+  return formatToolResult(content, client, maxBytes)
 }
 
 /** Read the system prompt out of the SDK options, whatever shape it takes. */
@@ -85,7 +61,8 @@ export function formatAssistantBlocks(blocks: unknown, client: PostHog): ClaudeA
 }
 
 /** Convert an Anthropic user message body into PostHog content items. */
-export function formatUserContent(content: unknown, client: PostHog): FormattedContent | unknown {
+export function formatUserContent(content: unknown, client: PostHog, privacyMode = false): FormattedContent | unknown {
+  if (withPrivacyMode(client, privacyMode, false) === null) return []
   if (typeof content === 'string') {
     return content
   }
@@ -102,7 +79,7 @@ export function formatUserContent(content: unknown, client: PostHog): FormattedC
       formatted.push({
         type: 'tool_result',
         tool_use_id: block.tool_use_id,
-        content: formatContent(block.content, client, TOOL_RESULT_MAX_STRING_LENGTH),
+        content: formatToolResult(block.content, client),
         ...(typeof block.is_error === 'boolean' ? { is_error: block.is_error } : {}),
       })
     } else if (typeof block.text === 'string') {

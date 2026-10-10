@@ -467,7 +467,7 @@ export class PostHogClaudeAgentProcessor {
     }
   }
 
-  private _beginTurn(state: QueryState, userMessageUuid?: string): void {
+  private _beginTurn(state: QueryState, trace: ClaudeAgentTraceOptions, userMessageUuid?: string): void {
     if (state.turnActive) {
       return
     }
@@ -491,7 +491,7 @@ export class PostHogClaudeAgentProcessor {
     }
     for (const message of state.pendingPrompts.splice(start, end - start + 1)) {
       state.tracker.appendPendingInput([
-        { role: 'user', content: formatUserContent(message.message.content, this._client) },
+        { role: 'user', content: formatUserContent(message.message.content, this._client, trace.privacyMode) },
       ])
     }
   }
@@ -514,13 +514,13 @@ export class PostHogClaudeAgentProcessor {
         state.userMessageUuid = message.user_message_uuid
       }
       if (message.event.type === 'message_start') {
-        this._beginTurn(state, message.user_message_uuid)
+        this._beginTurn(state, trace, message.user_message_uuid)
       }
       state.tracker.processStreamEvent(message.event, this._client, message.ttft_ms)
       await this._captureCompletedGenerations(state, trace)
     } else if (message.type === 'assistant') {
       if (!message.parent_tool_use_id) {
-        this._beginTurn(state, message.user_message_uuid)
+        this._beginTurn(state, trace, message.user_message_uuid)
       }
       this._handleAssistantMessage(message, state, trace)
     } else if (message.type === 'user') {
@@ -539,13 +539,13 @@ export class PostHogClaudeAgentProcessor {
       }
       // A user message carries the tool results of the model call that asked
       // for them, so it becomes the input of the next model call.
-      const content = formatUserContent(message.message?.content, this._client)
+      const content = formatUserContent(message.message?.content, this._client, trace.privacyMode)
       if (typeof content === 'string' || (Array.isArray(content) && content.length > 0)) {
         state.tracker.appendPendingInput([{ role: 'user', content }])
       }
     } else if (message.type === 'result') {
       try {
-        this._beginTurn(state, message.user_message_uuid)
+        this._beginTurn(state, trace, message.user_message_uuid)
         state.tracker.finishCurrent()
         await this._captureCompletedGenerations(state, trace, resultError(message), message)
         if (message.total_cost_usd != null) {
@@ -698,11 +698,10 @@ export class PostHogClaudeAgentProcessor {
       ...(parentSpanId ? { $ai_parent_id: parentSpanId } : {}),
       $ai_span_name: block.name,
       $ai_span_type: 'tool',
-      $ai_input_state: withPrivacyMode(
-        this._client,
-        trace.privacyMode ?? false,
-        formatContent(block.input ?? {}, this._client)
-      ),
+      $ai_input_state:
+        withPrivacyMode(this._client, trace.privacyMode ?? false, false) === null
+          ? null
+          : formatContent(block.input ?? {}, this._client),
     }
     state.pendingTools.set(properties.$ai_span_id, { startTime: performance.now(), properties })
   }
@@ -723,11 +722,10 @@ export class PostHogClaudeAgentProcessor {
       $ai_latency: (performance.now() - tool.startTime) / 1000,
       ...(result
         ? {
-            $ai_output_state: withPrivacyMode(
-              this._client,
-              trace.privacyMode ?? false,
-              formatContent(result.content, this._client)
-            ),
+            $ai_output_state:
+              withPrivacyMode(this._client, trace.privacyMode ?? false, false) === null
+                ? null
+                : formatContent(result.content, this._client),
             $ai_is_error: result.is_error === true,
           }
         : {}),
