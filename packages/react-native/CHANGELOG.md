@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.81.0
+
+### Minor Changes
+
+- [#5257](https://github.com/PostHog/posthog-js/pull/5257) [`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change properties passed to `capture()` and the other event methods to override SDK context properties such as `$app_version`, `$os_name` and `$lib`, matching posthog-js and posthog-android
+  (2026-10-10)
+
+### Patch Changes
+
+- Updated dependencies [[`2788b40`](https://github.com/PostHog/posthog-js/commit/2788b409d1649e3e2a901e86b4f60cfb8839dc57)]:
+  - @posthog/core@1.58.0
+
 ## 4.80.0
 
 ### Minor Changes
