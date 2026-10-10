@@ -43,6 +43,11 @@ export type FlagCalledEventParams = {
  */
 export interface FeatureFlagEvaluationsHost {
   captureFlagCalledEventIfNeeded(params: FlagCalledEventParams): void
+  /**
+   * Whether a read sends `$feature_flag_called`: the per-read option, then the client's
+   * `sendFeatureFlagEvent` option, then `true`.
+   */
+  resolveSendFeatureFlagEvents(perRead: boolean | undefined): boolean
   logWarning(message: string): void
 }
 
@@ -117,32 +122,48 @@ export class FeatureFlagEvaluations {
   /**
    * Check whether a feature flag is enabled. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
-   * existing cache.
+   * existing cache, unless events are off for this read (see `options.sendFeatureFlagEvents`).
    *
    * Flags that were not returned from the underlying evaluation resolve to
    * `options.defaultValue` (`false` unless overridden). A flag that has a value —
    * including a conclusive `false` result and variant strings — always wins over
    * `options.defaultValue`. Use `getFlag()` to distinguish an absent result from `false`.
+   *
+   * @param key - The feature flag key
+   * @param options - `defaultValue`: the result when the flag is not in the snapshot.
+   *   `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called` event.
+   *   Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
+  isEnabled(key: string, options: { defaultValue?: boolean; sendFeatureFlagEvents?: boolean } = {}): boolean {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     return flag?.enabled ?? options.defaultValue ?? false
   }
 
   /**
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
-   * on the first access per (distinctId, flag, value) tuple.
+   * on the first access per (distinctId, flag, value) tuple, unless events are off for
+   * this read (see `options.sendFeatureFlagEvents`).
    *
    * Returns the variant string for multivariate flags, `true` for boolean flags that
    * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`
    * for flags that were not returned by the evaluation. Cached inactive definitions are
    * conclusive `false` results during local evaluation, while remote evaluation omits
    * globally inactive flags.
+   *
+   * @param key - The feature flag key
+   * @param options - `sendFeatureFlagEvents`: whether this read sends a `$feature_flag_called`
+   *   event. Defaults to the client's `sendFeatureFlagEvent` option, which defaults to `true`.
+   *   When `false`, the read sends nothing and does not mark the flag as reported, so a
+   *   later read that sends events still reports it. The flag still counts as accessed
+   *   for `onlyAccessed()`.
    */
-  getFlag(key: string): FeatureFlagValue | undefined {
+  getFlag(key: string, options: { sendFeatureFlagEvents?: boolean } = {}): FeatureFlagValue | undefined {
     const flag = this._flags[key]
-    this._recordAccess(key)
+    this._recordAccess(key, options.sendFeatureFlagEvents)
     if (!flag) {
       return undefined
     }
@@ -162,7 +183,8 @@ export class FeatureFlagEvaluations {
 
   /**
    * Return a filtered copy containing only flags that have been accessed via
-   * `isEnabled()` or `getFlag()` before this call.
+   * `isEnabled()` or `getFlag()` before this call, including reads that sent no
+   * `$feature_flag_called` event.
    *
    * Order-dependent: if nothing has been accessed yet, the returned snapshot is
    * empty. The method honors its name — pre-access if you want a populated result.
@@ -260,8 +282,14 @@ export class FeatureFlagEvaluations {
     })
   }
 
-  private _recordAccess(key: string): void {
+  private _recordAccess(key: string, sendFeatureFlagEvents: boolean | undefined): void {
     this._accessed.add(key)
+
+    // Return before the dedupe cache is touched, so a later read that sends events still
+    // reports this flag.
+    if (!this._host.resolveSendFeatureFlagEvents(sendFeatureFlagEvents)) {
+      return
+    }
 
     // Empty snapshots (no resolvable distinctId) are returned by `evaluateFlags()` as a
     // safety fallback. Firing $feature_flag_called for them would emit events with an

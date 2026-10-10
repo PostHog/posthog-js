@@ -1758,7 +1758,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -1910,7 +1910,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     return this._getFeatureFlagResult(key, resolvedDistinctId, {
       ...resolvedOptions,
-      sendFeatureFlagEvents: resolvedOptions?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(resolvedOptions?.sendFeatureFlagEvents),
     })
   }
 
@@ -2020,7 +2020,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Bypass the public `getFeatureFlag` so the user only sees one deprecation warning per call.
     const result = await this._getFeatureFlagResult(key, distinctId, {
       ...options,
-      sendFeatureFlagEvents: options?.sendFeatureFlagEvents ?? this.options.sendFeatureFlagEvent ?? true,
+      sendFeatureFlagEvents: this._resolveSendFeatureFlagEvents(options?.sendFeatureFlagEvents),
     })
     if (result === undefined) {
       return undefined
@@ -2230,6 +2230,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * Locally resolved values remain authoritative when remote results are merged. In particular,
    * a cached inactive definition is a conclusive `false` result locally, while remote evaluation
    * omits globally inactive flags and therefore leaves those keys absent.
+   *
+   * **Exposure events.** `isEnabled()` and `getFlag()` send a `$feature_flag_called` event the
+   * first time each flag value is read for a user. Experiments use these events as exposures.
+   * The client's `sendFeatureFlagEvent` option sets the default for these reads. Pass
+   * `{ sendFeatureFlagEvents: true }` or `{ sendFeatureFlagEvents: false }` to a read to override
+   * it, so one snapshot can serve both experiment flags and flags that should send no events.
+   * `getFlagPayload()` never sends events.
    *
    * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
    * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
@@ -2543,12 +2550,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
+  /**
+   * Whether a flag read sends `$feature_flag_called`: the per-call option wins, then the
+   * client's `sendFeatureFlagEvent` option, then `true`. Shared by the single-flag getters
+   * and `FeatureFlagEvaluations.isEnabled() / getFlag()`.
+   */
+  private _resolveSendFeatureFlagEvents(perCall?: boolean): boolean {
+    return perCall ?? this.options.sendFeatureFlagEvent ?? true
+  }
+
   private _featureFlagEvaluationsHost?: FeatureFlagEvaluationsHost
 
   private _getFeatureFlagEvaluationsHost(): FeatureFlagEvaluationsHost {
     if (!this._featureFlagEvaluationsHost) {
       this._featureFlagEvaluationsHost = {
         captureFlagCalledEventIfNeeded: (params) => this._captureFlagCalledEventIfNeeded(params),
+        resolveSendFeatureFlagEvents: (perRead) => this._resolveSendFeatureFlagEvents(perRead),
         logWarning: (message) => {
           if (this.options.featureFlagsLogWarnings !== false) {
             // These warnings guide API usage (misuse of `onlyAccessed()` / `only()`) and
