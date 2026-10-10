@@ -262,7 +262,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this.disabled && normalizedOptions.personalApiKey) {
       if (normalizedOptions.personalApiKey.includes('phc_')) {
         throw new Error(
-          'Your Personal API key is invalid. These keys are prefixed with "phx_" and can be created in PostHog project settings.'
+          'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
         )
       }
 

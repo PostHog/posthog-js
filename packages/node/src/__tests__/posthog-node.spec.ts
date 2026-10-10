@@ -1556,6 +1556,8 @@ describe('PostHog Node.js', () => {
 
     it.each([
       { name: 'resolves secretKey into the personal api key', keyOption: { secretKey: 'TEST_SECRET_KEY' } },
+      { name: 'accepts a project secret API key', keyOption: { secretKey: 'phs_abc123' } },
+      { name: 'accepts a personal API key via secretKey', keyOption: { secretKey: 'phx_abc123' } },
       {
         name: 'still accepts the deprecated personalApiKey alias',
         keyOption: { personalApiKey: 'TEST_PERSONAL_API_KEY' },
@@ -1619,17 +1621,25 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalled()
     })
 
-    it('should throw an error when creating SDK if a project key is passed in as personalApiKey', async () => {
-      expect(() => {
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          fetchRetryCount: 0,
-          personalApiKey: 'phc_abc123',
-          featureFlagsPollingInterval: 100,
-          disableCompression: true,
-        })
-      }).toThrow(Error)
-    })
+    it.each(['secretKey', 'personalApiKey'])(
+      'explains how to configure server-only credentials when a project key is passed as %s',
+      (keyOption) => {
+        expect(() => {
+          new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            fetchRetryCount: 0,
+            [keyOption]: 'phc_abc123',
+            featureFlagsPollingInterval: 100,
+            disableCompression: true,
+          })
+        }).toThrowError(
+          new Error(
+            'A project API key ("phc_...") was provided as secretKey or personalApiKey. Pass the project API key as the first constructor argument. For local evaluation, set secretKey (or the deprecated personalApiKey alias) to a server-only Project Secret API Key ("phs_...") or Personal API Key ("phx_...") with feature flag read access.'
+          )
+        )
+        expect(mockedFetch).not.toHaveBeenCalled()
+      }
+    )
 
     it.each(['loaded', 'empty'])(
       'does not automatically enrich capture events with %s local definitions',
