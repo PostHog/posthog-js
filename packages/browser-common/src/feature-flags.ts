@@ -926,8 +926,6 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         if (this._firingFeatureFlagsCallbacks) {
-            // Flag callbacks also fire when another tab stores new flags, so a reload here makes
-            // every open tab wake the others and can send requests in a loop.
             this._logger.warn(
                 'reloadFeatureFlags() was called inside an onFeatureFlags callback. ' +
                     'This callback also runs when flags change in other tabs, so this can cause a request loop.'
