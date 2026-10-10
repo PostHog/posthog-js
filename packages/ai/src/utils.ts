@@ -201,12 +201,17 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
 
         if (choice.message.tool_calls) {
           for (const toolCall of choice.message.tool_calls) {
+            // Custom tools carry their free-form text in `custom.input`, with no `function` object.
+            const call = toolCall.type === 'custom' ? toolCall.custom : toolCall.function
+            if (!call) {
+              continue
+            }
             content.push({
               type: 'function',
               id: toolCall.id,
               function: {
-                name: toolCall.function.name,
-                arguments: toolCall.function.arguments,
+                name: call.name,
+                arguments: toolCall.type === 'custom' ? call.input : call.arguments,
               },
             })
           }
