@@ -1,7 +1,12 @@
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
+import {
+  addProperty,
+  getFirstHeaderValue,
+  getPostHogCookieReadOptions,
+  getPostHogTracingHeaderValues,
+} from './tracing-headers'
 import { normalizeRequestCurrentUrl, normalizeRequestPath } from './url-utils'
 import type { Request, Response } from 'express'
 import type { ContextData } from './context/types'
@@ -34,7 +39,7 @@ function getClientIp(req: Request): string | undefined {
 }
 
 function buildRequestContextData(posthog: PostHogBackendClient, req: Request): Partial<ContextData> {
-  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers)
+  const { sessionId, distinctId } = getPostHogTracingHeaderValues(req.headers, getPostHogCookieReadOptions(posthog))
   const properties: Record<string, any> = {}
   const disableCaptureUrlHashes = posthog.options.disable_capture_url_hashes === true
 
