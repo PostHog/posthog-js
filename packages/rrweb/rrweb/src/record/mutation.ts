@@ -14,6 +14,8 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  getAnimatedStyles,
+  appendAnimatedStyles,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -213,6 +215,7 @@ export default class MutationBuffer {
   private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
   private recordCanvas: observerParam['recordCanvas'];
+  private recordAnimationStyles: observerParam['recordAnimationStyles'];
   private canvasMaskingConfigured: observerParam['canvasMaskingConfigured'];
   private inlineImages: observerParam['inlineImages'];
   private slimDOMOptions: observerParam['slimDOMOptions'];
@@ -243,6 +246,7 @@ export default class MutationBuffer {
         'maskAttributeFn',
         'keepIframeSrcFn',
         'recordCanvas',
+        'recordAnimationStyles',
         'canvasMaskingConfigured',
         'inlineImages',
         'slimDOMOptions',
@@ -427,6 +431,7 @@ export default class MutationBuffer {
         slimDOMOptions: this.slimDOMOptions,
         dataURLOptions: this.dataURLOptions,
         recordCanvas: this.recordCanvas,
+        recordAnimationStyles: this.recordAnimationStyles,
         canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
         onSerialize: (currentN) => {
@@ -594,6 +599,22 @@ export default class MutationBuffer {
         .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
         .map((attribute) => {
           const { attributes } = attribute;
+          // rewriting the style attribute would drop the animated values the
+          // snapshot folded into it (see getAnimatedStyles), so carry them over
+          if (
+            this.recordAnimationStyles &&
+            'style' in attributes &&
+            (typeof attributes.style === 'string' || attributes.style === null)
+          ) {
+            const animated = getAnimatedStyles(attribute.node as Element);
+            if (animated) {
+              attributes.style = appendAnimatedStyles(
+                attributes.style,
+                animated,
+              );
+              Object.assign(attribute.styleDiff, animated);
+            }
+          }
           if (
             !this.maskAllElementAttributes &&
             !this.maskAttributeFn &&
