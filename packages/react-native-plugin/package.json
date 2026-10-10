@@ -24,7 +24,6 @@
     "lib",
     "android",
     "ios",
-    "cpp",
     "*.podspec",
     "!ios/build",
     "!android/build",
@@ -79,7 +78,7 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": ">=0.71"
   },
   "react-native-builder-bob": {
     "source": "src",

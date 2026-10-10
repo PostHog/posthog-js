@@ -135,9 +135,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         /// Runs at launch, before JS config exists, so the Info.plist key is the only way to skip it.
         @objc static func prewarmPushNotificationOpenCapture() {
             guard plistCapturePushNotificationOpened else { return }
-            if #available(iOS 14.0, *) {
-                PostHogSDK.prewarmPushNotificationOpenCapture()
-            }
+            PostHogSDK.prewarmPushNotificationOpenCapture()
         }
     #endif
 
@@ -163,7 +161,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         let exceptionStepsConfig = errorTrackingConfig["exceptionSteps"] as? [String: Any] ?? [:]
 
         setupNativeSdk(
-            method: "setup",
             sessionId: sessionId,
             sdkOptions: sdkOptions,
             sessionReplayEnabled: sessionReplayConfig["enabled"] as? Bool ?? false,
@@ -177,29 +174,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         )
     }
 
-    @objc(start:withSdkOptions:withSdkReplayConfig:withDecideReplayConfig:withResolver:withRejecter:)
-    func start(
-        sessionId: String, sdkOptions: [String: Any], sdkReplayConfig: [String: Any],
-        decideReplayConfig: [String: Any], resolve: RCTPromiseResolveBlock,
-        reject _: RCTPromiseRejectBlock
-    ) {
-        setupNativeSdk(
-            method: "start",
-            sessionId: sessionId,
-            sdkOptions: sdkOptions,
-            sessionReplayEnabled: true,
-            sdkReplayConfig: sdkReplayConfig,
-            decideReplayConfig: decideReplayConfig,
-            nativeErrorTrackingAutocapture: false,
-            exceptionStepsConfig: [:],
-            pushConfig: [:],
-            rageClickConfig: [:],
-            resolve: resolve
-        )
-    }
-
     private func setupNativeSdk(
-        method _: String,
         sessionId: String,
         sdkOptions: [String: Any],
         sessionReplayEnabled: Bool,
@@ -296,9 +271,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
         // don't exist on macOS. macOS gets error tracking only.
         #if os(iOS)
-            if #available(iOS 15.0, *) {
-                config.surveys = false
-            }
+            config.surveys = false
 
             // Always apply the session replay configuration so that recording started later
             // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
@@ -316,11 +289,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             let maskAllSandboxedViews = sdkReplayConfig["maskAllSandboxedViews"] as? Bool ?? true
             config.sessionReplayConfig.maskAllSandboxedViews = maskAllSandboxedViews
 
-            // read throttleDelayMs and use iOSdebouncerDelayMs as a fallback for back compatibility
-            let throttleDelayMs =
-                (sdkReplayConfig["throttleDelayMs"] as? Int)
-                    ?? (sdkReplayConfig["iOSdebouncerDelayMs"] as? Int)
-                    ?? 1000
+            let throttleDelayMs = sdkReplayConfig["throttleDelayMs"] as? Int ?? 1000
 
             let timeInterval: TimeInterval = Double(throttleDelayMs) / 1000.0
             config.sessionReplayConfig.throttleDelay = timeInterval
@@ -367,8 +336,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             postHogVersion = sdkVersion
         }
 
-        // Only set when present: the legacy start() path predates push, and there the
-        // native defaults (both true) must win, matching posthog-ios on its own.
+        // Only set when present: setup() from a posthog-react-native that predates push sends
+        // no push config, and there the native defaults (both true) must win, matching posthog-ios.
         if let capturePushSubscriptions = pushConfig["capturePushNotificationSubscriptions"] as? Bool {
             config.capturePushNotificationSubscriptions = capturePushSubscriptions
         }

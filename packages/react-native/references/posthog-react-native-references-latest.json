@@ -4125,11 +4125,6 @@
           "name": "setup"
         },
         {
-          "description": "Legacy session replay setup entrypoint. Prefer setup() for new native features.",
-          "type": "(sessionId: string, sdkOptions: PostHogReactNativePluginMap, sdkReplayConfig: PostHogReactNativePluginMap, decideReplayConfig: PostHogReactNativePluginMap) => Promise<void>",
-          "name": "start"
-        },
-        {
           "type": "(sessionId: string) => Promise<void>",
           "name": "startSession"
         },
@@ -4188,6 +4183,10 @@
         {
           "type": "((provider: PostHogPushIdentityProvider) => void) & ((provider: PostHogPushIdentityProvider) => void)",
           "name": "setPushIdentityProvider"
+        },
+        {
+          "type": "(sessionId: string, sdkOptions: { [key: string]: any; }, sdkReplayConfig: { [key: string]: any; }, decideReplayConfig: { [key: string]: any; }) => Promise<void>",
+          "name": "start"
         }
       ],
       "path": "dist/optional/OptionalPlugin.d.ts"
