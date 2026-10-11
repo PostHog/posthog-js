@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.55.2
+
+### Patch Changes
+
+- [#5268](https://github.com/PostHog/posthog-js/pull/5268) [`74d7eb2`](https://github.com/PostHog/posthog-js/commit/74d7eb268172b016142dd66495a7e68fc9c9bf47) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify which server-only credentials to use for local evaluation when a project API key is supplied instead.
+  (2026-10-11)
+
 ## 5.55.1
 
 ### Patch Changes
