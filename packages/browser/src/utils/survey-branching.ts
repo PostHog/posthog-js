@@ -1,5 +1,6 @@
 import { Survey, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isNullish } from '@posthog/core'
 
 const logger = createLogger('[Surveys]')
 
@@ -49,7 +50,7 @@ export function getRatingBucketForResponseValue(responseValue: number, scale: nu
 export function getNextSurveyStep(
     survey: Survey,
     currentQuestionIndex: number,
-    response: string | string[] | number | null
+    response: string | string[] | number | null | undefined
 ): number | typeof SurveyQuestionBranchingType.End {
     const question = survey.questions[currentQuestionIndex]
     const nextQuestionIndex = currentQuestionIndex + 1
@@ -96,6 +97,10 @@ export function getNextSurveyStep(
                 return nextQuestionIndex
             }
         } else if (question.type === SurveyQuestionType.Rating) {
+            if (question.optional && isNullish(response)) {
+                return nextQuestionIndex
+            }
+
             if (typeof response !== 'number' || !Number.isInteger(response)) {
                 throw new Error('The response type must be an integer')
             }
