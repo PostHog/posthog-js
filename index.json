@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5278": {
+    "key": "PostHog/posthog-js/issue/5278",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5278",
+    "url": "https://github.com/PostHog/posthog-js/issues/5278",
+    "conclusion": "Confirmed browser-survey bug: an optional, response-branched rating submits null, but the branching helper rejects it before navigation.",
+    "labels": [
+      "feature/surveys",
+      "web",
+      "team/client-libraries",
+      "bug"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/5279",
+    "closed": false,
+    "updatedAt": "2026-10-11T21:25:55.959Z"
+  },
   "PostHog/posthog-js/issue/5277": {
     "key": "PostHog/posthog-js/issue/5277",
     "repo": "PostHog/posthog-js",
@@ -2914,17 +2930,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-27T09:21:29.014Z"
-  },
-  "PostHog/posthog-js/issue/3214": {
-    "key": "PostHog/posthog-js/issue/3214",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3214",
-    "url": "https://github.com/PostHog/posthog-js/issues/3214",
-    "conclusion": "Valid release/versioning issue; keep open for release tooling investigation.",
-    "labels": [
-      "release"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-27T09:20:06.668Z"
   }
 }
