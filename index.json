@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/5280": {
+    "key": "PostHog/posthog-js/issue/5280",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 5280",
+    "url": "https://github.com/PostHog/posthog-js/issues/5280",
+    "conclusion": "Confirmed type-contract bug: `before_send` hooks are only invoked with non-null events, while their public callback parameter types incorrectly allow `null`.",
+    "labels": [
+      "web",
+      "node",
+      "react-native",
+      "team/client-libraries",
+      "bug"
+    ],
+    "closed": false,
+    "updatedAt": "2026-10-12T13:11:47.558Z"
+  },
   "PostHog/posthog-js/issue/5278": {
     "key": "PostHog/posthog-js/issue/5278",
     "repo": "PostHog/posthog-js",
@@ -2915,20 +2931,5 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-27T09:22:05.424Z"
-  },
-  "PostHog/posthog-js/issue/2156": {
-    "key": "PostHog/posthog-js/issue/2156",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2156",
-    "url": "https://github.com/PostHog/posthog-js/issues/2156",
-    "conclusion": "Valid feature request; current React Native session replay is mobile-only and desktop support would be a large cross-platform project.",
-    "labels": [
-      "enhancement",
-      "feature/replay",
-      "react-native",
-      "feature/mobile"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-27T09:21:29.014Z"
   }
 }
