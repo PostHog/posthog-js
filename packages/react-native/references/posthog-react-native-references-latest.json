@@ -2320,7 +2320,7 @@
       "name": "BeforeSendFn",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+      "example": "(event: CaptureEvent) => CaptureEvent | null"
     },
     {
       "id": "CaptureEvent",
