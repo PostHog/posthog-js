@@ -99,7 +99,9 @@ export function getNextSurveyStep(
             }
         } else if (question.type === SurveyQuestionType.Rating) {
             if (question.optional && isNullish(response)) {
-                return nextQuestionIndex
+                return nextQuestionIndex === survey.questions.length
+                    ? SurveyQuestionBranchingType.End
+                    : nextQuestionIndex
             }
 
             if (typeof response !== 'number' || !Number.isInteger(response)) {

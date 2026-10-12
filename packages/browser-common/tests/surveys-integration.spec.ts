@@ -1628,6 +1628,35 @@ describe('surveys', () => {
             expect(getNextSurveyStep(survey, 0, undefined)).toEqual(1)
         })
 
+        it.each([null, undefined])(
+            'should finish after skipping a final optional rating with response %s',
+            (response) => {
+                survey.questions = [
+                    { type: SurveyQuestionType.Open, question: 'Tell us more!', id: 'q1' },
+                    {
+                        type: SurveyQuestionType.Rating,
+                        question: 'How happy are you?',
+                        id: 'q2',
+                        display: 'number',
+                        scale: 5,
+                        lowerBoundLabel: 'Unhappy',
+                        upperBoundLabel: 'Happy',
+                        optional: true,
+                        branching: {
+                            type: SurveyQuestionBranchingType.ResponseBased,
+                            responseValues: {
+                                negative: SurveyQuestionBranchingType.End,
+                                neutral: SurveyQuestionBranchingType.End,
+                                positive: SurveyQuestionBranchingType.End,
+                            },
+                        },
+                    },
+                ]
+
+                expect(getNextSurveyStep(survey, 1, response)).toBe(SurveyQuestionBranchingType.End)
+            }
+        )
+
         it('should throw an error for an invalid scale', () => {
             survey.questions = [
                 {
