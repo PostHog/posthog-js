@@ -37,6 +37,16 @@ interface WebMCPMetadata {
     model?: string
 }
 
+interface WebMCPFailure {
+    message: string
+    type: string
+}
+
+interface WebMCPFailureInput {
+    error: unknown
+    errorResult: boolean
+}
+
 type WebMCPDocument = Document & { modelContext?: WebMCPModelContext }
 
 const instrumentedModelContexts = new WeakMap<WebMCPModelContext, WebMCPInstrumentation>()
@@ -65,7 +75,10 @@ const INJECTABLE_SCHEMA_KEYS = new Set([
 ])
 const MAX_INTENT_LENGTH = 2048
 const MAX_MODEL_LENGTH = 256
+const MAX_ERROR_MESSAGE_LENGTH = 2048
+const MAX_ERROR_TYPE_LENGTH = 256
 const INTENT_SANITIZATION_OPTIONS = { maxStringLength: MAX_INTENT_LENGTH, truncationSuffix: '...' }
+const ERROR_SANITIZATION_OPTIONS = { maxStringLength: MAX_ERROR_MESSAGE_LENGTH, truncationSuffix: '...' }
 
 function getMetadataOptions(config: boolean | WebMCPCaptureConfig | undefined): WebMCPMetadataOptions | undefined {
     if (!config) {
@@ -227,6 +240,65 @@ function isErrorResult(value: unknown): boolean {
     }
 }
 
+function getErrorResultMessage(value: unknown): string | undefined {
+    try {
+        if (!isObject(value) || !isArray(value.content)) {
+            return undefined
+        }
+        const parts = value.content
+            .filter((part) => isObject(part) && part.type === 'text' && isString(part.text))
+            .map((part) => (part as { text: string }).text)
+        return parts.join(' ').trim() || undefined
+    } catch {
+        return undefined
+    }
+}
+
+function getErrorMessage(error: unknown, errorResult: boolean): string {
+    try {
+        const message = errorResult
+            ? getErrorResultMessage(error)
+            : isObject(error) && isString(error.message)
+              ? error.message
+              : isString(error)
+                ? error
+                : String(error)
+        return sanitizeFreeText(message || 'Unknown error', ERROR_SANITIZATION_OPTIONS).slice(
+            0,
+            MAX_ERROR_MESSAGE_LENGTH
+        )
+    } catch {
+        return 'Unknown error'
+    }
+}
+
+function getErrorType(error: unknown, errorResult: boolean): string {
+    if (errorResult) {
+        return 'Error'
+    }
+    try {
+        if (!isObject(error)) {
+            return 'Error'
+        }
+        let type = isString(error.name) ? error.name.trim() : ''
+        const constructor = error.constructor
+        if ((!type || type === 'Error') && isFunction(constructor) && constructor.name !== 'Error') {
+            type = constructor.name
+        }
+        return (type || 'Error').slice(0, MAX_ERROR_TYPE_LENGTH)
+    } catch {
+        return 'Error'
+    }
+}
+
+function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
+    const message = getErrorMessage(error, errorResult)
+    return {
+        message,
+        type: getErrorType(error, errorResult),
+    }
+}
+
 export class WebMCP {
     private _isPatched = false
 
@@ -299,30 +371,38 @@ export class WebMCP {
                 try {
                     result = execute.apply(this === wrappedTool ? tool : this, toolArgs)
                 } catch (error) {
-                    webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true, metadata)
+                    webMCP._captureToolCall(
+                        instrumentation,
+                        wrappedTool,
+                        startedAt,
+                        { error, errorResult: false },
+                        metadata
+                    )
                     throw error
                 }
 
                 if (isPromise(result)) {
                     return Promise.resolve(result).then(
                         (value) => {
+                            const failure = isErrorResult(value) ? { error: value, errorResult: true } : undefined
+                            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, failure, metadata)
+                            return value
+                        },
+                        (error) => {
                             webMCP._captureToolCall(
                                 instrumentation,
                                 wrappedTool,
                                 startedAt,
-                                isErrorResult(value),
+                                { error, errorResult: false },
                                 metadata
                             )
-                            return value
-                        },
-                        (error) => {
-                            webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, true, metadata)
                             throw error
                         }
                     )
                 }
 
-                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, isErrorResult(result), metadata)
+                const failure = isErrorResult(result) ? { error: result, errorResult: true } : undefined
+                webMCP._captureToolCall(instrumentation, wrappedTool, startedAt, failure, metadata)
                 return result
             },
         })
@@ -333,15 +413,20 @@ export class WebMCP {
         instrumentation: WebMCPInstrumentation,
         tool: WebMCPTool,
         timestamp: Date,
-        isError: boolean,
+        failureInput: WebMCPFailureInput | undefined,
         metadata: WebMCPMetadata
     ): void {
         const duration = Date.now() - timestamp.getTime()
+        let failure: WebMCPFailure | undefined
 
         for (const instance of instrumentation.instances) {
             const options = getMetadataOptions(instance.config.capture_webmcp)
             if (!options) {
                 continue
+            }
+
+            if (failureInput && !failure) {
+                failure = getFailure(failureInput.error, failureInput.errorResult)
             }
 
             try {
@@ -355,7 +440,8 @@ export class WebMCP {
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
                         $mcp_duration_ms: duration,
-                        $mcp_is_error: isError,
+                        $mcp_is_error: !!failureInput,
+                        ...(failure ? { $mcp_error_type: failure.type, $mcp_error_message: failure.message } : {}),
                         ...(options.intent && metadata.intent
                             ? { $mcp_intent: metadata.intent, $mcp_intent_source: 'context_parameter' }
                             : {}),
