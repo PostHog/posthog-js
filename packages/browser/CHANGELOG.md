@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.438.8
+
+### Patch Changes
+
+- [#5259](https://github.com/PostHog/posthog-js/pull/5259) [`ba4cc49`](https://github.com/PostHog/posthog-js/commit/ba4cc49d9471ac1eaec88023d7a2cc5d5b6f06a8) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP error types and sanitized messages.
+  (2026-10-12)
+
 ## 1.438.7
 
 ### Patch Changes
