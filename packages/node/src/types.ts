@@ -164,7 +164,7 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
  */
 export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
-export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
+export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
