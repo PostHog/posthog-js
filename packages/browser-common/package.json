@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.9.1",
+    "version": "0.9.4",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -29,6 +29,9 @@
             "constants": [
                 "dist/constants.d.ts"
             ],
+            "extension-tokens": [
+                "dist/extension-tokens.d.ts"
+            ],
             "extension-runtime": [
                 "dist/extension-runtime.d.ts"
             ],
@@ -37,6 +40,24 @@
             ],
             "utils/*": [
                 "dist/utils/*.d.ts"
+            ],
+            "feature-flags": [
+                "dist/feature-flags.d.ts"
+            ],
+            "feature-flags-config": [
+                "dist/feature-flags-config.d.ts"
+            ],
+            "logs": [
+                "dist/logs.d.ts"
+            ],
+            "logs-types": [
+                "dist/logs-types.d.ts"
+            ],
+            "logs-config": [
+                "dist/logs-config.d.ts"
+            ],
+            "console-logs": [
+                "dist/console-logs.d.ts"
             ]
         }
     },
@@ -56,6 +77,11 @@
             "require": "./dist/constants.js",
             "import": "./dist/constants.mjs"
         },
+        "./extension-tokens": {
+            "types": "./dist/extension-tokens.d.ts",
+            "require": "./dist/extension-tokens.js",
+            "import": "./dist/extension-tokens.mjs"
+        },
         "./extension-runtime": {
             "types": "./dist/extension-runtime.d.ts",
             "require": "./dist/extension-runtime.js",
@@ -70,6 +96,36 @@
             "types": "./dist/utils/*.d.ts",
             "require": "./dist/utils/*.js",
             "import": "./dist/utils/*.mjs"
+        },
+        "./feature-flags": {
+            "types": "./dist/feature-flags.d.ts",
+            "require": "./dist/feature-flags.js",
+            "import": "./dist/feature-flags.mjs"
+        },
+        "./feature-flags-config": {
+            "types": "./dist/feature-flags-config.d.ts",
+            "require": "./dist/feature-flags-config.js",
+            "import": "./dist/feature-flags-config.mjs"
+        },
+        "./logs": {
+            "types": "./dist/logs.d.ts",
+            "require": "./dist/logs.js",
+            "import": "./dist/logs.mjs"
+        },
+        "./logs-types": {
+            "types": "./dist/logs-types.d.ts",
+            "require": "./dist/logs-types.js",
+            "import": "./dist/logs-types.mjs"
+        },
+        "./logs-config": {
+            "types": "./dist/logs-config.d.ts",
+            "require": "./dist/logs-config.js",
+            "import": "./dist/logs-config.mjs"
+        },
+        "./console-logs": {
+            "types": "./dist/console-logs.d.ts",
+            "import": "./dist/console-logs.mjs",
+            "require": "./dist/console-logs.js"
         }
     },
     "scripts": {

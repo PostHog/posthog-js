@@ -849,13 +849,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
                     : undefined
                 plugins.push(
-                    networkPlugin(
-                        buildNetworkRequestOptions(
+                    networkPlugin({
+                        ...buildNetworkRequestOptions(
                             this._instance.config,
                             this._networkPayloadCapture,
                             isIngestionEndpoint
-                        )
-                    )
+                        ),
+                        // This private init option is deliberately off by default, including for old
+                        // cores loading a new recorder from the unversioned CDN. Never infer it from a version.
+                        captureFetchSynchronously: this._instance.config.__preview_replay_sync_fetch === true,
+                    })
                 )
             } else {
                 logger.info('NetworkCapture not started because we are on localhost.')

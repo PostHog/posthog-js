@@ -47,24 +47,29 @@ function diagnostics(
     }
 }
 
-function report(mode, status = 'passed') {
+function report(mode, status = 'passed', suite = 'migration') {
     const profile = mode === 'v0' ? 'node-legacy' : 'node-analytics-v1'
+    const caseSource = suite === 'acceptance' ? { ...source, path: 'acceptance/public/identify.feature' } : source
     return {
         contract_version: 'sdk-compliance-v2-draft2',
-        run_id: `run-${mode}`,
+        run_id: `run-${suite}-${mode}`,
         profiles: [{ id: profile }],
         results: [
             {
                 profile_id: profile,
-                case_id: 'example',
-                source,
+                case_id: suite === 'acceptance' ? 'identify-example' : 'example',
+                source: caseSource,
                 result: {
                     status,
                     executed: true,
                     failure:
                         status === 'passed'
                             ? undefined
-                            : { code: 'local_flag_value', message: 'Unexpected flag value', failed_step: failedStep },
+                            : {
+                                  code: 'local_flag_value',
+                                  message: 'Unexpected flag value',
+                                  failed_step: { ...failedStep, source: { ...caseSource, line: 1187 } },
+                              },
                 },
             },
         ],
@@ -134,19 +139,34 @@ async function exercise(options = {}) {
         for (const mode of ['v0', 'v1']) {
             if (options.missing?.includes(mode)) continue
             const dir = join(root, `node-v2-${mode}`)
-            mkdirSync(join(dir, 'reports'), { recursive: true })
-            const data = options.reports?.[mode] || report(mode)
+            mkdirSync(dir)
             writeFileSync(join(dir, 'source.txt'), options.source || sha)
-            writeFileSync(join(dir, 'reports/report.json'), typeof data === 'string' ? data : JSON.stringify(data))
-            if (options.diagnostics?.[mode] !== null && typeof data !== 'string') {
-                const diagnostic = options.diagnostics?.[mode] ?? diagnostics(data)
+            for (const suite of ['acceptance', 'migration']) {
+                if (suite === 'acceptance' && options.missingAcceptance?.includes(mode)) continue
+                const folder = suite === 'acceptance' ? 'acceptance' : 'reports'
+                mkdirSync(join(dir, folder), { recursive: true })
+                const data =
+                    (suite === 'acceptance' ? options.acceptanceReports : options.reports)?.[mode] ||
+                    report(mode, 'passed', suite)
+                writeFileSync(join(dir, folder, 'report.json'), typeof data === 'string' ? data : JSON.stringify(data))
+                const candidate =
+                    suite === 'acceptance' ? options.acceptanceDiagnostics?.[mode] : options.diagnostics?.[mode]
+                if (candidate !== null && typeof data !== 'string') {
+                    const diagnostic = candidate ?? diagnostics(data)
+                    writeFileSync(
+                        join(dir, folder, 'report.json.diagnostics.json'),
+                        typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
+                    )
+                }
                 writeFileSync(
-                    join(dir, 'reports/report.json.diagnostics.json'),
-                    typeof diagnostic === 'string' ? diagnostic : JSON.stringify(diagnostic)
+                    join(dir, folder, 'cli-exit.txt'),
+                    (suite === 'acceptance' ? options.acceptanceExit : options.exit) || '0'
+                )
+                writeFileSync(
+                    join(dir, folder, 'report-check-exit.txt'),
+                    (suite === 'acceptance' ? options.acceptanceValidation : options.validation) || '0'
                 )
             }
-            writeFileSync(join(dir, 'reports/cli-exit.txt'), options.exit || '0')
-            writeFileSync(join(dir, 'reports/report-check-exit.txt'), options.validation || '0')
         }
         let error
         try {
@@ -165,7 +185,9 @@ test('creates one combined comment for both profiles and writes the same summary
     assert.equal(error, undefined)
     assert.match(summary, /Capture v0/)
     assert.match(summary, /Capture v1/)
-    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
+    assert.match(summary, /Capture v0 — acceptance/)
+    assert.match(summary, /Capture v1 — migration/)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 4)
     assert.doesNotMatch(summary, /example|<details>/)
     assert.equal(calls[0], 'summary')
     assert.equal(calls.at(-1)[0], 'create')
@@ -183,6 +205,20 @@ test('updates the existing bot comment, ignoring a matching human comment', asyn
     assert.equal(calls.at(-1)[1].comment_id, 2)
 })
 
+test('shows acceptance failures without losing migration results', async () => {
+    const { summary, error } = await exercise({
+        acceptanceReports: { v1: report('v1', 'failed_assertion', 'acceptance') },
+        acceptanceExit: '1',
+        acceptanceValidation: '1',
+    })
+    assert.equal(error, undefined)
+    assert.match(summary, /Capture v1 — acceptance[\s\S]*❌ 1 non-passing/)
+    assert.match(summary, /acceptance\/report.json.diagnostics.json/)
+    assert.match(summary, /identify-example/)
+    assert.match(summary, /Capture v0 — migration/)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
+})
+
 test('shows failed cases without losing the other profile', async () => {
     const { summary, error } = await exercise({
         reports: { v0: report('v0', 'failed_assertion') },
@@ -193,13 +229,15 @@ test('shows failed cases without losing the other profile', async () => {
     assert.match(summary, /✅ 0 passed \/ ❌ 1 non-passing/)
     assert.match(summary, /Unexpected flag value/)
     assert.match(summary, /Capture v1/)
-    assert.doesNotMatch(summary, /All selected cases passed/)
+    assert.equal((summary.match(/All selected cases passed/g) || []).length, 2)
 })
 
 for (const options of [
     { missing: ['v0'] },
     { missing: ['v0', 'v1'] },
     { reports: { v0: 'not json' } },
+    { acceptanceReports: { v1: 'not json' } },
+    { missingAcceptance: ['v0'] },
     { source: 'wrong-sha' },
     { reports: { v0: report('v1') } },
 ]) {

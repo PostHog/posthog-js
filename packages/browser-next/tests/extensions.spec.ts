@@ -1,6 +1,7 @@
 import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Client, ExtensionToken } from '@posthog/browser-common'
+import type { BrowserClient, ConsentChangeInfo } from '../src/browser-client'
 
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
@@ -37,6 +38,32 @@ const flagExtension = (events: string[]): FlagCapability => {
 }
 
 describe('@posthog/browser extensions', () => {
+    it('notifies extensions of consent changes without replaying initial state', async () => {
+        const changes: ConsentChangeInfo[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            remoteConfig: localRemoteConfig,
+            extensions: [
+                {
+                    name: 'consent-observer',
+                    setup(client: BrowserClient) {
+                        client.onConsentChange((change) => changes.push(change))
+                    },
+                },
+            ],
+        })
+        expect(changes).toEqual([])
+        posthog.optOut()
+        posthog.optIn()
+        expect(changes).toEqual([
+            { current: 'denied', previous: 'implicit' },
+            { current: 'granted', previous: 'denied' },
+        ])
+        await posthog.shutdown()
+    })
+
     it('installs an extension and exposes its capability', async () => {
         const requests: SentRequest[] = []
         const events: string[] = []

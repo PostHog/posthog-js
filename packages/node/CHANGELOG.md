@@ -1,5 +1,19 @@
 # posthog-node
 
+## 5.55.2
+
+### Patch Changes
+
+- [#5268](https://github.com/PostHog/posthog-js/pull/5268) [`74d7eb2`](https://github.com/PostHog/posthog-js/commit/74d7eb268172b016142dd66495a7e68fc9c9bf47) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify which server-only credentials to use for local evaluation when a project API key is supplied instead.
+  (2026-10-11)
+
+## 5.55.1
+
+### Patch Changes
+
+- [#5134](https://github.com/PostHog/posthog-js/pull/5134) [`175413f`](https://github.com/PostHog/posthog-js/commit/175413fcf632ae7242354ee9cc4f463b3e0b2833) Thanks [@posthog](https://github.com/apps/posthog)! - Evict only the least recently used distinct ids from the `$feature_flag_called` dedupe cache instead of clearing it entirely. `distinctIdHasSentFlagCalls` now returns a snapshot, so writing or deleting individual keys on it no longer changes deduplication.
+  (2026-10-08)
+
 ## 5.55.0
 
 ### Minor Changes

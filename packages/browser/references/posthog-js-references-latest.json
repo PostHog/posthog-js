@@ -2677,7 +2677,7 @@
           "name": "requestId"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/feature-flags.d.ts"
     },
     {
       "id": "FlagVariant",
@@ -3026,7 +3026,7 @@
           "name": "autocapture"
         },
         {
-          "description": "Determines whether PostHog should capture rage clicks.\n\nBy default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.\nWhen `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.\nWhen `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.",
+          "description": "Determines whether PostHog should capture rage clicks.\n\nBy default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.\nWhen `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`, which also ignores repeat-click\ncontrols such as pagination arrows and pagers (see `content_ignorelist`).\nWhen `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.",
           "type": "boolean | RageclickConfig",
           "name": "rageclick"
         },
@@ -3523,6 +3523,11 @@
           "description": "Determines whether to capture dead clicks.\n\nby default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent",
           "type": "boolean | DeadClicksAutoCaptureConfig",
           "name": "capture_dead_clicks"
+        },
+        {
+          "description": "Captures WebMCP tool calls as `$mcp_tool_call` events.\nSet this option to `true` to capture intent and model metadata. Use an object to disable either field.\nPostHog wraps tools registered after the SDK initializes. Tool inputs and outputs are not captured.\nMetadata options are applied when each tool registers. Changing them does not update registered schemas;\nre-register the tool to apply the new options.",
+          "type": "boolean | WebMCPCaptureConfig",
+          "name": "capture_webmcp"
         },
         {
           "description": "Determines whether to capture exceptions.",

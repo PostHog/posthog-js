@@ -249,7 +249,7 @@ test('assertNoCompatibilityVersionNamespaceCollisions rejects compatibility keys
     )
 })
 
-test('assertCanUploadImmutableAssets refuses to replace an existing release by default', async () => {
+test('assertCanUploadImmutableAssets fails closed when an existing asset differs', async () => {
     const uploads = [
         {
             key: 'static/1.370.0/array.js',
@@ -267,10 +267,11 @@ test('assertCanUploadImmutableAssets refuses to replace an existing release by d
 
     await assert.rejects(
         () =>
-            assertCanUploadImmutableAssets('us-assets.i.posthog.com', uploads, false, async (_bucket, key) =>
-                key.endsWith('/array.js')
-            ),
-        /Refusing to overwrite existing immutable release assets.*--force-overwrite/
+            assertCanUploadImmutableAssets('us-assets.i.posthog.com', uploads, false, async (_bucket, upload) => {
+                if (upload.key.endsWith('/array.js')) throw new Error('Release asset checksum differs')
+                return false
+            }),
+        /Release asset checksum differs/
     )
 })
 

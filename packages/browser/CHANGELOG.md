@@ -1,5 +1,102 @@
 # posthog-js
 
+## 1.438.8
+
+### Patch Changes
+
+- [#5259](https://github.com/PostHog/posthog-js/pull/5259) [`ba4cc49`](https://github.com/PostHog/posthog-js/commit/ba4cc49d9471ac1eaec88023d7a2cc5d5b6f06a8) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP error types and sanitized messages.
+  (2026-10-12)
+
+## 1.438.7
+
+### Patch Changes
+
+- [#4990](https://github.com/PostHog/posthog-js/pull/4990) [`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share browser logging across SDKs with consistent initialization and cleanup; `captureLog` and `logger` calls before logging setup are now dropped instead of buffered.
+  (2026-10-09)
+- Updated dependencies [[`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a)]:
+  - @posthog/browser-common@0.9.4
+
+## 1.438.6
+
+### Patch Changes
+
+- [#5218](https://github.com/PostHog/posthog-js/pull/5218) [`8bc2df6`](https://github.com/PostHog/posthog-js/commit/8bc2df61511bf21f3abaf9edf0b6d489ddc43a9f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Skip WebMCP intent and model injection for schemas with constraints that the extra fields could break.
+  (2026-10-09)
+
+- [#5217](https://github.com/PostHog/posthog-js/pull/5217) [`6af3aa8`](https://github.com/PostHog/posthog-js/commit/6af3aa8ebff7f1ebc178f0c5bc5bf2d094fc1e53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Export `WebMCPExtensions` from the slim `extension-bundles` entry point.
+  (2026-10-09)
+
+## 1.438.5
+
+### Patch Changes
+
+- [#5258](https://github.com/PostHog/posthog-js/pull/5258) [`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0) Thanks [@hpouillot](https://github.com/hpouillot)! - Recognize native bundler debug IDs and build-time error tracking release IDs.
+  (2026-10-09)
+- Updated dependencies [[`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0)]:
+  - @posthog/core@1.57.4
+
+## 1.438.4
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+- Updated dependencies [[`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e)]:
+  - @posthog/browser-common@0.9.3
+
+## 1.438.3
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+- Updated dependencies [[`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8)]:
+  - @posthog/types@1.415.2
+
+## 1.438.2
+
+### Patch Changes
+
+- [#4988](https://github.com/PostHog/posthog-js/pull/4988) [`22dfa4a`](https://github.com/PostHog/posthog-js/commit/22dfa4a4d8c678053c466c5e96f5b46f5743f35c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share feature flag functionality across browser SDKs while preserving existing behavior.
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
+## 1.438.1
+
+### Patch Changes
+
+- [#5004](https://github.com/PostHog/posthog-js/pull/5004) [`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e) Thanks [@posthog](https://github.com/apps/posthog)! - Stop carousel and pager arrow controls from capturing false `$rageclick` events. The rageclick content ignorelist, active from the `2025-11-30` config defaults, now also covers arrow glyphs (`→`, `←`, `›`, `‹`, `»`, `«`, `▶`, `◀`, `❯`, `❮`). The built-in word keywords match whole words wherever they appear, including inside a list you pass yourself, so "Preview" keeps capturing; other word keywords you add still match as substrings. Keywords now match against the clicked control (the nearest button, link, ARIA control or `cursor: pointer` wrapper), reading its label from the control's whole subtree instead of every ancestor up to the body, so a region labelled "Featured carousel" no longer suppresses the buttons inside it. A control's own text or `aria-label` wins over an icon's `aria-label` inside it, so clicking the icon and clicking the text agree. Set `rageclick: { content_ignorelist: false }` to keep capturing these events.
+  (2026-10-06)
+- Updated dependencies [[`730d92b`](https://github.com/PostHog/posthog-js/commit/730d92baaf7cca48acf9ac9efb02b8cdf851879e)]:
+  - @posthog/browser-common@0.9.2
+  - @posthog/types@1.415.1
+
+## 1.438.0
+
+### Minor Changes
+
+- [#5191](https://github.com/PostHog/posthog-js/pull/5191) [`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP tool intent and model metadata by default.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6cd5496`](https://github.com/PostHog/posthog-js/commit/6cd54960354ec66c2dd7932fadac9c9cf308d938)]:
+  - @posthog/types@1.415.0
+  - @posthog/core@1.57.0
+
+## 1.437.0
+
+### Minor Changes
+
+- [#5190](https://github.com/PostHog/posthog-js/pull/5190) [`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d) Thanks [@gesh](https://github.com/gesh)! - Add opt-in WebMCP tool call capture for MCP Analytics.
+  (2026-10-06)
+
+### Patch Changes
+
+- Updated dependencies [[`6af4c59`](https://github.com/PostHog/posthog-js/commit/6af4c594acee1ae6b5dc93227f48d07f8bdd1b6d)]:
+  - @posthog/types@1.414.0
+
 ## 1.436.1
 
 ### Patch Changes
