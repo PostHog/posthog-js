@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.415.3
+
+### Patch Changes
+
+- [#5281](https://github.com/PostHog/posthog-js/pull/5281) [`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `before_send` callback types to accept non-null events while still allowing `null` returns to drop events.
+  (2026-10-12)
+
 ## 1.415.2
 
 ### Patch Changes
