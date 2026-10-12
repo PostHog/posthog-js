@@ -1,4 +1,6 @@
 import type { NextConfig } from 'next'
+import { createRequire } from 'node:module'
+import path from 'node:path'
 import { PosthogWebpackPlugin, PluginConfig, resolveConfig, ResolvedPluginConfig } from '@posthog/webpack-plugin'
 import * as utils from './utils'
 import { deleteSourceMapFiles, stripDanglingSourceMapComments } from './strip-sourcemap-comments'
@@ -14,7 +16,12 @@ type TurbopackConfigWithDebugIds = NonNullable<NextConfig['turbopack']> & { debu
 const INVOCATION_TIMEOUT_MS = 5000
 
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PluginConfig): NextConfig {
-  const resolvedConfig = resolveConfig(posthogConfig)
+  const resolvedConfig = resolveConfig({
+    ...posthogConfig,
+    cliBinaryPath:
+      posthogConfig.cliBinaryPath ??
+      createRequire(path.join(__dirname, '../package.json')).resolve('@posthog/cli/run-posthog-cli.js'),
+  })
   const sourceMapEnabled = resolvedConfig.sourcemaps.enabled
   const isCompilerHookSupported = utils.hasCompilerHook()
   const turbopackEnabled = utils.isTurbopackEnabled()

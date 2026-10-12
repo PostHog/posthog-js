@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import type { NextConfig } from 'next'
 import * as utils from './utils'
@@ -142,6 +143,26 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
     }
   )
 
+  it('uses its own CLI dependency instead of a workspace binary for release resolution and upload', async () => {
+    vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
+    const resolveRelease = vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('release-id')
+    const processMaps = vi.spyOn(utils, 'processSourceMaps').mockResolvedValue(undefined)
+    const workspaceBinDir = path.join(distDir, 'node_modules/.bin')
+    await fs.mkdir(workspaceBinDir, { recursive: true })
+    await fs.writeFile(path.join(workspaceBinDir, 'posthog-cli'), 'outdated workspace CLI')
+    vi.spyOn(process, 'cwd').mockReturnValue(distDir)
+    vi.stubEnv('PATH', workspaceBinDir)
+    const ownCliPath = createRequire(new URL('../package.json', import.meta.url)).resolve(
+      '@posthog/cli/run-posthog-cli.js'
+    )
+
+    const config = await resolveNextConfig({}, { ...pluginConfig, cliBinaryPath: undefined })
+    await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
+
+    expect(resolveRelease).toHaveBeenCalledWith(expect.objectContaining({ cliBinaryPath: ownCliPath }))
+    expect(processMaps).toHaveBeenCalledWith(expect.objectContaining({ cliBinaryPath: ownCliPath }), distDir, 'upload')
+  })
+
   it('enables native debug IDs and embeds one automatically resolved release id', async () => {
     vi.spyOn(utils, 'supportsTurbopackDebugIds').mockReturnValue(true)
     const resolveRelease = vi.spyOn(utils, 'resolveReleaseId').mockResolvedValue('resolved-release-id')
@@ -195,7 +216,11 @@ describe('withPostHogConfig Turbopack sourcemap hook', () => {
 
     await config.compiler!.runAfterProductionCompile!({ distDir, projectDir: distDir })
 
-    expect(processMaps).toHaveBeenCalledWith(expect.anything(), distDir, 'upload')
+    expect(processMaps).toHaveBeenCalledWith(
+      expect.objectContaining({ cliBinaryPath: pluginConfig.cliBinaryPath }),
+      distDir,
+      'upload'
+    )
     expect(await fs.readFile(path.join(distDir, 'static/app.js'), 'utf8')).toBe(source)
     await expect(fs.access(path.join(distDir, 'static/app.js.map'))).rejects.toThrow()
     await expect(fs.access(path.join(distDir, 'server/app.js.map'))).rejects.toThrow()

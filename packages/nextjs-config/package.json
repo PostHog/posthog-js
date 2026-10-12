@@ -26,6 +26,7 @@
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "test:unit": "vitest run --passWithNoTests",
+    "test:built": "node --test tests/cli-resolution.mjs",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
