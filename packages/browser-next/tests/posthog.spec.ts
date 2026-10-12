@@ -593,40 +593,48 @@ describe('@posthog/browser core', () => {
         }
     })
 
-    it('uses the bounded sender retry budget before disposal purges undelivered work', async () => {
-        vi.useFakeTimers()
-        try {
-            const fetch = vi
-                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
-                .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHogWithAnalytics({
-                remoteConfig: localRemoteConfig,
-                projectToken: 'ph_test',
-                storage: false,
-                navigator: false,
-                fetch,
-            })
+    it.each([
+        { jitter: 0.5, attempts: 4, outcome: 'every retry starts inside the shutdown timeout' },
+        { jitter: 1, attempts: 3, outcome: 'the shutdown timeout cancels a retry that would start after it' },
+    ])(
+        'uses the bounded sender retry budget before disposal purges undelivered work: $outcome',
+        async ({ jitter, attempts }) => {
+            vi.useFakeTimers()
+            const random = vi.spyOn(Math, 'random').mockReturnValue(jitter)
+            try {
+                const fetch = vi
+                    .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
+                    .mockResolvedValue(new Response('{}', { status: 503 }))
+                const posthog = await createPostHogWithAnalytics({
+                    remoteConfig: localRemoteConfig,
+                    projectToken: 'ph_test',
+                    storage: false,
+                    navigator: false,
+                    fetch,
+                })
 
-            posthog.capture('disposed_during_backoff')
-            await vi.advanceTimersByTimeAsync(0)
-            expect(fetch).toHaveBeenCalledTimes(1)
-            expect(vi.getTimerCount()).toBe(1)
+                posthog.capture('disposed_during_backoff')
+                await vi.advanceTimersByTimeAsync(0)
+                expect(fetch).toHaveBeenCalledTimes(1)
+                expect(vi.getTimerCount()).toBe(1)
 
-            let disposalSettled = false
-            const disposal = Promise.resolve(posthog.dispose()).then(() => {
-                disposalSettled = true
-            })
-            await Promise.resolve()
-            expect(disposalSettled).toBe(false)
-            await vi.runOnlyPendingTimersAsync()
-            await disposal
+                let disposalSettled = false
+                const disposal = Promise.resolve(posthog.dispose()).then(() => {
+                    disposalSettled = true
+                })
+                await Promise.resolve()
+                expect(disposalSettled).toBe(false)
+                await vi.runOnlyPendingTimersAsync()
+                await disposal
 
-            expect(fetch).toHaveBeenCalledTimes(4)
-            expect(disposalSettled).toBe(true)
-        } finally {
-            vi.useRealTimers()
+                expect(fetch).toHaveBeenCalledTimes(attempts)
+                expect(disposalSettled).toBe(true)
+            } finally {
+                random.mockRestore()
+                vi.useRealTimers()
+            }
         }
-    })
+    )
 
     it('flushes below-threshold work before shutdown and disables future capture', async () => {
         const requests: SentRequest[] = []
