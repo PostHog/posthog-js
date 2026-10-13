@@ -84,6 +84,20 @@ describe('React render error capture through ExceptionsManager.handleException',
     expect(handleException.mock.calls).toEqual([[error, true]])
   })
 
+  it('captures a repeated fatal again after the duplicate report was passed through', () => {
+    const tracker = vi.fn()
+    trackUncaughtExceptions(tracker)
+
+    current('boom', true)
+    current('boom', true)
+
+    expect(tracker.mock.calls).toEqual([
+      ['boom', true],
+      ['boom', true],
+    ])
+    expect(handleException).toHaveBeenCalledTimes(2)
+  })
+
   it('restores the original handleException after the last subscriber is removed', () => {
     const remove = trackUncaughtExceptions(vi.fn())
     expect(exceptionsManager.handleException).not.toBe(handleException)

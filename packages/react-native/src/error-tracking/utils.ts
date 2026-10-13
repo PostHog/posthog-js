@@ -42,13 +42,15 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
     const previousHandler = errorUtils.getGlobalHandler()
     const trackers = new Set<UncaughtExceptionHook>()
     // The same fatal can arrive through both hooks: the ErrorUtils handler forwards to React
-    // Native's default handler, which calls ExceptionsManager.handleException.
+    // Native's default handler, which calls ExceptionsManager.handleException. The second
+    // arrival is only forwarded, by the `finally` below.
     let lastFatal: unknown = NO_FATAL
     const dispatch = (error: unknown, isFatal: boolean, forward: () => void): void => {
       const pending: Promise<void>[] = []
       try {
         if (isFatal) {
           if (lastFatal === error) {
+            lastFatal = NO_FATAL
             return
           }
           lastFatal = error
