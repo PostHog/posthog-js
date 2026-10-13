@@ -98,6 +98,52 @@ describe('React render error capture through ExceptionsManager.handleException',
     expect(handleException).toHaveBeenCalledTimes(2)
   })
 
+  it('captures each of two overlapping ErrorUtils fatals once', async () => {
+    const tracker = vi.fn(() => Promise.resolve())
+    trackUncaughtExceptions(tracker)
+    const first = new Error('first crash')
+    const second = new Error('second crash')
+
+    current(first, true)
+    current(second, true)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(tracker.mock.calls).toEqual([
+      [first, true],
+      [second, true],
+    ])
+    expect(handleException.mock.calls).toEqual([
+      [first, true],
+      [second, true],
+    ])
+  })
+
+  it('holds a duplicate fatal report until the first report has been persisted', async () => {
+    let persist!: () => void
+    const tracker = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          persist = resolve
+        })
+    )
+    trackUncaughtExceptions(tracker)
+    const error = new Error('render crash')
+
+    exceptionsManager.handleException(error, true)
+    exceptionsManager.handleException(error, true)
+
+    expect(tracker.mock.calls).toEqual([[error, true]])
+    expect(handleException).not.toHaveBeenCalled()
+    persist()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(handleException.mock.calls).toEqual([[error, true]])
+    await vi.runOnlyPendingTimersAsync()
+    expect(handleException.mock.calls).toEqual([
+      [error, true],
+      [error, true],
+    ])
+  })
+
   it('restores the original handleException after the last subscriber is removed', () => {
     const remove = trackUncaughtExceptions(vi.fn())
     expect(exceptionsManager.handleException).not.toBe(handleException)

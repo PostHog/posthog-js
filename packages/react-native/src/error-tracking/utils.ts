@@ -6,7 +6,6 @@ type ExceptionHook = (error: unknown, isFatal: boolean, syntheticException?: Err
 type UncaughtExceptionHook = (error: unknown, isFatal: boolean) => void | Promise<void>
 
 const FATAL_PERSISTENCE_TIMEOUT_MS = 2000
-const NO_FATAL = Symbol('no fatal')
 
 export function trackUnhandledRejections(tracker: ExceptionHook): void {
   if (
@@ -42,19 +41,38 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
     const previousHandler = errorUtils.getGlobalHandler()
     const trackers = new Set<UncaughtExceptionHook>()
     // The same fatal can arrive through both hooks: the ErrorUtils handler forwards to React
-    // Native's default handler, which calls ExceptionsManager.handleException. The second
-    // arrival is only forwarded, by the `finally` below.
-    let lastFatal: unknown = NO_FATAL
+    // Native's default handler, which calls ExceptionsManager.handleException. Each fatal is
+    // captured once while it is in flight; a repeated report is only forwarded, once the first
+    // report has been forwarded.
+    const fatalsInFlight = new Map<unknown, { forwarding: boolean; forwarded: Promise<void> }>()
     const dispatch = (error: unknown, isFatal: boolean, forward: () => void): void => {
+      const inFlight = isFatal ? fatalsInFlight.get(error) : undefined
+      if (inFlight) {
+        if (inFlight.forwarding) {
+          forward()
+        } else {
+          // Keep errors thrown by the previous handler outside Promise rejection handling.
+          void inFlight.forwarded.then(() => safeSetTimeout(forward, 0))
+        }
+        return
+      }
+      let forwardFatal = forward
+      if (isFatal) {
+        let markForwarded!: () => void
+        const fatal = { forwarding: false, forwarded: new Promise<void>((resolve) => (markForwarded = resolve)) }
+        fatalsInFlight.set(error, fatal)
+        forwardFatal = () => {
+          fatal.forwarding = true
+          markForwarded()
+          try {
+            forward()
+          } finally {
+            fatalsInFlight.delete(error)
+          }
+        }
+      }
       const pending: Promise<void>[] = []
       try {
-        if (isFatal) {
-          if (lastFatal === error) {
-            lastFatal = NO_FATAL
-            return
-          }
-          lastFatal = error
-        }
         for (const callback of Array.from(trackers)) {
           try {
             const result = callback(error, isFatal)
@@ -71,7 +89,7 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
           const forwardOnce = () => {
             if (!forwarded) {
               forwarded = true
-              forward()
+              forwardFatal()
             }
           }
           const deadline = safeSetTimeout(forwardOnce, FATAL_PERSISTENCE_TIMEOUT_MS)
@@ -83,7 +101,7 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
             }
           })
         } else {
-          forward()
+          forwardFatal()
         }
       }
     }
