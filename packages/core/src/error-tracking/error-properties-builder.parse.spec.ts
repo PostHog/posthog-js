@@ -33,5 +33,18 @@ describe('ErrorPropertiesBuilder', () => {
       // of a repeated frame cycle, so those repeats count as a single frame here.
       expect(frames).toHaveLength(13)
     })
+
+    it('does not add undefined chunk IDs to unmapped frames', () => {
+      const frames: StackFrame[] = [
+        { platform: 'web:javascript', filename: 'app.js' },
+        { platform: 'web:javascript', filename: 'native' },
+      ]
+
+      //@ts-expect-error: testing private method
+      const result = errorPropertiesBuilder.applyChunkIds(frames, { 'app.js': 'app-chunk' })
+
+      expect(result[0]).toMatchObject({ chunk_id: 'app-chunk' })
+      expect(result[1]).not.toHaveProperty('chunk_id')
+    })
   })
 })

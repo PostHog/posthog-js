@@ -93,7 +93,10 @@ export class ErrorPropertiesBuilder {
   private applyChunkIds(frames: StackFrame[], chunkIdMap?: ChunkIdMapType): StackFrame[] {
     return frames.map((frame) => {
       if (frame.filename && chunkIdMap) {
-        frame.chunk_id = chunkIdMap[frame.filename]
+        const chunkId = chunkIdMap[frame.filename]
+        if (chunkId !== undefined) {
+          frame.chunk_id = chunkId
+        }
       }
       return frame
     })

@@ -1,3 +1,4 @@
+import { ErrorTracking } from '@posthog/core'
 import { buildFatalExceptionPayload } from '../src/error-tracking/fatal-payload'
 
 const FATAL_PAYLOAD_MAX_BYTES = 64 * 1024
@@ -61,6 +62,38 @@ describe('fatal exception payload', () => {
     expect((payload.properties.$exception_list as unknown[]).length).toBeLessThanOrEqual(32)
     expect((payload.properties.$exception_steps as unknown[] | undefined)?.length ?? 0).toBeLessThanOrEqual(64)
     expect(utf8Bytes(JSON.stringify(payload))).toBeLessThanOrEqual(FATAL_PAYLOAD_MAX_BYTES)
+  })
+
+  it('keeps frames from an exception with a partially mapped chunk-ID stack', () => {
+    const mappedStack = 'Error: boom\n    at app (https://example.com/app.js:1:2)'
+    const error = new Error('boom')
+    error.stack = `${mappedStack}\n    at native (native:3:4)`
+    const posthogGlobal = globalThis as typeof globalThis & { _posthogChunkIds?: Record<string, string> }
+    const previousChunkIds = posthogGlobal._posthogChunkIds
+    posthogGlobal._posthogChunkIds = { [mappedStack]: 'app-chunk' }
+
+    try {
+      const builder = new ErrorTracking.ErrorPropertiesBuilder(
+        [new ErrorTracking.ErrorCoercer()],
+        ErrorTracking.createStackParser('hermes', ErrorTracking.chromeStackLineParser)
+      )
+      const payload = build({
+        properties: { ...builder.buildFromUnknown(error), $exception_level: 'fatal' } as never,
+      })
+      const frames = (payload.properties.$exception_list as any)[0].stacktrace?.frames
+
+      expect(frames).toHaveLength(2)
+      expect(frames.find((frame: any) => frame.filename === 'native')).not.toHaveProperty('chunk_id')
+      expect(frames.find((frame: any) => frame.filename === 'https://example.com/app.js')).toMatchObject({
+        chunk_id: 'app-chunk',
+      })
+    } finally {
+      if (previousChunkIds === undefined) {
+        delete posthogGlobal._posthogChunkIds
+      } else {
+        posthogGlobal._posthogChunkIds = previousChunkIds
+      }
+    }
   })
 
   it('drops properties that are not JSON-safe rather than failing the whole capture', () => {
