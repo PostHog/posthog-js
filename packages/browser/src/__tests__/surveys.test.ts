@@ -15,7 +15,6 @@ import {
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
-import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { PostHogPersistence } from '../posthog-persistence'
 import { BrowserSurveys } from '../browser-surveys'
 import {
@@ -216,8 +215,9 @@ describe('surveys', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             onFeatureFlags: vi.fn().mockReturnValue(() => {}),
-            featureFlags: new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config)),
+            _shouldDisableFlags: vi.fn().mockReturnValue(false),
         })
+        instance.featureFlags = new PostHogFeatureFlags(instance)
 
         vi.spyOn(instance.featureFlags, 'hasLoadedFlags', 'get').mockReturnValue(true)
         vi.spyOn(instance.featureFlags, 'getFeatureFlag').mockImplementation((key) => flagsResponse.featureFlags[key])

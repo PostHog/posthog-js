@@ -1,5 +1,31 @@
 # posthog-ai
 
+## 8.13.5
+
+### Patch Changes
+
+- [#5201](https://github.com/PostHog/posthog-js/pull/5201) [`085ffd8`](https://github.com/PostHog/posthog-js/commit/085ffd8b151160a38627ed20833daf41b524205c) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.129.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.126.0`, in `peerDependencies`) (2026-10-06)
+
+## 8.13.4
+
+### Patch Changes
+
+- [#5113](https://github.com/PostHog/posthog-js/pull/5113) [`41f1243`](https://github.com/PostHog/posthog-js/commit/41f1243882210095a5841460a73b76c70708f96d) Thanks [@yoarajota](https://github.com/yoarajota)! - Capture Anthropic streaming tool call arguments when a thinking or server tool block precedes the tool call.
+  (2026-09-30)
+
+- [#5056](https://github.com/PostHog/posthog-js/pull/5056) [`9ddb74c`](https://github.com/PostHog/posthog-js/commit/9ddb74c7804e7f850d46c2087ce97e2244c21da9) Thanks [@brandon-julio-t](https://github.com/brandon-julio-t)! - Fix missing cache-read and cache-write token reporting in OpenAI Agents traces.
+  (2026-09-30)
+- Updated dependencies [[`2d2560a`](https://github.com/PostHog/posthog-js/commit/2d2560abd173fda85888ddcdd5889a612f2cef8c)]:
+  - posthog-node@5.55.0
+
+## 8.13.3
+
+### Patch Changes
+
+- [#5088](https://github.com/PostHog/posthog-js/pull/5088) [`882606d`](https://github.com/PostHog/posthog-js/commit/882606dc43831c9683e528f28feb699532d3f7d7) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Gemini tool calls and results in captured generation input
+  (2026-09-30)
+
 ## 8.13.2
 
 ### Patch Changes

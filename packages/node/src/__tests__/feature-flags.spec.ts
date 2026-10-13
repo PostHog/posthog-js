@@ -7397,6 +7397,77 @@ describe('local evaluation poll scheduling', () => {
     vi.useFakeTimers()
   })
 
+  it('loads and manually refreshes local definitions without scheduling polls when the interval is null', async () => {
+    let enabled = true
+    const mockFetch = vi.fn(async () => ({
+      status: 200,
+      json: async () => ({
+        flags: [{ id: 1, key: 'manual-flag', active: enabled, filters: { groups: [{}] } }],
+        group_type_mapping: {},
+        cohorts: {},
+      }),
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Join the initial load started by the constructor.
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(true)
+
+    enabled = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(
+      await posthog.getFeatureFlag('manual-flag', 'user', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps on-demand error backoff without scheduling polls when the interval is null', async () => {
+    const mockFetch = vi.fn(async () => ({
+      status: 429,
+      headers: { get: () => null },
+    }))
+    posthog = new PostHog('TEST_API_KEY', {
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: null,
+      ...posthogImmediateResolveOptions,
+    })
+    posthog.on('error', () => undefined)
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    await posthog.getFeatureFlag('manual-flag', 'user', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('schedules the next poll after a slow fetch completes', async () => {
     let resolveFetch!: (response: any) => void
     const deferredFetch = new Promise<any>((resolve) => {

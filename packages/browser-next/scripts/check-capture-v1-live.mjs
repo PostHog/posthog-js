@@ -23,7 +23,7 @@ const send = async (apiHost, route, compressed) => {
         return fetch(input, init)
     }
     const result = await sendCaptureV1Batch(
-        [{ api: apiHost, flags: apiHost, assets: apiHost }, projectToken, checkedFetch, undefined],
+        [{ api: apiHost, flags: apiHost }, projectToken, checkedFetch, undefined],
         [
             {
                 event: 'real_posthog_test_browser_next_capture_v1',

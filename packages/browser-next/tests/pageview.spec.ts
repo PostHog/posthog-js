@@ -1,3 +1,5 @@
+import { createRemoteConfigFetch } from './helpers'
+import { localRemoteConfig } from './helpers'
 import type { Client, Extension } from '@posthog/browser-common'
 
 import { analytics as createAnalytics } from '../src/analytics'
@@ -73,7 +75,7 @@ describe('browser-next initial pageview', () => {
         expect(order).toEqual(['setup', '$pageview'])
         expect(pageviewProperties).not.toHaveProperty('title')
         expect(pageviewProperties).not.toHaveProperty('$current_url')
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         await posthog.capture('explicit')
         expect(order).toEqual(['setup', '$pageview', 'explicit'])
     })
@@ -93,7 +95,7 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(document).not.toHaveBeenCalled()
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('waits for a hidden document and captures once when it becomes visible', async () => {
@@ -124,7 +126,7 @@ describe('browser-next initial pageview', () => {
 
         expect(observed).toEqual(['$pageview'])
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
     })
 
     it.each([
@@ -148,7 +150,7 @@ describe('browser-next initial pageview', () => {
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
 
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
         expect(observed).toEqual([])
         posthog.optIn()
 
@@ -290,7 +292,7 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(observed).toEqual([])
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('contains missing and hostile document capabilities', async () => {
@@ -367,6 +369,7 @@ describe('browser-next initial pageview', () => {
         setDocument(new TestDocument('visible'))
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -395,7 +398,7 @@ describe('browser-next initial pageview', () => {
         document.dispatchEvent(new Event('visibilitychange'))
 
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.session).toBeUndefined()
     })
 
     it('retries a pageview after active delivery capacity becomes available', async () => {
@@ -418,6 +421,7 @@ describe('browser-next initial pageview', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -445,6 +449,7 @@ describe('browser-next initial pageview', () => {
         const fetch = vi.fn(() => response)
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -453,14 +458,14 @@ describe('browser-next initial pageview', () => {
         })
         await Promise.resolve()
 
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         expect(fetch).toHaveBeenCalledTimes(1)
         finish?.(new Response('{}', { status: 200 }))
         await posthog.flush()
         await posthog.dispose()
     })
 
-    it('does not wait for or start remote configuration', async () => {
+    it('starts remote configuration without waiting for it', async () => {
         setDocument(new TestDocument('visible'))
         const loader = vi.fn(() => new Promise<never>(() => {}))
 
@@ -468,12 +473,12 @@ describe('browser-next initial pageview', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
 
-        expect(loader).not.toHaveBeenCalled()
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(loader).toHaveBeenCalledTimes(1)
+        expect(posthog.session!.sessionId).not.toBe('')
+        await posthog.dispose()
     })
 
     it('uses UTF-8 bytes for admission and does not publish rejected work or lose a pending session reason', async () => {

@@ -1,7 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilCondition, pollUntilEventCaptured } from './utils/event-capture-utils'
-import { Request } from '@playwright/test'
+import { Page, Request } from '@playwright/test'
 import { satisfies } from 'compare-versions'
 import { decompressSync, strFromU8 } from 'fflate'
 
@@ -173,6 +173,79 @@ test.describe('event capture', () => {
         // no rageclick event to wait for so just wait a little
         await page.waitForTimeout(250)
         await page.expectCapturedEventsToBe(['$pageview', 'custom-event', 'custom-event', 'custom-event'])
+    })
+
+    test.describe('rageclick content ignorelist on a non-semantic cursor:pointer control', () => {
+        async function injectPointerControl(page: Page, ariaLabel: string) {
+            await page.evaluate((label) => {
+                const control = document.createElement('div')
+                control.id = 'rc-next'
+                control.style.cursor = 'pointer'
+                control.setAttribute('aria-label', label)
+
+                const icon = document.createElement('i')
+                icon.id = 'rc-icon'
+                icon.style.display = 'inline-block'
+                icon.style.width = '40px'
+                icon.style.height = '40px'
+
+                control.appendChild(icon)
+                document.body.appendChild(control)
+            }, ariaLabel)
+        }
+
+        test('suppresses the rageclick when the wrapper label matches a keyword', async ({ page, context }) => {
+            await start(
+                {
+                    ...startOptions,
+                    options: {
+                        ...startOptions.options,
+                        rageclick: { content_ignorelist: true },
+                    },
+                },
+                page,
+                context
+            )
+
+            await injectPointerControl(page, 'Next slide')
+
+            // the premise: a real browser inherits `cursor:pointer` onto the icon, unlike jsdom
+            const iconCursor = await page.locator('#rc-icon').evaluate((el) => getComputedStyle(el).cursor)
+            expect(iconCursor).toEqual('pointer')
+
+            const icon = page.locator('#rc-icon')
+            await icon.click()
+            await icon.click()
+            await icon.click()
+
+            // no rageclick event to wait for so just wait a little
+            await page.waitForTimeout(250)
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents.map((event) => event.event)).not.toContain('$rageclick')
+        })
+
+        test('still captures the rageclick when the wrapper label matches no keyword', async ({ page, context }) => {
+            await start(
+                {
+                    ...startOptions,
+                    options: {
+                        ...startOptions.options,
+                        rageclick: { content_ignorelist: true },
+                    },
+                },
+                page,
+                context
+            )
+
+            await injectPointerControl(page, 'Buy now')
+
+            const icon = page.locator('#rc-icon')
+            await icon.click()
+            await icon.click()
+            await icon.click()
+
+            await pollUntilEventCaptured(page, '$rageclick')
+        })
     })
 
     test('captures pageviews and custom events when autocapture disabled', async ({ page, context }) => {

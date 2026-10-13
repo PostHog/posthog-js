@@ -818,7 +818,7 @@ export async function handleListToolsRequest(
     return response
   }
 
-  event.response = response
+  event.response = toolsListEnvelope(response)
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
@@ -844,6 +844,13 @@ function collectListedToolNames(tools: CompatibleToolsListLike['tools'] | undefi
   }
   const names = tools.map((tool) => tool?.name).filter((name): name is string => typeof name === 'string')
   return names.length > 0 ? names : undefined
+}
+
+// `listedToolNames` already names the tools. A copy of the full descriptors would be
+// sanitized and truncated on the request path, and a large catalogue loses most of it.
+function toolsListEnvelope(response: CompatibleToolsListLike): Record<string, unknown> | undefined {
+  const { tools: _tools, ...envelope } = response
+  return Object.keys(envelope).length > 0 ? envelope : undefined
 }
 
 async function getTracedToolsList(

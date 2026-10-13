@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Interaction fixture</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                font: 14px monospace;
+                scroll-behavior: auto;
+            }
+            #arena {
+                position: relative;
+                height: 3200px;
+            }
+            button,
+            input,
+            select {
+                box-sizing: border-box;
+                width: 120px;
+                height: 32px;
+            }
+            #compat-form {
+                position: absolute;
+                left: 20px;
+                top: 20px;
+                width: 440px;
+            }
+            #compat-link {
+                position: absolute;
+                left: 20px;
+                top: 180px;
+            }
+            #private-link {
+                position: absolute;
+                left: 20px;
+                top: 220px;
+            }
+            #rage-target {
+                position: absolute;
+                left: 20px;
+                top: 300px;
+            }
+            #spaced-target {
+                position: absolute;
+                left: 220px;
+                top: 300px;
+            }
+            #responsive-target {
+                position: absolute;
+                left: 20px;
+                top: 400px;
+            }
+            #dead-target {
+                position: absolute;
+                left: 220px;
+                top: 400px;
+            }
+            #private-dead {
+                position: absolute;
+                left: 420px;
+                top: 400px;
+            }
+            #response {
+                position: absolute;
+                left: 20px;
+                top: 450px;
+            }
+            #heat-normal {
+                position: absolute;
+                left: 100px;
+                top: 900px;
+                width: 120px;
+                height: 40px;
+            }
+            #heat-fixed {
+                position: fixed;
+                left: 880px;
+                top: 20px;
+                width: 120px;
+                height: 40px;
+            }
+            button {
+                user-select: none;
+            }
+        </style>
+    </head>
+    <body>
+        <main id="arena">
+            <form id="compat-form" action="/after" method="post">
+                <input id="category" name="category" type="text" /><select id="plan" name="plan">
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                </select>
+                <input id="form-password" name="password" type="password" /><input
+                    id="private-input"
+                    name="private"
+                    class="ph-no-capture"
+                    type="text"
+                />
+                <button id="submit-form" type="submit">Submit form</button>
+            </form>
+            <a id="compat-link" href="/after?destination=compat#link" target="compat-destination"
+                ><span>Open destination</span></a
+            >
+            <a id="private-link" class="ph-no-capture" href="#private"><span>Private link</span></a
+            ><iframe name="compat-destination" style="display: none"></iframe>
+            <button id="rage-target">Rage target</button><button id="spaced-target">Spaced target</button>
+            <button id="responsive-target">Responsive</button><button id="dead-target">Dead target</button
+            ><button id="private-dead" class="ph-no-capture">Private dead</button>
+            <p id="response">Waiting</p>
+            <button id="heat-normal">Document target</button><button id="heat-fixed">Fixed target</button>
+        </main>
+        <script>
+            window.__fixture = { submissions: 0 }
+            document.addEventListener('mousemove', (event) => {
+                window.__fixture.lastMouseMove = { x: event.clientX, y: event.clientY }
+            })
+            window.addEventListener(
+                'scroll',
+                () => {
+                    window.__fixture.lastScroll = window.scrollY
+                },
+                { capture: true }
+            )
+            document.querySelector('#compat-form').addEventListener('submit', (event) => {
+                event.preventDefault()
+                window.__fixture.submissions++
+            })
+            document.querySelector('#private-link').addEventListener('click', (event) => event.preventDefault())
+            document.querySelector('#responsive-target').addEventListener('click', () => {
+                document.querySelector('#response').textContent = 'Responded'
+            })
+        </script>
+    </body>
+</html>

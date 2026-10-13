@@ -11186,6 +11186,10 @@ exports[`record integration tests > should record after DOMContentLoaded event 1
     \\"data\\": {}
   },
   {
+    \\"type\\": 1,
+    \\"data\\": {}
+  },
+  {
     \\"type\\": 4,
     \\"data\\": {
       \\"href\\": \\"about:blank\\",
@@ -11254,10 +11258,6 @@ exports[`record integration tests > should record after DOMContentLoaded event 1
         \\"top\\": 0
       }
     }
-  },
-  {
-    \\"type\\": 1,
-    \\"data\\": {}
   }
 ]"
 `;

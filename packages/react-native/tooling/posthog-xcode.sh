@@ -375,6 +375,7 @@ set -x -e
 # natively (GitHub Actions, Vercel). Those runners inject the real variables
 # themselves, and we don't want to overwrite them with locally-derived ones.
 #
+set +e # best-effort git metadata; failures must not abort the build
 if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
   GIT_TOPLEVEL=$(git -C "${SRCROOT:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$GIT_TOPLEVEL" ]; then
@@ -389,7 +390,9 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
       GIT_HOST=$(echo "$GIT_REMOTE_URL" | sed -E 's#^[a-z]+://##; s#^[^@]*@##; s#[:/].*$##')
       # Strip scheme + user@host + separator, optional port, and .git suffix
       GIT_REPO_PATH=$(echo "$GIT_REMOTE_URL" | sed -E 's#^([a-z]+://)?[^:/]*[:/]##; s#^[0-9]+/##; s#\.git$##')
-      if [ -n "$GIT_HOST" ] && [ -n "$GIT_REPO_PATH" ]; then
+      # --verify --quiet prints nothing on an unborn branch, where plain `rev-parse HEAD` prints "HEAD"
+      GIT_SHA=$(git -C "$GIT_TOPLEVEL" rev-parse --verify --quiet HEAD 2>/dev/null)
+      if [ -n "$GIT_HOST" ] && [ -n "$GIT_REPO_PATH" ] && [ -n "$GIT_SHA" ]; then
         GIT_BRANCH_NAME=$(git -C "$GIT_TOPLEVEL" rev-parse --abbrev-ref HEAD 2>/dev/null)
         # --abbrev-ref returns the literal string "HEAD" when the working copy
         # is in a detached-HEAD state (bisect, checking out a tag, CI checkouts
@@ -399,7 +402,7 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
           GIT_BRANCH_NAME=$(git -C "$GIT_TOPLEVEL" rev-parse --short HEAD 2>/dev/null)
         fi
         export GITHUB_ACTIONS="true"
-        export GITHUB_SHA=$(git -C "$GIT_TOPLEVEL" rev-parse HEAD 2>/dev/null)
+        export GITHUB_SHA="$GIT_SHA"
         export GITHUB_REF_NAME="$GIT_BRANCH_NAME"
         export GITHUB_REPOSITORY="$GIT_REPO_PATH"
         export GITHUB_SERVER_URL="https://${GIT_HOST}"
@@ -407,6 +410,7 @@ if [ -z "$GITHUB_SHA" ] && [ -z "$VERCEL" ]; then
     fi
   fi
 fi
+set -e
 
 # Execute posthog cli clone
 set +x +e

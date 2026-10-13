@@ -1,3 +1,5 @@
+import { createRemoteConfigFetch } from './helpers'
+import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type BrowserFetch, type CorePostHogOptions, type RemoteConfig } from '../src/core'
@@ -28,7 +30,7 @@ describe('@posthog/browser core', () => {
             await create(),
             // @ts-expect-error Verify untyped JavaScript consumers.
             await create({}),
-            await create({ projectToken: '' }),
+            await create({ remoteConfig: localRemoteConfig, projectToken: '' }),
         ]
         for (const client of clients) {
             expect(client.canCapture).toBe(false)
@@ -61,6 +63,7 @@ describe('@posthog/browser core', () => {
     it('buffers capture without configured analytics delivery', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -83,6 +86,7 @@ describe('@posthog/browser core', () => {
         try {
             const requests: SentRequest[] = []
             const posthog = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -142,11 +146,13 @@ describe('@posthog/browser core', () => {
             capturePageview: false,
             storage: false,
             navigator: false,
-            fetch: async (_input, init = {}) => {
-                requests.push(init)
-                return new Response('{"results":{}}', { status: 200 })
-            },
-            remoteConfigLoader: () => remoteConfig,
+            fetch: createRemoteConfigFetch(
+                () => remoteConfig,
+                async (_input, init = {}) => {
+                    requests.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }
+            ),
         })
 
         await posthog.capture('before_config', { value: 'x'.repeat(2_000) })
@@ -172,6 +178,7 @@ describe('@posthog/browser core', () => {
     it('purges buffered capture when consent is revoked', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -189,6 +196,7 @@ describe('@posthog/browser core', () => {
     it('does not send a staged event after opt-out followed immediately by opt-in', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -206,6 +214,7 @@ describe('@posthog/browser core', () => {
     it('builds and sends a protected event envelope', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -246,8 +255,8 @@ describe('@posthog/browser core', () => {
                     event: 'signed_up',
                     distinct_id: posthog.distinctId,
                     timestamp: '2026-01-02T03:04:05.000Z',
-                    session_id: posthog.session.sessionId,
-                    window_id: posthog.session.windowId,
+                    session_id: posthog.session!.sessionId,
+                    window_id: posthog.session!.windowId,
                     options: {},
                     properties: {
                         dynamic: 'yes',
@@ -272,6 +281,7 @@ describe('@posthog/browser core', () => {
                 finishRequest = resolve
             })
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -328,6 +338,7 @@ describe('@posthog/browser core', () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const first = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -341,6 +352,7 @@ describe('@posthog/browser core', () => {
         await first.dispose()
 
         const second = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -422,6 +434,7 @@ describe('@posthog/browser core', () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const posthog = await createAutomaticPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -458,6 +471,7 @@ describe('@posthog/browser core', () => {
             return new Response('{}', { status: 503 })
         })
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -477,6 +491,7 @@ describe('@posthog/browser core', () => {
                 .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage: false,
                 navigator: false,
@@ -511,6 +526,7 @@ describe('@posthog/browser core', () => {
                 .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage: false,
                 navigator: false,
@@ -541,6 +557,7 @@ describe('@posthog/browser core', () => {
                 .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -576,43 +593,53 @@ describe('@posthog/browser core', () => {
         }
     })
 
-    it('uses the bounded sender retry budget before disposal purges undelivered work', async () => {
-        vi.useFakeTimers()
-        try {
-            const fetch = vi
-                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
-                .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHogWithAnalytics({
-                projectToken: 'ph_test',
-                storage: false,
-                navigator: false,
-                fetch,
-            })
+    it.each([
+        { jitter: 0.5, attempts: 4, outcome: 'every retry starts inside the shutdown timeout' },
+        { jitter: 1, attempts: 3, outcome: 'the shutdown timeout cancels a retry that would start after it' },
+    ])(
+        'uses the bounded sender retry budget before disposal purges undelivered work: $outcome',
+        async ({ jitter, attempts }) => {
+            vi.useFakeTimers()
+            const random = vi.spyOn(Math, 'random').mockReturnValue(jitter)
+            try {
+                const fetch = vi
+                    .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
+                    .mockResolvedValue(new Response('{}', { status: 503 }))
+                const posthog = await createPostHogWithAnalytics({
+                    remoteConfig: localRemoteConfig,
+                    projectToken: 'ph_test',
+                    storage: false,
+                    navigator: false,
+                    fetch,
+                })
 
-            posthog.capture('disposed_during_backoff')
-            await vi.advanceTimersByTimeAsync(0)
-            expect(fetch).toHaveBeenCalledTimes(1)
-            expect(vi.getTimerCount()).toBe(1)
+                posthog.capture('disposed_during_backoff')
+                await vi.advanceTimersByTimeAsync(0)
+                expect(fetch).toHaveBeenCalledTimes(1)
+                expect(vi.getTimerCount()).toBe(1)
 
-            let disposalSettled = false
-            const disposal = Promise.resolve(posthog.dispose()).then(() => {
-                disposalSettled = true
-            })
-            await Promise.resolve()
-            expect(disposalSettled).toBe(false)
-            await vi.runOnlyPendingTimersAsync()
-            await disposal
+                let disposalSettled = false
+                const disposal = Promise.resolve(posthog.dispose()).then(() => {
+                    disposalSettled = true
+                })
+                await Promise.resolve()
+                expect(disposalSettled).toBe(false)
+                await vi.runOnlyPendingTimersAsync()
+                await disposal
 
-            expect(fetch).toHaveBeenCalledTimes(4)
-            expect(disposalSettled).toBe(true)
-        } finally {
-            vi.useRealTimers()
+                expect(fetch).toHaveBeenCalledTimes(attempts)
+                expect(disposalSettled).toBe(true)
+            } finally {
+                random.mockRestore()
+                vi.useRealTimers()
+            }
         }
-    })
+    )
 
     it('flushes below-threshold work before shutdown and disables future capture', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -639,6 +666,7 @@ describe('@posthog/browser core', () => {
         try {
             const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(() => new Promise(() => {}))
             const posthog = await createPostHog({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 capturePageview: false,
                 storage: false,
@@ -673,8 +701,7 @@ describe('@posthog/browser core', () => {
                 capturePageview: false,
                 storage: false,
                 navigator: false,
-                fetch: false,
-                remoteConfigLoader: loader,
+                fetch: createRemoteConfigFetch(loader),
             })
             posthog.onRemoteConfig(() => {})
             await Promise.resolve()
@@ -710,7 +737,7 @@ describe('@posthog/browser core', () => {
 
             expect(settled).toBe(true)
             await posthog.capture('after_shutdown')
-            expect(posthog.session.sessionId).toBe('')
+            expect(posthog.session).toBeUndefined()
         } finally {
             vi.useRealTimers()
         }
@@ -747,6 +774,7 @@ describe('@posthog/browser core', () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const first = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -762,6 +790,7 @@ describe('@posthog/browser core', () => {
         )
 
         const second = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -775,6 +804,7 @@ describe('@posthog/browser core', () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage,
             navigator: { userAgent: 'Googlebot/2.1' },
@@ -800,6 +830,7 @@ describe('@posthog/browser core', () => {
     it('falls back to keepalive fetch when sendBeacon rejects a payload', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             fetch: createFetch(requests),
@@ -819,6 +850,7 @@ describe('@posthog/browser core', () => {
     it('rejects request URLs outside the configured API origin', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -834,10 +866,10 @@ describe('@posthog/browser core', () => {
     it('routes requests through the configured target host', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             apiHost: 'https://api.example.com/',
             flagsHost: 'https://flags.example.com//',
-            assetsHost: 'https://assets.example.com///',
             capturePageview: false,
             storage: false,
             navigator: false,
@@ -851,7 +883,7 @@ describe('@posthog/browser core', () => {
 
         expect(requests.map(({ url }) => url.toString())).toEqual([
             'https://flags.example.com/decide/?token=ph_test',
-            'https://assets.example.com/static/extension.js?token=ph_test',
+            'https://api.example.com/static/extension.js?token=ph_test',
             'https://api.example.com/i/v1/analytics/events',
         ])
     })
@@ -862,6 +894,7 @@ describe('@posthog/browser core', () => {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage,
                 navigator: false,
@@ -869,7 +902,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = Object.defineProperty({}, 'hostile', {
                 enumerable: true,
@@ -901,6 +934,7 @@ describe('@posthog/browser core', () => {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage,
                 navigator: false,
@@ -908,7 +942,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             const properties = {
                 toJSON() {
@@ -934,6 +968,7 @@ describe('@posthog/browser core', () => {
     it('accepts record-valued toJSON output while preserving protected property precedence', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -962,6 +997,7 @@ describe('@posthog/browser core', () => {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage,
                 navigator: false,
@@ -969,7 +1005,7 @@ describe('@posthog/browser core', () => {
             })
             const events: string[] = []
             posthog.onEvent(({ event }) => events.push(event))
-            const session = { ...posthog.session }
+            const session = posthog.session
             const persisted = new Map(storage.values)
             vi.advanceTimersByTime(1_000)
 
@@ -1035,6 +1071,7 @@ describe('@posthog/browser core', () => {
     it('does not let event observers replace protected delivery fields', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1077,6 +1114,7 @@ describe('@posthog/browser core', () => {
         async (distinctId) => {
             const requests: SentRequest[] = []
             const posthog = await createPostHogWithAnalytics({
+                remoteConfig: localRemoteConfig,
                 projectToken: 'ph_test',
                 storage: false,
                 navigator: false,
@@ -1098,6 +1136,7 @@ describe('@posthog/browser core', () => {
     it.each(['', '   ', '\t'])('rejects invalid group type %j without state or delivery changes', async (type) => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1113,6 +1152,7 @@ describe('@posthog/browser core', () => {
     it.each(['', '   ', '\t'])('rejects invalid group key %j without state or delivery changes', async (key) => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1128,6 +1168,7 @@ describe('@posthog/browser core', () => {
     it.each(['', '   ', '\t'])('rejects invalid event name %j without session or delivery changes', async (event) => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1144,6 +1185,7 @@ describe('@posthog/browser core', () => {
     it('marks same-ID anonymous identify as identified without later relinking it', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1166,6 +1208,7 @@ describe('@posthog/browser core', () => {
     it('does not repeat group-identify for an unchanged group without properties', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1186,6 +1229,7 @@ describe('@posthog/browser core', () => {
     it('does not merge a second identified user with the anonymous id', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -1208,9 +1252,8 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
+            fetch: createRemoteConfigFetch(() => new Promise(() => {})),
             remoteConfigTimeoutMs: 1,
-            remoteConfigLoader: () => new Promise(() => {}),
         })
 
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
@@ -1221,10 +1264,9 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: () => {
+            fetch: createRemoteConfigFetch(() => {
                 throw new Error('sync failure')
-            },
+            }),
         })
 
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
@@ -1237,14 +1279,14 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
         const changes: unknown[] = []
         posthog.onRemoteConfig((value) => changes.push(value))
 
-        await expect(posthog.getRemoteConfig()).resolves.toBe(remoteConfig)
-        await expect(posthog.getRemoteConfig()).resolves.toBe(remoteConfig)
+        const fetchedConfig = await posthog.getRemoteConfig()
+        expect(fetchedConfig).toEqual(remoteConfig)
+        await expect(posthog.getRemoteConfig()).resolves.toBe(fetchedConfig)
         expect(loader).toHaveBeenCalledTimes(1)
         expect(changes).toEqual([{ ok: true, config: remoteConfig }])
     })
@@ -1256,8 +1298,7 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
 
         const notification = new Promise<unknown>((resolve) => posthog.onRemoteConfig(resolve))
@@ -1265,7 +1306,7 @@ describe('@posthog/browser core', () => {
         expect(loader).toHaveBeenCalledTimes(1)
     })
 
-    it('blocks registration, requests, and persisted key-value mutation after disposal', async () => {
+    it('blocks registration and persisted key-value mutation after disposal', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const remoteConfig = createRemoteConfig()
@@ -1291,7 +1332,6 @@ describe('@posthog/browser core', () => {
         posthog.onEvent(({ event }) => events.push(event))
         posthog.onRemoteConfig(lateRemoteConfigListener)
         posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
-        await expect(posthog.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
         await posthog.capture('after_dispose')
         posthog.kv.set('after_dispose', true)
@@ -1355,8 +1395,8 @@ describe('@posthog/browser core', () => {
         await first.capture('first')
         await second.capture('second')
 
-        expect(second.session.sessionId).toBe(first.session.sessionId)
-        expect(second.session.windowId).not.toBe(first.session.windowId)
+        expect(second.session!.sessionId).toBe(first.session!.sessionId)
+        expect(second.session!.windowId).not.toBe(first.session!.windowId)
     })
 
     it('rotates an idle session when capture runs', async () => {
@@ -1410,10 +1450,10 @@ describe('@posthog/browser core', () => {
 
         expect(posthog.anonymousId).not.toBe(originalId)
         expect(posthog.distinctId).toBe(posthog.anonymousId)
-        expect(posthog.session.sessionId).toBe('')
+        expect(posthog.session).toBeUndefined()
         expect(sessions).toEqual([])
 
         await posthog.capture('after_reset')
-        expect(sessions).toEqual([`reset:${posthog.session.sessionId}`])
+        expect(sessions).toEqual([`reset:${posthog.session!.sessionId}`])
     })
 })

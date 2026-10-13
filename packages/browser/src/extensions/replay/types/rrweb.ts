@@ -123,6 +123,8 @@ export type rrwebRecord = {
     (options: recordOptions): (() => void) | undefined
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
+    // absent on recorder bundles older than this property
+    isRecording?: () => boolean
     mirror: {
         getId(n: Node | undefined | null): number
         getNode(id: number): Node | null

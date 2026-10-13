@@ -164,7 +164,7 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
  */
 export type FeatureFlagEvaluationRuntime = 'all' | 'client' | 'server'
 
-export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
+export type BeforeSendFn = (event: EventMessage) => EventMessage | null
 
 export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
@@ -230,9 +230,14 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
-  // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
-  featureFlagsPollingInterval?: number
-  // Maximum size of cache that deduplicates $feature_flag_called calls per user.
+  /**
+   * The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
+   * Set to null to disable automatic polling. Definitions are still loaded on initialization;
+   * call reloadFeatureFlags() to refresh them manually. Until refreshed, local evaluation uses the last loaded definitions.
+   */
+  featureFlagsPollingInterval?: number | null
+  // Maximum number of distinct ids held in the cache that deduplicates $feature_flag_called calls
+  // per user. When the cache is full the least recently used distinct ids are evicted.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.

@@ -4,6 +4,7 @@
  */
 export type { Extension } from './extension'
 export type { ExtensionToken } from './token'
+export { FeatureFlagsCommonExtension } from './extension-tokens'
 export * from './types'
 export { createDisposable, type Disposable } from './disposable'
 export type { Listener } from './pubsub'
