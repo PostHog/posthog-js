@@ -506,6 +506,12 @@ describe('WebMCP', () => {
                 lineno: 11,
                 colno: 7,
             },
+            {
+                platform: 'web:javascript' as const,
+                filename: 'https://example.com/alice%40example.com/app.js',
+                lineno: 14,
+                colno: 6,
+            },
         ]
         vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
             $exception_list: [
@@ -546,6 +552,10 @@ describe('WebMCP', () => {
             {
                 ...frames[4],
                 filename: 'https://example.com/helper.js?value=%5Bredacted%5D',
+            },
+            {
+                ...frames[5],
+                filename: 'https://example.com/%5Bredacted%5D/app.js',
             },
         ])
         expect(frames[0].filename).toBe('https://example.com/app.js?token=sk_live_example&view=summary')

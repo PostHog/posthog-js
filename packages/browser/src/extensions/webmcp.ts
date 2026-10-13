@@ -276,28 +276,28 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
     }
 }
 
+function sanitizeEncodedFrameFilenameComponent(component: string, plusAsSpace: boolean): string {
+    let decoded: string
+    try {
+        decoded = decodeURIComponent(plusAsSpace ? component.replace(/\+/g, ' ') : component)
+    } catch {
+        return encodeURIComponent('[redacted]')
+    }
+
+    const sanitized = sanitizeFreeText(decoded, { maxStringLength: decoded.length, truncationSuffix: '' })
+    return sanitized === decoded ? component : encodeURIComponent(sanitized)
+}
+
 function sanitizeFrameFilename(filename: string): string {
     const sanitized = sanitizeFreeText(filename, { maxStringLength: filename.length, truncationSuffix: '' })
     const queryOrFragmentIndex = sanitized.search(/[?#]/)
-    if (queryOrFragmentIndex === -1) {
-        return sanitized
-    }
-
-    const prefix = sanitized.slice(0, queryOrFragmentIndex)
-    const suffix = sanitized.slice(queryOrFragmentIndex).replace(/[^?#&=]+/g, (component) => {
-        let decoded: string
-        try {
-            decoded = decodeURIComponent(component.replace(/\+/g, ' '))
-        } catch {
-            return encodeURIComponent('[redacted]')
-        }
-
-        const sanitizedComponent = sanitizeFreeText(decoded, {
-            maxStringLength: decoded.length,
-            truncationSuffix: '',
-        })
-        return sanitizedComponent === decoded ? component : encodeURIComponent(sanitizedComponent)
-    })
+    const prefixEnd = queryOrFragmentIndex === -1 ? sanitized.length : queryOrFragmentIndex
+    const prefix = sanitized
+        .slice(0, prefixEnd)
+        .replace(/[^/\\]+/g, (component) => sanitizeEncodedFrameFilenameComponent(component, false))
+    const suffix = sanitized
+        .slice(prefixEnd)
+        .replace(/[^?#&=]+/g, (component) => sanitizeEncodedFrameFilenameComponent(component, true))
     return prefix + suffix
 }
 
