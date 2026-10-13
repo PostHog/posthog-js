@@ -7,7 +7,7 @@ import {
   extractAvailableToolCalls,
   extractPosthogParams,
   getModelParams,
-  withPrivacyMode,
+  isPrivacyModeEnabled,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
@@ -25,16 +25,6 @@ import { preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
 import { formatToolResult } from '../toolResult'
 import { isObject } from '../typeGuards'
-
-const TOOL_RESULT_TYPES = new Set([
-  'tool_result',
-  'bash_code_execution_tool_result',
-  'code_execution_tool_result',
-  'text_editor_code_execution_tool_result',
-  'tool_search_tool_result',
-  'web_fetch_tool_result',
-  'web_search_tool_result',
-])
 
 interface ToolInProgress {
   block: FormattedFunctionCall
@@ -70,7 +60,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
   private formatInputForPostHog(params: MessageCreateParams, privacyMode: boolean): unknown {
     try {
-      if (withPrivacyMode(this.phClient, privacyMode, false) === null) return null
+      if (isPrivacyModeEnabled(this.phClient, privacyMode)) return null
       const input = mergeSystemPrompt(params, 'anthropic')
       const messages = Array.isArray(input)
         ? input.map((message) => {
@@ -80,10 +70,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               if (
                 isObject(block) &&
                 typeof block.type === 'string' &&
-                TOOL_RESULT_TYPES.has(block.type) &&
+                (block.type === 'tool_result' || block.type.endsWith('_tool_result')) &&
                 Object.hasOwn(block, 'content')
               ) {
-                return { ...block, content: formatToolResult(block.content, this.phClient) }
+                return { ...block, content: formatToolResult(block.content, this.phClient, Infinity) }
               }
               return block
             })

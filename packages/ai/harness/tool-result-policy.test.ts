@@ -19,7 +19,6 @@ const cases = providers.flatMap((provider) =>
   [false, true].flatMap((stream) => [false, true].map((privacy) => ({ provider, stream, privacy })))
 )
 const body = '!'.repeat(4999) + '😀' + '!'.repeat(1000)
-const capped = '!'.repeat(4999) + '... [truncated]'
 const summary = '42 rows matched'
 const model = 'synthetic-model'
 const chatResult = {
@@ -273,14 +272,20 @@ it.each(cases)(
       } else if (provider === 'gemini') {
         expect(properties.$ai_input[1]).toEqual({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: 'call_1', content: { body: capped, summary } }],
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'call_1',
+              content: JSON.stringify({ body, summary }).slice(0, 5000) + '... [truncated]',
+            },
+          ],
         })
       } else if (provider === 'openai-chat') {
         expect(properties.$ai_input[1]).toEqual({
           role: 'tool',
           tool_call_id: 'call_1',
           content: [
-            { type: 'text', text: capped },
+            { type: 'text', text: body },
             { type: 'text', text: summary },
           ],
         })
@@ -290,7 +295,7 @@ it.each(cases)(
           type: 'function_call_output',
           call_id: 'call_1',
           output: [
-            { type: 'input_text', text: capped },
+            { type: 'input_text', text: body },
             { type: 'input_text', text: summary },
           ],
         })
@@ -303,7 +308,7 @@ it.each(cases)(
               tool_use_id: 'call_1',
               is_error: true,
               content: [
-                { type: 'text', text: capped },
+                { type: 'text', text: body },
                 { type: 'text', text: summary },
               ],
             },

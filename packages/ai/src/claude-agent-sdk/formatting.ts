@@ -1,7 +1,7 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import type { PostHog } from 'posthog-node'
-import { MAX_OUTPUT_SIZE, toContentString, withPrivacyMode } from '../utils'
+import { MAX_OUTPUT_SIZE, toContentString, isPrivacyModeEnabled } from '../utils'
 import { formatToolResult } from '../toolResult'
 import type { FormattedContent, FormattedContentItem } from '../types'
 
@@ -62,7 +62,7 @@ export function formatAssistantBlocks(blocks: unknown, client: PostHog): ClaudeA
 
 /** Convert an Anthropic user message body into PostHog content items. */
 export function formatUserContent(content: unknown, client: PostHog, privacyMode = false): FormattedContent | unknown {
-  if (withPrivacyMode(client, privacyMode, false) === null) return []
+  if (isPrivacyModeEnabled(client, privacyMode)) return []
   if (typeof content === 'string') {
     return content
   }

@@ -346,12 +346,14 @@ The existing Anthropic recorder supports streaming only, so its unary cases
 compare native and wrapped calls directly against the local server. No provider
 credentials or live-provider calls are required.
 
-The fixtures verify a 5,000 UTF-8-byte cap on each tool-result string value plus
-the existing 15-byte truncation marker. Objects, arrays, and later fields remain;
-many small fields can exceed 5,015 bytes in aggregate. This is not a whole-event
-size guarantee. Responses retains its existing serialized analytics content;
-values are capped before JSON encoding without parsing arbitrary tool-result
-text or applying another cap to the serialized envelope.
+The fixtures verify the existing provider-specific limits. Gemini retains its
+5,000 UTF-8-byte whole-result ceiling plus the 15-byte truncation marker,
+including combined response and parts payloads; oversized results become text
+previews that can omit later fields. OpenAI Chat/Responses and direct Anthropic
+keep opaque tool-result strings and text blocks without a new 5 KB cap.
+Responses retains its existing serialized analytics content without parsing
+arbitrary tool-result text. These limits do not guarantee an event fits transport
+limits.
 
 The unit suites `tool-result-policy.test.ts` and
 `tool-result-normalization.test.ts` additionally cover binary redaction before
@@ -359,7 +361,7 @@ type-erasing normalization, MIME metadata, UTF-8 boundaries, JSON-looking text,
 provider failure identity, full capture/privacy, nonmutation, and the existing
 depth/item/node traversal budgets. Claude Agent tests retain its separate
 200,000-byte original tool-span/assistant-output default while generation
-history uses the shared 5,000-byte policy. Full capture bypasses string caps and
+history keeps its existing 5,000-byte per-string limit. Full capture bypasses size caps and
 binary redaction while keeping traversal bounds; privacy wins over full capture.
 
 Use the repository-pinned pnpm version to build prerequisites and run the checks:

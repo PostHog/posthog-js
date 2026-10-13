@@ -16,7 +16,7 @@ import { captureAiGeneration } from '../captureAiGeneration'
 import type { CaptureAiGenerationOptions } from '../captureAiGeneration'
 import { stringifyError } from '../serializeError'
 import type { FormattedMessage, TokenUsage } from '../types'
-import { withPrivacyMode } from '../utils'
+import { isPrivacyModeEnabled } from '../utils'
 import { extractSystemPrompt, formatAssistantBlocks, formatContent, formatUserContent } from './formatting'
 import type { ClaudeAgentContentItem } from './formatting'
 
@@ -698,10 +698,9 @@ export class PostHogClaudeAgentProcessor {
       ...(parentSpanId ? { $ai_parent_id: parentSpanId } : {}),
       $ai_span_name: block.name,
       $ai_span_type: 'tool',
-      $ai_input_state:
-        withPrivacyMode(this._client, trace.privacyMode ?? false, false) === null
-          ? null
-          : formatContent(block.input ?? {}, this._client),
+      $ai_input_state: isPrivacyModeEnabled(this._client, trace.privacyMode ?? false)
+        ? null
+        : formatContent(block.input ?? {}, this._client),
     }
     state.pendingTools.set(properties.$ai_span_id, { startTime: performance.now(), properties })
   }
@@ -722,10 +721,9 @@ export class PostHogClaudeAgentProcessor {
       $ai_latency: (performance.now() - tool.startTime) / 1000,
       ...(result
         ? {
-            $ai_output_state:
-              withPrivacyMode(this._client, trace.privacyMode ?? false, false) === null
-                ? null
-                : formatContent(result.content, this._client),
+            $ai_output_state: isPrivacyModeEnabled(this._client, trace.privacyMode ?? false)
+              ? null
+              : formatContent(result.content, this._client),
             $ai_is_error: result.is_error === true,
           }
         : {}),
