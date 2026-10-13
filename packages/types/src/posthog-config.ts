@@ -1615,8 +1615,9 @@ export interface PostHogConfig {
     disable_surveys_automatic_display: boolean
 
     /**
-     * Determines whether PostHog should disable all product tours functionality.
+     * Has no effect.
      *
+     * @deprecated Product tours were removed from PostHog.
      * @default false
      */
     disable_product_tours: boolean
@@ -2226,8 +2227,8 @@ export interface PostHogConfig {
 
     /**
      * Overrides the URL used for client-side URL targeting: session replay URL triggers, the
-     * session replay URL blocklist, survey URL display conditions, product tour URL conditions,
-     * web experiment URL conditions, and autocapture URL allow/ignore lists.
+     * session replay URL blocklist, survey URL display conditions, web experiment URL
+     * conditions, and autocapture URL allow/ignore lists.
      *
      * These features match against `window.location.href` directly, which does not reflect
      * any `$current_url` you rewrite in `before_send`. In environments where the browser URL
@@ -2476,12 +2477,9 @@ export interface PostHogConfig {
     internal_or_test_user_hostname?: string | RegExp | null
 
     /**
-     * Display language override for Product Tours.
+     * Display language override for Surveys.
      *
      * Must be a valid BCP 47 language code.
-     *
-     * In the future this will be used for Surveys and other products that
-     * deliver in-app experiences to end-users.
      */
     override_display_language?: string | null
 

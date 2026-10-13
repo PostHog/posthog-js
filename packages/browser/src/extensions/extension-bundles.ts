@@ -30,7 +30,6 @@ import { TracingHeaders } from './tracing-headers'
 import { WebVitalsAutocapture } from './web-vitals'
 import { SessionRecording } from './replay/session-recording'
 import { Heatmaps } from '../heatmaps'
-import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
 import { BrowserSurveys } from '../browser-surveys'
@@ -70,9 +69,10 @@ export const ErrorTrackingExtensions = {
     exceptions: PostHogExceptions,
 } as const satisfies ExtensionClasses
 
-/** In-app product tours. Includes feature flags for targeting. */
+/**
+ * @deprecated Product tours were removed from PostHog. This bundle now only contains feature flags.
+ */
 export const ProductToursExtensions = {
-    productTours: PostHogProductTours,
     ...FeatureFlagsExtensions,
 } as const satisfies ExtensionClasses
 
@@ -129,7 +129,6 @@ export const AllExtensions = {
     ...SessionReplayExtensions,
     ...AnalyticsExtensions,
     ...ErrorTrackingExtensions,
-    ...ProductToursExtensions,
     ...SiteAppsExtensions,
     ...SurveysExtensions,
     ...TracingExtensions,

@@ -12,7 +12,6 @@ const snippetCopies = [
     { file: 'packages/browser/playground/css-layers/index.html', runtimeSnippets: 1, descriptors: 2 },
     { file: 'packages/browser/playground/cypress-full/index.html', runtimeSnippets: 1, descriptors: 2 },
     { file: 'packages/browser/playground/cypress/index.html', runtimeSnippets: 1, descriptors: 2 },
-    { file: 'packages/browser/playground/cypress/page2.html', runtimeSnippets: 1, descriptors: 2 },
     { file: 'packages/browser/playground/preload-link-leak/index.html', runtimeSnippets: 1, descriptors: 2 },
     { file: 'packages/browser/playground/session-recordings/index.html', runtimeSnippets: 1, descriptors: 2 },
     { file: 'packages/browser/playground/snippet/index.html', runtimeSnippets: 1, descriptors: 4 },

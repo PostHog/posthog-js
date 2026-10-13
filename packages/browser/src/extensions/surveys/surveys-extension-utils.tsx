@@ -330,15 +330,6 @@ export function hex2rgb(c: string): string {
     return 'rgb(255, 255, 255)'
 }
 
-export function hexToRgba(hex: string, opacity: number): string {
-    const rgb = hex2rgb(hex)
-    const match = rgb.match(/^rgb\((\d+),(\d+),(\d+)\)$/)
-    if (!match) {
-        return hex
-    }
-    return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${opacity})`
-}
-
 export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
@@ -833,7 +824,6 @@ export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector =
 
 /**
  * Get CSS position styles for a popover/modal based on SurveyPosition
- * Used by both surveys and product tours for consistent positioning
  */
 export function getPopoverPosition(
     type?: SurveyType,

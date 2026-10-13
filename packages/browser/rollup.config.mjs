@@ -475,8 +475,6 @@ const mainModuleTypesEntries = new Set([
     'customizations.es.ts',
     'dead-clicks-autocapture.ts',
     'main.cjs.ts',
-    'product-tours-preview.es.ts',
-    'product-tours.ts',
     'surveys-preview.es.ts',
     'surveys.ts',
     'tracing-headers.ts',

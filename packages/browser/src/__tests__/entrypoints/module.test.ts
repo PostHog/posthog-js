@@ -450,7 +450,6 @@ import exceptionAutocapture from 'posthog-js/dist/exception-autocapture'
 import webVitals from 'posthog-js/dist/web-vitals'
 import DeadClicksAutocapture from 'posthog-js/dist/dead-clicks-autocapture'
 import initConversations from 'posthog-js/dist/conversations'
-import generateProductTours from 'posthog-js/dist/product-tours'
 import generateSurveys from 'posthog-js/dist/surveys'
 import type { Replayer, ReplayPlugin, eventWithTime as ReplayerEvent } from 'posthog-js/dist/rrweb'
 import type { EventType, eventWithTime } from 'posthog-js/dist/rrweb-types'
@@ -469,7 +468,6 @@ void replayEventType
 
 new DeadClicksAutocapture(posthog)
 initConversations({} as any, posthog)
-generateProductTours(posthog, true)
 generateSurveys(posthog, true)
 void recorder
 void exceptionAutocapture

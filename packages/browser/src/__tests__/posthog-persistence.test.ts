@@ -17,8 +17,8 @@ import {
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
-    PRODUCT_TOURS,
-    PRODUCT_TOURS_ACTIVATED,
+    PRODUCT_TOURS_LEGACY,
+    PRODUCT_TOURS_LEGACY_ACTIVATED,
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_REMOTE_CONFIG,
@@ -403,8 +403,8 @@ describe('persistence', () => {
         })
 
         it.each([
-            [PRODUCT_TOURS, [{ id: 1, name: 'tour' }]],
-            [PRODUCT_TOURS_ACTIVATED, ['tour-1']],
+            [PRODUCT_TOURS_LEGACY, [{ id: 1, name: 'tour' }]],
+            [PRODUCT_TOURS_LEGACY_ACTIVATED, ['tour-1']],
             [SESSION_RECORDING_REMOTE_CONFIG, { endpoint: '/s/' }],
             [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
         ])('should not include reserved property %s in event properties', (key, value) => {

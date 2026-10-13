@@ -600,7 +600,7 @@ export class Autocapture implements Extension {
         } else {
             this._elementSelectorsByOwner.delete(owner)
         }
-        // Survey and product-tour actions can watch the same selector independently.
+        // Several action matchers can watch the same selector independently.
         const combined = new Set<string>()
         this._elementSelectorsByOwner.forEach((contribution) => {
             contribution.forEach((selector) => combined.add(selector))

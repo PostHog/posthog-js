@@ -23,7 +23,6 @@ import type { TracingHeaders } from './extensions/tracing-headers'
 import type { WebVitalsAutocapture } from './extensions/web-vitals'
 import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
-import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { BrowserSurveys } from './browser-surveys'
 import type { Toolbar } from './extensions/toolbar'
@@ -222,7 +221,6 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         siteApps?: ExtensionConstructor<SiteApps>
         sessionRecording?: ExtensionConstructor<SessionRecording>
         autocapture?: ExtensionConstructor<Autocapture>
-        productTours?: ExtensionConstructor<PostHogProductTours>
         heatmaps?: ExtensionConstructor<Heatmaps>
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
         exceptionObserver?: ExtensionConstructor<ExceptionObserver>

@@ -215,7 +215,6 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'logs'
     | 'conversations'
-    | 'product-tours'
     | 'dead-clicks-autocapture'
     | 'remote-config'
     | ExternalExtensionKind
@@ -298,7 +297,6 @@ interface PostHogExtensions {
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
-    generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
         replayConsoleBuffer?: (host: PostHog | Client, entries: BufferedConsoleEntry[]) => void

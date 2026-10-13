@@ -176,9 +176,6 @@ export interface RemoteConfig {
     /** Whether surveys are enabled, optionally including their definitions. */
     surveys?: boolean | Survey[]
 
-    /** Whether product tours are enabled. */
-    productTours?: boolean
-
     /** Parameters for the toolbar. */
     toolbarParams: ToolbarParams
 
