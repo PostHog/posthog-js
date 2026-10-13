@@ -33,7 +33,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
@@ -485,11 +485,14 @@ class PosthogReactNativePluginModule(
 
   /**
    * Records that the JS fatal handler saw a crash, so the JavascriptException React Native
-   * throws for it next is dropped as a duplicate.
+   * throws for it next is dropped as a duplicate when it contains [message].
    */
   @ReactMethod
-  fun markFatalExceptionHandled(promise: Promise) {
-    markJsFatalHandled()
+  fun markFatalExceptionHandled(
+    message: String?,
+    promise: Promise,
+  ) {
+    markJsFatalHandled(message ?: "")
     promise.resolve(null)
   }
 
@@ -789,30 +792,36 @@ internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent 
   return event
 }
 
-// Set when the JS fatal handler saw a crash. The JavascriptException React Native throws for
-// that crash is captured in this process, so memory is enough; the first one consumes it.
-private val jsFatalHandled = AtomicBoolean(false)
+// The start of the message of the last fatal the JS fatal handler saw. The JavascriptException
+// React Native throws for that crash is captured in this process, so memory is enough. The next
+// JavascriptException consumes it and is dropped only when it carries that message, so a marked
+// fatal the host app recovers from cannot hide a later, different crash.
+private val jsHandledFatalMessage = AtomicReference<String?>(null)
 
-internal fun markJsFatalHandled() {
-  jsFatalHandled.set(true)
+internal fun markJsFatalHandled(message: String) {
+  jsHandledFatalMessage.set(message)
 }
 
 internal fun dropJsHandledFatalCrash(event: PostHogEvent): PostHogEvent? {
-  if (event.event != "\$exception" || !hasJavascriptException(event.properties)) {
+  if (event.event != "\$exception") {
     return event
   }
-  return if (jsFatalHandled.getAndSet(false)) null else event
+  val exception = javascriptException(event.properties) ?: return event
+  val message = jsHandledFatalMessage.getAndSet(null) ?: return event
+  // An empty marker comes from an error without a message and matches any report.
+  val value = exception["value"] as? String
+  return if (message.isEmpty() || value?.contains(message) == true) null else event
 }
 
-private fun hasJavascriptException(properties: Map<String, Any>?): Boolean {
-  val exceptionList = properties?.get("\$exception_list") as? List<*> ?: return false
-  return exceptionList.any { entry ->
-    val exception = entry as? Map<*, *> ?: return@any false
-    val type = exception["type"] as? String ?: return@any false
+private fun javascriptException(properties: Map<String, Any>?): Map<*, *>? {
+  val exceptionList = properties?.get("\$exception_list") as? List<*> ?: return null
+  return exceptionList.firstNotNullOfOrNull { entry ->
+    val exception = entry as? Map<*, *> ?: return@firstNotNullOfOrNull null
+    val type = exception["type"] as? String ?: return@firstNotNullOfOrNull null
     val module = exception["module"] as? String
     // posthog-android splits the class name into module and type.
     val className = if (module.isNullOrEmpty()) type else "$module.$type"
-    className == JavascriptException::class.java.name
+    if (className == JavascriptException::class.java.name) exception else null
   }
 }
 

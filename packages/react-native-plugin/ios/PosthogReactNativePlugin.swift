@@ -38,35 +38,70 @@ private var jsFatalCaptureProperties: [String: Any]? {
     Thread.current.threadDictionary[jsFatalCaptureKey] as? [String: Any]
 }
 
-/// Written by `markFatalExceptionHandled` when the JS fatal handler saw a crash. React Native
-/// turns that crash into a native one, which posthog-ios only reports on the next launch, so the
-/// marker is a file: it has to survive the crash that follows it.
-private let jsFatalMarkerURL: URL? = FileManager.default
+/// One file per launch for the fatal JS marker protocol. posthog-ios reports a crash only on the
+/// next launch, so the state has to survive the crash. The file exists when the launch's JS layer
+/// marks the fatals it sees; `message` is the start of the last one it marked.
+private let jsFatalStateURL: URL? = FileManager.default
     .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
     .appendingPathComponent(Bundle.main.bundleIdentifier ?? "", isDirectory: true)
-    .appendingPathComponent("posthog-react-native-js-fatal-handled")
+    .appendingPathComponent("posthog-react-native-js-fatal-state.json")
 
-/// Whether the previous launch's JS fatal handler saw a crash. Read once at setup, before
-/// posthog-ios replays that launch's crash report, and consumed by the first fatal JS report.
-private final class PreviousLaunchJsFatal {
+private let jsFatalMessageKey = "message"
+
+/// Holds the previous launch's marker state, read and removed the first time this process uses
+/// it — before `setup` or `markFatalExceptionHandled` can write this launch's state over it.
+private final class JsFatalMarkers {
+    static let shared = JsFatalMarkers()
+
     private let lock = NSLock()
-    private var handled: Bool
+    /// `nil` when the previous launch did not use the marker protocol.
+    private var previousLaunch: [String: Any]?
+    private var currentLaunch: [String: Any]?
 
-    init() {
-        guard let url = jsFatalMarkerURL else {
-            handled = false
-            return
+    private init() {
+        guard let url = jsFatalStateURL else { return }
+        if let data = try? Data(contentsOf: url) {
+            previousLaunch = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         }
-        handled = FileManager.default.fileExists(atPath: url.path)
         try? FileManager.default.removeItem(at: url)
     }
 
-    func consume() -> Bool {
+    /// Records that this launch's JS layer marks the fatals it sees.
+    func useMarkers() throws {
+        try updateCurrentLaunch { _ in }
+    }
+
+    /// Records the start of the message of a fatal this launch's JS layer saw.
+    func markFatalHandled(message: String) throws {
+        try updateCurrentLaunch { $0[jsFatalMessageKey] = message }
+    }
+
+    private func updateCurrentLaunch(_ change: (inout [String: Any]) -> Void) throws {
+        guard let url = jsFatalStateURL else {
+            throw NSError(domain: fatalCaptureErrorCode, code: 0, userInfo: [
+                NSLocalizedDescriptionKey: "no application support directory",
+            ])
+        }
         lock.lock()
         defer { lock.unlock() }
-        let wasHandled = handled
-        handled = false
-        return wasHandled
+        var state = currentLaunch ?? [:]
+        change(&state)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: state).write(to: url, options: .atomic)
+        currentLaunch = state
+    }
+
+    /// Whether a native report of a fatal JS error duplicates a crash the JS layer captured.
+    /// Reports from a launch without the protocol are always dropped, since that launch's JS layer
+    /// captured every fatal its handler saw. Otherwise the first report consumes the marker and is
+    /// dropped only when one of `texts` contains the marked message (an empty one matches any).
+    func isJsHandledFatal(_ texts: [String]) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let previous = previousLaunch else { return true }
+        previousLaunch = [:]
+        guard let message = previous[jsFatalMessageKey] as? String else { return false }
+        return message.isEmpty || texts.contains { $0.contains(message) }
     }
 }
 
@@ -79,24 +114,23 @@ private let iso8601Formatter: ISO8601DateFormatter = {
     return formatter
 }()
 
-private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
+/// The fields of an exception that can carry React Native's fatal JS error text.
+private func fatalJsErrorTexts(_ exception: [String: Any]) -> [String] {
+    // New-architecture RN rethrows fatal JS errors as a C++ jsi::JSError (SIGABRT);
+    // the JS-error text only survives in the signal's crash-info message.
+    let mechanism = exception["mechanism"] as? [String: Any]
+    let meta = mechanism?["meta"] as? [String: Any]
+    let signal = meta?["signal"] as? [String: Any]
+    return [exception["type"], exception["value"], signal?["crash_info_message"]].compactMap { $0 as? String }
+}
+
+/// The error texts of `event` when it is a native report of a fatal JS error, otherwise `nil`.
+private func reactNativeFatalJsErrorTexts(_ event: PostHogEvent) -> [String]? {
     guard event.event == "$exception",
           let exceptionList = event.properties["$exception_list"] as? [[String: Any]]
-    else { return false }
-    return exceptionList.contains { exception in
-        if containsFatalJsErrorMarker(exception["type"] as? String) {
-            return true
-        }
-        if containsFatalJsErrorMarker(exception["value"] as? String) {
-            return true
-        }
-        // New-architecture RN rethrows fatal JS errors as a C++ jsi::JSError (SIGABRT);
-        // the JS-error text only survives in the signal's crash-info message.
-        let mechanism = exception["mechanism"] as? [String: Any]
-        let meta = mechanism?["meta"] as? [String: Any]
-        let signal = meta?["signal"] as? [String: Any]
-        return containsFatalJsErrorMarker(signal?["crash_info_message"] as? String)
-    }
+    else { return nil }
+    let texts = exceptionList.flatMap(fatalJsErrorTexts)
+    return texts.contains { containsFatalJsErrorMarker($0) } ? texts : nil
 }
 
 /// Carries the distinct id and consent JS holds into `beforeSend` for the length of
@@ -301,9 +335,15 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // Drop that report only when the JS layer saw the crash. Fatals that bypass the JS handler,
         // such as React render errors, have no marker and are reported natively instead.
-        // An older JS layer sends no marker, so every fatal JS report is dropped as before.
-        // Always read so a marker from a launch that sent no flag cannot outlive it.
-        let previousLaunchJsFatal = PreviousLaunchJsFatal()
+        // A JS layer that sends no flag marks nothing, so its launch's reports are always dropped.
+        let jsFatalMarkers = JsFatalMarkers.shared
+        if fatalExceptionMarker {
+            do {
+                try jsFatalMarkers.useMarkers()
+            } catch {
+                hedgeLog("Failed to record the fatal JS marker state: \(error.localizedDescription)")
+            }
+        }
         config.setBeforeSend { event in
             // The JS layer's own fatal capture is the event we want; only native re-reports
             // of a crash JS already captured are duplicates. Matching the event name as well
@@ -321,9 +361,8 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 }
                 return event
             }
-            if isReactNativeFatalJsError(event) {
-                guard fatalExceptionMarker else { return nil }
-                return previousLaunchJsFatal.consume() ? nil : event
+            if let texts = reactNativeFatalJsErrorTexts(event) {
+                return jsFatalMarkers.isJsHandledFatal(texts) ? nil : event
             }
             // Only the replayed tap. `setup()` also replays the previous launch's crash report,
             // and that `$exception` carries the distinct id recorded at crash time, which stands.
@@ -642,18 +681,14 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     }
 
     /// Records that the JS fatal handler saw a crash, so the native report of that crash on the
-    /// next launch is dropped as a duplicate. Resolves only after the marker is on disk.
-    @objc(markFatalExceptionHandled:withRejecter:)
-    func markFatalExceptionHandled(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-        guard let url = jsFatalMarkerURL else {
-            reject(fatalCaptureErrorCode, "markFatalExceptionHandled: no application support directory", nil)
-            return
-        }
+    /// next launch is dropped as a duplicate when it contains `message`. Resolves only after the
+    /// marker is on disk.
+    @objc(markFatalExceptionHandled:withResolver:withRejecter:)
+    func markFatalExceptionHandled(
+        message: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock
+    ) {
         do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true
-            )
-            try Data().write(to: url, options: .atomic)
+            try JsFatalMarkers.shared.markFatalHandled(message: message)
             resolve(nil)
         } catch {
             reject(fatalCaptureErrorCode, "markFatalExceptionHandled: \(error.localizedDescription)", error)

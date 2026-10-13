@@ -142,13 +142,14 @@ export function captureFatalException(
 
 /**
  * Records that the JS fatal handler saw a crash before React Native turns it into a native one.
- * Native error tracking drops its own report of a fatal JS error only when this marker is set,
- * so fatals that never reach the JS handler (such as React render errors) are still reported.
+ * Native error tracking drops its own report of a fatal JS error only when the report contains
+ * `message` (the start of the JS error message; empty matches any report), so fatals that never
+ * reach the JS handler (such as React render errors) are still reported.
  *
  * @internal Used by `posthog-react-native`'s fatal handler. Not part of the public API.
  */
-export function markFatalExceptionHandled(): Promise<void> {
-  return PosthogReactNativePlugin.markFatalExceptionHandled()
+export function markFatalExceptionHandled(message: string): Promise<void> {
+  return PosthogReactNativePlugin.markFatalExceptionHandled(message)
 }
 
 /**
@@ -269,7 +270,7 @@ export interface PostHogReactNativePluginModule {
     properties: PostHogReactNativePluginMap
   ) => Promise<void>
 
-  markFatalExceptionHandled: () => Promise<void>
+  markFatalExceptionHandled: (message: string) => Promise<void>
 
   getSessionReplayDebugProperties: () => Promise<PostHogReactNativePluginMap>
 

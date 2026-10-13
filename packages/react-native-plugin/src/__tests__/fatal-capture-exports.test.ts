@@ -1,7 +1,7 @@
 /* oxlint-disable compat/compat */
 const nativeMock = vi.hoisted(() => ({
   captureFatalException: vi.fn(() => Promise.resolve()),
-  markFatalExceptionHandled: vi.fn(() => Promise.resolve()),
+  markFatalExceptionHandled: vi.fn((_message: string) => Promise.resolve()),
 }))
 
 vi.mock('react-native', () => ({
@@ -37,10 +37,10 @@ describe('fatal capture exports', () => {
   })
 
   it('exposes markFatalExceptionHandled and delegates to the native module', async () => {
-    await Plugin.markFatalExceptionHandled()
-    expect(nativeMock.markFatalExceptionHandled).toHaveBeenCalledTimes(1)
-    expect(typeof (Plugin.default as unknown as { markFatalExceptionHandled?: unknown }).markFatalExceptionHandled).toBe(
-      'function'
-    )
+    await Plugin.markFatalExceptionHandled('boom')
+    expect(nativeMock.markFatalExceptionHandled).toHaveBeenCalledWith('boom')
+    expect(
+      typeof (Plugin.default as unknown as { markFatalExceptionHandled?: unknown }).markFatalExceptionHandled
+    ).toBe('function')
   })
 })

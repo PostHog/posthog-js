@@ -395,12 +395,23 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     handler(new Error('mark-me'), true)
     await vi.advanceTimersByTimeAsync(100)
 
-    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledTimes(1)
+    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledWith('mark-me')
     expect(previous).not.toHaveBeenCalled()
 
     resolveMark()
     await vi.advanceTimersByTimeAsync(0)
     expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the start of the message native matches its crash report against', async () => {
+    posthog = await readyClient()
+
+    handler(new Error('x'.repeat(200)), true)
+    await vi.advanceTimersByTimeAsync(100)
+    handler({ code: 1 }, true)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(mockPlugin.markFatalExceptionHandled.mock.calls).toEqual([['x'.repeat(80)], ['']])
   })
 
   it('marks the fatal as handled even when remote config disabled exception capture', async () => {

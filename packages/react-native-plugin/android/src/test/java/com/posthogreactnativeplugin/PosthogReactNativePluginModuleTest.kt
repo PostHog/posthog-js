@@ -226,14 +226,16 @@ class PosthogReactNativePluginModuleTest {
     }
   }
 
-  private fun javascriptCrashEvent() =
+  private fun javascriptCrashEvent(message: String = "Error: boom, stack:\nfoo@1:2") =
     PostHogEvent(
       "\$exception",
       "distinct-id",
       properties =
         mutableMapOf(
           "\$exception_list" to
-            listOf(mapOf("type" to "JavascriptException", "module" to "com.facebook.react.common")),
+            listOf(
+              mapOf("type" to "JavascriptException", "module" to "com.facebook.react.common", "value" to message),
+            ),
         ),
     )
 
@@ -244,15 +246,30 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `native JavascriptException is dropped once after the JS layer saw the crash`() {
-    markJsFatalHandled()
+    markJsFatalHandled("boom")
 
     assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
     assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
   }
 
   @Test
+  fun `a marked fatal that never crashed does not hide a later different crash`() {
+    markJsFatalHandled("recovered")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash, stack:\nfoo@1:2")))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: recovered, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a marker without a message matches any JavascriptException`() {
+    markJsFatalHandled("")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+  }
+
+  @Test
   fun `the JS crash marker is not consumed by other exceptions`() {
-    markJsFatalHandled()
+    markJsFatalHandled("boom")
 
     assertNotNull(dropJsHandledFatalCrash(nativeExceptionEvent()))
     assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))

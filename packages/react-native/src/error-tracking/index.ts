@@ -20,6 +20,17 @@ type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
 const LogLevelList: LogLevel[] = ['debug', 'log', 'info', 'warn', 'error']
 
+// Native crash reports truncate the JS message (iOS keeps 175 characters, including its own
+// prefix), so the start of the message is what both sides reliably share.
+const FATAL_MESSAGE_KEY_LENGTH = 80
+
+// The text native matches its fatal JS crash report against. Empty when the error has no
+// string message, which native treats as matching any report.
+function fatalMessageKey(error: unknown): string {
+  const message = typeof error === 'string' ? error : (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' ? Array.from(message).slice(0, FATAL_MESSAGE_KEY_LENGTH).join('') : ''
+}
+
 // user provided configuration
 interface AutocaptureOptions {
   uncaughtExceptions?: boolean
@@ -314,7 +325,7 @@ export class ErrorTracking {
 
   private autocaptureUncaughtErrors() {
     const onUncaughtException = (error: unknown, isFatal: boolean): void | Promise<void> => {
-      const marked = isFatal ? this.markFatalExceptionHandled() : undefined
+      const marked = isFatal ? this.markFatalExceptionHandled(error) : undefined
       if (!this._autocaptureEnabled || isPostHogFetchNetworkError(error)) {
         return marked
       }
@@ -335,15 +346,15 @@ export class ErrorTracking {
   }
 
   // React Native turns this fatal into a native crash once the handler chain finishes. The
-  // native plugin drops that crash report only when this marker says JS saw the error first,
-  // so fatals that bypass this handler (React render errors) still reach error tracking.
-  private markFatalExceptionHandled(): Promise<void> | undefined {
+  // native plugin drops that crash report only when it contains the message marked here, so
+  // fatals that bypass this handler (React render errors) still reach error tracking.
+  private markFatalExceptionHandled(error: unknown): Promise<void> | undefined {
     const bridge = OptionalReactNativePlugin?.markFatalExceptionHandled
     if (!bridge) {
       return undefined
     }
     try {
-      return Promise.resolve(bridge()).catch((e) => {
+      return Promise.resolve(bridge(fatalMessageKey(error))).catch((e) => {
         this.logger.warn(`Failed to mark fatal exception as handled: ${e}`)
       })
     } catch (e) {
