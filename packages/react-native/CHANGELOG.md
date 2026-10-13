@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.81.1
+
+### Patch Changes
+
+- [#5290](https://github.com/PostHog/posthog-js/pull/5290) [`f3ca9c4`](https://github.com/PostHog/posthog-js/commit/f3ca9c48e7610cf1bdd4124fcf02e443a679be17) Thanks [@tsayin4](https://github.com/tsayin4)! - Fix fatal crashes being reported without a stack trace since 4.77.0 when a stack frame has no chunk ID.
+  (2026-10-13)
+
 ## 4.81.0
 
 ### Minor Changes
