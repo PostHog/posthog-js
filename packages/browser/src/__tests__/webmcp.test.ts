@@ -38,6 +38,18 @@ describe('WebMCP', () => {
     const capturedProperties = (posthog: PostHog, index = 0): Record<string, unknown> =>
         vi.mocked(posthog.capture).mock.calls[index][1] as Record<string, unknown>
 
+    const createPostHogWithExceptionCapture = () => {
+        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
+        const posthog = createMockPostHog({
+            config: { ...defaultConfig(), capture_webmcp: true },
+            capture,
+            get_property: vi.fn(),
+        })
+        posthog.exceptions = new PostHogExceptions(posthog)
+        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        return { posthog, capture }
+    }
+
     const expectNoMetadata = (properties: Record<string, unknown>): void => {
         for (const property of ['$mcp_intent', '$mcp_intent_source', '$mcp_llm_model', '$mcp_llm_model_source']) {
             expect(properties).not.toHaveProperty(property)
@@ -437,14 +449,7 @@ describe('WebMCP', () => {
     })
 
     it('keeps type-like error result text as a synthetic Error', () => {
-        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            capture,
-            get_property: vi.fn(),
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
-        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        const { posthog, capture } = createPostHogWithExceptionCapture()
 
         register(new WebMCP(posthog), {
             name: 'error_result',
@@ -464,14 +469,7 @@ describe('WebMCP', () => {
     })
 
     it('redacts stack frame credentials without changing locations or the original error', () => {
-        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            capture,
-            get_property: vi.fn(),
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
-        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        const { posthog, capture } = createPostHogWithExceptionCapture()
         const thrown = new Error('tool failed')
         const originalStack = thrown.stack
         const frames = [
@@ -521,14 +519,7 @@ describe('WebMCP', () => {
     })
 
     it('does not capture an exception when its stack frame filename cannot be sanitized', () => {
-        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            capture,
-            get_property: vi.fn(),
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
-        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        const { posthog, capture } = createPostHogWithExceptionCapture()
         const frame = {
             platform: 'web:javascript' as const,
             get filename(): string {
@@ -551,13 +542,7 @@ describe('WebMCP', () => {
     })
 
     it('captures handled errors when the synthetic stack points to the PostHog SDK', () => {
-        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            capture,
-            get_property: vi.fn(),
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
+        const { posthog, capture } = createPostHogWithExceptionCapture()
         vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
             $exception_list: [
                 {
@@ -570,8 +555,6 @@ describe('WebMCP', () => {
                 },
             ],
         })
-        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
-
         register(new WebMCP(posthog), {
             name: 'error_result',
             execute: () => ({ isError: true, content: [{ type: 'text', text: 'result failure' }] }),
@@ -607,14 +590,7 @@ describe('WebMCP', () => {
     })
 
     it('redacts all exception values without changing the errors or their stacks', () => {
-        const capture = vi.fn().mockReturnValue({ uuid: 'exception-uuid', event: '$exception', properties: {} })
-        const posthog = createMockPostHog({
-            config: { ...defaultConfig(), capture_webmcp: true },
-            capture,
-            get_property: vi.fn(),
-        })
-        posthog.exceptions = new PostHogExceptions(posthog)
-        posthog.captureException = PostHog.prototype.captureException.bind(posthog)
+        const { posthog, capture } = createPostHogWithExceptionCapture()
         const privateValue = 'alice@example.com'
         const cause = new Error(`cause ${privateValue}`)
         const member = new Error(`member ${privateValue}`)
