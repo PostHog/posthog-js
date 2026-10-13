@@ -1,6 +1,6 @@
 import { test as base, Page, expect } from '@playwright/test'
-import { PostHog } from '@/posthog-core'
-import { CaptureResult } from '@/types'
+import { PostHog } from '../../../src/posthog-core'
+import { CaptureResult } from '../../../src/types'
 import { shouldSkipForVersion } from '../../compat-skips'
 
 export type StaticOverrides = Record<string, string>
@@ -88,9 +88,7 @@ export const test = base.extend<{
                 return this.waitForResponse(urlPattern)
             })
 
-            await options.action()
-
-            await Promise.allSettled(responsePromises)
+            await Promise.all([...responsePromises, Promise.resolve().then(options.action)])
         }
         page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {
             const capturedEvents = await this.capturedEvents()

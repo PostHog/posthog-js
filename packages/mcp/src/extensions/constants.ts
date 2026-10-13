@@ -10,7 +10,7 @@ export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain in 15-25 words, in
 export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. "claude-opus-4-8", "gpt-5.2"). Used for analytics only. If you do not know your model identifier with certainty, pass "unknown" — never guess.`
 
 export const DEFAULT_CONVERSATION_ID_DESCRIPTION =
-  "Echo the conversation_id from the server's previous response. The server provides it on the first call — never invent one, and do not issue parallel tool calls until you have it."
+  "Pass the exact conversation_id from the server's previous response, unchanged. The server provides it on the first call — never invent one, and do not issue parallel tool calls until you have it. Keep passing the same conversation_id for the rest of the conversation, including after later user messages or on a different task; do not reset it when the user starts a new request."
 
 export const POSTHOG_MCP_ANALYTICS_SOURCE = 'posthog_mcp_analytics'
 
@@ -55,7 +55,10 @@ export const PostHogMCPAnalyticsProperty = {
   FeedbackTaskCompleted: '$mcp_feedback_task_completed',
   FeedbackTool: '$mcp_feedback_tool',
   FeedbackType: '$mcp_feedback_type',
+  Interface: '$mcp_interface',
   IsError: '$mcp_is_error',
+  InputAliasesUsed: '$mcp_input_aliases_used',
+  InputKeys: '$mcp_input_keys',
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
@@ -65,6 +68,7 @@ export const PostHogMCPAnalyticsProperty = {
   ProtocolVersion: '$mcp_protocol_version',
   ResourceName: '$mcp_resource_name',
   Response: '$mcp_response',
+  ServerBuild: '$mcp_server_build',
   ServerName: '$mcp_server_name',
   ServerVersion: '$mcp_server_version',
   SessionId: '$session_id',

@@ -1,14 +1,21 @@
-import { PostHog } from '../posthog-core'
+import type { SpyInstance as VitestSpyInstance } from 'vitest'
+import { defaultConfig, PostHog } from '../posthog-core'
+import { BrowserAutocapture } from '../browser-autocapture'
 import type { PostHogConfig } from '../types'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {
+    it('keeps synchronous replay fetch disabled by default', () => {
+        expect(defaultConfig().__preview_replay_sync_fetch).toBe(false)
+        expect(defaultConfig('2026-05-30').__preview_replay_sync_fetch).toBe(false)
+    })
+
     describe('memory persistence without bootstrap.distinctID', () => {
         // The warning must reach customers running the default debug:false config, so it goes through
         // console.warn directly rather than logger.warn (which is silent unless debug is enabled). These
         // tests spy on console.warn to prove the message is actually visible.
-        let warnSpy: vi.SpyInstance
+        let warnSpy: VitestSpyInstance
 
         beforeEach(() => {
             warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -532,6 +539,10 @@ describe('config', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { defaults: '2026-08-30' })
             expect(posthog.config.autocapture).toBe(true)
+            const autocapture = new BrowserAutocapture(posthog)
+            expect(autocapture['_refreshConfig']().capture_copied_text).toBeFalsy()
+            posthog.set_config({ autocapture: { capture_copied_text: true } })
+            expect(autocapture['_refreshConfig']().capture_copied_text).toBe(true)
         })
 
         it('maps the deprecated preview option to cookieWinsOnConflict', () => {

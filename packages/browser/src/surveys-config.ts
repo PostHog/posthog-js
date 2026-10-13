@@ -18,5 +18,6 @@ export interface SurveysConfigSource {
     isOptedOut(): boolean
     isCapturing(): boolean
     getExtensions(): SurveysExtensionHost | undefined
-    createEventReceiver(): SurveyEventReceiver
+    createEventReceiver(onActivationChanged: () => void): SurveyEventReceiver
+    onMatchingConditionsChanged?(callback: () => void): () => void
 }

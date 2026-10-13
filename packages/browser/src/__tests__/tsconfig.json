@@ -4,9 +4,15 @@
         "skipLibCheck": true,
         "strict": false,
         "noImplicitReturns": false,
-        "typeRoots": ["../../node_modules/@types", "../../src/types"],
-        "allowJs": true
+        "allowJs": true,
+        "types": ["node", "vitest/globals"],
+        "baseUrl": ".",
+        "paths": {
+            "@posthog/browser-common/tests/client-conformance": [
+                "../../../browser-common/tests/helpers/client-conformance.ts"
+            ]
+        }
     },
-    "include": ["./**/*.ts*", "setup.js"],
+    "include": ["./**/*.ts*", "setup.js", "../*.d.ts"],
     "exclude": []
 }

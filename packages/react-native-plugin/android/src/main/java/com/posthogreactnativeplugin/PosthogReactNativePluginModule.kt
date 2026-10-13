@@ -17,8 +17,10 @@ import com.facebook.react.common.JavascriptException
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.posthog.PostHog
 import com.posthog.PostHogConfig
+import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogReplayIntegration
 import com.posthog.android.replay.PostHogScreenshotColorMode
 import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
@@ -76,6 +78,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = getMap(sessionReplayConfig, "sdkReplayConfig"),
       decideReplayConfig = getMap(sessionReplayConfig, "decideReplayConfig"),
       nativeErrorTrackingAutocapture = getBoolean(errorTrackingConfig, "nativeAutocapture", false),
+      androidNdkCrashes = getBoolean(errorTrackingConfig, "androidNdkCrashes", false),
       exceptionStepsConfig = getMap(errorTrackingConfig, "exceptionSteps"),
       pushConfig = getMap(pluginConfig, "push"),
       promise = promise,
@@ -98,6 +101,7 @@ class PosthogReactNativePluginModule(
       sdkReplayConfig = sdkReplayConfig,
       decideReplayConfig = decideReplayConfig,
       nativeErrorTrackingAutocapture = false,
+      androidNdkCrashes = false,
       exceptionStepsConfig = null,
       pushConfig = null,
       promise = promise,
@@ -112,6 +116,7 @@ class PosthogReactNativePluginModule(
     sdkReplayConfig: ReadableMap?,
     decideReplayConfig: ReadableMap?,
     nativeErrorTrackingAutocapture: Boolean,
+    androidNdkCrashes: Boolean,
     exceptionStepsConfig: ReadableMap?,
     pushConfig: ReadableMap?,
     promise: Promise,
@@ -155,7 +160,7 @@ class PosthogReactNativePluginModule(
               captureScreenViews = false
               flushAt = theFlushAt
               theRequestHeaders?.let { requestHeaders = it }
-              errorTrackingConfig.autoCapture = nativeErrorTrackingAutocapture
+              applyErrorTrackingConfig(nativeErrorTrackingAutocapture, androidNdkCrashes)
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.
@@ -167,6 +172,7 @@ class PosthogReactNativePluginModule(
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // The JS layer already captured them, so drop the native duplicate.
               errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
+              addBeforeSend { restoreJsFatalCaptureProperties(it) }
 
               // Always apply the session replay configuration so that recording started later
               // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
@@ -270,6 +276,22 @@ class PosthogReactNativePluginModule(
     } catch (e: Throwable) {
       logError("isEnabled", e)
       promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun getSessionReplayDebugProperties(promise: Promise) {
+    try {
+      // Read the config the SDK runs, not the one this module built: the SDK ignores a second setup().
+      val integration =
+        PostHog.getConfig<PostHogAndroidConfig>()
+          ?.integrations
+          ?.filterIsInstance<PostHogReplayIntegration>()
+          ?.firstOrNull()
+      promise.resolve(Arguments.makeNativeMap(integration?.debugProperties() ?: emptyMap()))
+    } catch (e: Throwable) {
+      logError("getSessionReplayDebugProperties", e)
+      promise.resolve(Arguments.createMap())
     }
   }
 
@@ -436,12 +458,14 @@ class PosthogReactNativePluginModule(
       // ReadableMap.toHashMap() is HashMap<String, Any?>; the native API takes Map<String, Any>?.
       @Suppress("UNCHECKED_CAST")
       val nativeProperties = properties.toHashMap() as Map<String, Any>
-      PostHog.capture(
-        event = "\$exception",
-        distinctId = distinctId.takeIf { it.isNotEmpty() },
-        properties = nativeProperties,
-        timestamp = parsedTimestamp,
-      )
+      withJsFatalCaptureProperties(nativeProperties) {
+        PostHog.capture(
+          event = "\$exception",
+          distinctId = distinctId.takeIf { it.isNotEmpty() },
+          properties = nativeProperties,
+          timestamp = parsedTimestamp,
+        )
+      }
       promise.resolve(null)
     } catch (e: Throwable) {
       logError("captureFatalException", e)
@@ -702,6 +726,49 @@ class PosthogReactNativePluginModule(
   }
 }
 
+// posthog-android computes these from its own state, which JS never syncs (the app's
+// `personProfiles` mode, identify, person processing started by `group()` and friends), and
+// newer versions no longer let caller properties override them. JS decided them for its fatal
+// crash, so its values stand.
+private val JS_OWNED_FATAL_CAPTURE_KEYS = listOf("\$process_person_profile", "\$is_identified")
+
+// Set only while the JS layer's own fatal capture runs; posthog-android runs `beforeSend`
+// on the calling thread, so nothing else it emits sees these properties.
+private val jsFatalCaptureProperties = ThreadLocal<Map<String, Any>?>()
+
+internal fun <T> withJsFatalCaptureProperties(
+  properties: Map<String, Any>,
+  block: () -> T,
+): T {
+  jsFatalCaptureProperties.set(properties)
+  try {
+    return block()
+  } finally {
+    jsFatalCaptureProperties.remove()
+  }
+}
+
+internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent {
+  val jsProperties = jsFatalCaptureProperties.get()
+  if (event.event != "\$exception" || jsProperties == null) {
+    return event
+  }
+  for (key in JS_OWNED_FATAL_CAPTURE_KEYS) {
+    if (!jsProperties.containsKey(key)) {
+      continue
+    }
+    // The JS map can hold nulls despite its type (`toHashMap()`); a null is omitted on the
+    // wire, so drop native's value rather than send it.
+    val value: Any? = jsProperties[key]
+    if (value == null) {
+      event.properties?.remove(key)
+    } else {
+      event.properties?.put(key, value)
+    }
+  }
+  return event
+}
+
 // The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly
 // rather than trusting a locale-dependent default, and treat anything unparseable as a
 // caller error: silently substituting "now" would attribute the crash to the wrong instant.
@@ -740,6 +807,16 @@ private fun getDoubleOrNull(
   map: ReadableMap?,
   key: String,
 ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+// Two separate native features: autoCapture covers JVM crashes, while captureNativeCrashes
+// installs the tombstone scanner that reports NDK crashes on the next launch.
+internal fun PostHogAndroidConfig.applyErrorTrackingConfig(
+  nativeAutocapture: Boolean,
+  androidNdkCrashes: Boolean,
+) {
+  errorTrackingConfig.autoCapture = nativeAutocapture
+  errorTrackingConfig.captureNativeCrashes = androidNdkCrashes
+}
 
 internal fun applyScreenshotConfig(
   map: ReadableMap?,

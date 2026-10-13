@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { parseSemver } from './release-utils.ts'
-import { putS3ObjectFromFile, s3ObjectExists } from './s3.ts'
+import { putS3ObjectFromFile, s3ObjectMatchesFile } from './s3.ts'
+import { mapConcurrent } from './concurrency.ts'
 
 const require = createRequire(import.meta.url)
 const mimeTypes = require('mime-types') as {
@@ -179,65 +180,54 @@ async function uploadReleaseAssets(
     uploads: PlannedAssetUpload[],
     label: string,
     options: { ifNoneMatch?: string } = {}
-): Promise<string[]> {
+): Promise<void> {
     if (uploads.length === 0) {
-        return []
+        return
     }
 
     console.log(`==> Uploading ${label} to s3://${bucket}`)
 
-    await Promise.all(
-        uploads.map((upload) =>
-            putS3ObjectFromFile(bucket, upload.key, upload.filePath, {
-                cacheControl: upload.cacheControl,
-                contentType: upload.contentType,
-                ifNoneMatch: options.ifNoneMatch,
-            })
-        )
+    await mapConcurrent(uploads, (upload) =>
+        putS3ObjectFromFile(bucket, upload.key, upload.filePath, {
+            cacheControl: upload.cacheControl,
+            contentType: upload.contentType,
+            ifNoneMatch: options.ifNoneMatch,
+        })
     )
-
-    return uploads.map((upload) => upload.key)
 }
 
-async function verifyUploadedObject(bucket: string, key: string): Promise<void> {
-    if (!(await s3ObjectExists(bucket, key))) {
-        throw new Error(`Expected uploaded object s3://${bucket}/${key} to exist`)
-    }
+async function matchesUploadedAsset(bucket: string, upload: PlannedAssetUpload): Promise<boolean> {
+    return s3ObjectMatchesFile(bucket, upload.key, upload.filePath, upload)
 }
 
-async function verifyUploadedAssets(bucket: string, keys: string[], label: string): Promise<void> {
-    console.log(`==> Verifying ${label} exist in s3://${bucket}`)
-    await Promise.all(keys.map((key) => verifyUploadedObject(bucket, key)))
+async function verifyUploadedAssets(bucket: string, uploads: PlannedAssetUpload[], label: string): Promise<void> {
+    console.log(`==> Verifying ${label} bytes and metadata in s3://${bucket}`)
+    await mapConcurrent(uploads, async (upload) => {
+        if (!(await matchesUploadedAsset(bucket, upload))) {
+            throw new Error(`Expected uploaded object s3://${bucket}/${upload.key} to exist`)
+        }
+    })
 }
 
 export async function assertCanUploadImmutableAssets(
     bucket: string,
     uploads: PlannedAssetUpload[],
     forceOverwrite: boolean,
-    objectExists: (bucket: string, key: string) => Promise<boolean> = s3ObjectExists
+    matchesExisting: (bucket: string, upload: PlannedAssetUpload) => Promise<boolean> = matchesUploadedAsset
 ): Promise<void> {
     if (forceOverwrite) {
         return
     }
 
-    const existingKeys = (
-        await Promise.all(uploads.map(async ({ key }) => ((await objectExists(bucket, key)) ? key : undefined)))
-    ).filter((key): key is string => key !== undefined)
-
-    if (existingKeys.length > 0) {
-        const examples = existingKeys.slice(0, 3).map((key) => `s3://${bucket}/${key}`)
-        const remaining = existingKeys.length - examples.length
-        const suffix = remaining > 0 ? ` (and ${remaining} more)` : ''
-        throw new Error(
-            `Refusing to overwrite existing immutable release assets: ${examples.join(', ')}${suffix}. Retry with force overwrite enabled (CLI: --force-overwrite) to replace this S3 release.`
-        )
-    }
+    // Check the whole immutable set before writing anything. Missing or identical
+    // objects are safe to resume; mismatches and lookup failures throw.
+    await mapConcurrent(uploads, (upload) => matchesExisting(bucket, upload))
 }
 
 export async function uploadPostHogJsS3(
     bucket: string,
     version: string,
-    options: { publishMutableAliases?: boolean; forceOverwrite?: boolean } = {}
+    options: { publishMutableAliases?: boolean; forceOverwrite?: boolean; aliasesOnly?: boolean } = {}
 ): Promise<void> {
     const parsedVersion = parseSemver(version)
     if (!parsedVersion) {
@@ -245,11 +235,17 @@ export async function uploadPostHogJsS3(
     }
 
     const assets = await collectReleaseAssets()
+    if (assets.length === 0) throw new Error('No release assets found')
     const publishMutableAliases = options.publishMutableAliases ?? true
     const forceOverwrite = options.forceOverwrite ?? false
+    if (options.aliasesOnly && (!publishMutableAliases || forceOverwrite)) {
+        throw new Error('Alias promotion cannot upload or overwrite immutable assets')
+    }
     const uploadPlans = buildAssetUploadPlans(version, assets, publishMutableAliases)
 
-    await assertCanUploadImmutableAssets(bucket, uploadPlans.immutable, forceOverwrite)
+    if (!options.aliasesOnly) {
+        await assertCanUploadImmutableAssets(bucket, uploadPlans.immutable, forceOverwrite)
+    }
 
     console.log(`==> Uploading posthog-js v${version}`)
     console.log(`    immutable prefix: s3://${bucket}/static/${version}/`)
@@ -262,20 +258,20 @@ export async function uploadPostHogJsS3(
         console.log(`    compatibility prefix: s3://${bucket}/static/`)
     }
 
-    const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets', {
-        ifNoneMatch: forceOverwrite ? undefined : '*',
-    })
-    await verifyUploadedAssets(bucket, immutableKeys, 'immutable assets')
+    if (!options.aliasesOnly) {
+        await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets', {
+            ifNoneMatch: forceOverwrite ? undefined : '*',
+        })
+    }
+    // Alias-only jobs consume the exact same artifacts, after the workflow's
+    // cross-region barrier. Recheck locally before exposing any mutable alias.
+    await verifyUploadedAssets(bucket, uploadPlans.immutable, 'immutable assets')
 
-    const majorAliasKeys = await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
-    await verifyUploadedAssets(bucket, majorAliasKeys, 'major-version alias assets')
+    await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
+    await verifyUploadedAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
 
-    const compatibilityKeys = await uploadReleaseAssets(
-        bucket,
-        uploadPlans.compatibility,
-        'top-level compatibility assets'
-    )
-    await verifyUploadedAssets(bucket, compatibilityKeys, 'top-level compatibility assets')
+    await uploadReleaseAssets(bucket, uploadPlans.compatibility, 'top-level compatibility assets')
+    await verifyUploadedAssets(bucket, uploadPlans.compatibility, 'top-level compatibility assets')
 
     if (uploadPlans.majorAlias.length > 0 || uploadPlans.compatibility.length > 0) {
         console.log(

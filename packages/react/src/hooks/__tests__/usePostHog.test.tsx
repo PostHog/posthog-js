@@ -3,8 +3,6 @@ import { renderHook } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { usePostHog } from '..'
 
-vi.useFakeTimers()
-
 const posthog = { posthog_client: true } as unknown as PostHog
 
 describe('usePostHog hook', () => {
@@ -14,6 +12,6 @@ describe('usePostHog hook', () => {
                 <PostHogProvider client={posthog}>{children}</PostHogProvider>
             ),
         })
-        expect(result.current).toEqual(posthog)
+        expect(result.current).toBe(posthog)
     })
 })

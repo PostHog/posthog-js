@@ -113,9 +113,7 @@ describe('PostHog Node.js metrics', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('is reachable through the IPostHog interface', () => {
-    // Compile-time check: `metrics` must be part of the exported interface,
-    // not just the concrete client class.
+  it('exposes the metrics count method at runtime', () => {
     const asInterface: IPostHog = posthog
     expect(typeof asInterface.metrics.count).toBe('function')
   })

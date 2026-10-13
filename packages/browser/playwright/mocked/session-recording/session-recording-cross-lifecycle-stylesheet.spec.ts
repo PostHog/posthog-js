@@ -123,20 +123,30 @@ test.describe('Session recording handles a pending stylesheet across rrweb check
         })
 
         await page.locator('[data-cy-input]').type('hello')
-        await page.waitForResponse('**/ses/*')
-
-        await page.waitForTimeout(4000)
-        await page.locator('[data-cy-input]').type(' again')
-        await page.waitForResponse('**/ses/*')
-
-        await page.waitForTimeout(4000)
-        await page.locator('[data-cy-input]').type(' once more')
-        await page.waitForResponse('**/ses/*')
-
+        await expect
+            .poll(async () => countFullSnapshots(await page.capturedEvents()), { timeout: 15000 })
+            .toBeGreaterThanOrEqual(3)
+        const cssResponse = page.waitForResponse('**/cross-lifecycle/slow.css')
         releaseCss()
-
+        await cssResponse
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const link = document.querySelector('link[href="/cross-lifecycle/slow.css"]') as HTMLLinkElement
+                    return !!link?.sheet?.cssRules.length
+                })
+            )
+            .toBe(true)
         await page.locator('[data-cy-input]').type(' final')
-        await page.waitForResponse('**/ses/*')
+        await expect
+            .poll(async () => {
+                const events = await page.capturedEvents()
+                const id = findLinkNodeId(events, 'slow.css')
+                return id === undefined ? 0 : countCssTextDeliveries(events, id)
+            })
+            .toBe(1)
+        // Observe a further complete flush cycle for duplicate deliveries.
+        await page.waitForTimeout(2500)
 
         const events = await page.capturedEvents()
 

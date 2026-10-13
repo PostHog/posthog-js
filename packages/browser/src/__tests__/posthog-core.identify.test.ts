@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { USER_STATE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
@@ -13,7 +14,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
 
 describe('identify()', () => {
     let instance: PostHog
-    let beforeSendMock: vi.Mock
+    let beforeSendMock: VitestMock
 
     beforeEach(() => {
         beforeSendMock = vi.fn().mockImplementation((e) => e)
@@ -90,8 +91,8 @@ describe('identify()', () => {
             })
             .mockReturnValue(false)
         vi.spyOn(instance.persistence!, 'consumeCookieIdentityChange').mockReturnValueOnce(true).mockReturnValue(false)
-        const resetFeatureFlags = instance.featureFlags!.reset as vi.Mock
-        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as vi.Mock
+        const resetFeatureFlags = instance.featureFlags!.reset as VitestMock
+        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as VitestMock
 
         instance.identify('a-new-id', { plan: 'pro' })
 

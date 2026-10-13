@@ -55,7 +55,9 @@ describe('Surveys: resuming a shuffled survey', () => {
         HTMLFormElement.prototype.submit = vi.fn()
     })
 
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
 
     test('resumes on the question the respondent left off on', () => {
         shuffleWith(0)

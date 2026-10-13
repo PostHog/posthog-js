@@ -261,16 +261,25 @@ export class PostHogPersistence {
     /**
      * @param {PostHogConfig} config initial PostHog configuration
      * @param {boolean=} isDisabled should persistence be disabled (e.g. because of consent management)
+     * @param {boolean=} allowDisabledRead restore stored state read-only during disabled initialization
      */
-    constructor(config: PostHogConfig, isDisabled?: boolean, ownsSplitStorage: boolean = true) {
+    constructor(
+        config: PostHogConfig,
+        isDisabled?: boolean,
+        ownsSplitStorage: boolean = true,
+        allowDisabledRead: boolean = !config.cookieless_mode
+    ) {
         this._config = config
         this._ownsSplitStorage = ownsSplitStorage
         this.props = {}
         this._campaign_params_url = undefined
         this._name = parseName(config)
+        this._disabled = config.disable_persistence || !!isDisabled
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
-        this.load()
+        // Retain identity before disabled initialization clears storage, without migration writes.
+        // Core permits this read while consent is pending, but not for cookieless tracking.
+        this.load(allowDisabledRead)
         // Preserve only values for which load() selected a fresher source than
         // the current storage entry. Ordinary loaded values remain mergeable.
         this._markLoadedCrossTabFeatureFlagChangesPending()
@@ -953,7 +962,8 @@ export class PostHogPersistence {
         // so create it once for this specific config and use it if necessary
         const localPlusCookieStore = createLocalPlusCookieStore(
             config['cookie_persisted_properties'] || [],
-            config.cookieWinsOnConflict
+            config.cookieWinsOnConflict,
+            () => !!this._disabled
         )
 
         let store: PersistentStore
@@ -1033,8 +1043,8 @@ export class PostHogPersistence {
     /**
      * Reload persisted properties from storage.
      *
-     * @param allowDisabled - Read while this instance is disabled when shared consent changed in another tab
-     * and the in-memory disabled state has not yet been reconciled.
+     * @param allowDisabled - Read without migration writes while disabled, for initial identity restoration
+     * or when shared consent changed before the in-memory disabled state was reconciled.
      */
     load(allowDisabled: boolean = false): void {
         if (this._disabled && !allowDisabled) {
@@ -1072,7 +1082,9 @@ export class PostHogPersistence {
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
             if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
                 this._cookieIdentityChangePending = true
-                sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                if (!this._disabled) {
+                    sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                }
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
                 const siblingReset =
@@ -1097,6 +1109,9 @@ export class PostHogPersistence {
                     }
                 })
                 affectedGroups.forEach((group) => {
+                    if (this._disabled) {
+                        return
+                    }
                     const groupProps: Properties = {}
                     each(this.props, (value, key) => {
                         if (getPersistenceKeyPolicy(key)?.storageGroup === group) {

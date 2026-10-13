@@ -219,6 +219,80 @@ it.each(['generateContent', 'generateContentStream'] as const)(
   }
 )
 
+it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s captures tool-call history without changing the provider request',
+  async (operation) => {
+    const contents = [
+      { role: 'user', parts: [{ text: 'Weather in Paris?' }] },
+      { role: 'model', parts: [{ functionCall: { id: 'call_1', name: 'weather', args: { city: 'Paris' } } }] },
+      {
+        role: 'user',
+        parts: [{ functionResponse: { id: 'call_1', name: 'weather', response: { temperature: 21 } } }],
+      },
+    ]
+    const response = {
+      candidates: [{ content: { role: 'model', parts: [{ text: 'It is 21°C.' }] }, finishReason: 'STOP' }],
+      usageMetadata: usage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents },
+      operation === 'generateContentStream' ? [response] : response
+    )
+
+    expect(event.properties.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      {
+        role: 'model',
+        content: [{ type: 'function', id: 'call_1', function: { name: 'weather', arguments: { city: 'Paris' } } }],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1', content: { temperature: 21 } }] },
+    ])
+  }
+)
+
+it.each(['generateContent', 'generateContentStream'] as const)(
+  'built Gemini %s captures a function response with only media parts',
+  async (operation) => {
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              id: 'call_2',
+              name: 'read_image',
+              parts: [{ inlineData: { mimeType: 'image/png', data: 'U0hPUlQgQklOQVJZ' } }],
+            },
+          },
+        ],
+      },
+    ]
+    const response = {
+      candidates: [{ content: { role: 'model', parts: [{ text: 'Image received.' }] }, finishReason: 'STOP' }],
+      usageMetadata: usage,
+    }
+    const { event } = await runSynthetic(
+      operation,
+      { model, contents },
+      operation === 'generateContentStream' ? [response] : response
+    )
+
+    expect(event.properties.$ai_input).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_2',
+            content: { parts: [{ inlineData: { mimeType: 'image/png', data: '[base64 image/png redacted]' } }] },
+          },
+        ],
+      },
+    ])
+  }
+)
+
 it.each([false, true])(
   'built Gemini embeddings preserve vectors but omit them from analytics with privacy=%s',
   async (privacy) => {

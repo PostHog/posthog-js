@@ -97,6 +97,7 @@ test.describe('flags', () => {
                 $initial_li_fat_id: null,
                 $initial_mc_cid: null,
                 $initial_msclkid: null,
+                $initial_oppref: null,
                 $initial_pathname: '/playground/cypress/index.html',
                 $initial_qclid: null,
                 $initial_rdt_cid: null,

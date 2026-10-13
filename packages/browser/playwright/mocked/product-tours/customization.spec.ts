@@ -267,6 +267,14 @@ test.describe('product tours - customization', () => {
                 return link?.href
             })
             expect(href).toBe('https://example.com/docs')
+            await context.route('https://example.com/docs', (route) =>
+                route.fulfill({ body: '<h1>Local docs control</h1>', contentType: 'text/html' })
+            )
+            const popupPromise = page.waitForEvent('popup')
+            await tourContainer(page, 'link-button').locator('a.ph-tour-button').click()
+            const popup = await popupPromise
+            await expect(popup).toHaveURL('https://example.com/docs')
+            await expect(popup.locator('h1')).toHaveText('Local docs control')
         })
 
         test('previous_step button action goes back', async ({ page, context }) => {

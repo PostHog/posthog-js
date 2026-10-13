@@ -43,7 +43,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('still calls the original error handler when legacy capture throws', () => {
-        const originalErrorHandler = vi.fn(() => true)
+        const originalErrorHandler = vi.fn<Parameters<OnErrorEventHandlerNonNull>, boolean>(() => true)
         const capture = vi.fn(() => {
             throw new Error('capture failed')
         })
@@ -59,7 +59,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('still calls the original error handler when legacy property building throws', () => {
-        const originalErrorHandler = vi.fn(() => true)
+        const originalErrorHandler = vi.fn<Parameters<OnErrorEventHandlerNonNull>, boolean>(() => true)
         const error = errorWithThrowingMessage()
         if (!window) {
             throw new Error('window is required for this test')

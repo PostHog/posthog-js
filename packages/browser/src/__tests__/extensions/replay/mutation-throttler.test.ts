@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import { MutationThrottler } from '../../../extensions/replay/external/mutation-throttler'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -28,16 +29,18 @@ const makeEvent = (mutations: {
 describe('MutationThrottler', () => {
     const mockGetNode = vi.fn()
     const mockGetId = vi.fn()
-    const rrwebMock: vi.Mock<rrwebRecord> = {
+    const rrwebMock: rrwebRecord = Object.assign(vi.fn<Parameters<rrwebRecord>, ReturnType<rrwebRecord>>(), {
+        addCustomEvent: vi.fn(),
+        takeFullSnapshot: vi.fn(),
         mirror: {
             getNode: mockGetNode,
             getId: mockGetId,
         },
-    } as unknown as vi.Mock<rrwebRecord>
+    })
 
     let mutationThrottler: MutationThrottler
     let onBlockedNodeMock: (id: number, node: Node | null) => void
-    let onDroppedAttributeMutationsMock: vi.Mock
+    let onDroppedAttributeMutationsMock: VitestMock
 
     beforeEach(() => {
         mockGetNode.mockReturnValueOnce({ nodeName: 'div' })
@@ -45,13 +48,15 @@ describe('MutationThrottler', () => {
 
         onBlockedNodeMock = vi.fn()
         onDroppedAttributeMutationsMock = vi.fn()
-        mutationThrottler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+        mutationThrottler = new MutationThrottler(rrwebMock, {
             onBlockedNode: onBlockedNodeMock,
             onDroppedAttributeMutations: onDroppedAttributeMutationsMock,
         })
     })
 
     afterEach(() => {
+        mutationThrottler.stop()
+        vi.clearAllTimers()
         vi.clearAllMocks()
     })
 
@@ -177,8 +182,8 @@ describe('MutationThrottler', () => {
     })
 
     describe('byte budget', () => {
-        let onDroppedOversizedMutation: vi.Mock
-        let requestFullSnapshot: vi.Mock
+        let onDroppedOversizedMutation: VitestMock
+        let requestFullSnapshot: VitestMock
         let throttler: MutationThrottler
 
         const eventOfRoughSize = (chars: number): eventWithTime =>
@@ -187,7 +192,7 @@ describe('MutationThrottler', () => {
         beforeEach(() => {
             onDroppedOversizedMutation = vi.fn()
             requestFullSnapshot = vi.fn()
-            throttler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+            throttler = new MutationThrottler(rrwebMock, {
                 bytesBucketSize: 1000,
                 bytesRefillRate: 100,
                 resyncIntervalMs: 10_000,
@@ -263,7 +268,7 @@ describe('MutationThrottler', () => {
         })
 
         test('a resync interval of 0 falls back to the default cooldown', () => {
-            const zeroInterval = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+            const zeroInterval = new MutationThrottler(rrwebMock, {
                 bytesBucketSize: 1000,
                 bytesRefillRate: 1,
                 resyncIntervalMs: 0,
@@ -280,7 +285,7 @@ describe('MutationThrottler', () => {
         })
 
         test('a bucket size of 0 disables the byte budget', () => {
-            const unlimited = new MutationThrottler(rrwebMock as unknown as rrwebRecord, { bytesBucketSize: 0 })
+            const unlimited = new MutationThrottler(rrwebMock, { bytesBucketSize: 0 })
 
             expect(unlimited.throttleMutations(eventOfRoughSize(5000))).toBeDefined()
         })

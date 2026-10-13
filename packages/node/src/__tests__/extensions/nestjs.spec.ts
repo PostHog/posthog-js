@@ -19,7 +19,10 @@ const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
 const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
 
-  const call = mockedFetch.mock.calls.reverse().find((x) => (x[0] as string).includes('/batch/'))
+  const call = mockedFetch.mock.calls
+    .slice()
+    .reverse()
+    .find((x) => (x[0] as string).includes('/batch/'))
   if (!call) {
     return undefined
   }
@@ -484,9 +487,9 @@ describe('PostHogInterceptor', () => {
     })
 
     it('should capture 5xx HttpException-like errors', async () => {
-      const error: any = new Error('Internal Server Error')
-      error.getStatus = () => 500
-      const context = createMockContext()
+      const error: any = new Error('Service Unavailable')
+      error.getStatus = () => 503
+      const context = createMockContext({ statusCode: 200 })
 
       await expect(lastValueFrom(interceptor.intercept(context, createMockCallHandler(error)))).rejects.toThrow(error)
       await waitForFlushTimer(posthog)
@@ -494,7 +497,7 @@ describe('PostHogInterceptor', () => {
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
       expect(batchEvents![0].event).toBe('$exception')
-      expect(batchEvents![0].properties.$response_status_code).toBe(500)
+      expect(batchEvents![0].properties.$response_status_code).toBe(503)
     })
   })
 
@@ -513,6 +516,7 @@ describe('PostHogInterceptor', () => {
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toBeDefined()
       expect(batchEvents![0].event).toBe('$exception')
+      expect(batchEvents![0].properties.$response_status_code).toBe(404)
     })
   })
 })

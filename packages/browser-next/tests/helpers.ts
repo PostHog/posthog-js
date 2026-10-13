@@ -1,4 +1,23 @@
-import type { BrowserFetch, StorageLike } from '../src/core'
+import type { BrowserFetch, RemoteConfig, StorageLike } from '../src/core'
+
+export const localRemoteConfig: RemoteConfig = {
+    supportedCompression: [],
+    toolbarParams: {},
+    toolbarVersion: 'toolbar',
+    isAuthenticated: false,
+    siteApps: [],
+}
+
+export const createRemoteConfigFetch =
+    (config: () => Promise<RemoteConfig | undefined>, fallback?: BrowserFetch): BrowserFetch =>
+    async (input, init) => {
+        if (new URL(String(input)).pathname.endsWith('/config')) {
+            const result = await config()
+            return new Response(JSON.stringify(result), { status: result ? 200 : 500 })
+        }
+        if (fallback) return fallback(input, init)
+        throw new Error(`Unexpected request: ${String(input)}`)
+    }
 
 export class MemoryStorage implements StorageLike {
     readonly values = new Map<string, string>()

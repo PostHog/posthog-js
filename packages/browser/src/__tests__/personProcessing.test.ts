@@ -22,6 +22,7 @@ const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_li_fat_id: null,
     $initial_mc_cid: null,
     $initial_msclkid: null,
+    $initial_oppref: null,
     $initial_pathname: null,
     $initial_qclid: null,
     $initial_rdt_cid: null,
@@ -53,6 +54,7 @@ const CAMPAIGN_PARAMS_NULL = {
     li_fat_id: null,
     mc_cid: null,
     msclkid: null,
+    oppref: null,
     qclid: null,
     rdt_cid: null,
     sccid: null,
@@ -77,10 +79,14 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         mockReferrerGetter,
         document: {
             ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
-            // oxlint-disable-next-line posthog-js/no-add-event-listener
-            addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
-            removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
+            createElement: (...args: Parameters<typeof orig.document.createElement>) =>
+                orig.document.createElement(...args),
+            addEventListener: (...args: Parameters<typeof orig.document.addEventListener>) => {
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                return orig.document.addEventListener(...args)
+            },
+            removeEventListener: (...args: Parameters<typeof orig.document.removeEventListener>) =>
+                orig.document.removeEventListener(...args),
             body: {},
             get referrer() {
                 return mockReferrerGetter()

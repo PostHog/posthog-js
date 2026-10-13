@@ -5,6 +5,12 @@ import { SessionRecordingUrlTrigger, PostHogConfig } from '../../../types'
 // The browser URL is meaningless for Electron/desktop apps served from a generated host.
 // `get_current_url` lets those apps point URL targeting at the logical URL instead.
 describe('get_current_url override for replay URL targeting', () => {
+    const originalLocation = Object.getOwnPropertyDescriptor(window, 'location')!
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', originalLocation)
+    })
+
     const setWindowLocation = (url: string) => {
         Object.defineProperty(window, 'location', {
             value: { href: url },
@@ -74,7 +80,7 @@ describe('get_current_url override for replay URL targeting', () => {
     })
 
     it('applies the override to the URL blocklist', () => {
-        setWindowLocation('https://generated-host.skin/internal-admin')
+        setWindowLocation('https://generated-host.skin/public')
 
         const matcher = createMatcher(() => 'https://app/internal-admin')
         configure(matcher, [], [{ url: '.*internal-admin.*$', matching: 'regex' }])
@@ -85,6 +91,21 @@ describe('get_current_url override for replay URL targeting', () => {
         matcher.checkUrlBlocklist(onPause, vi.fn())
 
         expect(onPause).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not block when only the raw browser URL matches the blocklist', () => {
+        setWindowLocation('https://generated-host.skin/internal-admin')
+
+        const matcher = createMatcher(() => 'https://app/public')
+        configure(matcher, [], [{ url: '.*internal-admin.*$', matching: 'regex' }])
+        const onPause = vi.fn()
+        const onResume = vi.fn()
+
+        matcher.checkUrlBlocklist(onPause, onResume)
+
+        expect(onPause).not.toHaveBeenCalled()
+        expect(onResume).not.toHaveBeenCalled()
+        expect(matcher.urlBlocked).toBe(false)
     })
 
     it('falls back to window.location.href when the override returns an empty string', () => {

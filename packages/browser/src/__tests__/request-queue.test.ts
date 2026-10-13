@@ -1,4 +1,4 @@
-import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from '../request-queue'
+import { RequestQueue } from '../request-queue'
 import { QueuedRequestWithOptions } from '../types'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
@@ -6,35 +6,46 @@ const EPOCH = 1_600_000_000
 
 describe('RequestQueue', () => {
     describe('setting flush timeout', () => {
-        it('can override the flush timeout', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 1000 })
-            expect(queue['_flushTimeoutMs']).toEqual(1000)
-        })
+        const expectDeliveryAt = (queue: RequestQueue, interval: number) => {
+            const send = vi.spyOn(queue as any, '_sendRequest').mockImplementation(() => {})
+            queue.unload()
+            send.mockClear()
+            vi.useFakeTimers()
+            try {
+                queue.enqueue({ url: '/e', data: { event: 'interval-probe' } })
+                queue.enable()
+                vi.advanceTimersByTime(interval - 1)
+                expect(send).not.toHaveBeenCalled()
+                vi.advanceTimersByTime(1)
+                expect(send).toHaveBeenCalledTimes(1)
+                expect(send).toHaveBeenCalledWith(
+                    expect.objectContaining({ url: '/e', data: [{ event: 'interval-probe' }] }),
+                    undefined
+                )
+            } finally {
+                queue.unload()
+                send.mockRestore()
+                vi.useRealTimers()
+            }
+        }
 
-        it('defaults to 3000 when not configured', () => {
-            const queue = new RequestQueue(vi.fn(), {})
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('defaults to 3000 when no config', () => {
-            const queue = new RequestQueue(vi.fn())
-            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
-        })
-
-        it('cannot set below 250', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 249 })
-            expect(queue['_flushTimeoutMs']).toEqual(250)
-        })
-
-        it('cannot set above 5000', () => {
-            const queue = new RequestQueue(vi.fn(), { flush_interval_ms: 5001 })
-            expect(queue['_flushTimeoutMs']).toEqual(5000)
+        it.each([
+            ['explicit override', { flush_interval_ms: 1000 }, 1000],
+            ['empty config', {}, 3000],
+            ['omitted config', undefined, 3000],
+            ['lower clamp', { flush_interval_ms: 249 }, 250],
+            ['upper clamp', { flush_interval_ms: 5001 }, 5000],
+        ] as const)('delivers at the configured interval: %s', (_, config, expected) => {
+            const queue = new RequestQueue(vi.fn(), config)
+            expect(queue['_flushTimeoutMs']).toBe(expected)
+            expectDeliveryAt(queue, expected)
         })
 
         it('can be passed in from posthog config', async () => {
             const posthog = await createPosthogInstance('token', { request_queue_config: { flush_interval_ms: 1000 } })
             expect(posthog.config.request_queue_config.flush_interval_ms).toEqual(1000)
             expect(posthog['_requestQueue']['_flushTimeoutMs']).toEqual(1000)
+            expectDeliveryAt(posthog['_requestQueue'], 1000)
         })
     })
 
@@ -109,6 +120,35 @@ describe('RequestQueue', () => {
                 ],
             ])
         })
+
+        it.each([true, false])(
+            'notifies every batch callback when the first request has a callback: %s',
+            (firstHasCallback) => {
+                const first = vi.fn()
+                const second = vi.fn()
+                const otherBatch = vi.fn()
+                queue.enqueue({
+                    url: '/e',
+                    data: { event: 'first' },
+                    ...(firstHasCallback ? { callback: first, fireCallbackOnDrop: true } : {}),
+                })
+                queue.enqueue({ url: '/e', data: { event: 'second' }, callback: second })
+                queue.enqueue({ url: '/s', data: { event: 'other-batch' }, callback: otherBatch })
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+
+                const batch = vi.mocked(sendRequest).mock.calls[0][0]
+                expect(batch.data).toEqual([{ event: 'first' }, { event: 'second' }])
+                expect(batch.fireCallbackOnDrop).toBeUndefined()
+                expect(batch.callback).toBeDefined()
+                const response = { statusCode: 200 }
+                batch.callback!(response)
+                expect(first).toHaveBeenCalledTimes(firstHasCallback ? 1 : 0)
+                expect(second).toHaveBeenCalledTimes(1)
+                expect(second).toHaveBeenCalledWith(response)
+                expect(otherBatch).not.toHaveBeenCalled()
+            }
+        )
 
         it('does not merge requests that share a batch key but not a batch group', () => {
             queue.enqueue({
@@ -208,13 +248,15 @@ describe('RequestQueue', () => {
         })
 
         it('handles unload', () => {
+            const callback = vi.fn()
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
-            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
+            queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, callback })
             queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
             queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
             queue.unload()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
+            expect(vi.mocked(sendRequest).mock.calls[0][0].callback).toBeUndefined()
             expect(sendRequest).toHaveBeenNthCalledWith(
                 1,
                 {

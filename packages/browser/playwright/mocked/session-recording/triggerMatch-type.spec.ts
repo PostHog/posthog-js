@@ -3,6 +3,10 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForRemoteConfig } from '../utils/setup'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
+test.beforeEach(async ({ page }) => {
+    await page.clock.install()
+})
+
 const startOptions = {
     options: {
         session_recording: {
@@ -110,7 +114,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
             // Try to trigger a recording by interacting
             await page.locator('[data-cy-input]').fill('hello posthog!')
 
-            await page.waitForTimeout(1000)
+            await page.clock.runFor(4500)
 
             // Get all events
             const events = await page.capturedEvents()
@@ -247,7 +251,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
             })
 
             await page.locator('[data-cy-input]').fill('hello posthog!')
-            await page.waitForTimeout(1000)
+            await page.clock.runFor(4500)
 
             // Get all events
             const events = await page.capturedEvents()

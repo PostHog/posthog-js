@@ -67,6 +67,26 @@ describe('config', () => {
                 })
             })
 
+            it('honors the modern masking callback when both modern and deprecated hooks are configured', () => {
+                const posthogConfig = defaultConfig()
+                const modernMask = vi.fn((_request: CapturedNetworkRequest) => undefined)
+                const deprecatedMask = vi.fn(() => ({ url: 'https://example.com/legacy' }))
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = modernMask
+                posthogConfig.session_recording.maskNetworkRequestFn = deprecatedMask
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+                const request: CapturedNetworkRequest = {
+                    name: 'https://example.com/private',
+                    entryType: 'resource',
+                    startTime: 0,
+                    duration: 5,
+                }
+
+                expect(networkOptions.maskRequestFn!(request)).toBeUndefined()
+                expect(modernMask).toHaveBeenCalledTimes(1)
+                expect(modernMask).toHaveBeenCalledWith(request)
+                expect(deprecatedMask).not.toHaveBeenCalled()
+            })
+
             it('redacts denied request and response headers, including credential-shaped custom names', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({

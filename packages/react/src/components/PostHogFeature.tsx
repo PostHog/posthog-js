@@ -32,7 +32,9 @@ export function PostHogFeature({
     const shouldTrackView = trackView ?? true
 
     if (!isUndefined(variant)) {
-        if (isUndefined(match) || variant === match) {
+        // Without a match, any enabled value (true or a variant key) shows the feature. A flag that
+        // evaluated off is `false`, and must show the fallback like a missing flag does.
+        if (isUndefined(match) ? variant !== false : variant === match) {
             const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
             return (
                 <VisibilityAndClickTrackers
