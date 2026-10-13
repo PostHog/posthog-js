@@ -3,6 +3,7 @@ import type {
   MetricAttributes,
   MetricSample,
   MetricType,
+  OtlpExemplar,
   OtlpHistogramDataPoint,
   OtlpMetric,
   OtlpMetricsPayload,
@@ -14,6 +15,7 @@ import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
 import { MAX_FLUSH_BACKOFF_MS, NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
+import { TRACE_FLAGS_SAMPLED, parseTraceparent } from '../traces/traceparent'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
   bucketIndexFor,
@@ -25,6 +27,13 @@ import {
 import type { MetricsHost, ResolvedPostHogMetricsConfig } from './types'
 
 const OTLP_TEMPORALITY_DELTA = 1
+
+interface ExemplarState {
+  traceId: string
+  spanId: string
+  value: number
+  timeMs: number
+}
 
 interface HistogramState {
   count: number
@@ -47,6 +56,8 @@ interface SeriesState {
   total?: number
   last?: number
   hist?: HistogramState
+  /** The last sample recorded inside a sampled span this window. */
+  exemplar?: ExemplarState
 }
 
 /**
@@ -62,6 +73,10 @@ interface SeriesState {
  * Deliberately unlike logs, no per-user context (distinct ID, session ID) is
  * attached: every attribute value creates a new series, and per-user series
  * are the canonical metrics-cardinality explosion.
+ *
+ * A sample recorded inside a sampled span stamps its series with an exemplar
+ * (trace ID, span ID, value). One per series per window, last sample wins, so a
+ * metric point links to one representative trace at no cardinality cost.
  */
 export class PostHogMetrics {
   private _series = new Map<string, SeriesState>()
@@ -224,7 +239,27 @@ export class PostHogMetrics {
     }
 
     this._fold(state, filtered.value)
+    const traceContext = this._activeTraceContext()
+    if (traceContext) {
+      state.exemplar = { ...traceContext, value: filtered.value, timeMs: Date.now() }
+    }
     this._armFlushTimer()
+  }
+
+  /**
+   * The sampled span a sample is recorded in. An unsampled span is never
+   * exported, so an exemplar pointing at it would link to a missing trace.
+   */
+  private _activeTraceContext(): { traceId: string; spanId: string } | undefined {
+    try {
+      const parsed = parseTraceparent(this._instance.getActiveSpan?.()?.traceparent())
+      if (parsed && parsed.flags === TRACE_FLAGS_SAMPLED) {
+        return { traceId: parsed.traceId, spanId: parsed.spanId }
+      }
+    } catch {
+      // A throwing host never costs the sample itself.
+    }
+    return undefined
   }
 
   /**
@@ -413,6 +448,7 @@ export class PostHogMetrics {
 
       const attributes = toOtlpKeyValueList(state.attributes ?? {}, this._logger)
       const startNano = msToUnixNano(state.windowStartMs)
+      const exemplars = toOtlpExemplars(state.exemplar)
 
       if (state.type === 'count') {
         const dp: OtlpNumberDataPoint = {
@@ -420,6 +456,7 @@ export class PostHogMetrics {
           startTimeUnixNano: startNano,
           timeUnixNano: nowNano,
           asDouble: state.total ?? 0,
+          ...exemplars,
         }
         metric.sum!.dataPoints.push(dp)
       } else if (state.type === 'gauge') {
@@ -427,6 +464,7 @@ export class PostHogMetrics {
           attributes,
           timeUnixNano: nowNano,
           asDouble: state.last ?? 0,
+          ...exemplars,
         }
         metric.gauge!.dataPoints.push(dp)
       } else if (state.hist) {
@@ -440,6 +478,7 @@ export class PostHogMetrics {
           max: state.hist.max,
           bucketCounts: state.hist.bucketCounts,
           explicitBounds: DEFAULT_HISTOGRAM_BOUNDS,
+          ...exemplars,
         }
         metric.histogram!.dataPoints.push(dp)
       }
@@ -461,6 +500,8 @@ export class PostHogMetrics {
         continue
       }
       current.windowStartMs = Math.min(current.windowStartMs, old.windowStartMs)
+      // The live window's exemplar is newer; the old one only fills a gap.
+      current.exemplar = current.exemplar ?? old.exemplar
       switch (current.type) {
         case 'count':
           current.total = (current.total ?? 0) + (old.total ?? 0)
@@ -485,6 +526,25 @@ export class PostHogMetrics {
           break
       }
     }
+  }
+}
+
+// Spread into the data point, so a point without an exemplar keeps its exact
+// pre-exemplar wire shape.
+function toOtlpExemplars(exemplar: ExemplarState | undefined): { exemplars?: OtlpExemplar[] } {
+  if (!exemplar) {
+    return {}
+  }
+  return {
+    exemplars: [
+      {
+        filteredAttributes: [],
+        timeUnixNano: msToUnixNano(exemplar.timeMs),
+        asDouble: exemplar.value,
+        traceId: exemplar.traceId,
+        spanId: exemplar.spanId,
+      },
+    ],
   }
 }
 
