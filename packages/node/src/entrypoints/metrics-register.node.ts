@@ -11,6 +11,10 @@ import { PostHog } from './index.node'
  * `OTEL_SERVICE_NAME`.
  */
 
+// Short enough to fit inside a container's termination grace period.
+const SHUTDOWN_TIMEOUT_MS = 5000
+const EXIT_SIGNALS = ['SIGTERM', 'SIGINT'] as const
+
 // ESM imports bypass the CommonJS require hook, so ESM apps need the loader hook
 // the OpenTelemetry instrumentations ship. Without it, only `require` is patched.
 function registerEsmLoaderHook(): void {
@@ -31,11 +35,28 @@ if (token) {
     host: process.env.POSTHOG_HOST,
     metrics: { autocapture: true, serviceName: process.env.OTEL_SERVICE_NAME },
   })
-  // Sends the last window when the event loop drains. Signals are left to the
-  // app: a handler here would stop the default exit on SIGTERM.
+  let shuttingDown: Promise<void> | undefined
+  const shutdown = (): Promise<void> => (shuttingDown ??= posthog.shutdown(SHUTDOWN_TIMEOUT_MS).catch(() => {}))
+
+  // Sends the last window when the event loop drains.
   process.once('beforeExit', () => {
-    void posthog.shutdown()
+    void shutdown()
   })
+  // `beforeExit` does not run on a signal, so the last window is sent here too.
+  // `once` removes this listener before it runs: when no other listener is left,
+  // the app has no handler of its own, and the signal is raised again after the
+  // flush so the process still exits the default way. When the app has a
+  // handler, it owns the exit.
+  for (const signal of EXIT_SIGNALS) {
+    process.once(signal, () => {
+      const appHandlesSignal = process.listenerCount(signal) > 0
+      void shutdown().then(() => {
+        if (!appHandlesSignal) {
+          process.kill(process.pid, signal)
+        }
+      })
+    })
+  }
 } else {
   console.warn('[PostHog] posthog-node/metrics/register needs POSTHOG_PROJECT_TOKEN, so metrics autocapture is off.')
 }

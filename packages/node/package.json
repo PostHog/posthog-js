@@ -17,6 +17,7 @@
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
+    "test:built": "node --test scripts/check-metrics-register.mjs",
     "prebuild": "node ../../tooling/write-version.mjs",
     "build": "rslib build",
     "dev": "rslib build -w",
