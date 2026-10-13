@@ -1,18 +1,14 @@
 import { context, trace, TraceFlags, type Span, type SpanContext } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
-import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import ErrorTracking from '@/extensions/error-tracking'
+import { PostHog } from '@/entrypoints/index.node'
 
 const traceId = '4bf92f3577b34da6a3ce929d0e0e4736'
 const spanId = '00f067aa0ba902b7'
 
-const builder = new CoreErrorTracking.ErrorPropertiesBuilder(
-  [new CoreErrorTracking.ErrorCoercer()],
-  CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser)
-)
+let client: PostHog
 
 function capture(properties?: Record<string, string>) {
-  return ErrorTracking.buildEventMessage(builder, new Error('boom'), {}, 'user-1', properties)
+  return client.prepareEventMessage({ event: '$exception', distinctId: 'user-1', properties })
 }
 
 function withSpan(spanContext: SpanContext, callback: () => ReturnType<typeof capture>) {
@@ -24,9 +20,15 @@ describe('exception trace context', () => {
 
   beforeAll(() => {
     context.setGlobalContextManager(manager.enable())
+    client = new PostHog('test-token', {
+      host: 'https://example.test',
+      fetchRetryCount: 0,
+      fetch: async () => ({ status: 200, text: async () => 'ok', json: async () => ({}) }),
+    })
   })
 
-  afterAll(() => {
+  afterAll(async () => {
+    await client.shutdown()
     context.disable()
     manager.disable()
   })
@@ -81,6 +83,20 @@ describe('exception trace context', () => {
     ).toEqual(properties)
   })
 
+  it.each([
+    { $trace_id: 'context-trace', $span_id: 'context-span' },
+    { $trace_id: 'context-trace' },
+    { $span_id: 'context-span' },
+  ])('preserves request context IDs without mixing trace contexts', async (properties) => {
+    const event = await client.withContext({ properties }, () =>
+      withSpan({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }, () => capture())
+    )
+
+    expect(
+      Object.fromEntries(Object.entries(event.properties).filter(([key]) => key === '$trace_id' || key === '$span_id'))
+    ).toEqual(properties)
+  })
+
   it('preserves caller supplied IDs when there is no span', async () => {
     const event = await capture({ $trace_id: 'custom-trace', $span_id: 'custom-span' })
 
@@ -96,6 +112,30 @@ describe('exception trace context', () => {
     const event = await context.with(trace.setSpan(context.active(), span), () => capture())
 
     expect(event.event).toBe('$exception')
+    expect(event.properties).not.toHaveProperty('$trace_id')
+    expect(event.properties).not.toHaveProperty('$span_id')
+  })
+
+  it('adds IDs to an exception captured through the public API', async () => {
+    const events: any[] = []
+    client.on('capture', (event) => events.push(event))
+
+    await withSpan({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }, async () => {
+      client.captureException(new Error('boom'), 'user-1')
+      await client.flush()
+    })
+
+    expect(events.find((event) => event.event === '$exception')?.properties).toMatchObject({
+      $trace_id: traceId,
+      $span_id: spanId,
+    })
+  })
+
+  it('does not add trace IDs to other events', async () => {
+    const event = await withSpan({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }, () =>
+      client.prepareEventMessage({ event: 'purchase', distinctId: 'user-1' })
+    )
+
     expect(event.properties).not.toHaveProperty('$trace_id')
     expect(event.properties).not.toHaveProperty('$span_id')
   })
