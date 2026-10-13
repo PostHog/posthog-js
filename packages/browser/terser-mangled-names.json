@@ -12,6 +12,7 @@
         "_activeMatchingSurveyConditionsUnsubscribe",
         "_activeReloads",
         "_activeTour",
+        "_activeTraceContext",
         "_addActionHook",
         "_addBufferedExceptionSteps",
         "_addDomEventHandlers",
