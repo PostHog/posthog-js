@@ -94,8 +94,10 @@ export class NetworkPage {
             })
         }
 
-        // Mock the remote config endpoint to return the same config data.
-        // RemoteConfig is now the sole config loading mechanism.
+        // Keep JSON as the config source so tests can delay or replace its response.
+        await this.page.route(/\/array\/[^/]+\/config\.js(\?|$)/, (route) =>
+            route.fulfill({ contentType: 'application/javascript', body: '' })
+        )
         await this.page.route(/\/array\/[^/]+\/config(\?|$)/, async (route) => {
             await route.fulfill({
                 status: 200,
@@ -130,20 +132,26 @@ export class NetworkPage {
 
     async mockStatic(staticOverrides: Record<string, string | undefined>) {
         await Promise.all(
-            files.map((file) => {
-                return this.page.route(`**/static/${file}*`, async (route) => {
-                    const source = staticOverrides[file] ?? file
-                    await route.fulfill({
-                        headers: { loaded: 'using relative path by playwright', source: source },
-                        path: `./dist/${source}`,
+            files.flatMap((file) =>
+                [`**/static/${file}*`, `**/static/*/${file}*`].map((pattern) =>
+                    this.page.route(pattern, async (route) => {
+                        const source = staticOverrides[file] ?? file
+                        await route.fulfill({
+                            headers: { loaded: 'using relative path by playwright', source: source },
+                            path: `./dist/${source}`,
+                        })
                     })
-                })
-            })
+                )
+            )
         )
     }
 
     expectNoFailed(): void {
-        expect(this.responses.filter((response) => !response.ok)).toHaveLength(0)
+        expect(
+            this.responses
+                .filter((response) => !response.ok())
+                .map((response) => ({ url: response.url(), status: response.status() }))
+        ).toEqual([])
     }
 
     /**
@@ -157,8 +165,7 @@ export class NetworkPage {
         const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
             return this.page.waitForResponse(urlPattern)
         })
-        await options.action()
-        await Promise.allSettled(responsePromises)
+        await Promise.all([...responsePromises, Promise.resolve().then(options.action)])
     }
 
     async waitForFlags() {

@@ -3,13 +3,14 @@ import { isNumber } from '@posthog/core'
 import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION, SURVEYS_ACTIVATED_TIMESTAMPS } from '../constants'
 import { Survey, SurveyEventName } from '../posthog-surveys-types'
 import type { PostHog } from '../posthog-core'
+import type { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
 import { ActivationOutcome, EventReceiver } from './event-receiver'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 export class SurveyEventReceiver extends EventReceiver<Survey> {
-    constructor(instance: PostHog) {
-        super(instance)
+    constructor(instance: PostHog, onActivationChanged?: () => void) {
+        super(instance, onActivationChanged)
     }
 
     protected _getActivatedKey(): string {
@@ -80,7 +81,10 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
         return false
     }
 
-    protected _activationOutcome(event: string, itemId: string): ActivationOutcome {
+    protected _activationOutcome(event: string, itemId: string, eventPayload?: CaptureResult): ActivationOutcome {
+        if (event === SurveyEventName.SENT && eventPayload?.properties?.$survey_completed === false) {
+            return 'ignore'
+        }
         let survey: Survey | undefined
         this._getItems((surveys) => {
             survey = surveys.find((s) => s.id === itemId)

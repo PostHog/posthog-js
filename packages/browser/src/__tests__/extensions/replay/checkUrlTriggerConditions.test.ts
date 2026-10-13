@@ -185,43 +185,42 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         callCount: fc.integer({ min: 2, max: 50 }),
                     }),
                     ({ triggerUrls, blocklistUrls, currentUrl, callCount }) => {
-                        onPauseCalls = 0
-                        onResumeCalls = 0
-                        onActivateCalls = 0
-                        persistedSession = null
-                        urlTriggerMatching.urlBlocked = false
-                        // Reset URL tracking state for each property test run
-                        ;(urlTriggerMatching as any)._lastCheckedUrl = ''
+                        for (const checkedUrl of [
+                            currentUrl,
+                            triggerUrls[0].url.replace('/.*', '/page'),
+                            ...blocklistUrls.map((rule) => rule.url.replace('/.*', '/page')),
+                        ]) {
+                            onPauseCalls = 0
+                            onResumeCalls = 0
+                            onActivateCalls = 0
+                            persistedSession = null
+                            urlTriggerMatching = new URLTriggerMatching(mockPostHog)
 
-                        configureTriggers(triggerUrls, blocklistUrls)
-                        setWindowLocation(currentUrl)
+                            configureTriggers(triggerUrls, blocklistUrls)
+                            setWindowLocation(checkedUrl)
+                            const sessionId = 'session-' + checkedUrl
+                            const urlMatchesTrigger = triggerUrls.some((t) => new RegExp(t.url).test(checkedUrl))
+                            const urlMatchesBlocklist = blocklistUrls.some((b) => new RegExp(b.url).test(checkedUrl))
 
-                        const sessionId = 'session-' + currentUrl
+                            for (let i = 0; i < callCount; i++) {
+                                urlTriggerMatching.checkUrlTriggerConditions(
+                                    () => {
+                                        onPauseCalls++
+                                        urlTriggerMatching.urlBlocked = true
+                                    },
+                                    () => {
+                                        onResumeCalls++
+                                        urlTriggerMatching.urlBlocked = false
+                                    },
+                                    createActivateCallback(sessionId),
+                                    sessionId
+                                )
+                            }
 
-                        const urlMatchesTrigger = triggerUrls.some((t) => new RegExp(t.url).test(currentUrl))
-                        const urlMatchesBlocklist = blocklistUrls.some((b) => new RegExp(b.url).test(currentUrl))
-
-                        for (let i = 0; i < callCount; i++) {
-                            urlTriggerMatching.checkUrlTriggerConditions(
-                                () => {
-                                    onPauseCalls++
-                                    urlTriggerMatching.urlBlocked = true
-                                },
-                                () => {
-                                    onResumeCalls++
-                                    urlTriggerMatching.urlBlocked = false
-                                },
-                                createActivateCallback(sessionId),
-                                sessionId
-                            )
+                            expect(onActivateCalls).toBe(urlMatchesTrigger && !urlMatchesBlocklist ? 1 : 0)
+                            expect(onPauseCalls).toBe(urlMatchesBlocklist ? 1 : 0)
+                            expect(onResumeCalls).toBe(0)
                         }
-
-                        if (urlMatchesTrigger && !urlMatchesBlocklist) {
-                            return onActivateCalls === 1
-                        } else if (urlMatchesBlocklist) {
-                            return onPauseCalls >= 1
-                        }
-                        return true
                     }
                 ),
                 { numRuns: 100 }
@@ -237,22 +236,18 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                         transitions: fc.array(fc.boolean(), { minLength: 1, maxLength: 20 }),
                     }),
                     ({ blockedUrl, unblockedUrl, transitions }) => {
-                        onPauseCalls = 0
-                        onResumeCalls = 0
-                        onActivateCalls = 0
-                        urlTriggerMatching.urlBlocked = false
-
+                        onPauseCalls = onResumeCalls = onActivateCalls = 0
+                        persistedSession = null
+                        urlTriggerMatching = new URLTriggerMatching(mockPostHog)
                         configureTriggers([{ url: '.*', matching: 'regex' }], [{ url: blockedUrl, matching: 'regex' }])
-
                         const sessionId = 'test-session-transitions'
-
-                        for (const shouldBlock of transitions) {
-                            const url = shouldBlock ? blockedUrl : unblockedUrl
-                            setWindowLocation(url)
-
-                            // Reset lastCheckedUrl to force the check (simulating actual URL changes)
-                            ;(urlTriggerMatching as any)._lastCheckedUrl = ''
-
+                        let blocked = false
+                        let pauses = 0
+                        let resumes = 0
+                        for (const shouldBlock of [false, true, true, false, ...transitions, true]) {
+                            if (shouldBlock && !blocked) pauses++
+                            if (!shouldBlock && blocked) resumes++
+                            setWindowLocation(shouldBlock ? blockedUrl : unblockedUrl)
                             urlTriggerMatching.checkUrlTriggerConditions(
                                 () => {
                                     onPauseCalls++
@@ -262,14 +257,15 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
                                     onResumeCalls++
                                     urlTriggerMatching.urlBlocked = false
                                 },
-                                () => {
-                                    onActivateCalls++
-                                },
+                                createActivateCallback(sessionId),
                                 sessionId
                             )
+                            blocked = shouldBlock
+                            expect(onPauseCalls).toBe(pauses)
+                            expect(onResumeCalls).toBe(resumes)
+                            expect(urlTriggerMatching.urlBlocked).toBe(blocked)
+                            expect(onActivateCalls).toBe(1)
                         }
-
-                        return onPauseCalls > 0 || onResumeCalls > 0 || onActivateCalls > 0
                     }
                 ),
                 { numRuns: 100 }
@@ -409,7 +405,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             expect(cache.size).toBe(1)
         })
 
-        it('handles invalid regex patterns gracefully', () => {
+        it('omits invalid trigger regex from the configuration cache', () => {
             const triggers: SessionRecordingUrlTrigger[] = [
                 { url: '[invalid(regex', matching: 'regex' },
                 { url: 'valid\\.pattern', matching: 'regex' },
@@ -422,7 +418,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
             expect(cache.has('[invalid(regex')).toBe(false)
         })
 
-        it('handles invalid blocklist regex patterns gracefully', () => {
+        it('omits invalid blocklist regex from the configuration cache', () => {
             const blocklist: SessionRecordingUrlTrigger[] = [{ url: '*invalid*', matching: 'regex' }]
 
             configureTriggers([], blocklist)
@@ -533,6 +529,8 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
         it('skips blocklist checks when URL has not changed', () => {
             configureTriggers([], [{ url: 'blocked\\.com', matching: 'regex' }])
 
+            const regex = [...(urlTriggerMatching as any)._compiledBlocklistRegexes.values()][0]
+            const testSpy = vi.spyOn(regex, 'test')
             const onPause = vi.fn(() => {
                 urlTriggerMatching.urlBlocked = true
             })
@@ -542,9 +540,11 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             urlTriggerMatching.checkUrlTriggerConditions(onPause, vi.fn(), vi.fn(), 'test-session')
             expect(onPause).toHaveBeenCalledTimes(1)
+            expect(testSpy).toHaveBeenCalledTimes(1)
 
             urlTriggerMatching.checkUrlTriggerConditions(onPause, vi.fn(), vi.fn(), 'test-session')
             expect(onPause).toHaveBeenCalledTimes(1)
+            expect(testSpy).toHaveBeenCalledTimes(1)
         })
     })
 })

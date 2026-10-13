@@ -352,19 +352,11 @@ describe('user-agent-utils', () => {
          * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
          * they were copied here
          */
-        test.each(uaParserDeviceTestCases.filter((tc) => !tc['//']))('device - $ua', (testCase) => {
-            if (testCase['expect']['type'] === 'smarttv') {
-                // we'll test that separately
-                return
-            }
-            if (testCase['expect']['type'] === 'wearable') {
-                // we'll test that separately
-                return
-            }
-            if (testCase['expect']['type'] === 'embedded') {
-                // we don't support it
-                return
-            }
+        test.each(
+            uaParserDeviceTestCases.filter(
+                (tc) => !tc['//'] && !['smarttv', 'wearable', 'embedded'].includes(tc['expect']['type'])
+            )
+        )('device - $ua', (testCase) => {
             const actual = detectDeviceType(testCase['ua']).toLowerCase()
             const expected =
                 isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'

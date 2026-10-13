@@ -26,6 +26,7 @@ export class ActionMatcher {
     dispose(): void {
         this._captureHookUnsubscribe?.()
         this._captureHookUnsubscribe = undefined
+        this._instance?.autocapture?.setElementSelectors(new Set(), this)
         this._debugEventEmitter = new SimpleEventEmitter()
     }
 
@@ -50,7 +51,7 @@ export class ActionMatcher {
                     }
                 })
             })
-            this._instance.autocapture.setElementSelectors(selectorsToWatch)
+            this._instance.autocapture.setElementSelectors(selectorsToWatch, this)
         }
     }
 

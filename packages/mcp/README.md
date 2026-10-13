@@ -134,6 +134,22 @@ What matters is instance lifetime, not statelessness. A server that is stateless
 (`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
 first `tools/list` and keeps it, so none of the above applies to it.
 
+An extra key is not free for a tool that validates strictly (a `.strict()` Zod object, or
+`additionalProperties: false` enforced by the handler): it rejects the call. A low-level server that
+can look up its own tools can resolve ownership without a listing. Return the tool's input schema
+as registered, before PostHog preparation, and the SDK strips the arguments it owns on every
+instance. It never strips a parameter that the returned schema declares. Returning `undefined`
+keeps the behavior above.
+
+```ts
+instrument(server, posthog, {
+  resolveOriginalTool: (toolName) => {
+    const tool = myToolRegistry.get(toolName)
+    return tool ? { inputSchema: tool.inputSchema } : undefined
+  },
+})
+```
+
 The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
 cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,
 and it is capped at 2048 characters. Two ways out, both one line:
@@ -182,6 +198,23 @@ to retain transport-based session grouping and unchanged response content. Custo
 dispatchers also enable model capture and conversation correlation by default.
 The reasoning behind these defaults is in [ADR-0013](./docs/adr/0013-analytics-capture-is-on-by-default.md).
 
+### Identifying the deployed server build
+
+MCP advertises a server version, but it does not define an exact build identifier. Pass an immutable
+Git commit SHA, release ID, or container digest once during setup. The SDK adds it to every MCP event
+as `$mcp_server_build`.
+
+```ts
+instrument(server, posthog, { serverBuild: process.env.GIT_SHA })
+
+const customDispatcherClient = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  serverBuild: process.env.GIT_SHA,
+})
+```
+
+Omit `serverBuild` when the deployment does not provide a reliable value.
+`PostHogMCP` also adds the build to custom events from its inherited `capture()` and `captureImmediate()` methods.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **on** by default. The SDK records the best model id visible to the
@@ -204,7 +237,12 @@ open where the SDK cannot tell who declared it, stripping it requires proof that
   that descriptor itself, so what it declares is known without a listing.
 - Instrumenting a low-level `Server` learns ownership while serving `tools/list`. A fresh instance
   that never served one — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode — has no
-  answer, so it records `llm_model` as the self-reported model and strips nothing. A tool that
+  answer, so it records `llm_model` as the self-reported model and strips nothing, unless
+  `resolveOriginalTool` supplies the tool's schema (see `$mcp_intent` above). Return the schema as
+  your `tools/list` advertises it: ownership follows the same rule as a served listing, and a
+  listing served on the instance wins. A Zod schema is read the way the MCP SDK advertises it, so a
+  union, record or refined object lists as an empty object, gains the injected fields and has them
+  stripped; a host that lists its own JSON Schema (an `anyOf`, say) returns that schema. A tool that
   declares its own `llm_model` on such an instance is therefore recorded under `$mcp_llm_model`
   until a listing says otherwise; `captureModel: false` or dropping the property in `beforeSend`
   are the escapes. The SDK never replays your listing handler on the call path to find out.

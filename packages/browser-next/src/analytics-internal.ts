@@ -64,6 +64,7 @@ export interface CaptureSink {
 
 /** First-party analytics is both a configured extension and the client's capture sink. */
 export interface AnalyticsExtension extends Extension, CaptureSink {
+    flush: CaptureSink['flush']
     initialize(host: CaptureHost): void
     start(): Promise<void>
 }

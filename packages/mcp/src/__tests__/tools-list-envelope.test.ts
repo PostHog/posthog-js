@@ -172,18 +172,14 @@ describe('tools/list response envelope', () => {
 
   /**
    * A real paginated catalogue, not a two-tool stand-in: 100 tools over two pages.
-   * The oversized row pushes `$mcp_response` past the 100KB event cap, so it pins
-   * that the truncation ladder sheds tool contents and keeps the envelope — the
-   * pagination facts have to survive on exactly the large catalogues that need them.
+   * The event keeps each page's pagination facts but not its tool descriptors,
+   * which `$mcp_listed_tool_names` already names.
    */
-  it.each([
-    ['a realistic catalogue', 300],
-    ['a catalogue past the 100KB event cap', 4000],
-  ])('paginates 100 tools over two pages — %s', async (_label, descriptionChars) => {
+  it('paginates 100 tools over two pages', async () => {
     const page = (offset: number) =>
       Array.from({ length: 50 }, (_, i) => ({
         name: `tool_${offset + i}`,
-        description: 'x'.repeat(descriptionChars),
+        description: 'x'.repeat(300),
         inputSchema: { type: 'object' as const, properties: { alpha: { type: 'string' } } },
       }))
 
@@ -212,41 +208,15 @@ describe('tools/list response envelope', () => {
       expect(firstPage.tools.every((tool) => tool.inputSchema.properties?.context)).toBe(true)
       expect(secondPage.tools.every((tool) => tool.inputSchema.properties?.context)).toBe(true)
 
-      const event = eventCapture.findEventByType(MCPAnalyticsEventType.mcpToolsList)
-      const response = event?.response as { nextCursor?: string; ttlMs?: number; cacheScope?: string }
-      expect(response.nextCursor).toBe('page-2')
-      expect(response.ttlMs).toBe(60_000)
-      expect(response.cacheScope).toBe('public')
-      expect(event?.listedToolNames).toHaveLength(50)
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_tools_list')).toHaveLength(2))
+      const [firstList, secondList] = eventCapture.findCapturesByEvent('$mcp_tools_list').map((c) => c.properties)
+      expect(firstList.$mcp_response).toEqual({ nextCursor: 'page-2', ttlMs: 60_000, cacheScope: 'public' })
+      expect(secondList.$mcp_response).toBeUndefined()
+      expect(firstList.$mcp_listed_tool_names).toHaveLength(50)
+      expect(secondList.$mcp_listed_tool_names).toHaveLength(50)
     } finally {
       await clientTransport.close?.()
       await serverTransport.close?.()
-    }
-  })
-
-  it('captures the response as sent, envelope included', async () => {
-    const { server, client, connect, cleanup } = await setupPaginatedServer({
-      firstPage: { tools: PAGE_ONE, nextCursor: 'page-2', ttlMs: 60_000, cacheScope: 'public' },
-    })
-    try {
-      instrument(server, fakePostHog(), { reportMissing: false })
-      await connect()
-
-      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-
-      const event = eventCapture.findEventByType(MCPAnalyticsEventType.mcpToolsList)
-      const response = event?.response as {
-        tools: unknown[]
-        nextCursor?: string
-        ttlMs?: number
-        cacheScope?: string
-      }
-      expect(response.nextCursor).toBe('page-2')
-      expect(response.ttlMs).toBe(60_000)
-      expect(response.cacheScope).toBe('public')
-      expect(response.tools).toHaveLength(1)
-    } finally {
-      await cleanup()
     }
   })
 

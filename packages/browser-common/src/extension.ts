@@ -24,11 +24,15 @@ import type { Client } from './client'
 export interface Extension {
     /** Stable extension name used for diagnostics and de-duplication within a client instance. */
     readonly name: string
+    /** Additional lookup targets whose lifecycle belongs to this extension. */
+    readonly bindings?: Readonly<Record<string, Extension>>
     /**
      * Start the extension with the host client's capability surface. Called once
      * after construction; return a promise when setup needs asynchronous state.
      */
     setup(client: Client): void | Promise<void>
+    /** Flush buffered work. Shutdown awaits this within the host's timeout before disposal. */
+    flush?(reason?: 'flush' | 'shutdown'): Promise<void>
     /** Release final resources synchronously. Feature-level start/stop remains extension-owned. */
     dispose?(): void
 }

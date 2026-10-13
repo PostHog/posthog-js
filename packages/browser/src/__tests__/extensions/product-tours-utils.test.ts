@@ -1,3 +1,4 @@
+import type { Mock as VitestMock } from 'vitest'
 import {
     calculateTooltipPosition,
     getStepHtml,
@@ -65,7 +66,7 @@ describe('getProductTourStylesheet', () => {
     ])('$name', ({ setup, expectedHookCalls, expectedNonce, expectedStylesheet }) => {
         const { posthog, prepareExternalDependencyStylesheet } = setup() as {
             posthog?: PostHog
-            prepareExternalDependencyStylesheet?: vi.Mock
+            prepareExternalDependencyStylesheet?: VitestMock
         }
 
         const stylesheet = getProductTourStylesheet(posthog)
@@ -124,11 +125,14 @@ describe('calculateTooltipPosition', () => {
     })
 
     it('clamps tooltip to viewport and calculates arrow offset', () => {
-        const targetRect = { top: 300, bottom: 350, left: 10, right: 60, width: 50, height: 50 } as DOMRect
+        const targetRect = { top: 0, bottom: 50, left: 10, right: 60, width: 50, height: 50 } as DOMRect
         const result = calculateTooltipPosition(targetRect, tooltipDimensions)
 
         expect(result.position).toBe('right')
         expect(typeof result.arrowOffset).toBe('number')
+        expect(result.top).toBe(108)
+        expect(result.left).toBe(72)
+        expect(result.arrowOffset).toBe(-83)
     })
 })
 
@@ -246,13 +250,16 @@ describe('renderTipTapContent', () => {
 
 describe('getStepHtml', () => {
     it('sanitizes HTML rendered from legacy TipTap content', () => {
-        const step = {
+        const step: ProductTourStep = {
+            id: 'legacy-content-step',
+            type: 'modal',
+            progressionTrigger: 'button',
             content: {
                 type: 'heading',
                 attrs: { level: '1><img src=x onerror=alert(document.cookie)><h1' },
                 content: [{ type: 'text', text: 'Test' }],
             },
-        } as ProductTourStep
+        }
 
         const html = getStepHtml(step)
 

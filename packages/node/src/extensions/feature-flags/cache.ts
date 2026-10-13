@@ -4,23 +4,42 @@ import type { PostHogFeatureFlag, PropertyGroup } from '../../types'
  * Represents the complete set of feature flag data needed for local evaluation.
  *
  * This includes flag definitions, group type mappings, and cohort property groups.
+ * Newly published data includes snake_case keys and camelCase aliases so existing
+ * providers and older Node SDKs can continue to read the same cache.
  */
 export interface FlagDefinitionCacheData {
   /** Array of feature flag definitions */
   flags: PostHogFeatureFlag[]
-  /** Mapping of group type index to group name */
+  /** Mapping of group type index to group name, using the flag-definitions endpoint's field name. */
+  group_type_mapping?: Record<string, string>
+  /** Legacy alias for group_type_mapping, retained for existing providers and cache readers. */
   groupTypeMapping: Record<string, string>
   /** Cohort property groups for local evaluation */
   cohorts: Record<string, PropertyGroup>
   /**
    * Server-controlled gate for minimal `$feature_flag_called` events, from the top-level
-   * `minimal_flag_called_events` field of the flag-definitions payload. Absent (e.g. cached
-   * data written by an older SDK version) means full events.
+   * `minimal_flag_called_events` field of the flag-definitions payload. If neither this
+   * field nor its legacy alias is present, full events are sent.
    */
+  minimal_flag_called_events?: boolean
+  /** Legacy alias for minimal_flag_called_events. */
   minimalFlagCalledEvents?: boolean
   /** Top-level definitions matching version; absent in older caches means legacy matching. */
+  property_matching_version?: number
+  /** Legacy alias for property_matching_version. */
   propertyMatchingVersion?: number
 }
+
+/**
+ * Cache reads accept endpoint-shaped snake_case data or older camelCase data.
+ * When both forms are present, snake_case takes precedence.
+ */
+export type FlagDefinitionCacheInput =
+  | FlagDefinitionCacheData
+  | (Omit<FlagDefinitionCacheData, 'groupTypeMapping'> & {
+      group_type_mapping: Record<string, string>
+      groupTypeMapping?: Record<string, string>
+    })
 
 /**
  * Provider interface for caching feature flag definitions.
@@ -34,14 +53,17 @@ export interface FlagDefinitionCacheData {
  * All methods may throw errors - the poller will catch and log them gracefully,
  * ensuring cache provider errors never break flag evaluation.
  *
+ * @typeParam CacheData - The shape returned by cache reads. Use FlagDefinitionCacheInput
+ * to accept snake_case entries as well as legacy camelCase entries.
+ *
  * @example
  * ```typescript
- * import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'
+ * import type { FlagDefinitionCacheData, FlagDefinitionCacheInput, FlagDefinitionCacheProvider } from 'posthog-node'
  *
- * class RedisFlagCache implements FlagDefinitionCacheProvider {
+ * class RedisFlagCache implements FlagDefinitionCacheProvider<FlagDefinitionCacheInput> {
  *   constructor(private redis: Redis, private teamKey: string) { }
  *
- *   async getFlagDefinitions(): Promise<FlagDefinitionCacheData | undefined> {
+ *   async getFlagDefinitions(): Promise<FlagDefinitionCacheInput | undefined> {
  *     const cached = await this.redis.get(`posthog:flags:${this.teamKey}`)
  *     return cached ? JSON.parse(cached) : undefined
  *   }
@@ -63,7 +85,7 @@ export interface FlagDefinitionCacheData {
  * }
  * ```
  */
-export interface FlagDefinitionCacheProvider {
+export interface FlagDefinitionCacheProvider<CacheData extends FlagDefinitionCacheInput = FlagDefinitionCacheData> {
   /**
    * Retrieve cached flag definitions.
    *
@@ -74,7 +96,7 @@ export interface FlagDefinitionCacheProvider {
    * @returns cached definitions if available, undefined if cache is empty
    * @throws if an error occurs while accessing the cache (error will be logged)
    */
-  getFlagDefinitions(): Promise<FlagDefinitionCacheData | undefined> | FlagDefinitionCacheData | undefined
+  getFlagDefinitions(): Promise<CacheData | undefined> | CacheData | undefined
 
   /**
    * Determines whether this instance should fetch new flag definitions.

@@ -1,6 +1,8 @@
 import { SurveyType } from '@posthog/core'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { Page, BrowserContext } from '@playwright/test'
+import { waitForSurveyDefinitions } from '../utils/survey-readiness'
 
 const openTextQuestion = {
     type: 'open',
@@ -24,6 +26,13 @@ const testSurvey = {
     type: 'popover',
     start_date: '2021-01-01T00:00:00Z',
     questions: [openTextQuestion],
+}
+
+async function startWithPausedClock(page: Page, context: BrowserContext) {
+    await page.clock.install({ time: new Date('2024-01-01T00:00:00Z') })
+    await start(startOptions, page, context)
+    await waitForSurveyDefinitions(page)
+    await page.clock.pauseAt(new Date('2024-01-01T00:01:00Z'))
 }
 
 const testSurveyWithDelay = {
@@ -120,10 +129,7 @@ test.describe('surveys - displaySurvey on demand', () => {
         )
     })
 
-    test('displaySurvey shows a survey inline when called with valid survey ID with delay', async ({
-        page,
-        context,
-    }) => {
+    test('displaySurvey shows an inline delayed survey immediately with ignoreDelay', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -132,7 +138,7 @@ test.describe('surveys - displaySurvey on demand', () => {
             })
         })
 
-        await start(startOptions, page, context)
+        await startWithPausedClock(page, context)
         await surveysAPICall
 
         // Survey should not be visible initially, but playwright has 10 second timeout
@@ -150,6 +156,7 @@ test.describe('surveys - displaySurvey on demand', () => {
                 })
             })
         })
+        await page.clock.runFor(1)
 
         await expect(page.locator('#survey').locator('.survey-form')).toBeVisible()
     })
@@ -163,7 +170,7 @@ test.describe('surveys - displaySurvey on demand', () => {
             })
         })
 
-        await start(startOptions, page, context)
+        await startWithPausedClock(page, context)
         await surveysAPICall
 
         // Survey should not be visible initially
@@ -181,6 +188,7 @@ test.describe('surveys - displaySurvey on demand', () => {
                 })
             })
         })
+        await page.clock.runFor(1)
 
         // Survey should be visible immediately (ignoring the 3-second delay)
         await expect(page.locator('.PostHogSurvey-test-survey-delay').locator('.survey-form')).toBeVisible()
@@ -198,7 +206,7 @@ test.describe('surveys - displaySurvey on demand', () => {
             })
         })
 
-        await start(startOptions, page, context)
+        await startWithPausedClock(page, context)
         await surveysAPICall
 
         // Survey should not be visible initially
@@ -215,6 +223,9 @@ test.describe('surveys - displaySurvey on demand', () => {
                 })
             })
         })
+        await page.clock.runFor(2999)
+        await expect(page.locator('.PostHogSurvey-test-survey-delay .survey-form')).not.toBeVisible()
+        await page.clock.runFor(1)
 
         // Survey should be visible at some point (Playwright by default has a 10 second timeout)
         await expect(page.locator('.PostHogSurvey-test-survey-delay').locator('.survey-form')).toBeVisible()

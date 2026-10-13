@@ -402,7 +402,9 @@ void clients
 describe('Published entrypoint declarations', () => {
     it('preserves the unbundled declarations previously emitted by the runtime build', () => {
         const libDirectory = path.resolve(__dirname, '../../../lib/src')
-        const declarations = fs.readdirSync(libDirectory, { recursive: true }).filter((file) => file.endsWith('.d.ts'))
+        const declarations = fs
+            .readdirSync(libDirectory, { recursive: true, encoding: 'utf8' })
+            .filter((file) => file.endsWith('.d.ts'))
         expect(declarations.length).toBeGreaterThan(0)
         for (const declaration of declarations) {
             expect(fs.readFileSync(path.resolve(__dirname, '../../../dist/src', declaration), 'utf-8')).toBe(
@@ -560,5 +562,21 @@ describe('Full bundles', () => {
         expect(fullBundle).toMatch(/__PosthogExtensions__\.rrweb\s*=/)
         expect(fullBundle).toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
         expect(nonFullBundle).not.toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+        const iframe = document.createElement('iframe')
+        document.body.appendChild(iframe)
+        try {
+            const frame = iframe.contentWindow as any
+            frame.exports = {}
+            frame.module = { exports: frame.exports }
+            frame.eval(
+                ts.transpileModule(fullBundle, {
+                    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ESNext },
+                }).outputText
+            )
+            expect(typeof frame.__PosthogExtensions__.rrweb.record).toBe('function')
+            expect(typeof frame.__PosthogExtensions__.initSessionRecording).toBe('function')
+        } finally {
+            iframe.remove()
+        }
     })
 })

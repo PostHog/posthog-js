@@ -513,6 +513,57 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     }
   }
 
+  // `git config --get` exits 1 with no origin; `rev-parse HEAD` exits 128 with no commits.
+  it.each([
+    ['no git repo', ''],
+    ['a git repo with no origin remote', 'git init -q'],
+    [
+      'a git repo with an origin remote but no commits',
+      'git init -q && git remote add origin git@github.com:acme/app.git',
+    ],
+  ])('continues without git metadata in a local build with %s', (_label, setup) => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
+    try {
+      if (setup) {
+        execSync(setup, { cwd: repoDir, stdio: 'pipe' })
+      }
+
+      const { status, invocations } = runWrapper([], { GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir })
+
+      expect(status).toBe(0)
+      expect(invocations).toHaveLength(2)
+      expect(invocations[0]).toContain('hermes clone')
+      expect(invocations[1]).toContain('hermes upload')
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not advertise GitHub Actions metadata for a repo with a remote but no commits', () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-repo-'))
+    try {
+      execSync('git init -q && git remote add origin git@github.com:acme/app.git', { cwd: repoDir, stdio: 'pipe' })
+      const envRecordingCli = [
+        '#!/bin/sh',
+        'if [ "$1" = "--version" ]; then echo 0.99.0; exit 0; fi',
+        'echo "$1 GITHUB_ACTIONS=[$GITHUB_ACTIONS] GITHUB_SHA=[$GITHUB_SHA]" >> "$CLI_TRACE_PATH"',
+        '',
+      ].join('\n')
+
+      const { status, invocations } = runWrapper(
+        [],
+        { GITHUB_ACTIONS: '', GITHUB_SHA: '', VERCEL: '', SRCROOT: repoDir },
+        undefined,
+        envRecordingCli
+      )
+
+      expect(status).toBe(0)
+      expect(invocations).toEqual(['hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]', 'hermes GITHUB_ACTIONS=[] GITHUB_SHA=[]'])
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
   it.each([
     ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],
     ['the --posthog-release-mode argument', ['--posthog-release-mode', 'event', '--'], {}],

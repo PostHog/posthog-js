@@ -17,7 +17,6 @@ import {
   type EvaluationContext,
   type JsonValue,
   type ResolutionDetails,
-  type ResolutionReason,
 } from '@openfeature/core'
 
 /**
@@ -30,6 +29,8 @@ export interface PostHogFlagResult {
   readonly enabled: boolean
   readonly variant?: string
   readonly payload?: unknown
+  readonly reason?: string
+  readonly reasonCode?: string
 }
 
 /**
@@ -78,14 +79,17 @@ export function splitContext(context?: EvaluationContext): SplitContext {
   }
 }
 
-/**
- * Map PostHog's enabled state to an OpenFeature reason. PostHog's JS
- * `FeatureFlagResult` carries no free-text reason (unlike the Python client), so
- * an enabled flag means a targeting condition matched and an off result falls
- * back to the default rollout.
- */
-function reasonFor(result: PostHogFlagResult): ResolutionReason {
-  return result.enabled ? StandardResolutionReasons.TARGETING_MATCH : StandardResolutionReasons.DEFAULT
+function resolutionMetadata(result: PostHogFlagResult): Pick<ResolutionDetails<unknown>, 'reason' | 'flagMetadata'> {
+  const reason = result.enabled
+    ? StandardResolutionReasons.TARGETING_MATCH
+    : result.reasonCode === 'flag_disabled'
+      ? StandardResolutionReasons.DISABLED
+      : StandardResolutionReasons.DEFAULT
+  const posthogReason = result.reason ?? result.reasonCode
+  return {
+    reason,
+    flagMetadata: posthogReason === undefined ? {} : { posthog_reason: posthogReason },
+  }
 }
 
 /**
@@ -106,7 +110,7 @@ export function resolveBooleanDetails(
   flagKey: string
 ): ResolutionDetails<boolean> {
   const resolved = ensureResolved(result, flagKey)
-  return { value: resolved.enabled, variant: resolved.variant, reason: reasonFor(resolved) }
+  return { value: resolved.enabled, variant: resolved.variant, ...resolutionMetadata(resolved) }
 }
 
 export function resolveStringDetails(
@@ -121,12 +125,12 @@ export function resolveStringDetails(
       // default (per the OpenFeature spec) rather than throwing — a throw would
       // set reason=ERROR and fire every registered error hook on an ordinary
       // off-result read.
-      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+      return { value: defaultValue, ...resolutionMetadata(resolved) }
     }
     // An enabled boolean flag has no string variant: a genuine type mismatch.
     throw new TypeMismatchError(`Flag '${flagKey}' has no string variant (boolean flag).`)
   }
-  return { value: resolved.variant, variant: resolved.variant, reason: reasonFor(resolved) }
+  return { value: resolved.variant, variant: resolved.variant, ...resolutionMetadata(resolved) }
 }
 
 export function resolveNumberDetails(
@@ -137,7 +141,7 @@ export function resolveNumberDetails(
   const resolved = ensureResolved(result, flagKey)
   if (resolved.variant === undefined) {
     if (!resolved.enabled) {
-      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+      return { value: defaultValue, ...resolutionMetadata(resolved) }
     }
     throw new TypeMismatchError(`Flag '${flagKey}' has no variant to parse as a number.`)
   }
@@ -147,7 +151,7 @@ export function resolveNumberDetails(
   if (resolved.variant.trim() === '' || !Number.isFinite(value)) {
     throw new TypeMismatchError(`Flag '${flagKey}' variant '${resolved.variant}' is not a valid number.`)
   }
-  return { value, variant: resolved.variant, reason: reasonFor(resolved) }
+  return { value, variant: resolved.variant, ...resolutionMetadata(resolved) }
 }
 
 export function resolveObjectDetails<T extends JsonValue>(
@@ -159,9 +163,9 @@ export function resolveObjectDetails<T extends JsonValue>(
   const payload = resolved.payload
   if (typeof payload !== 'object' || payload === null) {
     if (!resolved.enabled) {
-      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
+      return { value: defaultValue, ...resolutionMetadata(resolved) }
     }
     throw new TypeMismatchError(`Flag '${flagKey}' has no object/JSON payload.`)
   }
-  return { value: payload as T, variant: resolved.variant, reason: reasonFor(resolved) }
+  return { value: payload as T, variant: resolved.variant, ...resolutionMetadata(resolved) }
 }

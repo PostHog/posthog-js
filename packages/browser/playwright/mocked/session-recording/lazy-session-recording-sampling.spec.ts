@@ -1,5 +1,5 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start, waitForSessionRecordingToStart } from '../utils/setup'
+import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
@@ -26,14 +26,22 @@ test.describe('Session recording - sampling', () => {
             },
         },
     }
+    let replayRequests: string[]
+
     test.beforeEach(async ({ page, context }) => {
+        replayRequests = []
+        page.on('request', (request) => {
+            if (new URL(request.url()).pathname.startsWith('/ses/')) replayRequests.push(request.url())
+        })
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
-                await start(startOptions, page, context)
+                await start(sampleZeroStartOptions, page, context)
             },
         })
-        await waitForSessionRecordingToStart(page)
+        await expect
+            .poll(() => page.evaluate(() => (window as WindowWithPostHog).posthog?.sessionRecording?.status))
+            .toBe('disabled')
 
         await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
@@ -41,10 +49,11 @@ test.describe('Session recording - sampling', () => {
 
     test('does not capture events when sampling is set to 0', async ({ page }) => {
         await page.locator('[data-cy-input]').fill('hello posthog!')
-        // because it doesn't make sense to wait for a snapshot event that won't happen
-        await page.waitForTimeout(250)
+        // Observe beyond the recorder's 2-second flush interval.
+        await page.waitForTimeout(2500)
 
         await page.expectCapturedEventsToBe([])
+        expect(replayRequests).toEqual([])
     })
 
     test('can override sampling when starting session recording', async ({ page, context }) => {
@@ -57,6 +66,14 @@ test.describe('Session recording - sampling', () => {
         expect((await page.capturedEvents())[0]['properties']['$session_recording_start_reason']).toEqual(
             'sampling_overridden'
         )
+
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').fill('record before reload')
+            },
+        })
+        expect((await page.capturedEvents()).some((event) => event.event === '$snapshot')).toBe(true)
 
         // sampling override survives a page refresh
         await page.resetCapturedEvents()

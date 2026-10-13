@@ -33,13 +33,19 @@ export function extractPrefillParamsFromUrl(searchString: string): {
     const pairs = cleanSearch.split('&')
 
     for (const pair of pairs) {
-        const [key, value] = pair.split('=')
-        if (!key || isUndefined(value)) {
+        const separator = pair.indexOf('=')
+        if (separator <= 0) {
             continue
         }
 
-        const decodedKey = decodeURIComponent(key)
-        const decodedValue = decodeURIComponent(value)
+        let decodedKey: string
+        let decodedValue: string
+        try {
+            decodedKey = decodeURIComponent(pair.slice(0, separator))
+            decodedValue = decodeURIComponent(pair.slice(separator + 1))
+        } catch {
+            continue
+        }
 
         // Check for auto_submit parameter
         if (decodedKey === 'auto_submit' && decodedValue === 'true') {

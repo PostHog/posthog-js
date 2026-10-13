@@ -136,14 +136,34 @@ describe('waitUntil debounced flush', () => {
     })
 
     it('resolves the waitUntil promise after flush completes', async () => {
-      posthog.capture({ distinctId: 'user-1', event: 'test_event' })
-      await vi.advanceTimersByTimeAsync(0)
+      let completeDelivery!: () => void
+      const delivery = new Promise<void>((resolve) => {
+        completeDelivery = resolve
+      })
+      mockedFetch.mockImplementationOnce(async () => {
+        await delivery
+        return { status: 200, text: async () => 'ok', json: async () => ({ status: 'ok' }) } as any
+      })
 
-      const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+      try {
+        posthog.capture({ distinctId: 'user-1', event: 'test_event' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+        const waitUntilPromise = mockWaitUntil.mock.calls[0][0] as Promise<unknown>
+        const settled = vi.fn()
+        void waitUntilPromise.then(settled)
 
-      await expect(waitUntilPromise).resolves.toBeUndefined()
+        await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['test_event']])
+        expect(settled).not.toHaveBeenCalled()
+
+        completeDelivery()
+        await expect(waitUntilPromise).resolves.toBeUndefined()
+        expect(settled).toHaveBeenCalledTimes(1)
+      } finally {
+        completeDelivery()
+      }
     })
 
     it('does not activate debounced flush when no waitUntil in options', async () => {
@@ -270,26 +290,30 @@ describe('waitUntil debounced flush', () => {
         waitUntilMaxWaitMs: 100,
       })
 
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_1' })
-      await vi.advanceTimersByTimeAsync(0)
+      try {
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_1' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // Advance DEBOUNCE_MS - 1ms (under the 50ms debounce) then capture again
-      vi.advanceTimersByTime(DEBOUNCE_MS - 1)
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_2' })
-      await vi.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(40)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_2' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // No flush yet — DEBOUNCE_MS - 1ms elapsed, under the 100ms custom max
-      expect(getFlushedBatches()).toHaveLength(0)
+        await vi.advanceTimersByTimeAsync(40)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_3' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      // Advance another 51ms (total 100ms) then capture — hits 100ms max
-      vi.advanceTimersByTime(DEBOUNCE_MS + 1)
-      posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_3' })
-      // This fires the 0ms max-cap timer
-      await vi.advanceTimersByTimeAsync(0)
+        // At 100ms the ordinary debounce is still pending until 130ms.
+        await vi.advanceTimersByTimeAsync(20)
+        expect(getFlushedBatches()).toHaveLength(0)
+        posthogCustomMax.capture({ distinctId: 'user-1', event: 'event_4' })
+        await vi.advanceTimersByTimeAsync(0)
 
-      expect(getFlushedBatches().length).toEqual(1)
-
-      await posthogCustomMax.shutdown()
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([
+          ['event_1', 'event_2', 'event_3', 'event_4'],
+        ])
+      } finally {
+        await posthogCustomMax.shutdown()
+      }
     })
   })
 
@@ -455,10 +479,23 @@ describe('waitUntil debounced flush', () => {
         waitUntilDebounceMs: DEBOUNCE_MS,
       })
 
-      // Should not throw even though waitUntil throws during scheduleDebouncedFlush
-      expect(() => {
-        posthogThrowing.capture({ distinctId: 'user-1', event: 'test_event' })
-      }).not.toThrow()
+      const captureError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        expect(() => {
+          posthogThrowing.capture({ distinctId: 'user-1', event: 'test_event' })
+        }).not.toThrow()
+        await vi.advanceTimersByTimeAsync(0)
+
+        expect(throwingWaitUntil).toHaveBeenCalledTimes(1)
+        expect(throwingWaitUntil).toHaveBeenCalledWith(expect.any(Promise))
+        expect(captureError).not.toHaveBeenCalled()
+
+        await expect(posthogThrowing.flush()).resolves.toBeUndefined()
+        expect(getFlushedBatches().map((batch) => batch.map(({ event }) => event))).toEqual([['test_event']])
+      } finally {
+        await posthogThrowing.shutdown()
+        captureError.mockRestore()
+      }
     })
   })
 

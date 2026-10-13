@@ -32,7 +32,7 @@ failOnUnexpectedConsoleOutput()
 beforeEach(() => {
     Config.DEBUG = false
     if (typeof window !== 'undefined') {
-        delete window.POSTHOG_DEBUG
+        Reflect.deleteProperty(window, 'POSTHOG_DEBUG')
         try {
             window.localStorage?.removeItem('ph_debug')
         } catch {

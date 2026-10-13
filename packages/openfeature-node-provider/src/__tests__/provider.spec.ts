@@ -8,6 +8,8 @@ type FlagResult = {
   enabled: boolean
   variant?: string
   payload?: unknown
+  reason?: string
+  reasonCode?: string
 }
 
 function makeClient(result: FlagResult | undefined): {
@@ -155,6 +157,45 @@ describe('PostHogServerProvider', () => {
     })
   })
 
+  describe('evaluation reasons', () => {
+    it.each<[string, Resolve]>([
+      ['boolean', (p) => p.resolveBooleanEvaluation('flag', true, CTX)],
+      ['string', (p) => p.resolveStringEvaluation('flag', 'fallback', CTX)],
+      ['number', (p) => p.resolveNumberEvaluation('flag', 42, CTX)],
+      ['object', (p) => p.resolveObjectEvaluation('flag', {}, CTX)],
+    ])('preserves disabled reason and metadata for %s', async (_type, resolve) => {
+      const { client } = makeClient({
+        key: 'flag',
+        enabled: false,
+        reason: 'Flag switched off',
+        reasonCode: 'flag_disabled',
+      })
+      expect(await resolve(new PostHogServerProvider(client))).toMatchObject({
+        reason: StandardResolutionReasons.DISABLED,
+        flagMetadata: { posthog_reason: 'Flag switched off' },
+      })
+    })
+
+    it.each([
+      [true, 'condition_match', 'Matched condition set 1', StandardResolutionReasons.TARGETING_MATCH],
+      [false, 'no_condition_match', 'User property disabled is true', StandardResolutionReasons.DEFAULT],
+      [false, undefined, 'flag is disabled', StandardResolutionReasons.DEFAULT],
+      [false, 'flag_disabled', undefined, StandardResolutionReasons.DISABLED],
+    ])('maps enabled=%s code=%s without parsing description text', async (enabled, reasonCode, reason, expected) => {
+      const { client } = makeClient({ key: 'flag', enabled, reasonCode, reason })
+      const details = await new PostHogServerProvider(client).resolveBooleanEvaluation('flag', true, CTX)
+      expect(details.reason).toBe(expected)
+      expect(details.flagMetadata).toEqual({ posthog_reason: reason ?? reasonCode })
+    })
+
+    it('omits posthog_reason when unavailable', async () => {
+      const { client } = makeClient({ key: 'flag', enabled: false })
+      const details = await new PostHogServerProvider(client).resolveBooleanEvaluation('flag', true, CTX)
+      expect(details.flagMetadata?.posthog_reason).toBeUndefined()
+      expect(details.reason).toBe(StandardResolutionReasons.DEFAULT)
+    })
+  })
+
   describe('distinct id resolution', () => {
     it('uses the targetingKey as the distinct id', async () => {
       const { client, getFeatureFlagResult } = makeClient({ key: 'flag', enabled: true })
@@ -284,6 +325,21 @@ describe('PostHogServerProvider', () => {
       const details = await ofClient.getObjectDetails('flag', {}, CTX)
       expect(details.value).toEqual({ a: 1 })
       expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
+    })
+
+    it('exposes disabled reason metadata through the real client', async () => {
+      const { client } = makeClient({
+        key: 'flag',
+        enabled: false,
+        reason: 'Flag switched off',
+        reasonCode: 'flag_disabled',
+      })
+      await OpenFeature.setProviderAndWait(new PostHogServerProvider(client))
+      expect(await OpenFeature.getClient().getBooleanDetails('flag', true, CTX)).toMatchObject({
+        value: false,
+        reason: StandardResolutionReasons.DISABLED,
+        flagMetadata: { posthog_reason: 'Flag switched off' },
+      })
     })
 
     it('returns the default value with an error code on a type mismatch', async () => {

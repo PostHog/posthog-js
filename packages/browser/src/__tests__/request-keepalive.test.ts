@@ -1,3 +1,4 @@
+import { createLogsClient } from './helpers/logs-client'
 import { request } from '../request'
 import { Compression, OtlpLogsPayload, RequestWithOptions } from '../types'
 import { PostHogLogs } from '../posthog-logs'
@@ -15,7 +16,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
 
 const mockedFetch = vi.mocked(fetch!)
 const threshold = 64 * 1024 * 0.8
-const data = '😀'.repeat(7500) // 30,002 encoded bytes, not 15,002 UTF-16 code units
+const data = '😀'.repeat(7500) // Unicode payload has twice as many UTF-8 bytes as UTF-16 code units
 const deferred = <T>() => {
     let resolve!: (value: T) => void
     let reject!: (error: Error) => void
@@ -35,7 +36,7 @@ describe('request fetch aggregate keepalive', () => {
     let pending: ReturnType<typeof deferred<Response>>[]
     let bodies: ReturnType<typeof deferred<string>>[]
     const send = (overrides: Partial<RequestWithOptions> = {}) =>
-        request({ url: 'https://example.com/e/', method: 'POST', data, ...overrides })
+        request({ url: 'https://example.com/e/', method: 'POST', data: { payload: data }, ...overrides })
     const keepalives = () => mockedFetch.mock.calls.map(([, init]) => init?.keepalive)
 
     beforeEach(() => {
@@ -51,7 +52,7 @@ describe('request fetch aggregate keepalive', () => {
 
     afterEach(async () => {
         vi.restoreAllMocks()
-        pending.forEach((response) => response.resolve({ status: 200, text: () => Promise.resolve('{}') } as Response))
+        pending.forEach((response) => response.resolve(new Response('{}', { status: 200 })))
         bodies.forEach((body) => body.resolve('{}'))
         await tick()
         vi.useRealTimers()
@@ -65,7 +66,7 @@ describe('request fetch aggregate keepalive', () => {
         expect(keepalives()).toEqual([true, false, false])
         const body = deferred<string>()
         bodies.push(body)
-        pending[0].resolve({ status: 200, text: () => body.promise } as Response)
+        pending[0].resolve(Object.assign(new Response(), { text: () => body.promise }))
         await tick()
         send()
         expect(keepalives()).toEqual([true, false, false, false])
@@ -92,15 +93,16 @@ describe('request fetch aggregate keepalive', () => {
             if (outcome === 'reject') {
                 pending[0].reject(error)
             } else if (outcome !== 'sync throw') {
-                pending[0].resolve({
-                    status: 200,
-                    text: () => {
-                        if (outcome === 'text throw') {
-                            throw error
-                        }
-                        return outcome === 'text reject' ? Promise.reject(error) : Promise.resolve('{}')
-                    },
-                } as Response)
+                pending[0].resolve(
+                    Object.assign(new Response(), {
+                        text: () => {
+                            if (outcome === 'text throw') {
+                                throw error
+                            }
+                            return outcome === 'text reject' ? Promise.reject(error) : Promise.resolve('{}')
+                        },
+                    })
+                )
             }
             await tick()
             expect(callback).toHaveBeenCalledTimes(1)
@@ -114,12 +116,15 @@ describe('request fetch aggregate keepalive', () => {
     )
 
     it('releases before the logs batch promise resumes sequential sends', async () => {
-        const logs = new PostHogLogs({
+        const instance = {
             config: { token: 'test-token' },
             requestRouter: { endpointFor: () => 'https://example.com/i/v1/logs' },
             // Exercise the real logs callback/Promise bridge with uncompressed request bodies.
             _send_request: (options: RequestWithOptions) => request({ ...options, compression: undefined }),
-        } as unknown as PostHog)
+        } as unknown as PostHog
+        const logs = new PostHogLogs(instance)
+        const client = createLogsClient(instance)
+        logs.setup(client)
         const payload: OtlpLogsPayload = {
             resourceLogs: [
                 {
@@ -150,7 +155,7 @@ describe('request fetch aggregate keepalive', () => {
             }
             const sent = sendBatches()
             for (let i = 0; i < 3; i++) {
-                pending[i].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+                pending[i].resolve(new Response('{}', { status: 200 }))
                 await tick()
             }
             await sent
@@ -167,7 +172,7 @@ describe('request fetch aggregate keepalive', () => {
             throw error
         })
         send({ callback })
-        pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+        pending[0].resolve(new Response('{}', { status: 200 }))
         await tick()
         expect(callback.mock.calls).toEqual([[{ statusCode: 200, text: '{}', json: {} }]])
         send()
@@ -177,15 +182,15 @@ describe('request fetch aggregate keepalive', () => {
     it.each([undefined, Compression.Base64, Compression.GZipJS])('uses encoded bytes for %s', (compression) => {
         // Incompressible enough to exercise gzip's byte budget with a bounded number of requests.
         const payload = Array.from({ length: 2000 }, (_, i) => `${i * 982451653}😀`).join('')
-        send({ data: payload, compression })
+        send({ data: { payload }, compression })
         const body = mockedFetch.mock.calls[0][1]!.body!
         const size = new Blob([body as BlobPart]).size
         if (compression === Compression.GZipJS) {
-            expect(size).toBe(gzipSync(strToU8(JSON.stringify(payload)), { mtime: 0 }).byteLength)
+            expect(size).toBe(gzipSync(strToU8(JSON.stringify({ payload })), { mtime: 0 }).byteLength)
         }
         const count = Math.ceil(threshold / size) + 1
         for (let i = 1; i < count; i++) {
-            send({ data: payload, compression })
+            send({ data: { payload }, compression })
         }
         expect(keepalives()).toEqual(Array.from({ length: count }, (_, i) => (i + 1) * size < threshold))
     })
@@ -202,15 +207,16 @@ describe('request fetch aggregate keepalive', () => {
         if (failure === 'reject') {
             pending[0].reject(error)
         } else if (failure === 'text reject' || failure === 'text throw') {
-            pending[0].resolve({
-                status: 200,
-                text: () => {
-                    if (failure === 'text throw') {
-                        throw error
-                    }
-                    return Promise.reject(error)
-                },
-            } as Response)
+            pending[0].resolve(
+                Object.assign(new Response(), {
+                    text: () => {
+                        if (failure === 'text throw') {
+                            throw error
+                        }
+                        return Promise.reject(error)
+                    },
+                })
+            )
         }
         await tick()
         expect(callback).toHaveBeenCalledTimes(1)
@@ -247,7 +253,7 @@ describe('request fetch aggregate keepalive', () => {
             send()
             expect(keepalives()).toEqual([true, false])
             if (outcome === 'success') {
-                pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+                pending[0].resolve(new Response('{}', { status: 200 }))
             } else {
                 pending[0].reject(new TypeError('Failed to fetch'))
             }
@@ -282,7 +288,7 @@ describe('request fetch aggregate keepalive', () => {
         const body = deferred<string>()
         bodies.push(body)
         send({ timeout: 10 })
-        pending[0].resolve({ status: 200, text: () => body.promise } as Response)
+        pending[0].resolve(Object.assign(new Response(), { text: () => body.promise }))
         await tick()
         vi.advanceTimersByTime(10)
         send()

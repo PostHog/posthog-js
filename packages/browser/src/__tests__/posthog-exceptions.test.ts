@@ -62,6 +62,7 @@ describe('PostHogExceptions', () => {
 
     afterEach(() => {
         captureMock.mockClear()
+        vi.useRealTimers()
     })
 
     describe('onRemoteConfig', () => {
@@ -70,6 +71,8 @@ describe('PostHogExceptions', () => {
             const remoteResponse: Partial<RemoteConfig> = { errorTracking: { suppressionRules: [suppressionRule] } }
             exceptions.onRemoteConfig({ ok: true, config: remoteResponse as RemoteConfig })
             expect(exceptions['_suppressionRules']).toEqual([suppressionRule])
+            expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([suppressionRule])
+            expect(new PostHogExceptions(posthog)['_suppressionRules']).toEqual([suppressionRule])
         })
 
         it('does not overwrite persistence when called with empty config', () => {
@@ -232,11 +235,7 @@ describe('PostHogExceptions', () => {
                 const frame = { filename, platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it('captures exceptions from the page even when a filename merely mentions an extension', () => {
@@ -284,11 +283,7 @@ describe('PostHogExceptions', () => {
                     },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it.each([
@@ -312,11 +307,7 @@ describe('PostHogExceptions', () => {
                     },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it.each([
@@ -380,11 +371,7 @@ describe('PostHogExceptions', () => {
                     },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it.each([
@@ -437,11 +424,7 @@ describe('PostHogExceptions', () => {
             ])('does not capture exceptions thrown by %s injected scripts', (_browser, exceptionFields) => {
                 const exception = { ...exceptionFields, stacktrace: { frames: [pageFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it('captures the exception when the value does not reference an injected global', () => {
@@ -482,11 +465,7 @@ describe('PostHogExceptions', () => {
             it('does not capture exceptions thrown by the PostHog SDK', () => {
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).not.toBeCalledWith(
-                    '$exception',
-                    { $exception_list: [exception] },
-                    expect.anything()
-                )
+                expect(captureMock).not.toHaveBeenCalled()
             })
 
             it('captures the exception if a frame from the PostHog SDK is not the kaboom frame', () => {
@@ -629,6 +608,8 @@ describe('PostHogExceptions', () => {
         })
 
         it('drops reserved keys from addExceptionStep properties', () => {
+            vi.useFakeTimers()
+            vi.setSystemTime(new Date('2024-06-18T16:34:36.965Z'))
             exceptions.addExceptionStep('from-message-arg', {
                 $message: 'ignored',
                 $timestamp: 'ignored',
@@ -643,7 +624,7 @@ describe('PostHogExceptions', () => {
                     {
                         $message: 'from-message-arg',
                         custom_property: true,
-                        $timestamp: expect.any(String),
+                        $timestamp: '2024-06-18T16:34:36.965Z',
                     },
                 ],
             })

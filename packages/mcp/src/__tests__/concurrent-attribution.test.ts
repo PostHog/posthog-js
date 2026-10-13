@@ -655,4 +655,47 @@ describe('concurrent request attribution', () => {
       $mcp_is_error: true,
     })
   })
+
+  it('keeps listed input schemas scoped to the request session', async () => {
+    const listAStarted = deferred()
+    const releaseListA = deferred()
+    const server = createServer({})
+    let listIndex = 0
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      listIndex += 1
+      if (listIndex === 1) {
+        listAStarted.resolve()
+        await releaseListA.promise
+        return {
+          tools: [{ name: 'echo', inputSchema: { type: 'object', properties: { labelA: { type: 'string' } } } }],
+        }
+      }
+      return {
+        tools: [{ name: 'echo', inputSchema: { type: 'object', properties: { requestLabel: { type: 'string' } } } }],
+      }
+    })
+    const tokenA = encodeSessionId({ sessionId: 'ses_a' })
+    const tokenB = encodeSessionId({ sessionId: 'ses_b' })
+
+    const listA = invokeListTools(server, {
+      requestInfo: { headers: { 'mcp-session-id': tokenA } },
+    })
+    await listAStarted.promise
+    await invokeListTools(server, {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseListA.resolve()
+    await listA
+
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    await flushCaptures()
+
+    const toolCall = capture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall.properties).toMatchObject({
+      $session_id: 'ses_b',
+      $mcp_input_keys: ['requestLabel'],
+    })
+  })
 })

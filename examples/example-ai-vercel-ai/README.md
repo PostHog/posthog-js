@@ -2,6 +2,11 @@
 
 Track Vercel AI SDK calls with PostHog across multiple providers.
 
+This example uses AI SDK v4. For v7, see [the AI SDK v7 example](../example-ai-vercel-ai-v7).
+For a real Convex application with AI tracing inside Convex actions, see
+[the Convex example](../example-convex), including its
+[AI SDK OpenTelemetry action](../example-convex/convex/aiSdk/openTelemetry.ts).
+
 ## Setup
 
 ```bash

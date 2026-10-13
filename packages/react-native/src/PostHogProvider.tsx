@@ -18,7 +18,10 @@ export interface PostHogProviderProps {
   children: React.ReactNode
   /** PostHog configuration options */
   options?: PostHogOptions
-  /** Your PostHog API key */
+  /**
+   * Your PostHog project token, which starts with `phc_`. Find it in your project settings:
+   * https://us.posthog.com/settings/project-details#variables
+   */
   apiKey?: string
   /** An existing PostHog client instance */
   client?: PostHog

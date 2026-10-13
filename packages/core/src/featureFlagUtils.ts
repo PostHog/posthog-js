@@ -212,6 +212,7 @@ export const MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES = [
   'epik',
   'qclid',
   'sccid',
+  'oppref',
   'irclid',
   '_kx',
 ] as const

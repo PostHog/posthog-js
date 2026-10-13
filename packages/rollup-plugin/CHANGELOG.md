@@ -1,5 +1,12 @@
 # @posthog/rollup-plugin
 
+## 1.6.1
+
+### Patch Changes
+
+- [#5095](https://github.com/PostHog/posthog-js/pull/5095) [`4e0f232`](https://github.com/PostHog/posthog-js/commit/4e0f23235d805d3de3c31039628b7ba2ddd06c47) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Keep the release snippet byte-exact under Vite 8 minification, so posthog-cli recognizes it and stops re-uploading unchanged chunks on every release.
+  (2026-09-25)
+
 ## 1.6.0
 
 ### Minor Changes

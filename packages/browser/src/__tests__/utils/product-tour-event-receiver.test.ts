@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
+import type { Mock as VitestMock } from 'vitest'
 
+import { PRODUCT_TOURS_ACTIVATED } from '../../constants'
 import { ProductTour, ProductTourEventName } from '../../posthog-product-tours-types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
@@ -13,7 +15,7 @@ import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance
 describe('product-tour-event-receiver', () => {
     let config: PostHogConfig
     let instance: PostHog
-    let mockAddCaptureHook: vi.Mock
+    let mockAddCaptureHook: VitestMock
 
     const makeTour = (overrides: Partial<ProductTour> = {}): ProductTour =>
         ({
@@ -39,6 +41,7 @@ describe('product-tour-event-receiver', () => {
             config,
             persistence: new PostHogPersistence(config),
             _addCaptureHook: mockAddCaptureHook,
+            get_session_id: () => 'tour-session',
             productTours: { getProductTours: vi.fn((callback) => callback([tour])) },
         } as unknown as Partial<PostHog>)
         const receiver = new ProductTourEventReceiver(instance)
@@ -62,7 +65,7 @@ describe('product-tour-event-receiver', () => {
             conditions: { events: { values: [{ name: 'second_trigger' }] } },
         })
         const { receiver, hook } = setup(firstTour)
-        ;(instance.productTours.getProductTours as vi.Mock).mockImplementation((callback) =>
+        ;(instance.productTours.getProductTours as VitestMock).mockImplementation((callback) =>
             callback([firstTour, secondTour])
         )
 
@@ -79,7 +82,8 @@ describe('product-tour-event-receiver', () => {
         hook('trigger_event')
         expect(receiver.getTours()).toContain('lifecycle-tour')
 
-        // Armed in memory only — a fresh receiver (a reload) does not see it.
+        expect(instance.persistence?.props[PRODUCT_TOURS_ACTIVATED] || []).not.toContain('lifecycle-tour')
+        // Armed in memory only — a fresh receiver in the same valid session does not see it.
         expect(new ProductTourEventReceiver(instance).getTours()).not.toContain('lifecycle-tour')
     })
 

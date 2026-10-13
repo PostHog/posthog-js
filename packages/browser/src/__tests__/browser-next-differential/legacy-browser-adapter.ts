@@ -1,8 +1,9 @@
 import { isUndefined } from '@posthog/core'
 
 import type { PostHog } from '../../posthog-core'
-import type { CaptureResult, PostHogConfig, QueuedRequestWithOptions } from '../../types'
+import type { CaptureResult, QueuedRequestWithOptions } from '../../types'
 import { assignableWindow } from '../../utils/globals'
+import { createRemoteConfig } from '../helpers/posthog-instance'
 
 import {
     type BehaviorAdapter,
@@ -24,10 +25,10 @@ const createInstance = async (
 ): Promise<{ posthog: PostHog; removeCaptureHook: () => void }> => {
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [runtime.projectToken]: {
-            config: { autocapture_opt_out: true },
+            config: createRemoteConfig({ autocapture_opt_out: true }),
             siteApps: [],
         },
-    } as typeof assignableWindow._POSTHOG_REMOTE_CONFIG
+    }
 
     let publicPostHog: PostHog | undefined
     vi.resetModules()
@@ -40,6 +41,7 @@ const createInstance = async (
         throw new Error('The canonical posthog-js module entry point did not initialize')
     }
 
+    const initializedPostHog = publicPostHog
     const posthog = await new Promise<PostHog>((resolve) => {
         publicPostHog!.init(runtime.projectToken, {
             api_host: 'https://us.i.posthog.com',
@@ -57,8 +59,11 @@ const createInstance = async (
             opt_out_capturing_by_default: setup.optOutByDefault,
             opt_out_capturing_persistence_type: 'localStorage',
             before_send: (event) => event,
-            loaded: (loaded) => resolve(loaded as PostHog),
-        } as Partial<PostHogConfig>)
+            loaded: (loaded) => {
+                if (loaded !== initializedPostHog) throw new Error('Unexpected initialized PostHog instance')
+                resolve(initializedPostHog)
+            },
+        })
     })
 
     const removeCaptureHook = posthog._addCaptureHook((_eventName, payload?: CaptureResult) => {

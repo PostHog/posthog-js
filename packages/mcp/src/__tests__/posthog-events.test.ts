@@ -15,6 +15,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     eventType: MCPAnalyticsEventType.mcpToolsCall,
     timestamp: new Date('2025-01-15T10:00:00Z'),
     resourceName: 'get_weather',
+    serverBuild: 'abc123',
     serverName: 'weather-server',
     serverVersion: '1.0.0',
     clientName: 'claude-desktop',
@@ -47,10 +48,12 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.timestamp).toBe('2025-01-15T10:00:00.000Z')
 
     expect(event.properties[PostHogMCPAnalyticsProperty.SessionId]).toBe('ses_session456')
+    expect(event.properties[PostHogMCPAnalyticsProperty.Interface]).toBe('mcp')
     expect(event.properties[PostHogMCPAnalyticsProperty.Source]).toBe(POSTHOG_MCP_ANALYTICS_SOURCE)
     expect(event.properties[PostHogMCPAnalyticsProperty.ToolName]).toBe('get_weather')
     expect(event.properties[PostHogMCPAnalyticsProperty.ResourceName]).toBe('get_weather')
     expect(event.properties[PostHogMCPAnalyticsProperty.DurationMs]).toBe(150)
+    expect(event.properties[PostHogMCPAnalyticsProperty.ServerBuild]).toBe('abc123')
     expect(event.properties[PostHogMCPAnalyticsProperty.ServerName]).toBe('weather-server')
     expect(event.properties[PostHogMCPAnalyticsProperty.ServerVersion]).toBe('1.0.0')
     expect(event.properties[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-desktop')
@@ -153,8 +156,10 @@ describe('buildPostHogCaptureEvents', () => {
       expect.objectContaining({ type: 'TimeoutError', value: 'Connection timeout' }),
     ])
     expect(exceptionEvent.properties.$session_id).toBe('ses_session456')
+    expect(exceptionEvent.properties.$mcp_interface).toBe('mcp')
     expect(exceptionEvent.properties.$mcp_resource_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_tool_name).toBe('get_weather')
+    expect(exceptionEvent.properties.$mcp_server_build).toBe('abc123')
     expect(exceptionEvent.properties.$mcp_server_name).toBe('weather-server')
     expect(exceptionEvent.properties).not.toHaveProperty('$mcp_lib')
     expect(exceptionEvent.properties).not.toHaveProperty('$mcp_lib_version')
@@ -180,6 +185,21 @@ describe('buildPostHogCaptureEvents', () => {
     expect(exceptionEvent?.properties.$groups).toEqual({
       organization: 'org_123',
     })
+  })
+
+  it('keeps the configured server build authoritative on primary and exception events', () => {
+    const events = buildPostHogCaptureEvents(
+      makeEvent({
+        isError: true,
+        error: makeError('boom'),
+        properties: { $mcp_server_build: 'custom-build' },
+      })
+    )
+
+    expect(events).toHaveLength(2)
+    for (const event of events) {
+      expect(event.properties.$mcp_server_build).toBe('abc123')
+    }
   })
 
   it('does not build an $exception event when isError is false', () => {

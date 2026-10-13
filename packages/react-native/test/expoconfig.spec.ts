@@ -11,6 +11,8 @@ import {
   addPostHogWithBundledScriptsToBundleShellScript,
   applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
+  setPostHogAndroidNativeSymbolsExtension,
+  removePostHogAndroidNativeSymbolsExtension,
   buildAndroidDotenvFileGradleValue,
   buildAndroidForceGradleLine,
   buildAndroidSkipOnConflictGradleLine,
@@ -765,6 +767,29 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     expect(twice.classpathPresent).toBe(true)
   })
 
+  it.each(['1.0.0', '1.4.0', '0.9.9'])('bumps an existing %s classpath that predates native symbols', (version) => {
+    const contents = projectBuildGradle.replace(
+      'classpath("com.android.tools.build:gradle")',
+      `classpath("com.android.tools.build:gradle")\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")`
+    )
+    const result = addPostHogAndroidGradlePluginClasspath(contents)
+    expect(result.contents).not.toContain(`posthog-android-gradle-plugin:${version}`)
+    expect(result.contents.split('posthog-android-gradle-plugin')).toHaveLength(2)
+  })
+
+  it.each(['1.5.0', '2.0.0'])('keeps an existing %s classpath', (version) => {
+    const contents = `buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:${version}")\n    }\n}`
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+  })
+
+  it('keeps a variable-driven classpath and warns that it needs 1.5.0', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const contents =
+      'buildscript {\n    dependencies {\n        classpath("com.posthog:posthog-android-gradle-plugin:$posthogVersion")\n    }\n}'
+    expect(addPostHogAndroidGradlePluginClasspath(contents).contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('uploadNativeSymbols needs 1.5.0 or later'))
+  })
+
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = 'plugins {\n  id "com.android.application"\n}'
@@ -1350,6 +1375,63 @@ describe('postHogExpoPlugin Android native symbols', () => {
     } finally {
       warnSpy.mockRestore()
     }
+  })
+})
+
+describe('setPostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.posthog.android"',
+    '',
+    'android {',
+    '}',
+  ].join('\n')
+
+  it('enables native symbol upload right after the plugin apply line', () => {
+    const result = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    const lines = result.split('\n')
+    const applyIdx = lines.indexOf('apply plugin: "com.posthog.android"')
+    expect(lines.slice(applyIdx + 2, applyIdx + 6)).toEqual([
+      'posthog {',
+      '    uploadNativeSymbols = true',
+      '    includeNativeSymbolSources = false',
+      '}',
+    ])
+  })
+
+  it('is idempotent and follows a changed includeSource', () => {
+    const once = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, false)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, false)).toBe(once)
+    const withSource = setPostHogAndroidNativeSymbolsExtension(once, true)
+    expect(withSource).toBe(setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true))
+    expect(withSource).toContain('includeNativeSymbolSources = true')
+    expect(withSource.split('posthog {')).toHaveLength(2)
+  })
+
+  it('leaves the file unchanged when the plugin is not applied', () => {
+    const contents = 'apply plugin: "com.android.application"\n'
+    expect(setPostHogAndroidNativeSymbolsExtension(contents, false)).toBe(contents)
+  })
+
+  it('is idempotent on a CRLF file', () => {
+    const crlf = appBuildGradle.replace(/\n/g, '\r\n')
+    const once = setPostHogAndroidNativeSymbolsExtension(crlf, true)
+    expect(setPostHogAndroidNativeSymbolsExtension(once, true)).toBe(once)
+    expect(removePostHogAndroidNativeSymbolsExtension(once)).toBe(crlf)
+    expect(removePostHogAndroidNativeSymbolsExtension(once.replace(/\r?\n/g, '\r\n'))).toBe(crlf)
+  })
+})
+
+describe('removePostHogAndroidNativeSymbolsExtension', () => {
+  const appBuildGradle = 'apply plugin: "com.posthog.android"\n\nandroid {\n}\n'
+
+  it('removes the managed block', () => {
+    const withBlock = setPostHogAndroidNativeSymbolsExtension(appBuildGradle, true)
+    expect(removePostHogAndroidNativeSymbolsExtension(withBlock)).toBe(appBuildGradle)
+  })
+
+  it('leaves a file without the block unchanged', () => {
+    expect(removePostHogAndroidNativeSymbolsExtension(appBuildGradle)).toBe(appBuildGradle)
   })
 })
 

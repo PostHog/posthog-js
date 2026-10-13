@@ -162,12 +162,14 @@ describe('versioned definitions in the Node poller', () => {
     const writer = poller(fetch, cache)
     await writer.loadFeatureFlags()
     expect(stored).toHaveProperty('propertyMatchingVersion', 2)
+    expect(stored).toHaveProperty('property_matching_version', 2)
     shouldFetch = false
     const reader = poller(fetch, cache)
     expect(await reader.getFeatureFlag('person', 'user', {}, { value: 'banana' })).toBe(false)
     expect(fetch).toHaveBeenCalledTimes(1)
     for (const version of [1, 2, undefined]) {
       stored = { ...stored!, propertyMatchingVersion: version }
+      delete stored.property_matching_version
       if (version === undefined) delete stored.propertyMatchingVersion
       await reader.loadFeatureFlags(true)
       expect(await reader.getFeatureFlag('person', 'user', {}, { value: 'banana' })).toBe(version !== 2)

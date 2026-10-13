@@ -35,8 +35,8 @@ const multipleChoiceQuestion = {
 
 const appearanceWithThanks = {
     displayThankYouMessage: true,
-    thankyouMessageHeader: 'Thanks!',
-    thankyouMessageBody: 'We appreciate your feedback.',
+    thankYouMessageHeader: 'Thanks!',
+    thankYouMessageDescription: 'We appreciate your feedback.',
 }
 
 const tabPositions = [
@@ -167,15 +167,14 @@ test.describe('surveys - feedback widget', () => {
                             type: 'widget',
                             start_date: '2021-01-01T00:00:00Z',
                             questions: [
-                                { type: 'open', question: 'Feedback for us?', description: 'tab feedback widget' },
+                                {
+                                    id: 'responsive_feedback',
+                                    type: 'open',
+                                    question: 'Feedback for us?',
+                                    description: 'tab feedback widget',
+                                },
                             ],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thanks!',
-                                thankyouMessageBody: 'We appreciate your feedback.',
-                            },
+                            appearance: { ...appearanceWithThanks, widgetLabel: 'Feedback', widgetType: 'tab' },
                         },
                     ],
                 },
@@ -188,7 +187,13 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
         await page.setViewportSize({ width: 375, height: 667 })
 
-        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeInViewport()
+        const form = page.locator('.PostHogSurvey-123').locator('.survey-form')
+        await expect(form).toBeInViewport({ ratio: 1 })
+        await expect(form.locator('textarea')).toBeInViewport({ ratio: 1 })
+        await expect(form.locator('.form-submit')).toBeInViewport({ ratio: 1 })
+        await form.locator('textarea').fill('mobile feedback')
+        await form.locator('.form-submit').click()
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
     })
 
     test('widgetType is custom selector', async ({ page, context }) => {
@@ -277,6 +282,10 @@ test.describe('surveys - feedback widget', () => {
 
         await pollUntilEventCaptured(page, 'survey shown')
         await pollUntilEventCaptured(page, 'survey sent')
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message-header')).toHaveText(
+            appearanceWithThanks.thankYouMessageHeader
+        )
     })
 
     test('auto contrasts text color for feedback tab', async ({ page, context }) => {
@@ -381,8 +390,13 @@ test.describe('surveys - feedback widget', () => {
         // Verify thank you message appears again
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-header')).toBeVisible()
 
-        // Verify second event was sent
-        await pollUntilEventCaptured(page, 'survey sent')
+        await expect
+            .poll(async () =>
+                (await page.capturedEvents())
+                    .filter((event) => event.event === 'survey sent')
+                    .map((event) => event.properties.$survey_response_open_text_1)
+            )
+            .toEqual(['first submission', 'second submission'])
     })
 
     test('if multiple surveys being shown, sending one of them does not close the other one', async ({
@@ -501,7 +515,7 @@ test.describe('surveys - feedback widget', () => {
 
         await pollUntilEventCaptured(page, 'survey dismissed')
 
-        // check if the second survey is still visible
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
+        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
     })
 })

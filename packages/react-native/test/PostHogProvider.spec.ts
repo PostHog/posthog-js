@@ -307,7 +307,7 @@ describe('PostHogProvider', () => {
       const posthog = onClient.mock.calls[0][0] as PostHog
       expect(posthog.isDisabled).toEqual(true)
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "You must pass your PostHog project's api key. The client will be disabled."
+        'You must pass your PostHog project token. The client will be disabled.'
       )
     } finally {
       consoleErrorSpy.mockRestore()
