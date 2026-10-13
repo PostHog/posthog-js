@@ -11,6 +11,7 @@ import {
   getModelParams,
   type MonitoringEventPropertiesWithDefaults,
   withPrivacyMode,
+  isPrivacyModeEnabled,
 } from '../utils'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { formatToolResult } from '../toolResult'
@@ -59,10 +60,10 @@ const RESPONSE_TOOL_RESULT_TYPES = new Set([
 
 function buildSanitizedChatInput(context: CommonContext<ChatParams>): unknown {
   try {
-    if (withPrivacyMode(context.client, context.monitoring.privacyMode, false) === null) return null
+    if (isPrivacyModeEnabled(context.client, context.monitoring.privacyMode)) return null
     const messages = context.params.messages.map((message) => {
       if ((message.role === 'tool' || message.role === 'function') && Object.hasOwn(message, 'content')) {
-        return { ...message, content: formatToolResult(message.content, context.client) }
+        return { ...message, content: formatToolResult(message.content, context.client, Infinity) }
       }
       return message
     })
@@ -182,22 +183,25 @@ export function buildChatErrorOptions(
 
 function buildSanitizedResponsesInput(context: CommonContext<ResponsesParams>): unknown {
   try {
-    if (withPrivacyMode(context.client, context.monitoring.privacyMode, false) === null) return null
+    if (isPrivacyModeEnabled(context.client, context.monitoring.privacyMode)) return null
     const input = Array.isArray(context.params.input)
       ? context.params.input.map((item) => {
-          if (
-            isObject(item) &&
-            typeof item.type === 'string' &&
-            RESPONSE_TOOL_RESULT_TYPES.has(item.type) &&
-            Object.hasOwn(item, 'output')
-          ) {
-            return { ...item, output: formatToolResult(item.output, context.client) }
-          }
-          return item
+          if (!isObject(item) || typeof item.type !== 'string') return item
+          const key = RESPONSE_TOOL_RESULT_TYPES.has(item.type)
+            ? 'output'
+            : item.type === 'code_interpreter_call'
+              ? 'outputs'
+              : item.type === 'file_search_call'
+                ? 'results'
+                : undefined
+          if (!key || !Object.hasOwn(item, key)) return item
+          // Direct providers previously captured opaque result strings in full.
+          // Share normalization without imposing a new size policy here.
+          return { ...item, [key]: formatToolResult(item[key], context.client, Infinity) }
         })
       : context.params.input
     // Preserve the existing Responses analytics representation. Only result
-    // values are capped, never the subsequently serialized envelope or its IDs.
+    // values are normalized, never the subsequently serialized envelope or its IDs.
     return formatOpenAIResponsesInput(
       sanitizeOpenAIResponse(input, context.client),
       sanitizeOpenAIResponse(context.params.instructions, context.client) as string | null | undefined

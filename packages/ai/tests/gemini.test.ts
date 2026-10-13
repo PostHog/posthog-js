@@ -637,7 +637,7 @@ describe('PostHogGemini - Jest test suite', () => {
       ['generateContent', true],
       ['generateContentStream', true],
     ] as const)(
-      '%s caps tool-result strings without discarding fields unless full capture is enabled (full=%s)',
+      '%s retains the aggregate tool-result ceiling unless full capture is enabled (full=%s)',
       async (method, full) => {
         const large = { text: '!'.repeat(4990) + '😀' + 'x'.repeat(100) }
         const manyFields = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`field_${i}`, 'value']))
@@ -676,10 +676,12 @@ describe('PostHogGemini - Jest test suite', () => {
         expect(captured[0]).toEqual({
           type: 'tool_result',
           tool_use_id: 'call_3',
-          content: full ? large : { text: `${'!'.repeat(4990)}😀${'x'.repeat(6)}... [truncated]` },
+          content: full ? large : JSON.stringify(large).slice(0, 4999) + '... [truncated]',
         })
         expect(captured[1]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_4' })
-        expect(captured[1].content).toEqual(manyFields)
+        expect(captured[1].content).toEqual(
+          full ? manyFields : JSON.stringify(manyFields).slice(0, 5000) + '... [truncated]'
+        )
         expect(captured[2]).toEqual({ type: 'tool_result', tool_use_id: 'call_5', content: small })
       }
     )
@@ -1569,6 +1571,24 @@ describe('PostHogGemini - Jest test suite', () => {
     })
   })
 
+  test('bounds the combined functionResponse response and parts while preserving the provider request', async () => {
+    const response = { summary: 'small response' }
+    const parts = Array.from({ length: 100 }, () => ({ text: '!'.repeat(100) }))
+    const functionResponse = { id: 'combined_call', name: 'lookup', response, parts }
+    const contents = [{ role: 'user', parts: [{ functionResponse }] }]
+    await client.models.generateContent({ model: 'gemini-synthetic', contents: contents as any })
+    const input = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties.$ai_input
+    const combined = JSON.stringify({ response, parts })
+    expect(input[0].content[0]).toEqual({
+      type: 'tool_result',
+      tool_use_id: 'combined_call',
+      content: combined.slice(0, 5000) + '... [truncated]',
+    })
+    expect((client as any).client.models.generateContent).toHaveBeenCalledWith({ model: 'gemini-synthetic', contents })
+    expect(functionResponse.parts).toBe(parts)
+    expect(functionResponse.response).toBe(response)
+  })
+
   test.each(['single content', 'single part', 'part array'])(
     'preserves binary redaction and tool-result policy for %s input',
     async (shape) => {
@@ -1585,7 +1605,7 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(result).toEqual({
         id: 'fallback_call',
         name: 'lookup',
-        response: { body: '!'.repeat(5000) + '... [truncated]', summary: 'later field' },
+        response: JSON.stringify(response).slice(0, 5000) + '... [truncated]',
       })
       expect(response.body.length).toBe(6000)
     }

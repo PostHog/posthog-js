@@ -11,6 +11,12 @@ import { buildChatErrorOptions, buildResponsesErrorOptions } from '../src/openai
 const marker = '... [truncated]'
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength
 const providerNames = ['gemini', 'openai-chat', 'openai-responses', 'anthropic'] as const
+const directProviders = ['openai-chat', 'openai-responses', 'anthropic'] as const
+function expectedResult(provider: string, value: unknown): unknown {
+  if (provider !== 'gemini') return value
+  const serialized = JSON.stringify(value)
+  return bytes(serialized) > 5000 ? serialized.slice(0, 5000) + marker : value
+}
 type ProviderName = (typeof providerNames)[number]
 
 function phClient(full = false, privacy = false) {
@@ -34,7 +40,7 @@ function history(content: unknown, full = false) {
 async function callAdapter(
   provider: ProviderName,
   content: unknown,
-  options: { full?: boolean; privacy?: boolean; error?: Error; callId?: string } = {}
+  options: { full?: boolean; privacy?: boolean; error?: Error; callId?: string; malformed?: boolean } = {}
 ) {
   const posthog = phClient(options.full, options.privacy)
   const callId = options.callId ?? 'call_1'
@@ -106,6 +112,27 @@ async function callAdapter(
     }
     invoke = () => client.messages.create(request)
   }
+  if (options.malformed) {
+    const invalid = {
+      get content() {
+        throw new Error('non-tool getter')
+      },
+      get text() {
+        throw new Error('non-tool getter')
+      },
+    }
+    if (provider === 'gemini') request.contents = [{ role: 'user', parts: [{ text: 'earlier' }, invalid] }]
+    else if (provider === 'openai-responses') request.input = [{ role: 'user', content: 'earlier' }, invalid]
+    else request.messages = [{ role: 'user', content: 'earlier' }, invalid]
+    if (provider === 'openai-chat' || provider === 'anthropic') {
+      request.messages[1] = Object.defineProperty({ role: 'user' }, 'content', {
+        enumerable: true,
+        get() {
+          throw new Error('non-tool getter')
+        },
+      })
+    }
+  }
   if (options.error) spy.mockRejectedValue(options.error)
   else spy.mockResolvedValue(response)
   if (options.error) await expect(invoke()).rejects.toBe(options.error)
@@ -117,7 +144,7 @@ async function callAdapter(
   const event = (posthog.capture as vi.Mock).mock.calls[0][0]
   const input = event.properties.$ai_input
   let captured: unknown
-  if (input !== null) {
+  if (input !== null && input !== '[Unserializable]') {
     if (provider === 'gemini') {
       expect(input[0].role).toBe('user')
       expect(input[0].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: callId })
@@ -199,26 +226,25 @@ describe('Claude tool-result history characterization', () => {
 })
 
 describe('cross-adapter tool-result history policy', () => {
-  test.each(providerNames)('%s preserves result structure and later fields while capping strings', async (provider) => {
+  test.each(providerNames)('%s preserves its established result-size policy', async (provider) => {
     const input = { body: '!'.repeat(6000), summary: '42 rows matched', nested: [{ text: 'é'.repeat(3000) }] }
     const original = structuredClone(input)
     const { captured, event } = await callAdapter(provider, input)
-    expect(captured).toEqual({
-      body: '!'.repeat(5000) + marker,
-      summary: '42 rows matched',
-      nested: [{ text: 'é'.repeat(2500) + marker }],
-    })
+    expect(captured).toEqual(expectedResult(provider, input))
     expect(event.properties).toMatchObject({ $ai_input_tokens: 7, $ai_output_tokens: 2 })
     expect(input).toEqual(original)
   })
 
-  test.each(providerNames)('%s retains many small fields and never parses arbitrary JSON text', async (provider) => {
-    const fields = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [`field_${index}`, `value_${index}`]))
-    expect((await callAdapter(provider, fields)).captured).toEqual(fields)
-    vi.restoreAllMocks()
-    const text = '{"body":"' + '!'.repeat(6000) + '","summary":"still text"}'
-    expect((await callAdapter(provider, text)).captured).toBe(text.slice(0, 5000) + marker)
-  })
+  test.each(providerNames)(
+    '%s retains established aggregate handling and never parses arbitrary JSON text',
+    async (provider) => {
+      const fields = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [`field_${index}`, `value_${index}`]))
+      expect((await callAdapter(provider, fields)).captured).toEqual(expectedResult(provider, fields))
+      vi.restoreAllMocks()
+      const text = '{"body":"' + '!'.repeat(6000) + '","summary":"still text"}'
+      expect((await callAdapter(provider, text)).captured).toBe(expectedResult(provider, text))
+    }
+  )
 
   test.each(providerNames)(
     '%s applies the same history policy on provider errors and preserves error identity',
@@ -226,7 +252,7 @@ describe('cross-adapter tool-result history policy', () => {
       const error = new Error('original provider failure')
       const input = { body: '!'.repeat(6000), summary: 'failure context' }
       const { captured, event } = await callAdapter(provider, input, { error })
-      expect(captured).toEqual({ body: '!'.repeat(5000) + marker, summary: 'failure context' })
+      expect(captured).toEqual(expectedResult(provider, input))
       expect(event.properties.$ai_is_error).toBe(true)
     }
   )
@@ -324,7 +350,7 @@ describe('recognized provider envelopes', () => {
     'shell_call_output',
     'apply_patch_call_output',
     'mcp_call',
-  ])('caps only the output of the Responses %s envelope, preserving its serialized representation', (type) => {
+  ])('normalizes only the output of the Responses %s envelope without introducing a new cap', (type) => {
     const item = {
       type,
       call_id: '!'.repeat(6000),
@@ -344,13 +370,47 @@ describe('recognized provider envelopes', () => {
     expect(typeof message.content).toBe('string')
     expect(JSON.parse(message.content)).toEqual({
       ...item,
-      output: { stdout: '!'.repeat(5000) + marker, stderr: 'later field' },
+      output: { stdout: '!'.repeat(6000), stderr: 'later field' },
     })
     expect(bytes(message.content)).toBeGreaterThan(10000)
     expect(item).toEqual(original)
   })
 
-  test('caps raw Responses strings before JSON escaping without truncating the serialized envelope', () => {
+  test.each([
+    ['code_interpreter_call', 'outputs'],
+    ['file_search_call', 'results'],
+  ])('normalizes provider-executed Responses %s %s with metadata intact', (type, key) => {
+    const item = {
+      type,
+      id: 'item_1',
+      status: 'completed',
+      [key]: [
+        {
+          mimeType: 'image/png',
+          data: {
+            toJSON() {
+              return new Uint8Array([1, 2, 3])
+            },
+          },
+          text: '!'.repeat(6000),
+        },
+      ],
+    }
+    const options = buildResponsesErrorOptions(
+      { ...context, params: { model: 'synthetic-model', input: [item] } as any },
+      new Error('failure'),
+      { latency: 1 }
+    )
+    expect(JSON.parse((options.input as any[])[0].content)).toEqual({
+      type,
+      id: 'item_1',
+      status: 'completed',
+      [key]: [{ mimeType: 'image/png', data: '[base64 image/png redacted]', text: '!'.repeat(6000) }],
+    })
+    expect(typeof item[key][0].data.toJSON).toBe('function')
+  })
+
+  test('preserves raw Responses strings and JSON escaping without a new tool-output cap', () => {
     const raw = '\n"\\'.repeat(2000)
     const item = {
       type: 'function_call_output',
@@ -366,8 +426,8 @@ describe('recognized provider envelopes', () => {
     expect(bytes(serialized)).toBeGreaterThan(10000)
     const decoded = JSON.parse(serialized)
     expect(decoded.call_id).toBe('call_escaped')
-    expect(decoded.output.body).toBe(raw.slice(0, 5000) + marker)
-    expect(bytes(decoded.output.body)).toBe(5015)
+    expect(decoded.output.body).toBe(raw)
+    expect(bytes(decoded.output.body)).toBe(6000)
     expect(decoded.output.summary).toBe('later field survives')
     expect(item.output.body).toBe(raw)
   })
@@ -400,7 +460,7 @@ describe('recognized provider envelopes', () => {
       new Error('failure'),
       { latency: 1 }
     )
-    expect(options.input).toEqual([messages[0], messages[1], { ...messages[2], content: '!'.repeat(5000) + marker }])
+    expect(options.input).toEqual(messages)
     expect(messages[2].content.length).toBe(6000)
   })
 
@@ -412,7 +472,9 @@ describe('recognized provider envelopes', () => {
     'tool_search_tool_result',
     'web_fetch_tool_result',
     'web_search_tool_result',
-  ])('caps direct Anthropic %s content and retains the block envelope and adjacent blocks', async (type) => {
+    'mcp_tool_result',
+    'future_server_tool_result',
+  ])('normalizes direct Anthropic %s content without losing the envelope or imposing a new cap', async (type) => {
     const posthog = phClient()
     const response = {
       content: [{ type: 'text', text: 'done' }],
@@ -426,7 +488,18 @@ describe('recognized provider envelopes', () => {
       tool_use_id: '!'.repeat(6000),
       is_error: true,
       cache_control: { type: 'ephemeral' },
-      content: { body: '!'.repeat(6000), summary: 'later' },
+      content: {
+        body: '!'.repeat(6000),
+        summary: 'later',
+        media: {
+          mimeType: 'image/png',
+          data: {
+            toJSON() {
+              return new Uint8Array([1, 2])
+            },
+          },
+        },
+      },
     }
     const adjacent = { type: 'text', text: '!'.repeat(6000) }
     const messages = [{ role: 'user', content: [block, adjacent] }]
@@ -435,9 +508,37 @@ describe('recognized provider envelopes', () => {
     expect((posthog.capture as vi.Mock).mock.calls[0][0].properties.$ai_input).toEqual([
       {
         role: 'user',
-        content: [{ ...block, content: { body: '!'.repeat(5000) + marker, summary: 'later' } }, adjacent],
+        content: [
+          {
+            ...block,
+            content: {
+              body: '!'.repeat(6000),
+              summary: 'later',
+              media: { mimeType: 'image/png', data: '[base64 image/png redacted]' },
+            },
+          },
+          adjacent,
+        ],
       },
     ])
     expect(block.content.body.length).toBe(6000)
+  })
+})
+
+describe('adapter preparation fallbacks', () => {
+  test.each(providerNames)('%s replaces the whole input for a throwing non-tool getter', async (provider) => {
+    const { event } = await callAdapter(provider, 'unused', { malformed: true })
+    expect(event.properties.$ai_input).toBe('[Unserializable]')
+    expect(event.properties).toMatchObject({ $ai_input_tokens: 7, $ai_output_tokens: 2 })
+    vi.restoreAllMocks()
+    const error = new Error('original provider failure')
+    const failure = await callAdapter(provider, 'unused', { malformed: true, error })
+    expect(failure.event.properties.$ai_input).toBe('[Unserializable]')
+    expect(failure.event.properties.$ai_is_error).toBe(true)
+  })
+
+  test.each(directProviders)('%s retains opaque serialized tool output beyond 5KB', async (provider) => {
+    const text = JSON.stringify({ document: '!'.repeat(6000), summary: 'later field' })
+    expect((await callAdapter(provider, text)).captured).toBe(text)
   })
 })

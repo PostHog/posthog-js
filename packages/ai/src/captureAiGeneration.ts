@@ -4,7 +4,7 @@ import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@po
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
-import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, withPrivacyMode } from './utils'
+import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, isPrivacyModeEnabled } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
 import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
 
@@ -118,7 +118,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     // Check privacy before reading or traversing input/output. Besides avoiding
     // needless work, this ensures hostile getters/proxies cannot observe a value
     // that the caller explicitly requested us to redact.
-    const shouldRedact = withPrivacyMode(client, privacyMode, false) === null
+    const shouldRedact = isPrivacyModeEnabled(client, privacyMode)
     const safeInput = shouldRedact ? null : toJsonSafeValue(options.input)
     const safeOutput = shouldRedact ? null : toJsonSafeValue(options.output)
 

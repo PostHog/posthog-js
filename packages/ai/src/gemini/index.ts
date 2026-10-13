@@ -1,3 +1,4 @@
+import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import {
   GoogleGenAI,
   GenerateContentResponse as GeminiResponse,
@@ -16,6 +17,9 @@ import {
   extractPosthogParams,
   toContentString,
   withPrivacyMode,
+  truncate,
+  utf8ByteLength,
+  isPrivacyModeEnabled,
   buildInlineDataBlock,
   getModelParams,
 } from '../utils'
@@ -28,6 +32,14 @@ import { mapGeminiUsage } from './usage'
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
+}
+
+const TOOL_RESULT_MAX_BYTES = 5000
+
+function geminiFunctionResponseContent(response: { response?: unknown; parts?: unknown }): unknown {
+  return response.parts !== undefined
+    ? { ...(response.response !== undefined && { response: response.response }), parts: response.parts }
+    : (response.response ?? {})
 }
 
 interface FormattedGeminiFunctionResponse {
@@ -315,13 +327,7 @@ export class WrappedModels {
       } else if (part && typeof part === 'object' && 'functionResponse' in part) {
         const functionResponse = (part as Part).functionResponse
         if (functionResponse?.name) {
-          const content =
-            functionResponse.parts !== undefined
-              ? {
-                  ...(functionResponse.response !== undefined && { response: functionResponse.response }),
-                  parts: functionResponse.parts,
-                }
-              : (functionResponse.response ?? {})
+          const content = geminiFunctionResponseContent(functionResponse)
           blocks.push({
             type: 'tool_result',
             ...(functionResponse.id != null && { tool_use_id: functionResponse.id }),
@@ -427,9 +433,18 @@ export class WrappedModels {
     return null
   }
 
+  private boundToolResult(content: unknown): unknown {
+    const normalized = formatToolResult(content, this.phClient, Infinity)
+    if (isFullAiCaptureEnabled(this.phClient)) return normalized
+    const serialized = JSON.stringify(normalized)
+    return serialized !== undefined && utf8ByteLength(serialized) > TOOL_RESULT_MAX_BYTES
+      ? truncate(serialized, undefined, TOOL_RESULT_MAX_BYTES)
+      : normalized
+  }
+
   private formatInputForPostHog(params: GenerateContentParameters, privacyMode: boolean): unknown {
     try {
-      if (withPrivacyMode(this.phClient, privacyMode, false) === null) return null
+      if (isPrivacyModeEnabled(this.phClient, privacyMode)) return null
 
       const preparePart = (part: unknown): unknown => {
         if (!isObject(part) || !Object.hasOwn(part, 'functionResponse') || !isObject(part.functionResponse)) return part
@@ -437,19 +452,13 @@ export class WrappedModels {
         const hasParts = response.parts !== undefined
         const hasResponse = Object.hasOwn(response, 'response')
         if (!hasParts && !hasResponse) return part
-        const content = hasParts
-          ? {
-              ...(response.response !== undefined && { response: response.response }),
-              parts: response.parts,
-            }
-          : response.response
-        const formatted = formatToolResult(content, this.phClient)
+        const formatted = this.boundToolResult(geminiFunctionResponseContent(response))
         const prepared = { ...response }
         if (hasParts && isObject(formatted)) {
           if (hasResponse) prepared.response = formatted.response
           prepared.parts = formatted.parts
         } else {
-          // A failed/depth-bounded combined payload can be a marker instead of
+          // An oversized combined payload can be a marked preview instead of
           // an object. Keep that marker as result content, never spread a string.
           prepared.response = formatted
           if (hasParts) delete prepared.parts
