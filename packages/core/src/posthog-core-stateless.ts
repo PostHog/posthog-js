@@ -156,6 +156,9 @@ type SuccessfulWriteResponseHandling = {
   type: 'successful-write'
 }
 
+/** Fixed request options, or a builder `fetchWithRetry` calls again before every attempt. */
+type FetchOptionsSource = PostHogFetchOptions | (() => Promise<PostHogFetchOptions>)
+
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
   value !== undefined ? { [key]: value } : {}
 
@@ -1595,39 +1598,44 @@ export abstract class PostHogCoreStateless {
     retryOptions?: Partial<RetriableOptions>,
     route: string = DEFAULT_QUEUE_ROUTE
   ): Promise<void> {
-    const data: Record<string, any> = {
-      api_key: this.projectToken,
-      batch: batchMessages.map((message) => {
-        if (!message) {
-          return message
-        }
+    const batch = batchMessages.map((message) => {
+      if (!message) {
+        return message
+      }
 
-        const timestamp = this.normalizeTimestampForWire(message.timestamp)
-        return timestamp === message.timestamp ? message : { ...message, timestamp }
-      }),
-      sent_at: currentISOTime(),
-    }
-
-    if (this.historicalMigration) {
-      data.historical_migration = true
-    }
-
-    const payload = safeJsonStringify(data)
+      const timestamp = this.normalizeTimestampForWire(message.timestamp)
+      return timestamp === message.timestamp ? message : { ...message, timestamp }
+    })
 
     const url = `${this.host}${this.getBatchEndpointPath(route)}`
 
-    const gzippedPayload = !this.disableCompression ? await this.compressPayload(payload) : null
-    const fetchOptions: PostHogFetchOptions = {
-      method: 'POST',
-      headers: {
-        ...this.getCustomHeaders(),
-        'Content-Type': 'application/json',
-        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-      },
-      body: gzippedPayload || payload,
+    // Built again for every attempt: capture corrects clock skew against `sent_at`, so a
+    // stamp reused across retries would move every event in the batch later by the retry wait.
+    const buildFetchOptions = async (): Promise<PostHogFetchOptions> => {
+      const data: Record<string, any> = {
+        api_key: this.projectToken,
+        batch,
+        sent_at: currentISOTime(),
+      }
+
+      if (this.historicalMigration) {
+        data.historical_migration = true
+      }
+
+      const payload = safeJsonStringify(data)
+      const gzippedPayload = !this.disableCompression ? await this.compressPayload(payload) : null
+      return {
+        method: 'POST',
+        headers: {
+          ...this.getCustomHeaders(),
+          'Content-Type': 'application/json',
+          ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+        },
+        body: gzippedPayload || payload,
+      }
     }
 
-    await this.fetchWithRetry(url, fetchOptions, { type: 'successful-write' }, retryOptions)
+    await this.fetchWithRetry(url, buildFetchOptions, { type: 'successful-write' }, retryOptions)
     // The response handler above cancels the body to prevent cross-request promise warnings
     // in runtimes like Cloudflare Workers that enforce body consumption.
     // See: https://github.com/PostHog/posthog-js/issues/3173
@@ -1881,34 +1889,33 @@ export abstract class PostHogCoreStateless {
 
   private fetchWithRetry<T>(
     url: string,
-    options: PostHogFetchOptions,
+    options: FetchOptionsSource,
     responseHandling: RequiredResponseHandling<T>,
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
   ): Promise<T>
   private fetchWithRetry(
     url: string,
-    options: PostHogFetchOptions,
+    options: FetchOptionsSource,
     responseHandling: SuccessfulWriteResponseHandling,
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
   ): Promise<void>
   private async fetchWithRetry<T>(
     url: string,
-    options: PostHogFetchOptions,
+    optionsSource: FetchOptionsSource,
     responseHandling: RequiredResponseHandling<T> | SuccessfulWriteResponseHandling,
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
   ): Promise<T | void> {
-    const body = options.body ? options.body : ''
-    const reqByteLength = byteLengthOf(body)
-
     const retriableOptions = { ...this._retryOptions, ...retryOptions }
     let attempt = 0
 
     return await retriable(
       async () => {
         attempt++
+        const options = typeof optionsSource === 'function' ? await optionsSource() : optionsSource
+        const reqByteLength = byteLengthOf(options.body ? options.body : '')
         const ctrl = new AbortController()
         const timeoutMs = requestTimeout ?? this.requestTimeout
         const requestDeadline = Date.now() + timeoutMs
