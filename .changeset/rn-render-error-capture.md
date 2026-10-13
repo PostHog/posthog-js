@@ -2,4 +2,4 @@
 'posthog-react-native': patch
 ---
 
-Capture React render errors that crash the app on React Native 0.78 and newer as fatal exceptions with their JavaScript stack trace when `errorTracking.autocapture.uncaughtExceptions` is enabled
+Fix React render errors that crash the app not being captured on React Native 0.78 and newer when `errorTracking.autocapture.uncaughtExceptions` is enabled.
