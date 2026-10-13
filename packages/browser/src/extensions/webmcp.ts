@@ -277,7 +277,28 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
 }
 
 function sanitizeFrameFilename(filename: string): string {
-    return sanitizeFreeText(filename, { maxStringLength: filename.length, truncationSuffix: '' })
+    const sanitized = sanitizeFreeText(filename, { maxStringLength: filename.length, truncationSuffix: '' })
+    const queryOrFragmentIndex = sanitized.search(/[?#]/)
+    if (queryOrFragmentIndex === -1) {
+        return sanitized
+    }
+
+    const prefix = sanitized.slice(0, queryOrFragmentIndex)
+    const suffix = sanitized.slice(queryOrFragmentIndex).replace(/[^?#&=]+/g, (component) => {
+        let decoded: string
+        try {
+            decoded = decodeURIComponent(component.replace(/\+/g, ' '))
+        } catch {
+            return encodeURIComponent('[redacted]')
+        }
+
+        const sanitizedComponent = sanitizeFreeText(decoded, {
+            maxStringLength: decoded.length,
+            truncationSuffix: '',
+        })
+        return sanitizedComponent === decoded ? component : encodeURIComponent(sanitizedComponent)
+    })
+    return prefix + suffix
 }
 
 function getSanitizedExceptionList(instance: PostHog, failure: WebMCPFailure) {

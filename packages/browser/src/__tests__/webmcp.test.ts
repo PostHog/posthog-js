@@ -487,6 +487,25 @@ describe('WebMCP', () => {
                 lineno: 3,
                 colno: 8,
             },
+            {
+                platform: 'web:javascript' as const,
+                filename: 'webpack:///src/tool.ts?first=one&email=alice%40example.com&last=two',
+                lineno: 6,
+                colno: 2,
+                chunk_id: 'bundle-2',
+            },
+            {
+                platform: 'web:javascript' as const,
+                filename: 'https://example.com/helper.js#/route?email=alice%40example.com',
+                lineno: 9,
+                colno: 5,
+            },
+            {
+                platform: 'web:javascript' as const,
+                filename: 'https://example.com/helper.js?value=%E0%A4%A',
+                lineno: 11,
+                colno: 7,
+            },
         ]
         vi.spyOn(posthog.exceptions, 'buildProperties').mockReturnValue({
             $exception_list: [
@@ -515,6 +534,18 @@ describe('WebMCP', () => {
             {
                 ...frames[1],
                 filename: 'https://example.com/helper.js?email=[redacted]&view=summary',
+            },
+            {
+                ...frames[2],
+                filename: 'webpack:///src/tool.ts?first=one&email=%5Bredacted%5D&last=two',
+            },
+            {
+                ...frames[3],
+                filename: 'https://example.com/helper.js#/route?email=%5Bredacted%5D',
+            },
+            {
+                ...frames[4],
+                filename: 'https://example.com/helper.js?value=%5Bredacted%5D',
             },
         ])
         expect(frames[0].filename).toBe('https://example.com/app.js?token=sk_live_example&view=summary')
