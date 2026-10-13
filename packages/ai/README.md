@@ -9,6 +9,20 @@ SDK usage examples and code snippets live in the official documentation so they 
 - [AI observability installation docs](https://posthog.com/docs/ai-observability/installation)
 - [AI observability docs](https://posthog.com/docs/ai-observability)
 
+## Gemini Interactions
+
+`PostHogGoogleGenAI.interactions.create` traces foreground model calls with `@google/genai` 2.18 or later in the 2.x series.
+Existing `models` calls remain compatible with the supported 1.x SDK range.
+Agent and background interactions are rejected because their completion requires separate lifecycle tracking.
+
+Regular and streamed calls capture text, tool-call IDs, media metadata, and reported token usage.
+Interrupted streams retain the usage observed before cancellation or failure; these counts may be incomplete.
+Provider requests, responses, and stream events are preserved.
+Privacy mode suppresses input/output even when full AI capture is enabled.
+
+Modality pricing and image previews depend on corresponding PostHog ingestion and viewer support.
+Recognizing an audio or image token count does not establish that the selected model has a dedicated catalog rate.
+
 ## Claude Agent SDK
 
 The `@posthog/ai/claude-agent-sdk` integration accepts string and streamed prompts.
