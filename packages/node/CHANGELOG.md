@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.56.0
+
+### Minor Changes
+
+- [#5291](https://github.com/PostHog/posthog-js/pull/5291) [`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Attach trace exemplars to metrics recorded inside sampled spans.
+  (2026-10-13)
+
+### Patch Changes
+
+- Updated dependencies [[`7c10169`](https://github.com/PostHog/posthog-js/commit/7c10169546b1fcfcfff74d05d8d80ba1913b3543)]:
+  - @posthog/core@1.59.0
+
 ## 5.55.3
 
 ### Patch Changes
