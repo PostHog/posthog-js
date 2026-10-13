@@ -1,7 +1,7 @@
 import { isObject } from '@posthog/core'
 import type { PostHog } from '../../posthog-core'
 
-const capturedInstances = new WeakMap<object, Set<PostHog>>()
+const capturedInstances = new WeakMap<object, WeakSet<PostHog>>()
 
 export function markExceptionCaptured(instance: PostHog, error: unknown): void {
     if (!isObject(error)) {
@@ -10,7 +10,7 @@ export function markExceptionCaptured(instance: PostHog, error: unknown): void {
 
     let instances = capturedInstances.get(error)
     if (!instances) {
-        instances = new Set()
+        instances = new WeakSet()
         capturedInstances.set(error, instances)
     }
     instances.add(instance)
