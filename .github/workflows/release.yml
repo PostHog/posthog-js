@@ -138,6 +138,8 @@ jobs:
         environment: 'NPM Release' # This will require an approval from a maintainer, they are notified in Slack above
         permissions:
             contents: read
+            actions: read
+            pull-requests: read
         outputs:
             commit-hash: ${{ steps.commit-version-bump.outputs.commit-hash }}
             # posthog-js SDK version after `pnpm bump`. Downstream jobs use this
@@ -149,6 +151,11 @@ jobs:
               uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
               with:
                   egress-policy: audit
+
+            - name: Block approval by the authors of the released PRs
+              uses: PostHog/.github/.github/actions/release-approval-guard@68f2906c222a22652292c6120028c196db916c3f # main
+              with:
+                  environment: 'NPM Release'
 
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
