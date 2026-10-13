@@ -1,5 +1,77 @@
 # posthog-js
 
+## 1.438.9
+
+### Patch Changes
+
+- [#5281](https://github.com/PostHog/posthog-js/pull/5281) [`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `before_send` callback types to accept non-null events while still allowing `null` returns to drop events.
+  (2026-10-12)
+- Updated dependencies [[`8f2d581`](https://github.com/PostHog/posthog-js/commit/8f2d5818a160040444807a7fc640aabd1ed324f5)]:
+  - @posthog/types@1.415.3
+  - @posthog/core@1.58.1
+
+## 1.438.8
+
+### Patch Changes
+
+- [#5259](https://github.com/PostHog/posthog-js/pull/5259) [`ba4cc49`](https://github.com/PostHog/posthog-js/commit/ba4cc49d9471ac1eaec88023d7a2cc5d5b6f06a8) Thanks [@gesh](https://github.com/gesh)! - Capture WebMCP error types and sanitized messages.
+  (2026-10-12)
+
+## 1.438.7
+
+### Patch Changes
+
+- [#4990](https://github.com/PostHog/posthog-js/pull/4990) [`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share browser logging across SDKs with consistent initialization and cleanup; `captureLog` and `logger` calls before logging setup are now dropped instead of buffered.
+  (2026-10-09)
+- Updated dependencies [[`a66cada`](https://github.com/PostHog/posthog-js/commit/a66cadac23bc13b7aa6cfbe32a467b531591982a)]:
+  - @posthog/browser-common@0.9.4
+
+## 1.438.6
+
+### Patch Changes
+
+- [#5218](https://github.com/PostHog/posthog-js/pull/5218) [`8bc2df6`](https://github.com/PostHog/posthog-js/commit/8bc2df61511bf21f3abaf9edf0b6d489ddc43a9f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Skip WebMCP intent and model injection for schemas with constraints that the extra fields could break.
+  (2026-10-09)
+
+- [#5217](https://github.com/PostHog/posthog-js/pull/5217) [`6af3aa8`](https://github.com/PostHog/posthog-js/commit/6af3aa8ebff7f1ebc178f0c5bc5bf2d094fc1e53) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Export `WebMCPExtensions` from the slim `extension-bundles` entry point.
+  (2026-10-09)
+
+## 1.438.5
+
+### Patch Changes
+
+- [#5258](https://github.com/PostHog/posthog-js/pull/5258) [`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0) Thanks [@hpouillot](https://github.com/hpouillot)! - Recognize native bundler debug IDs and build-time error tracking release IDs.
+  (2026-10-09)
+- Updated dependencies [[`429b5b2`](https://github.com/PostHog/posthog-js/commit/429b5b20770ae5b28b54db2ba52fa3443d4047a0)]:
+  - @posthog/core@1.57.4
+
+## 1.438.4
+
+### Patch Changes
+
+- [#5245](https://github.com/PostHog/posthog-js/pull/5245) [`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e) Thanks [@abrahamguo](https://github.com/abrahamguo)! - Fix type checking in posthog-js 1.438.2 by publishing the feature flag types it imports from @posthog/browser-common.
+  (2026-10-09)
+- Updated dependencies [[`76b4402`](https://github.com/PostHog/posthog-js/commit/76b4402d91a5e1b7b2d7530e14af8191d3779c4e)]:
+  - @posthog/browser-common@0.9.3
+
+## 1.438.3
+
+### Patch Changes
+
+- [#5200](https://github.com/PostHog/posthog-js/pull/5200) [`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8) Thanks [@hpouillot](https://github.com/hpouillot)! - fix(replay): add a private opt-in to preserve application stacks for failed fetch requests
+  (2026-10-08)
+- Updated dependencies [[`34cdfa6`](https://github.com/PostHog/posthog-js/commit/34cdfa6534dcf16e33ff7379076911bcaa12d7c8)]:
+  - @posthog/types@1.415.2
+
+## 1.438.2
+
+### Patch Changes
+
+- [#4988](https://github.com/PostHog/posthog-js/pull/4988) [`22dfa4a`](https://github.com/PostHog/posthog-js/commit/22dfa4a4d8c678053c466c5e96f5b46f5743f35c) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Share feature flag functionality across browser SDKs while preserving existing behavior.
+  (2026-10-07)
+- Updated dependencies [[`ff7582a`](https://github.com/PostHog/posthog-js/commit/ff7582aa771c0e0388b2f7ef79ef1a775fe4db15)]:
+  - @posthog/core@1.57.1
+
 ## 1.438.1
 
 ### Patch Changes

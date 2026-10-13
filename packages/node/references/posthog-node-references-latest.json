@@ -1982,14 +1982,14 @@
       "name": "BeforeSendFn_2",
       "properties": [],
       "path": "../core/src/types.ts",
-      "example": "(event: CaptureEvent | null) => CaptureEvent | null"
+      "example": "(event: CaptureEvent) => CaptureEvent | null"
     },
     {
       "id": "BeforeSendFn",
       "name": "BeforeSendFn",
       "properties": [],
       "path": "src/types.ts",
-      "example": "(event: EventMessage | null) => EventMessage | null"
+      "example": "(event: EventMessage) => EventMessage | null"
     },
     {
       "id": "CaptureEvent",

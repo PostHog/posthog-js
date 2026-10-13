@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.22.1",
+  "version": "0.22.3",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -35,7 +35,8 @@
   "files": [
     "src",
     "dist",
-    "!src/__tests__"
+    "!src/__tests__",
+    "!src/**/*.spec.md"
   ],
   "license": "MIT",
   "author": {

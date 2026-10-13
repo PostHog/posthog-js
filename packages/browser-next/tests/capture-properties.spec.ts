@@ -63,8 +63,8 @@ describe.each(['capture', 'captureImmediate'] as const)('%s property serializati
                 event: 'Nullable Properties',
                 uuid: 'nullable-uuid',
                 distinct_id: posthog.distinctId,
-                session_id: posthog.session.sessionId,
-                window_id: posthog.session.windowId,
+                session_id: posthog.session!.sessionId,
+                window_id: posthog.session!.windowId,
             })
             const { $device_id, $groups, ...custom } = received[0]!.properties
             expect($device_id).toBe(posthog.deviceId)

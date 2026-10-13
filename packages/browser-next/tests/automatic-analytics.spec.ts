@@ -62,7 +62,7 @@ describe('@posthog/browser automatic analytics', () => {
             { uuid: 'stable-uuid', timestamp }
         )
         const originalIdentity = posthog.distinctId
-        const originalSession = posthog.session.sessionId
+        const originalSession = posthog.session!.sessionId
         await posthog.identify('identified-later')
         expect(requests).toHaveLength(0)
         imported.resolve(createAnalyticsDelivery)
@@ -221,7 +221,12 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.capture('snapshotted')
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
 
-        expect(requests).toHaveLength(1)
+        expect(
+            requests.map((request) => [
+                request.url.pathname,
+                (request.body?.batch as Array<{ event: string }> | undefined)?.map((event) => event.event),
+            ])
+        ).toEqual([['/i/v1/analytics/events', ['snapshotted']]])
         await posthog.shutdown()
     })
 

@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.16.2
-      version: 0.16.2
+      specifier: ~0.18.10
+      version: 0.18.10
     '@rslib/core':
       specifier: 0.23.2
       version: 0.23.2
@@ -143,6 +143,9 @@ importers:
       '@microsoft/tsdoc':
         specifier: ^0.15.1
         version: 0.15.1
+      '@posthog/coherence':
+        specifier: ^1.7.1
+        version: 1.7.1
       '@types/node':
         specifier: ^22.19.1
         version: 22.19.1
@@ -215,10 +218,10 @@ importers:
         version: 3.0.18
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.251
-        version: 0.3.251(@anthropic-ai/sdk@0.128.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)
+        version: 0.3.251(@anthropic-ai/sdk@0.131.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)
       '@anthropic-ai/sdk':
-        specifier: '>=0.112.3 <0.129.0'
-        version: 0.128.0(zod@4.1.13)
+        specifier: '>=0.112.3 <0.134.0'
+        version: 0.131.0(zod@4.1.13)
       '@babel/preset-env':
         specifier: 'catalog:'
         version: 7.28.5(@babel/core@7.28.5)
@@ -319,6 +322,9 @@ importers:
         specifier: npm:web-vitals@6.2.1
         version: web-vitals@6.2.1
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@babel/core':
         specifier: 'catalog:'
         version: 7.28.5
@@ -409,6 +415,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.10
       expect:
         specifier: ^29.7.0
         version: 29.7.0
@@ -512,7 +521,13 @@ importers:
       '@posthog/browser-common':
         specifier: workspace:^
         version: link:../browser-common
+      '@posthog/types':
+        specifier: workspace:^
+        version: link:../types
     devDependencies:
+      '@posthog-tooling/sdk-mock-server':
+        specifier: workspace:*
+        version: link:../../tooling/sdk-mock-server
       '@playwright/test':
         specifier: 1.52.0
         version: 1.52.0
@@ -732,13 +747,16 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
       '@posthog/webpack-plugin':
         specifier: workspace:^
         version: link:../webpack-plugin
+      posthog-js:
+        specifier: '>=1.438.5'
+        version: link:../browser
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -812,7 +830,7 @@ importers:
         version: 4.1.3(magicast@0.5.3)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1142,7 +1160,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -1671,7 +1689,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.16.2
+        version: 0.18.10
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1765,6 +1783,15 @@ importers:
         specifier: 'catalog:'
         version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
 
+  tooling/sdk-mock-server:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.1
+        version: 22.20.4
+      typescript:
+        specifier: catalog:native
+        version: 7.0.2
+
   tooling/tsconfig-base: {}
 
 packages:
@@ -1855,8 +1882,8 @@ packages:
       '@modelcontextprotocol/sdk': ^1.29.0
       zod: ^4.0.0
 
-  '@anthropic-ai/sdk@0.128.0':
-    resolution: {integrity: sha512-tl5cBFZC1jVFrTuQyvQObA4WmuNgcYVeXfriqOumgtLAHUm4gPUj18YnszBW60v0PrjDB8nBDOC6wd9CmHQFlA==}
+  '@anthropic-ai/sdk@0.131.0':
+    resolution: {integrity: sha512-9+PepoU7qVMmM70jSahdnfcMHAvAnzhMOLv2W9WjRLO+OG/MAiBETkwKZqv7KIJ1Cj5h8eZ019bHzZaq+Mbepw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -6527,10 +6554,21 @@ packages:
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
 
-  '@posthog/cli@0.16.2':
-    resolution: {integrity: sha512-h8bpf9ffBUH/Z9IoyGV+wiI+vS8rIPorKT3eKQXuzuwawO0G7Qvy+hDd7HQ9YJjHByYZ77yPPQvrSs4WsqTUCg==}
+  '@posthog/cli@0.18.10':
+    resolution: {integrity: sha512-WFucXcIqUL35NkH4hVlch3TBSGRRAhjqvmh2/2z8sj+HsR7e+NUiG3QT5dy9Qs1C3hVe7uWkdNU6DKyKvONAXw==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
+
+  '@posthog/coherence@1.7.1':
+    resolution: {integrity: sha512-D5cwNyyI+H4S1ttVYFHJx32nDeu4PS/+l3MEGHhwkW9yvuWsYg41ELyfT55rHGOuRFBe4HYBdFxN9TuHgxYzbg==}
+    engines: {node: '>=22.18'}
+    os: [darwin, linux]
+    hasBin: true
+    peerDependencies:
+      node-llama-cpp: 3.21.1
+    peerDependenciesMeta:
+      node-llama-cpp:
+        optional: true
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -15696,6 +15734,11 @@ packages:
   pure-rand@6.1.0:
     resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
 
+  pyright@1.1.414:
+    resolution: {integrity: sha512-FPZZb51jepDX4eP7TEYDeNFtmE3WgwkkEcJpvH3/QmUSsj0EAy3LXu+xB4T/FWDejtsXlCfFr/rbWFjwuwuXww==}
+    engines: {node: '>=14.0.0'}
+    hasBin: true
+
   qrcode-terminal@0.10.0:
     resolution: {integrity: sha512-ZvWjbAj4MWAj6bnCc9CnculsXnJr7eoKsvH/8rVpZbqYxP2z05HNQa43ZVwe/dVRcFxgfFHE2CkUqn0sCyLfHw==}
     hasBin: true
@@ -17518,6 +17561,11 @@ packages:
   typedarray@0.0.6:
     resolution: {integrity: sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==}
 
+  typescript-language-server@5.3.0:
+    resolution: {integrity: sha512-5puofxZHgFdAYtfNpmwCAvgtaYgg8wrUnH30m7Ze3QuguId5RNRadKASpOpyDxTyUdAF51FjhTdjntLw/EuWcQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   typescript@4.7.4:
     resolution: {integrity: sha512-C0WQT0gezHuw6AdY1M2jxUO83Rjf0HP7Sk1DtXj6j1EwkQNZrHAg2XPWlq62oqEhYvONq5pkC2Y9oPljWToLmQ==}
     engines: {node: '>=4.2.0'}
@@ -18336,6 +18384,20 @@ packages:
   vlq@1.0.1:
     resolution: {integrity: sha512-gQpnTgkubC6hQgdIcRdYGDSDc+SaujOdyesZQMv6JlfQee/9Mp0Qhnys6WxDWvQnL5WZdT7o2Ul187aSt0Rq+w==}
 
+  vscode-jsonrpc@5.0.1:
+    resolution: {integrity: sha512-JvONPptw3GAQGXlVV2utDcHx0BiY34FupW/kI6mZ5x06ER5DdPG/tXWMVHjTNULF5uKPOUUD0SaXg5QaubJL0A==}
+    engines: {node: '>=8.0.0 || >=10.0.0'}
+
+  vscode-jsonrpc@9.0.3:
+    resolution: {integrity: sha512-qETYf9PCl1lVfwR+oBmMfc4vP2nqLNA35ABxorw3j06+xlKRgDVxbLgKm4Y/xPL0YWdeDjLoI4ImICIT3nB0zQ==}
+    engines: {node: '>=14.0.0'}
+
+  vscode-languageserver-protocol@3.18.4:
+    resolution: {integrity: sha512-CCXbyr99dafRJzJH/0Ryk7ly5T8XPmSR0//OuF2w4m+9JiOin7zcAT5iET8GRE7Z9taFBejb3GbM0a0mbjdbrg==}
+
+  vscode-languageserver-types@3.18.4:
+    resolution: {integrity: sha512-nQsacoiijvl0fRf2q28uFDrAVwRhdCa3QveiF7/CX0r18mLR5FU/1WskSsCKOjmEbtteKUnY8x8Yzxop+k0zwg==}
+
   vscode-uri@3.2.0:
     resolution: {integrity: sha512-m2gXo3bn0G1kT9InzMf07fTbqMbGtyckj3bH5ktLO+1Ssv+yiATZ4dhwaQv9UZWxJh6E9IFGnQyjgWVDWVBDrg==}
 
@@ -18901,9 +18963,9 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.251(@anthropic-ai/sdk@0.128.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)':
+  '@anthropic-ai/claude-agent-sdk@0.3.251(@anthropic-ai/sdk@0.131.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))(zod@4.1.13)':
     dependencies:
-      '@anthropic-ai/sdk': 0.128.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.131.0(zod@4.1.13)
       '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
@@ -18916,7 +18978,7 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.251
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.251
 
-  '@anthropic-ai/sdk@0.128.0(zod@4.1.13)':
+  '@anthropic-ai/sdk@0.131.0(zod@4.1.13)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
@@ -25132,9 +25194,15 @@ snapshots:
 
   '@poppinss/exception@1.2.3': {}
 
-  '@posthog/cli@0.16.2':
+  '@posthog/cli@0.18.10':
     dependencies:
       detect-libc: 2.1.2
+
+  '@posthog/coherence@1.7.1':
+    optionalDependencies:
+      pyright: 1.1.414
+      typescript: 5.9.3
+      typescript-language-server: 5.3.0
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -36777,6 +36845,11 @@ snapshots:
   pure-rand@6.1.0:
     optional: true
 
+  pyright@1.1.414:
+    optionalDependencies:
+      fsevents: 2.3.3
+    optional: true
+
   qrcode-terminal@0.10.0: {}
 
   qrcode-terminal@0.11.0: {}
@@ -39195,6 +39268,12 @@ snapshots:
 
   typedarray@0.0.6: {}
 
+  typescript-language-server@5.3.0:
+    dependencies:
+      vscode-jsonrpc: 5.0.1
+      vscode-languageserver-protocol: 3.18.4
+    optional: true
+
   typescript@4.7.4: {}
 
   typescript@5.8.2: {}
@@ -40461,6 +40540,21 @@ snapshots:
       - terser
 
   vlq@1.0.1: {}
+
+  vscode-jsonrpc@5.0.1:
+    optional: true
+
+  vscode-jsonrpc@9.0.3:
+    optional: true
+
+  vscode-languageserver-protocol@3.18.4:
+    dependencies:
+      vscode-jsonrpc: 9.0.3
+      vscode-languageserver-types: 3.18.4
+    optional: true
+
+  vscode-languageserver-types@3.18.4:
+    optional: true
 
   vscode-uri@3.2.0:
     optional: true

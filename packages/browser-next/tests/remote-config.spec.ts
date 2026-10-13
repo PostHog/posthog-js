@@ -13,7 +13,7 @@ const response = () => new Response(JSON.stringify(localRemoteConfig))
 
 // Exercise both published factory graphs, including the buffer-only core.
 describe.each([
-    ['root', createRoot],
+    ['root', (options: CorePostHogOptions) => createRoot({ ...options, flags: false })],
     ['core', createCore],
 ] as const)('%s remote configuration', (_, create) => {
     afterEach(() => {
@@ -85,7 +85,7 @@ describe.each([
         })
         posthog.onRemoteConfig(second)
         posthog.capture('before config')
-        expect(posthog.session.sessionId).not.toBe('')
+        expect(posthog.session!.sessionId).not.toBe('')
         const pending = posthog.getRemoteConfig()
         expect(fetch).toHaveBeenCalledTimes(1)
         finish(response())

@@ -48,6 +48,7 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.timestamp).toBe('2025-01-15T10:00:00.000Z')
 
     expect(event.properties[PostHogMCPAnalyticsProperty.SessionId]).toBe('ses_session456')
+    expect(event.properties[PostHogMCPAnalyticsProperty.Interface]).toBe('mcp')
     expect(event.properties[PostHogMCPAnalyticsProperty.Source]).toBe(POSTHOG_MCP_ANALYTICS_SOURCE)
     expect(event.properties[PostHogMCPAnalyticsProperty.ToolName]).toBe('get_weather')
     expect(event.properties[PostHogMCPAnalyticsProperty.ResourceName]).toBe('get_weather')
@@ -155,6 +156,7 @@ describe('buildPostHogCaptureEvents', () => {
       expect.objectContaining({ type: 'TimeoutError', value: 'Connection timeout' }),
     ])
     expect(exceptionEvent.properties.$session_id).toBe('ses_session456')
+    expect(exceptionEvent.properties.$mcp_interface).toBe('mcp')
     expect(exceptionEvent.properties.$mcp_resource_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_tool_name).toBe('get_weather')
     expect(exceptionEvent.properties.$mcp_server_build).toBe('abc123')

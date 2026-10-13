@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.57.0",
+  "version": "1.58.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -34,8 +34,10 @@
   },
   "files": [
     "dist",
+    "surveys",
     "src",
-    "!src/__tests__"
+    "!src/__tests__",
+    "!src/**/*.spec.md"
   ],
   "scripts": {
     "check-types": "tsc --noEmit --project tsconfig.build.json",

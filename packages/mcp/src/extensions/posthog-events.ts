@@ -60,6 +60,7 @@ function buildCaptureEvent(event: Event): PostHogCaptureEvent {
   const timestamp = getTimestamp(event)
 
   const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
     [PostHogMCPAnalyticsProperty.Source]: POSTHOG_MCP_ANALYTICS_SOURCE,
   }
   addSessionIdProperty(event, properties)
@@ -230,7 +231,9 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   const distinctId = getDistinctId(event)
   const timestamp = getTimestamp(event)
 
-  const properties: Record<string, unknown> = {}
+  const properties: Record<string, unknown> = {
+    [PostHogMCPAnalyticsProperty.Interface]: 'mcp',
+  }
   addSessionIdProperty(event, properties)
   addConversationIdProperty(event, properties)
   addPersonProcessingProperty(event, properties)

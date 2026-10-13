@@ -36,7 +36,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/**/*.spec.md"
   ],
   "exports": {
     "./package.json": "./package.json",

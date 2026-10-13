@@ -1,5 +1,5 @@
 import { OptionalAsyncStorage } from './optional/OptionalAsyncStorage'
-import { GLOBAL_OBJ, getPlatformOS, getReactNativeVersion, isMacOS, isWeb, isWindows } from './utils'
+import { GLOBAL_OBJ, getPlatformOS, isMacOS, isWeb, isWindows } from './utils'
 import { OptionalExpoApplication } from './optional/OptionalExpoApplication'
 import { OptionalExpoDevice } from './optional/OptionalExpoDevice'
 import { OptionalExpoFileSystem } from './optional/OptionalExpoFileSystem'
@@ -37,11 +37,6 @@ export const currentDeviceType = getDeviceType()
 export const getAppProperties = (): PostHogCustomAppProperties => {
   const properties: PostHogCustomAppProperties = {
     $device_type: currentDeviceType,
-  }
-
-  const reactNativeVersion = getReactNativeVersion()
-  if (reactNativeVersion) {
-    properties.$react_native_version = reactNativeVersion
   }
 
   if (OptionalExpoApplication) {

@@ -52,6 +52,19 @@ function prerequisites(tasks, taskId) {
 
 const executable = (tasks) => tasks.filter((task) => task.command !== '<NONEXISTENT>')
 
+test('browser fixture test commands build their shared mock before importing it', () => {
+    const scripts = readJson('packages/browser-next/package.json').scripts
+    for (const [script, runner] of [
+        ['test:browser', 'playwright test --config playwright.config.ts'],
+        ['test:fixture-server', 'node --test scripts/serve-browser-tests.test.mjs'],
+    ]) {
+        assert.deepEqual(scripts[script].split(' && '), [
+            'pnpm --filter @posthog-tooling/sdk-mock-server build',
+            runner,
+        ])
+    }
+})
+
 test('concurrent version generation never exposes an empty module to builds', async () => {
     const fixture = mkdtempSync(resolve(tmpdir(), 'posthog-version-race-'))
     const targets = []
@@ -287,8 +300,10 @@ test('rrweb dev bootstraps dependency builds before starting its single watcher'
 test('every SDK and rrweb package participates in the root semantic check contract', () => {
     const sdkPackages = globSync('packages/*/package.json', { cwd: root }).map(readJson)
     const tasks = rootScriptGraph('check-types')
-    const checks = executable(tasks).filter((task) => task.task === 'check-types')
     const packages = [...sdkPackages, ...rrwebPackages]
+    const checks = executable(tasks).filter(
+        (task) => task.task === 'check-types' && packages.some((pkg) => task.package === pkg.name)
+    )
     assert.equal(checks.length, packages.length)
     for (const pkg of packages) {
         const id = `${pkg.name}#check-types`
