@@ -468,7 +468,7 @@ describe('WebMCP', () => {
         )
     })
 
-    it('redacts stack frame credentials without changing locations or the original error', () => {
+    it('redacts sensitive stack frame values without changing locations or the original error', () => {
         const { posthog, capture } = createPostHogWithExceptionCapture()
         const thrown = new Error('tool failed')
         const originalStack = thrown.stack
@@ -483,7 +483,7 @@ describe('WebMCP', () => {
             },
             {
                 platform: 'web:javascript' as const,
-                filename: 'https://example.com/helper.js?view=summary',
+                filename: 'https://example.com/helper.js?email=alice@example.com&view=summary',
                 lineno: 3,
                 colno: 8,
             },
@@ -512,7 +512,10 @@ describe('WebMCP', () => {
                 ...frames[0],
                 filename: 'https://example.com/app.js?token=%5Bredacted%5D&view=summary',
             },
-            frames[1],
+            {
+                ...frames[1],
+                filename: 'https://example.com/helper.js?email=[redacted]&view=summary',
+            },
         ])
         expect(frames[0].filename).toBe('https://example.com/app.js?token=sk_live_example&view=summary')
         expect(thrown.stack).toBe(originalStack)

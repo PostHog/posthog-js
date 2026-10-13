@@ -1,13 +1,4 @@
-import {
-    isArray,
-    isFunction,
-    isObject,
-    isPromise,
-    isString,
-    isUndefined,
-    sanitizeCapturedValue,
-    sanitizeFreeText,
-} from '@posthog/core'
+import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
@@ -286,11 +277,7 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
 }
 
 function sanitizeFrameFilename(filename: string): string {
-    const sanitized = sanitizeCapturedValue(filename, { maxStringLength: filename.length, truncationSuffix: '' })
-    if (!isString(sanitized)) {
-        throw new Error('Invalid sanitized stack frame filename')
-    }
-    return sanitized
+    return sanitizeFreeText(filename, { maxStringLength: filename.length, truncationSuffix: '' })
 }
 
 function getSanitizedExceptionList(instance: PostHog, failure: WebMCPFailure) {
