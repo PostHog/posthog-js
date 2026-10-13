@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import type { Attributes, Meter, SpanKind as OtelSpanKind } from '@opentelemetry/api'
-import type { MetricReader, PushMetricExporter } from '@opentelemetry/sdk-metrics'
+import type { MetricReader, PushMetricExporter, ViewOptions } from '@opentelemetry/sdk-metrics'
 import type { ReadableSpan, Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { allSettled, type Logger } from '@posthog/core'
 
@@ -111,6 +111,35 @@ const operationFromStatement = (statement: string | undefined): string | undefin
   const keyword = statement?.match(/^\s*([A-Za-z]{2,20})\b/)?.[1]
   return keyword?.toUpperCase()
 }
+
+// An operation name is one word (`SELECT`, `find`, `HGETALL`). Anything after it
+// may be part of the statement.
+const DB_OPERATION_NAME = /^\s*([A-Za-z_][A-Za-z0-9_]{0,63})/
+
+/**
+ * Keeps only the leading word of `db.operation.name` on every
+ * `db.client.operation.duration` series. Native instrumentations derive it from
+ * the statement too: pg takes the text before the first space, so
+ * `SELECT\n'a@b.c'` would otherwise reach PostHog with the literal in it.
+ */
+export const DB_METRIC_VIEWS: ViewOptions[] = [
+  {
+    instrumentName: DB_OPERATION_DURATION,
+    attributesProcessors: [
+      {
+        process: (incoming) => {
+          const value = incoming['db.operation.name']
+          if (value === undefined) {
+            return incoming
+          }
+          const { 'db.operation.name': _dropped, ...attributes } = incoming
+          const operation = typeof value === 'string' ? value.match(DB_OPERATION_NAME)?.[1] : undefined
+          return operation ? { ...attributes, 'db.operation.name': operation } : attributes
+        },
+      },
+    ],
+  },
+]
 
 /**
  * Turns driver-level database client spans into a `db.client.operation.duration`
@@ -295,7 +324,7 @@ export function startMetricsAutocapture(
         ),
         exportIntervalMillis: options.exportIntervalMs ?? 10000,
       })
-    const meterProvider = new sdkMetrics.MeterProvider({ resource, readers: [reader] })
+    const meterProvider = new sdkMetrics.MeterProvider({ resource, readers: [reader], views: DB_METRIC_VIEWS })
     const tracerProvider = new sdkTrace.BasicTracerProvider({
       resource,
       sampler: clientSpansOnlySampler(sdkTrace.SamplingDecision),

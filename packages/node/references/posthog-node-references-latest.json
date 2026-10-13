@@ -1201,6 +1201,28 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Privacy",
+          "description": "Opt the client back in (same as `enable()`). Autocaptured metrics recorded while opted out are dropped, not sent.",
+          "details": null,
+          "id": "optIn",
+          "showDocs": true,
+          "title": "optIn",
+          "examples": [
+            {
+              "id": "optin",
+              "name": "Generated example for optIn",
+              "code": "// Generated example for optIn\nposthog.optIn();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Override feature flags locally. Useful for testing and local development. Overridden flags take precedence over both local evaluation and remote evaluation.",
           "details": null,
@@ -1626,27 +1648,6 @@
           "returnType": {
             "id": "() => void",
             "name": "() => void"
-          },
-          "path": "src/entrypoints/index.node.ts"
-        },
-        {
-          "category": "",
-          "details": null,
-          "id": "optIn",
-          "showDocs": true,
-          "title": "optIn",
-          "examples": [
-            {
-              "id": "optin",
-              "name": "Generated example for optIn",
-              "code": "// Generated example for optIn\nposthog.optIn();"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [],
-          "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
           },
           "path": "src/entrypoints/index.node.ts"
         },
@@ -2804,25 +2805,6 @@
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
-    },
-    {
-      "id": "MetricsAutocaptureAreas",
-      "name": "MetricsAutocaptureAreas",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "db"
-        },
-        {
-          "type": "boolean",
-          "name": "http"
-        },
-        {
-          "type": "boolean",
-          "name": "runtime"
-        }
-      ],
-      "path": "src/extensions/metrics-autocapture.node.ts"
     },
     {
       "id": "MetricsAutocaptureConfig",

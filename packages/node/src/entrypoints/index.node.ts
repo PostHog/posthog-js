@@ -12,7 +12,8 @@ import { PostHogContext } from '../extensions/context/context'
 import { AsyncLocalStorageSpanContextManager } from '../extensions/context/span-context.node'
 import { gzipCompress } from '../gzip.node'
 import { hostOsResourceAttributes } from '../host-os.node'
-import { startMetricsAutocapture, type MetricsAutocaptureAreas } from '../extensions/metrics-autocapture.node'
+import { startMetricsAutocapture } from '../extensions/metrics-autocapture.node'
+import type { MetricsAutocaptureConfig } from '../types'
 import { version } from '../version'
 
 export class PostHog extends PostHogBackendClient {
@@ -36,7 +37,9 @@ export class PostHog extends PostHogBackendClient {
     return hostOsResourceAttributes()
   }
 
-  protected override startMetricsAutocapture(areas: MetricsAutocaptureAreas): MetricsAutocaptureHandle | undefined {
+  protected override startMetricsAutocapture(
+    areas: Required<MetricsAutocaptureConfig>
+  ): MetricsAutocaptureHandle | undefined {
     const metrics = this.options.metrics
     return startMetricsAutocapture({
       host: this.host,

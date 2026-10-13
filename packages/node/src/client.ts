@@ -914,6 +914,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the client is enabled
    */
   enable(): Promise<void> {
+    return this.optIn()
+  }
+
+  /**
+   * Opt the client back in (same as `enable()`). Autocaptured metrics recorded
+   * while opted out are dropped, not sent.
+   *
+   * {@label Privacy}
+   *
+   * @returns Promise that resolves when the client is opted in
+   */
+  override async optIn(): Promise<void> {
+    if (this._metricsAutocapture && this.optedOut) {
+      // Autocaptured metrics recorded while opted out are still in the current
+      // window. Collecting it now, while the exporter still sees the client as
+      // opted out, drops them instead of sending them after opt-in.
+      await this._metricsAutocapture.forceFlush().catch(() => {})
+    }
     return super.optIn()
   }
 

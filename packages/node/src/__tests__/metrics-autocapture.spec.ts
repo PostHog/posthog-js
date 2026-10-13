@@ -14,6 +14,7 @@ import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 import { PostHog } from '@/entrypoints/index.node'
 import {
   createDbSpanMetricsProcessor,
+  DB_METRIC_VIEWS,
   startMetricsAutocapture,
   type MetricsAutocapture,
   type MetricsAutocaptureOptions,
@@ -367,6 +368,35 @@ describe('metrics autocapture', () => {
     })
   })
 
+  describe('DB_METRIC_VIEWS', () => {
+    it('keeps only the leading word of a native db.operation.name', async () => {
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.DELTA)
+      const reader = new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 60_000 })
+      const provider = new MeterProvider({ readers: [reader], views: DB_METRIC_VIEWS })
+      // As pg records it: the text before the first space of the statement.
+      const histogram = provider
+        .getMeter('@opentelemetry/instrumentation-pg')
+        .createHistogram('db.client.operation.duration', {
+          unit: 's',
+          advice: { explicitBucketBoundaries: [0.001, 0.01, 0.1, 1] },
+        })
+      histogram.record(0.2, { 'db.system.name': 'postgresql', 'db.operation.name': "SELECT\n'private@example.com'" })
+      histogram.record(0.2, { 'db.system.name': 'postgresql', 'db.operation.name': "('private@example.com')" })
+      histogram.record(0.2, { 'db.system.name': 'mongodb', 'db.operation.name': 'findAndModify' })
+      histogram.record(0.2, { 'db.system.name': 'postgresql' })
+
+      await reader.forceFlush()
+      const points = dataPoints(exporter.getMetrics(), 'db.client.operation.duration') as any[]
+      await provider.shutdown()
+      expect(points.map((point) => point.attributes)).toEqual([
+        { 'db.system.name': 'postgresql', 'db.operation.name': 'SELECT' },
+        { 'db.system.name': 'postgresql' },
+        { 'db.system.name': 'mongodb', 'db.operation.name': 'findAndModify' },
+      ])
+      expect(points[0].value.buckets.boundaries).toEqual([0.001, 0.01, 0.1, 1])
+    })
+  })
+
   describe('PostHog client option', () => {
     let posthogHost: { server: Server; url: string }
 
@@ -398,6 +428,27 @@ describe('metrics autocapture', () => {
       const probe = tryStart()
       expect(probe).toBeDefined()
       await probe!.shutdown()
+    })
+
+    it('drops metrics recorded while opted out when the client opts in again', async () => {
+      const received: string[] = []
+      const host = await listen((req, body) => req.url === '/i/v1/metrics' && received.push(body.toString('latin1')))
+      const app = await listen()
+      const posthog = new PostHog('phc_test_token', {
+        host: host.url,
+        defaultOptIn: false,
+        metrics: { autocapture: { http: true, db: false, runtime: false }, flushIntervalMs: 60_000 },
+      })
+      try {
+        await httpGet(`${app.url}/while-opted-out`)
+        await posthog.optIn()
+        await posthog.shutdown()
+        expect(received.join('')).not.toContain('http.client.request.duration')
+      } finally {
+        await posthog.shutdown()
+        await close(host.server)
+        await close(app.server)
+      }
     })
 
     it('does not start autocapture by default or when the client is disabled', async () => {
