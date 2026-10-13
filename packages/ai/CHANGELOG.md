@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.13.6
+
+### Patch Changes
+
+- [#5286](https://github.com/PostHog/posthog-js/pull/5286) [`4f739c6`](https://github.com/PostHog/posthog-js/commit/4f739c6ee8890798f6f9c8a09499f86f3c7a0c8f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Widen the supported `@anthropic-ai/sdk` peer range to `>=0.112.3 <0.134.0`.
+  (2026-10-13)
+
 ## 8.13.5
 
 ### Patch Changes
