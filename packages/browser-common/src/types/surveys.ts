@@ -94,6 +94,8 @@ export const SurveyEventProperties = {
     SURVEY_SUBMISSION_ID: '$survey_submission_id',
     SURVEY_QUESTIONS: '$survey_questions',
     SURVEY_COMPLETED: '$survey_completed',
+    /** @deprecated Product tours were removed from PostHog. */
+    PRODUCT_TOUR_ID: '$product_tour_id',
     SURVEY_LAST_SEEN_DATE: '$survey_last_seen_date',
     SURVEY_LANGUAGE: '$survey_language',
 } as const

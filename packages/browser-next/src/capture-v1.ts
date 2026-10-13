@@ -20,7 +20,6 @@ interface CaptureV1EventOptions {
     cookieless_mode?: boolean
     disable_skew_correction?: boolean
     process_person_profile?: boolean
-    product_tour_id?: string
 }
 
 export interface CaptureV1Event {
@@ -356,10 +355,6 @@ export const buildCaptureV1Event = (message: CaptureV1Message): CaptureV1Event =
         }
         delete properties[property]
     }
-    if (typeof properties.$product_tour_id === 'string') {
-        options.product_tour_id = properties.$product_tour_id
-    }
-    delete properties.$product_tour_id
 
     const sessionId = properties.$session_id
     const windowId = properties.$window_id

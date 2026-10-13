@@ -67,7 +67,6 @@ describe('Capture Analytics V1', () => {
         ['$cookieless_mode', ' 0 ', 'cookieless_mode', false],
         ['$ignore_sent_at', 1, 'disable_skew_correction', true],
         ['$process_person_profile', 'FALSE', 'process_person_profile', false],
-        ['$product_tour_id', 'tour-1', 'product_tour_id', 'tour-1'],
     ] as const)('promotes %s into typed options', (property, value, option, expected) => {
         const event = buildCaptureV1Event(message({ properties: { [property]: value, keep: true } }))
 
@@ -76,11 +75,10 @@ describe('Capture Analytics V1', () => {
     })
 
     it('strips malformed controls without rejecting the event', () => {
-        expect(
-            buildCaptureV1Event(
-                message({ properties: { $cookieless_mode: 'maybe', $product_tour_id: 42, keep: true } })
-            )
-        ).toMatchObject({ options: {}, properties: { keep: true } })
+        expect(buildCaptureV1Event(message({ properties: { $cookieless_mode: 'maybe', keep: true } }))).toMatchObject({
+            options: {},
+            properties: { keep: true },
+        })
     })
 
     it('ignores enumerable properties inherited by the option sentinel table', () => {

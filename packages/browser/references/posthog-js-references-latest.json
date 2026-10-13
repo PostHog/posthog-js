@@ -2766,6 +2766,33 @@
       "path": "lib/src/posthog-conversations-types.d.ts"
     },
     {
+      "id": "JSONContent",
+      "name": "JSONContent",
+      "properties": [
+        {
+          "type": "Record<string, any>",
+          "name": "attrs"
+        },
+        {
+          "type": "JSONContent[]",
+          "name": "content"
+        },
+        {
+          "type": "{\n        type: string;\n        attrs?: Record<string, any>;\n    }[]",
+          "name": "marks"
+        },
+        {
+          "type": "string",
+          "name": "text"
+        },
+        {
+          "type": "string",
+          "name": "type"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
       "id": "LinkSurveyQuestion",
       "name": "LinkSurveyQuestion",
       "properties": [
@@ -4040,8 +4067,155 @@
     {
       "id": "ProductTour",
       "name": "ProductTour",
-      "properties": [],
+      "properties": [
+        {
+          "type": "ProductTourAppearance",
+          "name": "appearance"
+        },
+        {
+          "type": "boolean",
+          "name": "auto_launch"
+        },
+        {
+          "type": "ProductTourConditions",
+          "name": "conditions"
+        },
+        {
+          "type": "number",
+          "name": "current_iteration"
+        },
+        {
+          "type": "string",
+          "name": "description"
+        },
+        {
+          "type": "boolean",
+          "name": "disable_image_preload"
+        },
+        {
+          "type": "ProductTourDisplayFrequency",
+          "name": "display_frequency"
+        },
+        {
+          "type": "string | null",
+          "name": "end_date"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "type": "string",
+          "name": "internal_targeting_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "linked_flag_key"
+        },
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "string | null",
+          "name": "start_date"
+        },
+        {
+          "type": "ProductTourStep[]",
+          "name": "steps"
+        },
+        {
+          "type": "ProductTourType",
+          "name": "tour_type"
+        }
+      ],
       "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourAppearance",
+      "name": "ProductTourAppearance",
+      "properties": [
+        {
+          "type": "string",
+          "name": "backgroundColor"
+        },
+        {
+          "type": "string",
+          "name": "borderColor"
+        },
+        {
+          "type": "number",
+          "name": "borderRadius"
+        },
+        {
+          "type": "string",
+          "name": "boxShadow"
+        },
+        {
+          "type": "number",
+          "name": "buttonBorderRadius"
+        },
+        {
+          "type": "string",
+          "name": "buttonColor"
+        },
+        {
+          "description": "defaults to true, auto-set to false for announcements/banners",
+          "type": "boolean",
+          "name": "dismissOnClickOutside"
+        },
+        {
+          "type": "string",
+          "name": "fontFamily"
+        },
+        {
+          "type": "boolean",
+          "name": "showOverlay"
+        },
+        {
+          "type": "string",
+          "name": "textColor"
+        },
+        {
+          "type": "boolean",
+          "name": "whiteLabel"
+        },
+        {
+          "type": "number",
+          "name": "zIndex"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourBannerConfig",
+      "name": "ProductTourBannerConfig",
+      "properties": [
+        {
+          "type": "{\n        type: 'none' | 'link' | 'trigger_tour';\n        link?: string;\n        tourId?: string;\n    }",
+          "name": "action"
+        },
+        {
+          "type": "{\n        duration?: number;\n    }",
+          "name": "animation"
+        },
+        {
+          "type": "'sticky' | 'static' | 'custom'",
+          "name": "behavior"
+        },
+        {
+          "type": "string",
+          "name": "selector"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourButtonAction",
+      "name": "ProductTourButtonAction",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"dismiss\" | \"link\" | \"next_step\" | \"previous_step\" | \"trigger_tour\""
     },
     {
       "id": "ProductTourCallback",
@@ -4049,6 +4223,319 @@
       "properties": [],
       "path": "lib/src/posthog-product-tours-types.d.ts",
       "example": "(tours: ProductTour[], context?: {\n    isLoaded: boolean;\n    error?: string;\n}) => void"
+    },
+    {
+      "id": "ProductTourConditions",
+      "name": "ProductTourConditions",
+      "properties": [
+        {
+          "type": "{\n        values: SurveyActionType[];\n    } | null",
+          "name": "actions"
+        },
+        {
+          "type": "number",
+          "name": "autoShowDelaySeconds"
+        },
+        {
+          "type": "{\n        values: SurveyEventWithFilters[];\n    } | null",
+          "name": "cancelEvents"
+        },
+        {
+          "type": "string[]",
+          "name": "deviceTypes"
+        },
+        {
+          "type": "{\n        values: SurveyEventWithFilters[];\n    } | null",
+          "name": "events"
+        },
+        {
+          "type": "string",
+          "name": "linkedFlagVariant"
+        },
+        {
+          "type": "ProductTourWaitPeriod",
+          "name": "seenTourWaitPeriod"
+        },
+        {
+          "type": "string",
+          "name": "selector"
+        },
+        {
+          "type": "string",
+          "name": "url"
+        },
+        {
+          "type": "PropertyMatchType",
+          "name": "urlMatchType"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourDismissReason",
+      "name": "ProductTourDismissReason",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"user_clicked_skip\" | \"user_clicked_outside\" | \"escape_key\" | \"element_unavailable\" | \"container_unavailable\""
+    },
+    {
+      "id": "ProductTourDisplayFrequency",
+      "name": "ProductTourDisplayFrequency",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"show_once\" | \"until_interacted\" | \"always\""
+    },
+    {
+      "id": "ProductTourEventName",
+      "name": "ProductTourEventName",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "(typeof ProductTourEventName)[keyof typeof ProductTourEventName]"
+    },
+    {
+      "id": "ProductTourEventProperties",
+      "name": "ProductTourEventProperties",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "(typeof ProductTourEventProperties)[keyof typeof ProductTourEventProperties]"
+    },
+    {
+      "id": "ProductTourRenderReason",
+      "name": "ProductTourRenderReason",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"auto\" | \"api\" | \"trigger\" | \"event\""
+    },
+    {
+      "id": "ProductTourSelectorError",
+      "name": "ProductTourSelectorError",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"not_found\" | \"multiple_matches\" | \"not_visible\""
+    },
+    {
+      "id": "ProductTourStep",
+      "name": "ProductTourStep",
+      "properties": [
+        {
+          "description": "Banner configuration (only for banner steps)",
+          "type": "ProductTourBannerConfig",
+          "name": "bannerConfig"
+        },
+        {
+          "description": "Button configuration for modal steps",
+          "type": "ProductTourStepButtons",
+          "name": "buttons"
+        },
+        {
+          "type": "JSONContent | null",
+          "name": "content"
+        },
+        {
+          "description": "Pre-rendered HTML content from the editor. If present, SDK should use this instead of rendering from JSONContent.",
+          "type": "string",
+          "name": "contentHtml"
+        },
+        {
+          "type": "string",
+          "name": "id"
+        },
+        {
+          "description": "Enhanced element data for more reliable lookup at runtime",
+          "type": "InferredSelector",
+          "name": "inferenceData"
+        },
+        {
+          "description": "ID of the auto-created survey for this step (set by backend)",
+          "type": "string",
+          "name": "linkedSurveyId"
+        },
+        {
+          "description": "ID of the survey question (set by backend, used for event tracking)",
+          "type": "string",
+          "name": "linkedSurveyQuestionId"
+        },
+        {
+          "description": "Maximum tooltip width in pixels (defaults to 320px)",
+          "type": "number",
+          "name": "maxWidth"
+        },
+        {
+          "description": "Position for modal/survey steps (defaults to middle_center)",
+          "type": "SurveyPosition",
+          "name": "modalPosition"
+        },
+        {
+          "type": "'button' | 'click'",
+          "name": "progressionTrigger"
+        },
+        {
+          "type": "string",
+          "name": "selector"
+        },
+        {
+          "description": "Inline survey question config - if present, this is a survey step",
+          "type": "ProductTourSurveyQuestion",
+          "name": "survey"
+        },
+        {
+          "description": "translation data for this tour step",
+          "type": "Record<string, ProductTourStepTranslation>",
+          "name": "translations"
+        },
+        {
+          "type": "ProductTourStepType",
+          "name": "type"
+        },
+        {
+          "description": "Use CSS selector instead of inference. Defaults to false (use inference).",
+          "type": "boolean",
+          "name": "useManualSelector"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourStepButton",
+      "name": "ProductTourStepButton",
+      "properties": [
+        {
+          "type": "ProductTourButtonAction",
+          "name": "action"
+        },
+        {
+          "description": "URL to open when action is 'link'",
+          "type": "string",
+          "name": "link"
+        },
+        {
+          "type": "string",
+          "name": "text"
+        },
+        {
+          "description": "Tour ID to trigger when action is 'trigger_tour'",
+          "type": "string",
+          "name": "tourId"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourStepButtons",
+      "name": "ProductTourStepButtons",
+      "properties": [
+        {
+          "type": "ProductTourStepButton",
+          "name": "primary"
+        },
+        {
+          "type": "ProductTourStepButton",
+          "name": "secondary"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourStepTranslation",
+      "name": "ProductTourStepTranslation",
+      "properties": [
+        {
+          "type": "{\n        primary?: Pick<ProductTourStepButton, 'text'>;\n        secondary?: Pick<ProductTourStepButton, 'text'>;\n    }",
+          "name": "buttons"
+        },
+        {
+          "type": "ProductTourStep['content']",
+          "name": "content"
+        },
+        {
+          "type": "ProductTourStep['contentHtml']",
+          "name": "contentHtml"
+        },
+        {
+          "type": "Pick<ProductTourSurveyQuestion, 'questionText' | 'lowerBoundLabel' | 'upperBoundLabel' | 'submitButtonText' | 'backButtonText'>",
+          "name": "survey"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourStepType",
+      "name": "ProductTourStepType",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"element\" | \"modal\" | \"survey\" | \"banner\""
+    },
+    {
+      "id": "ProductTourSurveyQuestion",
+      "name": "ProductTourSurveyQuestion",
+      "properties": [
+        {
+          "type": "string",
+          "name": "backButtonText"
+        },
+        {
+          "description": "Rating display type - emoji or number",
+          "type": "'emoji' | 'number'",
+          "name": "display"
+        },
+        {
+          "description": "Label for low end of rating scale (e.g., \"Not likely\")",
+          "type": "string",
+          "name": "lowerBoundLabel"
+        },
+        {
+          "type": "string",
+          "name": "questionText"
+        },
+        {
+          "description": "Rating scale - 3 or 5 for emoji, 5 or 10 for number",
+          "type": "3 | 5 | 10",
+          "name": "scale"
+        },
+        {
+          "type": "string",
+          "name": "submitButtonText"
+        },
+        {
+          "type": "ProductTourSurveyQuestionType",
+          "name": "type"
+        },
+        {
+          "description": "Label for high end of rating scale (e.g., \"Very likely\")",
+          "type": "string",
+          "name": "upperBoundLabel"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
+    },
+    {
+      "id": "ProductTourSurveyQuestionType",
+      "name": "ProductTourSurveyQuestionType",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"open\" | \"rating\""
+    },
+    {
+      "id": "ProductTourType",
+      "name": "ProductTourType",
+      "properties": [],
+      "path": "lib/src/posthog-product-tours-types.d.ts",
+      "example": "\"tour\" | \"announcement\" | \"banner\""
+    },
+    {
+      "id": "ProductTourWaitPeriod",
+      "name": "ProductTourWaitPeriod",
+      "properties": [
+        {
+          "type": "number",
+          "name": "days"
+        },
+        {
+          "type": "ProductTourType[]",
+          "name": "types"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
       "id": "QueuedRequestWithOptions",
@@ -4172,6 +4659,12 @@
           "description": "Log capture configuration.",
           "type": "{\n        captureConsoleLogs?: boolean;\n    }",
           "name": "logs"
+        },
+        {
+          "description": "Deprecated: Product tours were removed from PostHog. The SDK ignores this field.",
+          "type": "boolean",
+          "name": "productTours",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Session recording configuration.",
@@ -4727,6 +5220,21 @@
       "properties": [],
       "path": "lib/src/types.d.ts",
       "example": "\"sampling_overridden\" | \"recording_initialized\" | \"linked_flag_matched\" | \"linked_flag_overridden\" | \"session_id_changed\" | \"url_trigger_matched\" | \"event_trigger_matched\""
+    },
+    {
+      "id": "ShowTourOptions",
+      "name": "ShowTourOptions",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "enableStrictValidation"
+        },
+        {
+          "type": "ProductTourRenderReason",
+          "name": "reason"
+        }
+      ],
+      "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
       "id": "SiteApp",

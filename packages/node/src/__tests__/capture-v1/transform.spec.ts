@@ -1,6 +1,6 @@
 import type { JsonType, PostHogEventProperties } from '@posthog/core'
 
-import { buildV1Batch, buildV1Event, coerceBool, coerceString } from '@/capture-v1/transform'
+import { buildV1Batch, buildV1Event, coerceBool } from '@/capture-v1/transform'
 
 function baseMessage(overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return {
@@ -41,29 +41,11 @@ describe('capture v1 transform', () => {
     })
   })
 
-  describe('coerceString', () => {
-    it.each<[string, JsonType, string | undefined]>([
-      ['native string', 'abc', 'abc'],
-      ['empty string', '', ''],
-      ['integer (dropped)', 42, undefined],
-      ['zero (dropped)', 0, undefined],
-      ['negative integer (dropped)', -7, undefined],
-      ['float (dropped)', 1.5, undefined],
-      ['bool (dropped)', true, undefined],
-      ['null (dropped)', null, undefined],
-      ['array (dropped)', [], undefined],
-      ['object (dropped)', {}, undefined],
-    ])('accepts only strings: %s', (_label, input, expected) => {
-      expect(coerceString(input)).toBe(expected)
-    })
-  })
-
   describe('buildV1Event - option sentinels', () => {
-    it.each<[string, JsonType, keyof ReturnType<typeof buildV1Event>['options'], boolean | string]>([
+    it.each<[string, JsonType, keyof ReturnType<typeof buildV1Event>['options'], boolean]>([
       ['$cookieless_mode', true, 'cookieless_mode', true],
       ['$ignore_sent_at', 'true', 'disable_skew_correction', true],
       ['$process_person_profile', 0, 'process_person_profile', false],
-      ['$product_tour_id', 'tour_9', 'product_tour_id', 'tour_9'],
     ])('lifts %s into options and strips it from properties', (property, value, optionKey, expected) => {
       const event = buildV1Event(baseMessage({ properties: { [property]: value, keep: 'me' } }))
 
@@ -72,20 +54,11 @@ describe('capture v1 transform', () => {
       expect(event.properties.keep).toBe('me')
     })
 
-    it('drops a non-string $product_tour_id but still strips the sentinel', () => {
-      const event = buildV1Event(baseMessage({ properties: { $product_tour_id: 42, keep: 'me' } }))
-      expect(event.options).not.toHaveProperty('product_tour_id')
-      expect(event.properties).not.toHaveProperty('$product_tour_id')
-      expect(event.properties.keep).toBe('me')
-    })
-
     it('omits an option that cannot be coerced but still strips the sentinel', () => {
-      const event = buildV1Event(baseMessage({ properties: { $cookieless_mode: 'maybe', $product_tour_id: 1.5 } }))
+      const event = buildV1Event(baseMessage({ properties: { $cookieless_mode: 'maybe' } }))
 
       expect(event.options).not.toHaveProperty('cookieless_mode')
-      expect(event.options).not.toHaveProperty('product_tour_id')
       expect(event.properties).not.toHaveProperty('$cookieless_mode')
-      expect(event.properties).not.toHaveProperty('$product_tour_id')
     })
 
     it('leaves options as an empty object when no sentinels are present', () => {
@@ -100,7 +73,6 @@ describe('capture v1 transform', () => {
             $cookieless_mode: '1',
             $ignore_sent_at: false,
             $process_person_profile: true,
-            $product_tour_id: 'abc',
           },
         })
       )
@@ -108,7 +80,6 @@ describe('capture v1 transform', () => {
         cookieless_mode: true,
         disable_skew_correction: false,
         process_person_profile: true,
-        product_tour_id: 'abc',
       })
     })
   })

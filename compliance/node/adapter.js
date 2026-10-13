@@ -21,7 +21,6 @@ const OPTION_SENTINELS = {
     cookieless_mode: '$cookieless_mode',
     disable_skew_correction: '$ignore_sent_at',
     process_person_profile: '$process_person_profile',
-    product_tour_id: '$product_tour_id',
 }
 
 const state = {
@@ -128,7 +127,7 @@ app.post('/init', async (req, res) => {
                     status_code: response.status,
                     retry_attempt: 0,
                     event_count: events.length,
-                    uuid_list: events.map(e => e.uuid).filter(Boolean),
+                    uuid_list: events.map((e) => e.uuid).filter(Boolean),
                 })
 
                 if (response.status === 200) {

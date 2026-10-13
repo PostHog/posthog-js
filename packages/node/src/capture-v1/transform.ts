@@ -28,26 +28,15 @@ export function coerceBool(value: JsonType): boolean | undefined {
   return undefined
 }
 
-/**
- * Accept only a native string, else return `undefined` (the option is then
- * omitted). The backend's `product_tour_id` is `Option<String>`, so numbers,
- * booleans, objects, and arrays are dropped rather than coerced — matching
- * posthog-go, posthog-rs, and posthog-python exactly.
- */
-export function coerceString(value: JsonType): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
 /** Legacy sentinel property -> typed `options` field, with its coercion. */
 const OPTION_SENTINELS: ReadonlyArray<{
   property: string
   optionKey: keyof V1EventOptions
-  coerce: (value: JsonType) => boolean | string | undefined
+  coerce: (value: JsonType) => boolean | undefined
 }> = [
   { property: '$cookieless_mode', optionKey: 'cookieless_mode', coerce: coerceBool },
   { property: '$ignore_sent_at', optionKey: 'disable_skew_correction', coerce: coerceBool },
   { property: '$process_person_profile', optionKey: 'process_person_profile', coerce: coerceBool },
-  { property: '$product_tour_id', optionKey: 'product_tour_id', coerce: coerceString },
 ]
 
 /** Sentinel property -> top-level string field (string-only, non-string dropped). */

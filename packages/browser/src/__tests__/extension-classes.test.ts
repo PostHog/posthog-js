@@ -524,6 +524,7 @@ void exact`
                 'historyAutocapture',
                 'logs',
                 'metrics',
+                'productTours',
                 'sessionRecording',
                 'siteApps',
                 'surveys',
