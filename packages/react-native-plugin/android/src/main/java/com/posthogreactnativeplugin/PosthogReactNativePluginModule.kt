@@ -176,7 +176,7 @@ class PosthogReactNativePluginModule(
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // Drop it only when the JS layer saw the crash. Fatals that bypass the JS handler,
               // such as React render errors, have no marker and are reported natively instead.
-              // An older JS layer sends no marker, so every JavascriptException is dropped as before.
+              // A JS layer that sends no flag marks nothing, so every JavascriptException is dropped.
               if (fatalExceptionMarker) {
                 addBeforeSend { dropJsHandledFatalCrash(it) }
               } else {
