@@ -1,10 +1,12 @@
 import { isPromise, safeSetTimeout } from '@posthog/core'
 import { GLOBAL_OBJ, isHermes, isWeb } from '../utils'
+import { OptionalReactNativeExceptionsManager } from '../optional/OptionalReactNativeExceptionsManager'
 
 type ExceptionHook = (error: unknown, isFatal: boolean, syntheticException?: Error) => void
 type UncaughtExceptionHook = (error: unknown, isFatal: boolean) => void | Promise<void>
 
 const FATAL_PERSISTENCE_TIMEOUT_MS = 2000
+const NO_FATAL = Symbol('no fatal')
 
 export function trackUnhandledRejections(tracker: ExceptionHook): void {
   if (
@@ -39,12 +41,21 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
   if (!subscription) {
     const previousHandler = errorUtils.getGlobalHandler()
     const trackers = new Set<UncaughtExceptionHook>()
-    const handler = (error: Error, isFatal: boolean): void => {
+    // The same fatal can arrive through both hooks: the ErrorUtils handler forwards to React
+    // Native's default handler, which calls ExceptionsManager.handleException.
+    let lastFatal: unknown = NO_FATAL
+    const dispatch = (error: unknown, isFatal: boolean, forward: () => void): void => {
       const pending: Promise<void>[] = []
       try {
+        if (isFatal) {
+          if (lastFatal === error) {
+            return
+          }
+          lastFatal = error
+        }
         for (const callback of Array.from(trackers)) {
           try {
-            const result = callback(error, isFatal ?? false)
+            const result = callback(error, isFatal)
             if (isPromise(result)) {
               pending.push(Promise.resolve(result).catch(() => {}))
             }
@@ -55,25 +66,29 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
       } finally {
         if (isFatal && pending.length > 0) {
           let forwarded = false
-          const forward = () => {
+          const forwardOnce = () => {
             if (!forwarded) {
               forwarded = true
-              previousHandler?.(error, isFatal)
+              forward()
             }
           }
-          const deadline = safeSetTimeout(forward, FATAL_PERSISTENCE_TIMEOUT_MS)
+          const deadline = safeSetTimeout(forwardOnce, FATAL_PERSISTENCE_TIMEOUT_MS)
           void Promise.all(pending).then(() => {
             if (!forwarded) {
               clearTimeout(deadline)
               // Keep errors thrown by the previous handler outside Promise rejection handling.
-              safeSetTimeout(forward, 0)
+              safeSetTimeout(forwardOnce, 0)
             }
           })
         } else {
-          previousHandler?.(error, isFatal)
+          forward()
         }
       }
     }
+    const handler = (error: Error, isFatal: boolean): void => {
+      dispatch(error, isFatal ?? false, () => previousHandler?.(error, isFatal))
+    }
+    const restoreExceptionsManager = wrapExceptionsManager((error, forward) => dispatch(error, true, forward))
     subscription = {
       trackers,
       restore: () => {
@@ -81,6 +96,7 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
         if (errorUtils.getGlobalHandler?.() === handler) {
           errorUtils.setGlobalHandler?.(previousHandler)
         }
+        restoreExceptionsManager()
         uncaughtExceptionSubscriptions.delete(errorUtils)
       },
     }
@@ -94,6 +110,35 @@ export function trackUncaughtExceptions(tracker: UncaughtExceptionHook): () => v
     if (trackers.delete(tracker) && trackers.size === 0) {
       restore()
     }
+  }
+}
+
+// React 19 reports uncaught render errors from the root `onUncaughtError` straight to
+// ExceptionsManager.handleException(error, true), which never reaches ErrorUtils. Only fatal
+// calls are intercepted; errors caught by an error boundary arrive with isFatal false.
+function wrapExceptionsManager(onFatal: (error: unknown, forward: () => void) => void): () => void {
+  try {
+    const exceptionsManager = OptionalReactNativeExceptionsManager
+    const original = exceptionsManager?.handleException
+    if (!exceptionsManager || typeof original !== 'function') {
+      return () => {}
+    }
+    const wrapped = (error: unknown, isFatal: boolean): void => {
+      if (!isFatal) {
+        return original.call(exceptionsManager, error, isFatal)
+      }
+      onFatal(error, () => original.call(exceptionsManager, error, isFatal))
+    }
+    exceptionsManager.handleException = wrapped
+    return () => {
+      try {
+        if (exceptionsManager.handleException === wrapped) {
+          exceptionsManager.handleException = original
+        }
+      } catch {}
+    }
+  } catch {
+    return () => {}
   }
 }
 
