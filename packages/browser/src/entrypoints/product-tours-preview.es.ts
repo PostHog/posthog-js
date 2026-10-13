@@ -1,1 +1,1 @@
-export { renderProductTourPreview } from '../extensions/product-tours/preview'
+export { renderProductTourPreview } from '../extensions/product-tours/removed'

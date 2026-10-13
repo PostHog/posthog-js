@@ -14,7 +14,6 @@ const lazyLoadedJSFiles = [
     'conversations',
     'logs',
     'surveys',
-    'product-tours',
     'exception-autocapture',
     'tracing-headers',
     'web-vitals',

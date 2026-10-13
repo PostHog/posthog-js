@@ -33,8 +33,7 @@ export function applyUrlTargetingOverride(instance: UrlTargetingInstance | undef
 
 /**
  * Resolves the URL used for client-side URL targeting: session replay URL triggers, the
- * session replay URL blocklist, survey URL conditions, product tour URL conditions, and web
- * experiment URL conditions.
+ * session replay URL blocklist, survey URL conditions, and web experiment URL conditions.
  *
  * Defaults to `window.location.href`, but honors the `get_current_url` config hook so apps
  * that rewrite their URL (e.g. Electron/desktop builds, or `$current_url` rewrites in

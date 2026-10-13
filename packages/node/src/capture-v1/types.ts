@@ -9,7 +9,6 @@ export interface V1EventOptions {
   cookieless_mode?: boolean
   disable_skew_correction?: boolean
   process_person_profile?: boolean
-  product_tour_id?: string
 }
 
 /**

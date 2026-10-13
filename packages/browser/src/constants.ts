@@ -23,7 +23,6 @@ export const ERROR_TRACKING_SUPPRESSION_RULES = '$error_tracking_suppression_rul
 export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capture_extension_exceptions'
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
-export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
 export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
@@ -65,9 +64,17 @@ export const SURVEYS_LOADED_AT = '$surveys_loaded_at'
 export const SURVEYS_ACTIVATED = '$surveys_activated'
 export const SURVEYS_ACTIVATED_SESSION = '$surveys_activated_session'
 export const SURVEYS_ACTIVATED_TIMESTAMPS = '$surveys_activated_timestamps'
-export const PRODUCT_TOURS = 'ph_product_tours'
-export const PRODUCT_TOURS_ACTIVATED = '$product_tours_activated'
-export const PRODUCT_TOURS_ACTIVATED_SESSION = '$product_tours_activated_session'
+// Written by the removed product tours feature. Hidden from events and cleared on init.
+export const PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
+export const PRODUCT_TOURS_LEGACY = 'ph_product_tours'
+export const PRODUCT_TOURS_LEGACY_ACTIVATED = '$product_tours_activated'
+export const PRODUCT_TOURS_LEGACY_ACTIVATED_SESSION = '$product_tours_activated_session'
+export const PRODUCT_TOURS_LEGACY_KEYS = [
+    PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE,
+    PRODUCT_TOURS_LEGACY,
+    PRODUCT_TOURS_LEGACY_ACTIVATED,
+    PRODUCT_TOURS_LEGACY_ACTIVATED_SESSION,
+] as const
 export const CONVERSATIONS = '$conversations'
 export const CONVERSATIONS_LEGACY_WIDGET_SESSION_ID = '$conversations_widget_session_id'
 export const CONVERSATIONS_LEGACY_TICKET_ID = '$conversations_ticket_id'
@@ -139,8 +146,7 @@ export const EVENT_PAGELEAVE = '$pageleave'
 export const EVENT_IDENTIFY = '$identify'
 export const EVENT_GROUPIDENTIFY = '$groupidentify'
 
-/* Z-INDEX HIERARCHY: tours > surveys > support */
-export const Z_INDEX_TOURS = 2147483646
+/* Z-INDEX HIERARCHY: surveys > support */
 export const Z_INDEX_SURVEYS = 2147483645
 export const Z_INDEX_CONVERSATIONS = 2147483644
 

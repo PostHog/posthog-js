@@ -1,9 +1,9 @@
 import { PropertyMatchType } from './types'
 import { SurveyActionType, SurveyEventWithFilters } from './posthog-surveys-types'
-import type { InferredSelector } from './extensions/product-tours/element-inference'
+import type { InferredSelector } from './element-inference-types'
 import { SurveyPosition } from '@posthog/core'
-import { Z_INDEX_TOURS } from './constants'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface JSONContent {
     type?: string
     attrs?: Record<string, any>
@@ -12,8 +12,10 @@ export interface JSONContent {
     text?: string
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourStepType = 'element' | 'modal' | 'survey' | 'banner'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourBannerConfig {
     behavior: 'sticky' | 'static' | 'custom'
     selector?: string
@@ -27,9 +29,13 @@ export interface ProductTourBannerConfig {
     }
 }
 
-/** Button actions available on modal steps */
+/**
+ * Button actions available on modal steps
+ * @deprecated Product tours were removed from PostHog.
+ */
 export type ProductTourButtonAction = 'dismiss' | 'link' | 'next_step' | 'previous_step' | 'trigger_tour'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourStepButton {
     text: string
     action: ProductTourButtonAction
@@ -39,13 +45,16 @@ export interface ProductTourStepButton {
     tourId?: string
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourStepButtons {
     primary?: ProductTourStepButton
     secondary?: ProductTourStepButton
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourSurveyQuestionType = 'open' | 'rating'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourSurveyQuestion {
     type: ProductTourSurveyQuestionType
     questionText: string
@@ -61,6 +70,7 @@ export interface ProductTourSurveyQuestion {
     backButtonText?: string
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourStep {
     id: string
     type: ProductTourStepType
@@ -91,7 +101,10 @@ export interface ProductTourStep {
     translations?: Record<string, ProductTourStepTranslation>
 }
 
-/** all translatable content for a given tour step */
+/**
+ * all translatable content for a given tour step
+ * @deprecated Product tours were removed from PostHog.
+ */
 export interface ProductTourStepTranslation {
     content?: ProductTourStep['content']
     contentHtml?: ProductTourStep['contentHtml']
@@ -105,14 +118,19 @@ export interface ProductTourStepTranslation {
     >
 }
 
-/** maps to main repo EffectiveProductTourType */
+/**
+ * maps to main repo EffectiveProductTourType
+ * @deprecated Product tours were removed from PostHog.
+ */
 export type ProductTourType = 'tour' | 'announcement' | 'banner'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourWaitPeriod {
     days: number
     types: ProductTourType[]
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourConditions {
     url?: string
     urlMatchType?: PropertyMatchType
@@ -132,6 +150,7 @@ export interface ProductTourConditions {
     seenTourWaitPeriod?: ProductTourWaitPeriod
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTourAppearance {
     backgroundColor?: string
     textColor?: string
@@ -148,8 +167,10 @@ export interface ProductTourAppearance {
     zIndex?: number
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourDisplayFrequency = 'show_once' | 'until_interacted' | 'always'
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ProductTour {
     id: string
     name: string
@@ -168,10 +189,13 @@ export interface ProductTour {
     disable_image_preload?: boolean
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: boolean; error?: string }) => void
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourSelectorError = 'not_found' | 'multiple_matches' | 'not_visible'
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourDismissReason =
     | 'user_clicked_skip'
     | 'user_clicked_outside'
@@ -179,8 +203,10 @@ export type ProductTourDismissReason =
     | 'element_unavailable'
     | 'container_unavailable'
 
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 
+/** @deprecated Product tours were removed from PostHog. */
 export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = {
     backgroundColor: '#ffffff',
     textColor: '#1d1f27',
@@ -193,14 +219,16 @@ export const DEFAULT_PRODUCT_TOUR_APPEARANCE: Required<ProductTourAppearance> = 
     showOverlay: true,
     whiteLabel: false,
     dismissOnClickOutside: true,
-    zIndex: Z_INDEX_TOURS,
+    zIndex: 2147483646,
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export interface ShowTourOptions {
     reason?: ProductTourRenderReason
     enableStrictValidation?: boolean
 }
 
+/** @deprecated Product tours were removed from PostHog. */
 export const ProductTourEventName = {
     SHOWN: 'product tour shown',
     DISMISSED: 'product tour dismissed',
@@ -212,8 +240,10 @@ export const ProductTourEventName = {
     BANNER_CONTAINER_SELECTOR_FAILED: 'product tour banner container selector failed',
     BANNER_ACTION_CLICKED: 'product tour banner action clicked',
 } as const
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourEventName = (typeof ProductTourEventName)[keyof typeof ProductTourEventName]
 
+/** @deprecated Product tours were removed from PostHog. */
 export const ProductTourEventProperties = {
     TOUR_ID: '$product_tour_id',
     TOUR_NAME: '$product_tour_name',
@@ -246,4 +276,5 @@ export const ProductTourEventProperties = {
     TOUR_LAST_SEEN_DATE: '$product_tour_last_seen_date',
     TOUR_TYPE: '$product_tour_type',
 } as const
+/** @deprecated Product tours were removed from PostHog. */
 export type ProductTourEventProperties = (typeof ProductTourEventProperties)[keyof typeof ProductTourEventProperties]

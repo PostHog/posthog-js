@@ -3,7 +3,7 @@ import { PostHog } from '../posthog-core'
 import type { PostHogConfig, SessionIdChangedCallback } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
-import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
+import { PRODUCT_TOURS_LEGACY, PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE } from '../constants'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
@@ -1160,49 +1160,33 @@ describe('posthog core', () => {
         })
     })
 
-    describe('product tour capture()', () => {
-        const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = vi.fn().mockImplementation((e) => e)
-            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-            return { posthog, beforeSendMock }
-        }
-
-        it('sending product tour shown events with tour_type should set type-specific last seen date property', () => {
-            // arrange
-            const { posthog, beforeSendMock } = setup({ debug: false })
-
-            // act
-            posthog.capture(ProductTourEventName.SHOWN, {
-                [ProductTourEventProperties.TOUR_ID]: 'testTour1',
-                [ProductTourEventProperties.TOUR_NAME]: 'Test Tour',
-                [ProductTourEventProperties.TOUR_TYPE]: 'tour',
+    describe('removed product tours', () => {
+        it('clears persisted product tours state on init', () => {
+            const token = uuidv7()
+            const first = defaultPostHog().init(token, { persistence: 'localStorage' }, token + '-first')!
+            first.persistence!.register({
+                [PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE]: true,
+                [PRODUCT_TOURS_LEGACY]: [{ id: 'tour-1' }],
             })
 
-            // assert
-            const capturedEvent = beforeSendMock.mock.calls[0][0]
-            expect(capturedEvent.$set).toBeDefined()
-            const typeSpecificKey = `${ProductTourEventProperties.TOUR_LAST_SEEN_DATE}/tour`
-            expect(capturedEvent.$set[typeSpecificKey]).toBeDefined()
-            // Verify it's a valid ISO date string
-            expect(new Date(capturedEvent.$set[typeSpecificKey]).toISOString()).toBe(
-                capturedEvent.$set[typeSpecificKey]
-            )
+            const second = defaultPostHog().init(token, { persistence: 'localStorage' }, token + '-second')!
+
+            expect(second.persistence!.props).not.toHaveProperty(PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE)
+            expect(second.persistence!.props).not.toHaveProperty(PRODUCT_TOURS_LEGACY)
         })
 
-        it('sending product tour shown events without tour_type should not set last seen date property', () => {
-            // arrange
-            const { posthog, beforeSendMock } = setup({ debug: false })
+        it('keeps the productTours API as a no-op and ignores productTours in remote config', () => {
+            const posthog = defaultPostHog().init(uuidv7(), {}, uuidv7())!
+            const callback = vi.fn()
 
-            // act
-            posthog.capture(ProductTourEventName.SHOWN, {
-                [ProductTourEventProperties.TOUR_ID]: 'testTour1',
-                [ProductTourEventProperties.TOUR_NAME]: 'Test Tour',
-            })
+            expect(() => {
+                posthog._onRemoteConfig({ ok: true, config: { productTours: true } as any })
+                posthog.productTours.showProductTour('tour-1')
+                posthog.productTours.getProductTours(callback)
+            }).not.toThrow()
 
-            // assert
-            const capturedEvent = beforeSendMock.mock.calls[0][0]
-            // No $set should be added when tour_type is missing
-            expect(capturedEvent.$set).toBeUndefined()
+            expect(callback).toHaveBeenCalledWith([], expect.objectContaining({ isLoaded: false }))
+            expect(posthog.persistence!.props).not.toHaveProperty(PRODUCT_TOURS_LEGACY_ENABLED_SERVER_SIDE)
         })
     })
 

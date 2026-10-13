@@ -20,6 +20,7 @@ import {
     FACEBOOK_CLICK_ID,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PRODUCT_TOURS_LEGACY_KEYS,
     PERSISTENCE_FACEBOOK_BROWSER_ID,
     PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
@@ -45,7 +46,6 @@ import {
     SurveyEventProperties,
     type SurveyRenderReason,
 } from './posthog-surveys-types'
-import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { sendRequest, enableRequestSending } from './request-dispatch'
@@ -142,7 +142,7 @@ import type { PostHogConversations } from './extensions/conversations/posthog-co
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { PostHogLogs } from './posthog-logs'
 import type { PostHogMetrics } from './posthog-metrics'
-import type { PostHogProductTours } from './posthog-product-tours'
+import { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
 import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Extension } from './extensions/types'
@@ -508,7 +508,8 @@ export class PostHog implements PostHogInterface {
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
     historyAutocapture?: HistoryAutocapture
-    productTours?: PostHogProductTours
+    /** @deprecated Product tours were removed from PostHog. Every method is a no-op. */
+    productTours = new PostHogProductTours()
     webMCP?: WebMCP
 
     _requestQueue?: RequestQueue
@@ -910,6 +911,7 @@ export class PostHog implements PostHogInterface {
         const allowDisabledRead = !this._inCookielessMode()
 
         this.persistence = new PostHogPersistence(this.config, persistenceDisabled, true, allowDisabledRead)
+        this.persistence.unregister(PRODUCT_TOURS_LEGACY_KEYS)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
@@ -1243,9 +1245,6 @@ export class PostHog implements PostHogInterface {
         }
         if (ext.conversations) {
             this._extensions.push((this.conversations = this.conversations ?? new ext.conversations(this)))
-        }
-        if (ext.productTours) {
-            this._extensions.push((this.productTours = new ext.productTours(this)))
         }
         if (ext.heatmaps) {
             this._extensions.push((this.heatmaps = new ext.heatmaps(this)))
@@ -1976,16 +1975,6 @@ export class PostHog implements PostHogInterface {
             data.$set = {
                 ...data.$set,
                 [SurveyEventProperties.SURVEY_LAST_SEEN_DATE]: new Date().toISOString(),
-            }
-        }
-
-        if (event_name === ProductTourEventName.SHOWN) {
-            const tourType = properties?.[ProductTourEventProperties.TOUR_TYPE]
-            if (tourType) {
-                data.$set = {
-                    ...data.$set,
-                    [`${ProductTourEventProperties.TOUR_LAST_SEEN_DATE}/${tourType}`]: new Date().toISOString(),
-                }
             }
         }
 

@@ -222,6 +222,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         siteApps?: ExtensionConstructor<SiteApps>
         sessionRecording?: ExtensionConstructor<SessionRecording>
         autocapture?: ExtensionConstructor<Autocapture>
+        /** @deprecated Product tours were removed from PostHog. This class is ignored. */
         productTours?: ExtensionConstructor<PostHogProductTours>
         heatmaps?: ExtensionConstructor<Heatmaps>
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>

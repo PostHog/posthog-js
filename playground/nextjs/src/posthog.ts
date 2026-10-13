@@ -1,7 +1,6 @@
 // NOTE: This is how you can include the external dependencies so they are in your bundle and not loaded async at runtime
 // import 'posthog-js/dist/recorder'
 // import 'posthog-js/dist/surveys'
-// import 'posthog-js/dist/product-tours'
 // import 'posthog-js/dist/exception-autocapture'
 // import 'posthog-js/dist/tracing-headers'
 
@@ -97,7 +96,6 @@ if (typeof window !== 'undefined') {
         },
         cookieless_mode: 'on_reject',
         __preview_deferred_init_extensions: true,
-        disable_product_tours: false,
         ...configForConsent(),
     })
     // Help with debugging

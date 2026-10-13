@@ -421,7 +421,6 @@ test('analytics-v1 options translate to native input properties without coercion
                 cookieless_mode: false,
                 disable_skew_correction: true,
                 process_person_profile: false,
-                product_tour_id: 'tour',
             },
         }
         const before = structuredClone(args)
@@ -437,7 +436,6 @@ test('analytics-v1 options translate to native input properties without coercion
                         $cookieless_mode: false,
                         $ignore_sent_at: true,
                         $process_person_profile: false,
-                        $product_tour_id: 'tour',
                     },
                 },
             ],

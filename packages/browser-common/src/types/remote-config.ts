@@ -176,7 +176,7 @@ export interface RemoteConfig {
     /** Whether surveys are enabled, optionally including their definitions. */
     surveys?: boolean | Survey[]
 
-    /** Whether product tours are enabled. */
+    /** @deprecated Product tours were removed from PostHog. The SDK ignores this field. */
     productTours?: boolean
 
     /** Parameters for the toolbar. */

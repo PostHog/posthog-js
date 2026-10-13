@@ -658,7 +658,7 @@ describe('posthog core', () => {
         it('reaches every registered extension and no failure branch throws', async () => {
             const posthog = await createPosthogInstance()
             const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
-            expect(handlers.length).toBeGreaterThanOrEqual(9)
+            expect(handlers.length).toBeGreaterThanOrEqual(8)
             const spies = handlers.map((ext: any) => vi.spyOn(ext, 'onRemoteConfig'))
 
             expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()

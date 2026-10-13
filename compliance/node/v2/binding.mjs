@@ -86,7 +86,6 @@ const optionProperties = {
     cookieless_mode: '$cookieless_mode',
     disable_skew_correction: '$ignore_sent_at',
     process_person_profile: '$process_person_profile',
-    product_tour_id: '$product_tour_id',
 }
 function capture(args, captureMode) {
     if (!own(args, 'options')) return rename(args, captureFields, '/capture')

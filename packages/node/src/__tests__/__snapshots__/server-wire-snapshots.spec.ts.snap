@@ -132,7 +132,6 @@ exports[`server wire snapshots > snapshots the canonical Capture V1 transform an
           "cookieless_mode": true,
           "disable_skew_correction": false,
           "process_person_profile": false,
-          "product_tour_id": "tour-7",
         },
         "properties": {
           "$set": {

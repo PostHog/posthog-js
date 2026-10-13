@@ -8,7 +8,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 
 /**
  * Interface for items that can be triggered by events/actions.
- * Both Survey and ProductTour implement this interface.
+ * Survey implements this interface.
  */
 export interface EventTriggerable {
     id: string
@@ -29,7 +29,7 @@ export type ActivationOutcome = 'consume' | 'persist' | 'ignore'
 
 /**
  * Abstract base class for receiving events and matching them to triggerable items.
- * Subclasses implement type-specific behavior for surveys and product tours.
+ * Subclasses implement type-specific behavior for surveys.
  */
 export abstract class EventReceiver<T extends EventTriggerable> {
     // eventToItems is a mapping of event name to all the items that are activated by it
@@ -283,7 +283,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const logger = this._getLogger()
 
         // An item reacting to one of its own lifecycle events (shown / dismissed / sent).
-        const itemId = eventPayload?.properties?.$survey_id || eventPayload?.properties?.$product_tour_id
+        const itemId = eventPayload?.properties?.$survey_id
         if (itemId && this.getActivatedIds().includes(itemId)) {
             const outcome = this._activationOutcome(event, itemId, eventPayload)
             if (outcome === 'consume') {

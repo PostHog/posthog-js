@@ -70,7 +70,7 @@ export const ErrorTrackingExtensions = {
     exceptions: PostHogExceptions,
 } as const satisfies ExtensionClasses
 
-/** In-app product tours. Includes feature flags for targeting. */
+/** @deprecated Product tours were removed from PostHog. The product tours class in this bundle does nothing. */
 export const ProductToursExtensions = {
     productTours: PostHogProductTours,
     ...FeatureFlagsExtensions,

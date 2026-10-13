@@ -21,7 +21,6 @@ const OPTION_SENTINELS = {
     cookieless_mode: '$cookieless_mode',
     disable_skew_correction: '$ignore_sent_at',
     process_person_profile: '$process_person_profile',
-    product_tour_id: '$product_tour_id',
 }
 
 const state = {
@@ -52,7 +51,7 @@ async function discardClient() {
         client.setPersistedProperty?.('ai_queue', [])
         client.setPersistedProperty?.('ai_capture_queue', [])
         await client.shutdown(1)
-    } catch (error) {
+    } catch {
         // Ignore reset-time shutdown errors; the next test starts with a fresh client.
     }
 }
@@ -103,7 +102,7 @@ app.post('/init', async (req, res) => {
         // Keep v1 partial-retry backoff short so retry compliance tests stay well
         // within their wait windows (the mock also sends Retry-After: 1s).
         fetchRetryDelay: CAPTURE_MODE === 'v1' ? 250 : undefined,
-        disableCompression: enable_compression === undefined ? undefined : !enable_compression,
+        disableCompression: typeof enable_compression === 'undefined' ? undefined : !enable_compression,
         disableGeoip: disable_geoip ?? false,
         historicalMigration: historical_migration ?? undefined,
         // Capture V1 opt-in is env-var-only: the SDK reads POSTHOG_CAPTURE_MODE
@@ -128,7 +127,7 @@ app.post('/init', async (req, res) => {
                     status_code: response.status,
                     retry_attempt: 0,
                     event_count: events.length,
-                    uuid_list: events.map(e => e.uuid).filter(Boolean),
+                    uuid_list: events.map((e) => e.uuid).filter(Boolean),
                 })
 
                 if (response.status === 200) {
@@ -136,7 +135,7 @@ app.post('/init', async (req, res) => {
                     state.pendingEvents -= events.length
                     if (state.pendingEvents < 0) state.pendingEvents = 0
                 }
-            } catch (e) {
+            } catch {
                 // Ignore parsing errors
             }
 

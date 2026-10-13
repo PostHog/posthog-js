@@ -171,6 +171,14 @@
             }
         },
         {
+            "files": ["compliance/node/adapter.js"],
+            "env": { "node": true },
+            "rules": {
+                "typescript/no-require-imports": "off",
+                "no-console": "off"
+            }
+        },
+        {
             "files": ["**/*.cjs"],
             "rules": {
                 "typescript/no-require-imports": "off"
