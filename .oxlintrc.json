@@ -175,9 +175,7 @@
             "env": { "node": true },
             "rules": {
                 "typescript/no-require-imports": "off",
-                "no-console": "off",
-                "no-unused-vars": "off",
-                "posthog-js/no-direct-undefined-check": "off"
+                "no-console": "off"
             }
         },
         {
