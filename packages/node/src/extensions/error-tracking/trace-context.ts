@@ -1,12 +1,12 @@
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i
 
-let otelApi: Promise<typeof import('@opentelemetry/api') | null> | undefined
+let otelApi: Promise<typeof import('@opentelemetry/api')> | undefined
 
 export async function getActiveTraceProperties(): Promise<Record<string, string>> {
   try {
-    const api = await (otelApi ??= import('@opentelemetry/api').catch(() => null))
-    const spanContext = api?.trace.getActiveSpan()?.spanContext()
+    const api = await (otelApi ??= import('@opentelemetry/api'))
+    const spanContext = api.trace.getActiveSpan()?.spanContext()
     const traceId = spanContext?.traceId
     const spanId = spanContext?.spanId
 
