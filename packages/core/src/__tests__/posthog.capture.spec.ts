@@ -61,6 +61,40 @@ describe('PostHog Core', () => {
       })
     })
 
+    it('should let caller properties win over registered properties', async () => {
+      posthog.register({ plan: 'registered' })
+
+      posthog.capture('custom-event', { plan: 'caller' })
+
+      await waitForPromises()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties.plan).toEqual('caller')
+    })
+
+    it('should let caller properties win over common SDK properties', async () => {
+      posthog.capture('custom-event', { $lib: 'caller-lib', $lib_version: 'caller-version' })
+
+      await waitForPromises()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties).toMatchObject({ $lib: 'caller-lib', $lib_version: 'caller-version' })
+    })
+
+    it('should not let caller properties override SDK-owned properties', async () => {
+      posthog.capture('custom-event', {
+        $process_person_profile: true,
+        $is_identified: true,
+        $session_id: 'caller-session',
+      })
+
+      await waitForPromises()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0].properties).toMatchObject({
+        $process_person_profile: false,
+        $is_identified: false,
+        $session_id: posthog.getSessionId(),
+      })
+    })
+
     it('should preserve Date timestamp overrides until serializing the equivalent UTC instant', async () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
       const timestamp = new Date('2021-01-02T03:04:05.000+05:30')

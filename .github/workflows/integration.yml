@@ -1,5 +1,8 @@
 name: Playwright Integration Tests
-on: [pull_request]
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
 env:
   POSTHOG_API_HOST: https://us.i.posthog.com
   POSTHOG_PROJECT_ID: 11213
@@ -57,12 +60,12 @@ jobs:
 
     steps:
       - name: Skip integration tests
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.affected.outputs.is-affected != 'true' }}
         run: echo "Skipping ${{ matrix.tests.name }} integration tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
 
       - name: Check integration credentials
         id: credentials
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: ${{ (github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository) && needs.affected.outputs.is-affected == 'true' }}
         shell: bash
         run: |
           missing=()

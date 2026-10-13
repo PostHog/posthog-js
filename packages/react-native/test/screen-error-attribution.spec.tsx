@@ -141,7 +141,7 @@ describe('screen error attribution', () => {
     expect(exceptions(events)[6].properties.$screen_name).toBe('Session registered')
   })
 
-  it('preserves common screen-property precedence over registered and caller properties', async () => {
+  it('lets caller screen properties win over common ones, which win over registered ones', async () => {
     let resolveStorage!: (value: null) => void
     const storageReady = new Promise<null>((resolve) => {
       resolveStorage = resolve
@@ -157,7 +157,7 @@ describe('screen error attribution', () => {
     client.captureException(new Error('caller'), { $screen_name: 'Caller' })
     resolveStorage(null)
     await Promise.all([registration, screen, client.ready()])
-    expect(exceptions(events).map((event) => event.properties.$screen_name)).toEqual(['Common', 'Common'])
+    expect(exceptions(events).map((event) => event.properties.$screen_name)).toEqual(['Common', 'Caller'])
   })
 
   it('preserves before_send filtering of exceptions queued during initialization', async () => {

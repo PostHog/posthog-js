@@ -13,8 +13,18 @@ vi.mock('react-native', async () => {
   const native = await vi.importActual<typeof import('./mocks/react-native')>('./mocks/react-native')
   const R = await vi.importActual<typeof import('react')>('react')
   const Box = ({ children }: any) => R.createElement('div', null, children)
-  const Button = ({ children, onPress, disabled }: any) =>
-    R.createElement('button', { onClick: onPress, disabled }, children)
+  const Button = ({ children, onPress, disabled, accessibilityRole, accessibilityLabel, accessibilityState }: any) =>
+    R.createElement(
+      'button',
+      {
+        onClick: onPress,
+        disabled,
+        role: accessibilityRole,
+        'aria-label': accessibilityLabel,
+        'aria-checked': accessibilityState?.checked,
+      },
+      children
+    )
   return {
     ...native,
     View: Box,
@@ -24,8 +34,9 @@ vi.mock('react-native', async () => {
     KeyboardAvoidingView: Box,
     TouchableOpacity: Button,
     Pressable: Button,
-    TextInput: ({ value, onChangeText }: any) =>
-      R.createElement('input', { value, onChange: (e: any) => onChangeText(e.target.value) }),
+    TextInput: R.forwardRef<HTMLInputElement, any>(({ value, onChangeText }, ref) =>
+      R.createElement('input', { ref, value, onChange: (e: any) => onChangeText(e.target.value) })
+    ),
   }
 })
 vi.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
@@ -273,8 +284,14 @@ it('preserves a selected rating when translating', async () => {
     },
   ]
   const ui = await mount(survey)
-  fireEvent.click(ui.getByText('4'))
+  fireEvent.click(ui.getByRole('radio', { name: '4, Rate', checked: false }))
+  expect(ui.getByRole('radio', { name: '4, Rate', checked: true })).toBeTruthy()
   act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
+  expect(ui.getByRole('radio', { name: '4, Califica', checked: true })).toBeTruthy()
+  expect(ui.getAllByRole('radio', { checked: true })).toHaveLength(1)
+  expect(ui.queryByRole('radio', { name: '4, Rate' })).toBeNull()
+  expect(ui.getByRole('radio', { name: '1, Califica, Bajo', checked: false })).toBeTruthy()
+  expect(ui.getByRole('radio', { name: '5, Califica, Alto', checked: false })).toBeTruthy()
   expect(ui.queryByText('Califica')).not.toBeNull()
   expect(ui.queryByText('Bajo')).not.toBeNull()
   fireEvent.click(ui.getByText('Siguiente'))

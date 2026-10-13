@@ -90,8 +90,9 @@ Use it when your server can accept that a caller-chosen name reaches analytics, 
 
 ```ts
 instrument(server, posthog, {
-  shouldRecordInputKey: (key, { declared }) => declared || /^[A-Za-z0-9_.-]+$/.test(key),
-})
+  shouldRecordInputKey: (key, { declared }) =>
+    declared || /^[A-Za-z0-9_.-]+$/.test(key),
+});
 ```
 
 SDK argument names (`context`, `llm_model`, and `conversation_id`) are omitted unless the application schema declares them.
@@ -110,20 +111,20 @@ For example, this server accepts `city` or `place` instead of `location` for one
 It also accepts `orderId` or `id` instead of `order_id` for another tool:
 
 ```ts
-import { instrument, type InputAliasMap } from '@posthog/mcp'
+import { instrument, type InputAliasMap } from "@posthog/mcp";
 
 const inputAliasesByTool: Record<string, InputAliasMap> = {
-  'weather-current': {
-    location: ['city', 'place'],
+  "weather-current": {
+    location: ["city", "place"],
   },
-  'order-get': {
-    order_id: ['orderId', 'id'],
+  "order-get": {
+    order_id: ["orderId", "id"],
   },
-}
+};
 
 instrument(server, posthog, {
   resolveInputAliases: (toolName) => inputAliasesByTool[toolName],
-})
+});
 ```
 
 The resolver returns canonical name to aliases in the order the server tries them.
@@ -153,13 +154,16 @@ The SDK adds these properties to the `$mcp_tool_call` event:
 Custom dispatchers use the same helper through the existing `properties` argument:
 
 ```ts
-import { getToolInputProperties, PostHogMCP } from '@posthog/mcp'
+import { getToolInputProperties, PostHogMCP } from "@posthog/mcp";
 
-const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN)
-await posthog.register({ $mcp_server_build: 'example-build' })
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN);
+await posthog.register({ $mcp_server_build: "example-build" });
 
-const properties = getToolInputProperties(rawArguments, originalTool.inputSchema)
-posthog.captureToolCall({ toolName, isError: false, properties })
+const properties = getToolInputProperties(
+  rawArguments,
+  originalTool.inputSchema,
+);
+posthog.captureToolCall({ toolName, isError: false, properties });
 ```
 
 Compute these properties before argument normalization, and include them in both success and error events.
@@ -168,9 +172,13 @@ Custom command formats must extract the actual tool arguments and schema before 
 A server that accepts alternative field names passes its own alias map as `inputAliases`, canonical name to aliases in the order the server tries them:
 
 ```ts
-const properties = getToolInputProperties(rawArguments, originalTool.inputSchema, {
-  inputAliases: { id: ['experimentId', 'experiment_id'] },
-})
+const properties = getToolInputProperties(
+  rawArguments,
+  originalTool.inputSchema,
+  {
+    inputAliases: { id: ["experimentId", "experiment_id"] },
+  },
+);
 // { experimentId: 30 } → $mcp_input_keys: ['experimentId'], $mcp_input_aliases_used: ['experimentId:id']
 ```
 
@@ -193,7 +201,10 @@ Use the underlying PostHog client's `register()` method for values that apply to
 `PostHogMCP` inherits this method from `posthog-node`, and `instrument()` sends events through the supplied client.
 
 ```ts
-await posthog.register({ $mcp_server_build: 'example-build', environment: 'production' })
+await posthog.register({
+  $mcp_server_build: "example-build",
+  environment: "production",
+});
 ```
 
 Register these values during startup, before the server accepts requests.
@@ -240,7 +251,7 @@ All events are emitted by `buildPostHogCaptureEvents`. The main event name is co
 | PostHog event             | When                                                                                        | Notable extras                                                                                                                                                                                                                                                                  |
 | ------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$mcp_tool_call`          | Every tool invocation                                                                       | `$mcp_tool_name`, `$mcp_tool_description`, `$mcp_tool_category`, `$mcp_parameters`, `$mcp_response`, `$mcp_duration_ms`, `$mcp_is_error`, optionally `$mcp_intent` / `$mcp_intent_source`, `$mcp_llm_model` / `$mcp_llm_model_source`                                           |
-| `$mcp_tools_list`         | Client lists tools                                                                          | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?"                                                                                                                             |
+| `$mcp_tools_list`         | Client lists tools                                                                          | `$mcp_listed_tool_names` (array of tool names advertised); useful for "did this client discover us?" and "which advertised tools never get called?". With `instrument()`, `$mcp_response` keeps only the envelope (`nextCursor`, `ttlMs`, …), never the tool descriptors        |
 | `$mcp_initialize`         | Client/server handshake                                                                     | `$mcp_client_name`, `$mcp_client_version`, `$mcp_server_name`, `$mcp_server_version`, `$mcp_protocol_version` (negotiated MCP spec version — for tracking spec-revision adoption)                                                                                               |
 | `$mcp_missing_capability` | Agent calls the `get_more_tools` virtual tool                                               | A capability gap, **not** a tool invocation. The `context` arg is captured as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`                                                                                                                                     |
 | `$mcp_feedback`           | Agent calls the `send_feedback` virtual tool                                                | A feedback report, **not** a tool invocation. `$mcp_feedback_type` (`missing_capability` \| `issue` \| `praise` \| `other`), `$mcp_feedback_summary` and the other `$mcp_feedback_*` fields, declared extras as `$mcp_feedback_<key>`, and the summary/details as `$mcp_intent` |
@@ -468,20 +479,21 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
    ```ts
    intentFallback: (request) => {
-     const tool = request.params?.name
-     const args = request.params?.arguments ?? {}
-     if (tool === 'search_events') return `Searching events for "${args.query}"`
-     return tool ? `Invoking ${tool}` : null
-   }
+     const tool = request.params?.name;
+     const args = request.params?.arguments ?? {};
+     if (tool === "search_events")
+       return `Searching events for "${args.query}"`;
+     return tool ? `Invoking ${tool}` : null;
+   };
    ```
 
 2. **Transport metadata** (when `extra` carries user-agent or session info worth surfacing):
 
    ```ts
    intentFallback: (request, extra) => {
-     const ua = extra?.requestInfo?.headers?.['user-agent']
-     return `${ua ?? 'unknown client'} invoked ${request.params?.name}`
-   }
+     const ua = extra?.requestInfo?.headers?.["user-agent"];
+     return `${ua ?? "unknown client"} invoked ${request.params?.name}`;
+   };
    ```
 
 3. **LLM-derived** (async, expensive — push back unless the value is high). Sits on the hot path of every uncontextualized tool call.
@@ -489,7 +501,8 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 ### Known sharp edges
 
 - `reportMissing` and `collectFeedback` determine ownership from the server's raw `tools/list` handler without relying on a previous client request, so stateless calls can reach the virtual tools across instances. If a real tool already advertises the configured name, the SDK warns, does not inject a duplicate descriptor, and delegates calls to the real handler. If the raw listing is unavailable or fails, calls fail open to the server handler rather than risk intercepting a real tool.
-- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback.
+- A low-level `Server` learns reserved-argument ownership while serving `tools/list`, so an instance that never served one strips nothing (ADR-0011). `resolveOriginalTool` lets the host return the tool's input schema as its listing advertises it on `tools/call`; ownership follows the same rule as a served listing, a listing already served on the instance wins, and `$mcp_input_keys` follow the returned schema. A thrown error or `undefined` falls back to unresolved ownership.
+- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema on every path, including a Zod schema returned by `resolveOriginalTool`, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback. A low-level host that advertises the declared fields returns its listed JSON Schema from the resolver instead.
 - The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - The `send_feedback` virtual tool likewise emits its own `$mcp_feedback` event, **not** a `$mcp_tool_call`. All feedback types land in that one event; `$mcp_feedback_type = "missing_capability"` is a property filter, not a separate event, so dashboards reading `$mcp_missing_capability` see only `get_more_tools` reports (ADR-0012).
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.

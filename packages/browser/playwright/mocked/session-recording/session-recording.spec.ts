@@ -2,6 +2,7 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '@posthog/core'
+import { satisfies } from 'semver'
 
 async function ensureRecordingIsStopped(page: Page) {
     await page.resetCapturedEvents()
@@ -372,7 +373,7 @@ test.describe('Session recording - array.js', () => {
         )
     })
 
-    test('adds debug properties to captured events', async ({ page }) => {
+    test('keeps required replay diagnostics on custom events without optional debug properties', async ({ page }) => {
         // make sure recording is running
         await ensureActivitySendsSnapshots(page, [
             '$remote_config_received',
@@ -390,7 +391,15 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent).toBeDefined()
 
         expect(targetEvent!['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-        expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeDefined()
-        expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
+        expect(targetEvent!['properties']['$recording_status']).toEqual('active')
+        expect(targetEvent!['properties']['$sdk_debug_replay_internal_buffer_length']).toBeDefined()
+        expect(targetEvent!['properties']['$sdk_debug_replay_rrweb_error']).toEqual(false)
+        expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeUndefined()
+        // Optional diagnostics are filtered by the core, not the CDN recorder.
+        if (process.env.COMPAT_VERSION && satisfies(process.env.COMPAT_VERSION, '<=1.434.18')) {
+            expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
+        } else {
+            expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeUndefined()
+        }
     })
 })

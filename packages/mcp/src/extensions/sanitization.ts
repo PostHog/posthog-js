@@ -84,42 +84,26 @@ function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
  * with informative redaction messages.
  */
 function sanitizeResponse(response: unknown): unknown {
-  if (response == null || typeof response !== 'object') {
-    return sanitizeCapturedValue(response)
+  // Sanitize each kept block on its own, so the pass never scans the data of replaced blocks.
+  if (isRecord(response) && Array.isArray(response.content)) {
+    const result = sanitizeCapturedValue({ ...response, content: [] }) as SanitizedRecord
+    result.content = response.content.map(sanitizeContentBlock)
+    return result
   }
-
-  const sanitized = sanitizeCapturedValue(response)
-  if (!isRecord(sanitized)) {
-    return sanitized
-  }
-
-  const result: SanitizedRecord = { ...sanitized }
-  const content = result.content
-  if (Array.isArray(content)) {
-    result.content = content.map(sanitizeContentBlock)
-  }
-
-  if (result.structuredContent != null && typeof result.structuredContent === 'object') {
-    result.structuredContent = sanitizeCapturedValue(result.structuredContent)
-  }
-
-  return result
+  return sanitizeCapturedValue(response)
 }
 
 /**
  * Sanitizes a single content block based on its type discriminator.
  */
 function sanitizeContentBlock(block: unknown): unknown {
-  if (block == null || typeof block !== 'object') {
-    return block
-  }
-
   if (!isRecord(block)) {
-    return block
+    return sanitizeCapturedValue(block)
   }
 
   switch (block.type) {
     case 'text':
+    case 'resource_link':
       return sanitizeCapturedValue(block)
 
     case 'image':
@@ -137,13 +121,10 @@ function sanitizeContentBlock(block: unknown): unknown {
     case 'resource':
       return sanitizeResourceBlock(block)
 
-    case 'resource_link':
-      return sanitizeCapturedValue(block)
-
     default:
       return {
         type: 'text',
-        text: `[unsupported content type "${block.type}" redacted - not supported by PostHog MCP analytics]`,
+        text: `[unsupported content type "${sanitizeCapturedValue(block.type)}" redacted - not supported by PostHog MCP analytics]`,
       }
   }
 }

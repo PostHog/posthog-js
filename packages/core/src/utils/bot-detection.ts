@@ -102,17 +102,61 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 ]
 
 /**
- * Block various web spiders from executing our JS and sending false capturing data
+ * Session-level memoization for isBlockedUA.
+ *
+ * navigator.userAgent is constant across all events captured in a browser
+ * session, and PostHog's autocapture path calls isBlockedUA on every event.
+ * Memoizing the boolean result turns an O(N) substring-scan over all N events
+ * into O(1) after the first lookup. The map is keyed on (ua, customBlockedUserAgents)
+ * — a config change yields a fresh slot. If the cache grows past MAX_CACHE_ENTRIES
+ * we drop it entirely (healthy sessions see O(1) distinct keys).
+ */
+const UA_CACHE = new Map<string, boolean>()
+const MAX_CACHE_ENTRIES = 256
+
+/** Exposed for tests only. Not part of the public API. */
+export function __resetBotDetectionCacheForTests(): void {
+  UA_CACHE.clear()
+}
+
+function buildCacheKey(ua: string, custom: string[]): string {
+  // Length-prefixed encoding is collision-free regardless of what bytes
+  // appear inside ua or custom entries.
+  let customEncoded = ''
+  for (let i = 0; i < custom.length; i++) {
+    const c = custom[i]
+    customEncoded += c.length + ':' + c
+  }
+  return ua.length + ':' + ua + '|' + custom.length + ':' + customEncoded
+}
+
+/**
+ * Block various web spiders from executing our JS and sending false capturing data.
+ *
+ * @param ua - User agent string to check
+ * @param customBlockedUserAgents - Additional UA substrings to block
+ * @returns true if the UA matches a known-bot substring
  */
 export const isBlockedUA = function (ua: string | undefined, customBlockedUserAgents: string[] = []): boolean {
   if (!ua) {
     return false
   }
 
+  const key = buildCacheKey(ua, customBlockedUserAgents)
+  const cached = UA_CACHE.get(key)
+  if (cached !== undefined) {
+    return cached
+  }
+
   const uaLower = ua.toLowerCase()
-  return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
-    const blockedUaLower = blockedUA.toLowerCase()
+  const result = DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
     // can't use includes because IE 11 :/
-    return uaLower.indexOf(blockedUaLower) !== -1
+    return uaLower.indexOf(blockedUA.toLowerCase()) !== -1
   })
+
+  if (UA_CACHE.size >= MAX_CACHE_ENTRIES) {
+    UA_CACHE.clear()
+  }
+  UA_CACHE.set(key, result)
+  return result
 }

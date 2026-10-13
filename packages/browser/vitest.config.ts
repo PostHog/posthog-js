@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, URL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
 
 const require = createRequire(import.meta.url)
@@ -12,6 +12,27 @@ export default defineConfig({
             { find: /^.*\.css$/, replacement: require.resolve('identity-obj-proxy') },
             { find: '@posthog/rrweb-utils', replacement: fromRoot('../rrweb/utils/src/index.ts') },
             { find: /^@posthog\/browser-common$/, replacement: fromRoot('../browser-common/src/index.ts') },
+            {
+                find: '@posthog/browser-common/feature-flags-config',
+                replacement: fromRoot('../browser-common/src/feature-flags-config.ts'),
+            },
+            {
+                find: '@posthog/browser-common/feature-flags',
+                replacement: fromRoot('../browser-common/src/feature-flags.ts'),
+            },
+            {
+                find: '@posthog/browser-common/logs-types',
+                replacement: fromRoot('../browser-common/src/logs-types.ts'),
+            },
+            {
+                find: '@posthog/browser-common/logs-config',
+                replacement: fromRoot('../browser-common/src/logs-config.ts'),
+            },
+            {
+                find: '@posthog/browser-common/console-logs',
+                replacement: fromRoot('../browser-common/src/console-logs.ts'),
+            },
+            { find: '@posthog/browser-common/logs', replacement: fromRoot('../browser-common/src/logs.ts') },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },
             {

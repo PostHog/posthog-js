@@ -74,6 +74,47 @@ describe('FlagDefinitionCacheProvider Integration', () => {
   })
 
   describe('Cache Initialization', () => {
+    it.each([true, false])(
+      'loads initial definitions without polling when the interval is null (cache hit: %s)',
+      async (cacheHit) => {
+        const flags = [{ ...testFlagData.flags[0], filters: { groups: [{}] } }]
+        mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
+        mockCacheProvider.getFlagDefinitions.mockReturnValue(cacheHit ? { ...testFlagData, flags } : undefined)
+        mockedFetch.mockImplementation(apiImplementation({ localFlags: { ...testFlagDataApiResponse, flags } }))
+
+        posthog = new PostHog('TEST_API_KEY', {
+          host: 'http://example.com',
+          personalApiKey: 'TEST_PERSONAL_API_KEY',
+          flagDefinitionCacheProvider: mockCacheProvider,
+          featureFlagsPollingInterval: null,
+          fetchRetryCount: 0,
+        })
+
+        expect(
+          await posthog.getFeatureFlag('test-flag', 'user', {
+            onlyEvaluateLocally: true,
+            sendFeatureFlagEvents: false,
+          })
+        ).toBe(true)
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+        expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+        if (cacheHit) {
+          expect(mockedFetch).not.toHaveBeenCalled()
+        } else {
+          expect(mockedFetch).toHaveBeenCalledTimes(1)
+          expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        }
+        expect(vi.getTimerCount()).toBe(0)
+
+        await vi.advanceTimersByTimeAsync(60_000)
+
+        expect(mockCacheProvider.shouldFetchFlagDefinitions).toHaveBeenCalledTimes(1)
+        expect(mockCacheProvider.getFlagDefinitions).toHaveBeenCalledTimes(1)
+        expect(mockedFetch).toHaveBeenCalledTimes(cacheHit ? 0 : 1)
+        expect(vi.getTimerCount()).toBe(0)
+      }
+    )
+
     it('calls getFlagDefinitions when shouldFetchFlagDefinitions returns false', async () => {
       mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)

@@ -15,7 +15,7 @@ export default defineConfig({
             __BROWSER_COMMON_VERSION__: JSON.stringify(packageVersion),
         },
         entry: {
-            index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts'],
+            index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts', '!src/**/*.md'],
         },
         tsconfigPath: './tsconfig.build.json',
     },
