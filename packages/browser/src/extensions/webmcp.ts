@@ -1,4 +1,13 @@
-import { isArray, isFunction, isObject, isPromise, isString, isUndefined, sanitizeFreeText } from '@posthog/core'
+import {
+    isArray,
+    isFunction,
+    isObject,
+    isPromise,
+    isString,
+    isUndefined,
+    sanitizeCapturedValue,
+    sanitizeFreeText,
+} from '@posthog/core'
 import type { WebMCPCaptureConfig } from '@posthog/types'
 import type { PostHog } from '../posthog-core'
 import { document, location } from '../utils/globals'
@@ -40,6 +49,7 @@ interface WebMCPMetadata {
 
 interface WebMCPFailure {
     error: unknown
+    errorResult: boolean
     message: string
     type: string
 }
@@ -275,15 +285,37 @@ function getErrorMessage(error: unknown, errorResult: boolean): string {
     }
 }
 
-function getSanitizedExceptionList(instance: PostHog, error: unknown) {
+function sanitizeFrameFilename(filename: string): string {
+    const sanitized = sanitizeCapturedValue(filename, { maxStringLength: filename.length, truncationSuffix: '' })
+    if (!isString(sanitized)) {
+        throw new Error('Invalid sanitized stack frame filename')
+    }
+    return sanitized
+}
+
+function getSanitizedExceptionList(instance: PostHog, failure: WebMCPFailure) {
     try {
-        const properties = instance.exceptions?.buildProperties(error, {
+        const properties = instance.exceptions?.buildProperties(failure.error, {
             handled: true,
             syntheticException: new Error('PostHog syntheticException'),
         })
-        return properties?.$exception_list.map((exception) => ({
+        return properties?.$exception_list.map((exception, index) => ({
             ...exception,
-            value: sanitizeErrorMessage(exception.value),
+            ...(failure.errorResult && index === 0
+                ? { type: 'Error', value: failure.message }
+                : { value: sanitizeErrorMessage(exception.value) }),
+            ...(exception.stacktrace
+                ? {
+                      stacktrace: {
+                          ...exception.stacktrace,
+                          frames: exception.stacktrace.frames?.map((frame) =>
+                              isString(frame.filename)
+                                  ? { ...frame, filename: sanitizeFrameFilename(frame.filename) }
+                                  : { ...frame }
+                          ),
+                      },
+                  }
+                : {}),
         }))
     } catch {
         return undefined
@@ -313,6 +345,7 @@ function getFailure(error: unknown, errorResult: boolean): WebMCPFailure {
     const message = getErrorMessage(error, errorResult)
     return {
         error: errorResult ? message : error,
+        errorResult,
         message,
         type: getErrorType(error, errorResult),
     }
@@ -474,7 +507,10 @@ export class WebMCP {
 
             if (failure) {
                 try {
-                    const exceptionList = getSanitizedExceptionList(instance, failure.error)
+                    const exceptionList = getSanitizedExceptionList(instance, failure)
+                    if (!exceptionList?.length) {
+                        continue
+                    }
                     const captured = instance.captureException(failure.error, {
                         $exception_source: 'mcp.tool_call',
                         $mcp_interface: 'webmcp',
@@ -482,7 +518,7 @@ export class WebMCP {
                         $mcp_resource_name: tool.name,
                         $mcp_tool_description: tool.description,
                         $mcp_server_name: location?.hostname,
-                        ...(exceptionList ? { $exception_list: exceptionList } : {}),
+                        $exception_list: exceptionList,
                     })
                     if (captured) {
                         markExceptionCaptured(instance, failure.error)
