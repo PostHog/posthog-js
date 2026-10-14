@@ -98,7 +98,8 @@ jobs:
     permissions:
       contents: read
     name: Build example for iOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    # posthog-ios 4 requires Xcode 26.
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,6 +110,12 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
+
+      - name: Verify Xcode 26 or newer
+        run: |
+          version="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          echo "Xcode $version"
+          test "${version%%.*}" -ge 26
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -297,7 +304,8 @@ jobs:
     permissions:
       contents: read
     name: Build example for macOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    # posthog-ios 4 requires Xcode 26.
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -308,6 +316,12 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
+
+      - name: Verify Xcode 26 or newer
+        run: |
+          version="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          echo "Xcode $version"
+          test "${version%%.*}" -ge 26
 
       - name: Setup environment
         uses: ./.github/actions/setup
