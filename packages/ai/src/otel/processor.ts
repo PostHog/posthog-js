@@ -35,6 +35,8 @@ export interface PostHogSpanProcessorOptions {
    * session ID (as `$session_id`) and properties from the context entered with `client.withContext()` or
    * `client.enterContext()`. Other processors on the provider don't see them.
    * Attributes already on the span win over properties, which win over the context's IDs.
+   * The context is captured when a span starts, but its properties are read when the span ends,
+   * so mutating a context object while a span is open shows up in the export.
    * Must be the same posthog-node instance you call `withContext` or `enterContext` on.
    */
   client?: PostHogContextSource
