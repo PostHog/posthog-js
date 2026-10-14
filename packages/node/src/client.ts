@@ -62,6 +62,7 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import { getActiveTraceProperties } from './extensions/error-tracking/trace-context'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
@@ -3260,6 +3261,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(properties || {}),
         }
       : { ...(properties || {}) }
+
+    if (event === '$exception' && !('$trace_id' in mergedProperties || '$span_id' in mergedProperties)) {
+      Object.assign(mergedProperties, await getActiveTraceProperties())
+    }
 
     if (!mergedDistinctId) {
       mergedDistinctId = uuidv7()
