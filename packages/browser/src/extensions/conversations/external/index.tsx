@@ -37,11 +37,8 @@ import type { RequestResponse } from '@posthog/types'
 const logger = createLogger('[ConversationsManager]')
 
 const parseJsonBody = (text: string | undefined): Record<string, any> | undefined => {
-    if (!text) {
-        return undefined
-    }
     try {
-        const parsed = JSON.parse(text)
+        const parsed = JSON.parse(text as string)
         return parsed && typeof parsed === 'object' ? parsed : undefined
     } catch {
         return undefined
