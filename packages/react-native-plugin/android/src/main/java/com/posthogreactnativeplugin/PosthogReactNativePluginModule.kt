@@ -33,7 +33,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
@@ -485,7 +484,7 @@ class PosthogReactNativePluginModule(
 
   /**
    * Records that the JS fatal handler saw a crash, so the JavascriptException React Native
-   * throws for it next is dropped as a duplicate when it contains [message].
+   * throws for it next is dropped as a duplicate when its message is [message].
    */
   @ReactMethod
   fun markFatalExceptionHandled(
@@ -792,14 +791,25 @@ internal fun restoreJsFatalCaptureProperties(event: PostHogEvent): PostHogEvent 
   return event
 }
 
-// The start of the message of the last fatal the JS fatal handler saw. The JavascriptException
-// React Native throws for that crash is captured in this process, so memory is enough. The next
-// JavascriptException consumes it and is dropped only when it carries that message, so a marked
-// fatal the host app recovers from cannot hide a later, different crash.
-private val jsHandledFatalMessage = AtomicReference<String?>(null)
+// The starts of the messages of the fatals the JS fatal handler saw. The JavascriptException
+// React Native throws for one of them is captured in this process, so memory is enough. The next
+// JavascriptException consumes them all and is dropped only when it carries one of them, so a
+// marked fatal the host app recovers from cannot hide a later, different crash.
+private val jsHandledFatalMessages = mutableListOf<String>()
+
+// More fatals than this before the crash keep only the most recent ones.
+private const val MAX_JS_HANDLED_FATAL_MESSAGES = 10
+
+// Must match FATAL_MESSAGE_KEY_LENGTH in posthog-react-native's error tracking.
+private const val JS_FATAL_MESSAGE_KEY_LENGTH = 80
 
 internal fun markJsFatalHandled(message: String) {
-  jsHandledFatalMessage.set(message)
+  synchronized(jsHandledFatalMessages) {
+    jsHandledFatalMessages.add(message)
+    if (jsHandledFatalMessages.size > MAX_JS_HANDLED_FATAL_MESSAGES) {
+      jsHandledFatalMessages.removeAt(0)
+    }
+  }
 }
 
 internal fun dropJsHandledFatalCrash(event: PostHogEvent): PostHogEvent? {
@@ -807,10 +817,28 @@ internal fun dropJsHandledFatalCrash(event: PostHogEvent): PostHogEvent? {
     return event
   }
   val exception = javascriptException(event.properties) ?: return event
-  val message = jsHandledFatalMessage.getAndSet(null) ?: return event
-  // An empty marker comes from an error without a message and matches any report.
-  val value = exception["value"] as? String
-  return if (message.isEmpty() || value?.contains(message) == true) null else event
+  val messages =
+    synchronized(jsHandledFatalMessages) {
+      jsHandledFatalMessages.toList().also { jsHandledFatalMessages.clear() }
+    }
+  val value = exception["value"] as? String ?: return event
+  return if (messages.any { isJsFatalReportOf(value, it) }) null else event
+}
+
+// React Native's report starts with the JS message and continues with ", js engine: …, stack:"
+// (or ", stack:") for handler fatals, or a newline. A shorter message must end where the report's
+// message ends, so a marked "Error: " does not match "Error: something else".
+private fun isJsFatalReportOf(
+  value: String,
+  message: String,
+): Boolean {
+  if (!value.startsWith(message)) {
+    return false
+  }
+  if (message.codePointCount(0, message.length) >= JS_FATAL_MESSAGE_KEY_LENGTH || value.length == message.length) {
+    return true
+  }
+  return value[message.length] == ',' || value[message.length] == '\n'
 }
 
 private fun javascriptException(properties: Map<String, Any>?): Map<*, *>? {

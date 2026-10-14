@@ -40,13 +40,16 @@ private var jsFatalCaptureProperties: [String: Any]? {
 
 /// One file per launch for the fatal JS marker protocol. posthog-ios reports a crash only on the
 /// next launch, so the state has to survive the crash. The file exists when the launch's JS layer
-/// marks the fatals it sees; `message` is the start of the last one it marked.
+/// marks the fatals it sees; `messages` holds the starts of the most recent ones it marked.
 private let jsFatalStateURL: URL? = FileManager.default
     .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
     .appendingPathComponent(Bundle.main.bundleIdentifier ?? "", isDirectory: true)
     .appendingPathComponent("posthog-react-native-js-fatal-state.json")
 
-private let jsFatalMessageKey = "message"
+private let jsFatalMessagesKey = "messages"
+
+/// More fatals than this before the crash keep only the most recent ones.
+private let maxJsFatalMessages = 10
 
 /// Holds the previous launch's marker state, read and removed the first time this process uses
 /// it — before `setup` or `markFatalExceptionHandled` can write this launch's state over it.
@@ -73,7 +76,10 @@ private final class JsFatalMarkers {
 
     /// Records the start of the message of a fatal this launch's JS layer saw.
     func markFatalHandled(message: String) throws {
-        try updateCurrentLaunch { $0[jsFatalMessageKey] = message }
+        try updateCurrentLaunch { state in
+            let messages = (state[jsFatalMessagesKey] as? [String] ?? []) + [message]
+            state[jsFatalMessagesKey] = Array(messages.suffix(maxJsFatalMessages))
+        }
     }
 
     private func updateCurrentLaunch(_ change: (inout [String: Any]) -> Void) throws {
@@ -93,16 +99,34 @@ private final class JsFatalMarkers {
 
     /// Whether a native report of a fatal JS error duplicates a crash the JS layer captured.
     /// Reports from a launch without the protocol are always dropped, since that launch's JS layer
-    /// captured every fatal its handler saw. Otherwise the first report consumes the marker and is
-    /// dropped only when one of `texts` contains the marked message (an empty one matches any).
+    /// captured every fatal its handler saw. Otherwise the first report consumes the markers and is
+    /// dropped only when one of `texts` reports one of the marked messages.
     func isJsHandledFatal(_ texts: [String]) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard let previous = previousLaunch else { return true }
         previousLaunch = [:]
-        guard let message = previous[jsFatalMessageKey] as? String else { return false }
-        return message.isEmpty || texts.contains { $0.contains(message) }
+        let messages = previous[jsFatalMessagesKey] as? [String] ?? []
+        return messages.contains { message in texts.contains { isJsFatalReport($0, of: message) } }
     }
+}
+
+/// Must match FATAL_MESSAGE_KEY_LENGTH in posthog-react-native's error tracking.
+private let jsFatalMessageKeyLength = 80
+
+/// Whether `text`, one field of a native fatal JS error report, reports the JS error whose message
+/// starts with `message`. React Native writes `Unhandled JS Exception: <message>`, then `, stack:`
+/// or the end of the field. A shorter message must end where the report's message ends, so a
+/// marked `Error: ` does not match `Error: something else`.
+private func isJsFatalReport(_ text: String, of message: String) -> Bool {
+    guard let prefix = text.range(of: "Unhandled JS Exception: ") else { return false }
+    // Unicode scalars, as JS truncates the message by code point and may split a character.
+    let reported = text[prefix.upperBound...].unicodeScalars
+    let marked = message.unicodeScalars
+    guard reported.starts(with: marked) else { return false }
+    if marked.count >= jsFatalMessageKeyLength { return true }
+    let next = reported.dropFirst(marked.count).first
+    return next == nil || next == "," || next == "\n"
 }
 
 /// The JS layer sends an ISO-8601 UTC timestamp (`Date#toISOString`). Parse it explicitly so

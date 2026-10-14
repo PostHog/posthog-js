@@ -246,7 +246,7 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `native JavascriptException is dropped once after the JS layer saw the crash`() {
-    markJsFatalHandled("boom")
+    markJsFatalHandled("Error: boom")
 
     assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
     assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
@@ -254,22 +254,54 @@ class PosthogReactNativePluginModuleTest {
 
   @Test
   fun `a marked fatal that never crashed does not hide a later different crash`() {
-    markJsFatalHandled("recovered")
+    markJsFatalHandled("Error: recovered")
 
-    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash, stack:\nfoo@1:2")))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
     assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: recovered, stack:\nfoo@1:2")))
   }
 
   @Test
-  fun `a marker without a message matches any JavascriptException`() {
-    markJsFatalHandled("")
+  fun `a recovered fatal without a message does not hide a later render crash`() {
+    markJsFatalHandled("Error: ")
 
-    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: render crash\n\nThis error is located at:\n    at App")))
+  }
+
+  @Test
+  fun `a fatal without a message is dropped as a duplicate`() {
+    markJsFatalHandled("Error: ")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: , js engine: hermes, stack:\nfoo@1:2")))
+
+    markJsFatalHandled("")
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(", js engine: hermes, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a short marker does not match a report whose message only starts with it`() {
+    markJsFatalHandled("1")
+
+    assertNotNull(dropJsHandledFatalCrash(javascriptCrashEvent("10 apples, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `a truncated marker matches the start of a longer message`() {
+    val message = "Error: " + "x".repeat(73)
+    markJsFatalHandled(message)
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent(message + "yz, stack:\nfoo@1:2")))
+  }
+
+  @Test
+  fun `the first of two fatals marked before the crash is dropped`() {
+    markJsFatalHandled("Error: first")
+    markJsFatalHandled("Error: second")
+
+    assertNull(dropJsHandledFatalCrash(javascriptCrashEvent("Error: first, stack:\nfoo@1:2")))
   }
 
   @Test
   fun `the JS crash marker is not consumed by other exceptions`() {
-    markJsFatalHandled("boom")
+    markJsFatalHandled("Error: boom")
 
     assertNotNull(dropJsHandledFatalCrash(nativeExceptionEvent()))
     assertNull(dropJsHandledFatalCrash(javascriptCrashEvent()))

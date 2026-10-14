@@ -395,7 +395,7 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     handler(new Error('mark-me'), true)
     await vi.advanceTimersByTimeAsync(100)
 
-    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledWith('mark-me')
+    expect(mockPlugin.markFatalExceptionHandled).toHaveBeenCalledWith('Error: mark-me')
     expect(previous).not.toHaveBeenCalled()
 
     resolveMark()
@@ -403,15 +403,35 @@ describe('fatal JavaScript exceptions captured through the native SDK', () => {
     expect(previous).toHaveBeenCalledTimes(1)
   })
 
-  it('marks the start of the message native matches its crash report against', async () => {
+  it('marks the start of the message React Native sends native for the crash', async () => {
     posthog = await readyClient()
 
-    handler(new Error('x'.repeat(200)), true)
-    await vi.advanceTimersByTimeAsync(100)
-    handler({ code: 1 }, true)
-    await vi.advanceTimersByTimeAsync(100)
+    class CustomError extends Error {
+      name = 'CustomError'
+    }
+    const thrown: unknown[] = [
+      new Error('x'.repeat(200)),
+      new Error(),
+      new TypeError('TypeError: already prefixed'),
+      new CustomError('custom'),
+      { code: 1 },
+      'thrown string',
+      undefined,
+    ]
+    for (const error of thrown) {
+      handler(error, true)
+      await vi.advanceTimersByTimeAsync(100)
+    }
 
-    expect(mockPlugin.markFatalExceptionHandled.mock.calls).toEqual([['x'.repeat(80)], ['']])
+    expect(mockPlugin.markFatalExceptionHandled.mock.calls).toEqual([
+      ['Error: ' + 'x'.repeat(73)],
+      ['Error: '],
+      ['TypeError: already prefixed'],
+      ['CustomError: custom'],
+      ['[object Object]'],
+      ['thrown string'],
+      [''],
+    ])
   })
 
   it('marks the fatal as handled even when remote config disabled exception capture', async () => {

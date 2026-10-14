@@ -24,11 +24,20 @@ const LogLevelList: LogLevel[] = ['debug', 'log', 'info', 'warn', 'error']
 // prefix), so the start of the message is what both sides reliably share.
 const FATAL_MESSAGE_KEY_LENGTH = 80
 
-// The text native matches its fatal JS crash report against. Empty when the error has no
-// string message, which native treats as matching any report.
+// The start of the message React Native's ExceptionsManager sends native for this error:
+// `<name>: <message>`, where a thrown non-Error has no name and is converted to a string.
 function fatalMessageKey(error: unknown): string {
-  const message = typeof error === 'string' ? error : (error as { message?: unknown } | null)?.message
-  return typeof message === 'string' ? Array.from(message).slice(0, FATAL_MESSAGE_KEY_LENGTH).join('') : ''
+  let message: string
+  if (error instanceof Error) {
+    const namePrefix = error.name ? `${error.name}: ` : ''
+    message = error.message || ''
+    if (!message.startsWith(namePrefix)) {
+      message = namePrefix + message
+    }
+  } else {
+    message = error === undefined ? '' : String(error)
+  }
+  return Array.from(message).slice(0, FATAL_MESSAGE_KEY_LENGTH).join('')
 }
 
 // user provided configuration
