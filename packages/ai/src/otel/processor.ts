@@ -32,7 +32,7 @@ export interface PostHogSpanProcessorOptions {
 
   /**
    * Your posthog-node client. When set, each AI span this processor exports gets the distinct ID,
-   * session ID and properties from the context entered with `client.withContext()` or
+   * session ID (as `$session_id`) and properties from the context entered with `client.withContext()` or
    * `client.enterContext()`. Other processors on the provider don't see them.
    * Attributes already on the span win over properties, which win over the context's IDs.
    * Must be the same posthog-node instance you call `withContext` or `enterContext` on.

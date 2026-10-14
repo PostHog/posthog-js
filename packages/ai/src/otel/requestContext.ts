@@ -1,14 +1,29 @@
 import type { AttributeValue, Attributes } from '@opentelemetry/api'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
-import type { PostHog } from 'posthog-node'
 
 import { withAttributes } from './spans'
 
-export type PostHogContextSource = Pick<PostHog, 'getContext'>
-export type CapturedContext = NonNullable<ReturnType<PostHogContextSource['getContext']>>
+export type CapturedContext = {
+  distinctId?: string
+  sessionId?: string
+  properties?: Record<string, unknown>
+}
+
+// Structural so declarations type-check against posthog-node versions that have no getContext.
+export type PostHogContextSource = {
+  getContext?(): CapturedContext | undefined
+}
 
 const DISTINCT_ID_ATTRIBUTE = 'posthog.distinct_id'
-const SESSION_ID_ATTRIBUTE = '$ai_session_id'
+const SESSION_ID_ATTRIBUTE = '$session_id'
+
+// Ingestion prefers posthog.distinct_id, so adding it would override the user a span already names.
+const IDENTITY_ATTRIBUTES = [
+  DISTINCT_ID_ATTRIBUTE,
+  'user.id',
+  'ai.telemetry.metadata.posthog_distinct_id',
+  'ai.settings.context.posthog_distinct_id',
+]
 
 type Primitive = string | number | boolean
 
@@ -65,9 +80,10 @@ export function captureContext(client: PostHogContextSource): CapturedContext | 
   }
 }
 
-function toAttributes(context: CapturedContext): Attributes {
+function toAttributes(context: CapturedContext, spanAttributes: Attributes): Attributes {
+  const hasIdentity = IDENTITY_ATTRIBUTES.some((key) => spanAttributes[key] !== undefined)
   const values: Record<string, unknown> = {
-    ...(context.distinctId ? { [DISTINCT_ID_ATTRIBUTE]: context.distinctId } : {}),
+    ...(context.distinctId && !hasIdentity ? { [DISTINCT_ID_ATTRIBUTE]: context.distinctId } : {}),
     ...(context.sessionId ? { [SESSION_ID_ATTRIBUTE]: context.sessionId } : {}),
     ...context.properties,
   }
@@ -83,7 +99,7 @@ function toAttributes(context: CapturedContext): Attributes {
 
 export function withRequestContext(span: ReadableSpan, context: CapturedContext): ReadableSpan {
   try {
-    const attributes = toAttributes(context)
+    const attributes = toAttributes(context, span.attributes)
     if (Object.keys(attributes).length === 0) {
       return span
     }

@@ -48,16 +48,37 @@ describe('PostHogSpanProcessor request context', () => {
     )
 
     expect(ended.map((span) => span.attributes)).toEqual([
-      { 'posthog.distinct_id': 'alice', $ai_session_id: 's_alice', plan: 'pro' },
+      { 'posthog.distinct_id': 'alice', $session_id: 's_alice', plan: 'pro' },
     ])
   })
 
   it('keeps attributes already on the span', () => {
     const provider = providerWithClient()
 
-    posthog.withContext({ sessionId: 's_alice' }, () => emitAISpan(provider, { $ai_session_id: 'conv_42' }))
+    posthog.withContext({ sessionId: 's_alice' }, () => emitAISpan(provider, { $session_id: 'span_session' }))
 
-    expect(ended[0].attributes.$ai_session_id).toBe('conv_42')
+    expect(ended[0].attributes.$session_id).toBe('span_session')
+  })
+
+  it('does not derive $ai_session_id from the context session', () => {
+    const provider = providerWithClient()
+
+    posthog.withContext({ sessionId: 's_alice' }, () => emitAISpan(provider))
+
+    expect(ended[0].attributes).toEqual({ $session_id: 's_alice' })
+  })
+
+  it.each([
+    'posthog.distinct_id',
+    'user.id',
+    'ai.telemetry.metadata.posthog_distinct_id',
+    'ai.settings.context.posthog_distinct_id',
+  ])('keeps the span identity when it carries %s', (key) => {
+    const provider = providerWithClient()
+
+    posthog.withContext({ distinctId: 'alice', sessionId: 's_alice' }, () => emitAISpan(provider, { [key]: 'bob' }))
+
+    expect(ended[0].attributes).toEqual({ [key]: 'bob', $session_id: 's_alice' })
   })
 
   it('encodes structured properties as JSON', () => {
@@ -77,9 +98,17 @@ describe('PostHogSpanProcessor request context', () => {
   it('lets properties override the context session ID', () => {
     const provider = providerWithClient()
 
+    posthog.withContext({ sessionId: 's_alice', properties: { $session_id: 'tagged' } }, () => emitAISpan(provider))
+
+    expect(ended[0].attributes.$session_id).toBe('tagged')
+  })
+
+  it('passes an explicit $ai_session_id property through', () => {
+    const provider = providerWithClient()
+
     posthog.withContext({ sessionId: 's_alice', properties: { $ai_session_id: 'conv_42' } }, () => emitAISpan(provider))
 
-    expect(ended[0].attributes.$ai_session_id).toBe('conv_42')
+    expect(ended[0].attributes).toEqual({ $session_id: 's_alice', $ai_session_id: 'conv_42' })
   })
 
   it('skips an empty distinct ID and session ID', () => {
@@ -156,15 +185,27 @@ describe('PostHogSpanProcessor request context', () => {
     expect(ended.map((span) => span.attributes)).toEqual([{}, {}])
   })
 
-  it('stamps each concurrent request with its own context', async () => {
+  it('stamps each overlapping request with its own context', async () => {
     const provider = providerWithClient()
-    const request = (distinctId: string): Promise<void> =>
+    const tracer = provider.getTracer('test')
+    let startedCount = 0
+    let release: () => void = () => undefined
+    const bothStarted = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const request = (distinctId: string): Promise<ReturnType<typeof tracer.startSpan>> =>
       posthog.withContext({ distinctId }, async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5))
-        emitAISpan(provider)
+        const span = tracer.startSpan('gen_ai.chat')
+        startedCount += 1
+        if (startedCount === 2) {
+          release()
+        }
+        await bothStarted
+        return span
       })
 
-    await Promise.all([request('alice'), request('bob')])
+    const spans = await Promise.all([request('alice'), request('bob')])
+    spans.forEach((span) => span.end())
 
     expect(ended.map((span) => span.attributes['posthog.distinct_id']).sort()).toEqual(['alice', 'bob'])
   })
