@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.14.0
+
+### Minor Changes
+
+- [#5299](https://github.com/PostHog/posthog-js/pull/5299) [`7587be3`](https://github.com/PostHog/posthog-js/commit/7587be3705abcc5db80ee9fa5cd875f6869fbf9c) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Add per-request PostHog context to AI spans through the PostHogSpanProcessor client option.
+  (2026-10-14)
+
 ## 8.13.7
 
 ### Patch Changes
