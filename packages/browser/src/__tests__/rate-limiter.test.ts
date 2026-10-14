@@ -81,6 +81,18 @@ describe('Rate Limiter', () => {
                 isRateLimited: false,
                 remainingTokens: 98,
             })
+
+            moveTimeForward(143_000)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 98,
+            })
+
+            moveTimeForward(100)
+            expect(rateLimiter.clientRateLimitContext(true)).toEqual({
+                isRateLimited: false,
+                remainingTokens: 99,
+            })
         })
 
         it('adds tokens if time has passed ', () => {
